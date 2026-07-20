@@ -6,6 +6,16 @@ Native SwiftUI app for diagnosing your Mac: no browser, no local server,
 no dependencies — just one window. Bilingual — English and Russian,
 switchable anytime in Settings.
 
+## Screenshots
+
+| Overview | Details |
+| --- | --- |
+| ![Overview: CPU, memory, swap, disk and battery tiles, recommendations](docs/screenshots/overview.png) | ![Details: security, startup items, disk SMART data, Time Machine](docs/screenshots/details.png) |
+
+| Energy settings | Battery popover |
+| --- | --- |
+| ![Energy settings (pmset) editable table](docs/screenshots/energy-settings.png) | ![Battery popover: power, voltage, temperature, capacity and health](docs/screenshots/battery-popover.png) |
+
 ## About this project
 
 I'm not a developer — not even a programmer. I got curious what building
