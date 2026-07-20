@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-check:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: swift build (default, AI off)
+        run: swift build
+
+      - name: swift build (AI opt-in build)
+        run: swift build -Xswiftc -DAI_ENABLED
+
+      - name: Run checks (MacDashboardChecks)
+        run: swift run MacDashboardChecks

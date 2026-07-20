@@ -1,0 +1,1 @@
+../Sources/MacDashboard/Engine/BatteryInspector.swift

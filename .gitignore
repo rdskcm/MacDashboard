@@ -1,0 +1,15 @@
+# Build artifacts
+.build/
+Checks/.build/
+*.o
+*.swiftmodule
+
+# Packaged app / distribution (rebuilt from source via build_app.sh)
+dist/
+*.app
+*.zip
+
+# macOS
+.DS_Store
+
+# Runtime data lives in ~/Library/Application Support/MacDashboard, never in repo

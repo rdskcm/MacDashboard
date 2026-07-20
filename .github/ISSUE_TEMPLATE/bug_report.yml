@@ -1,0 +1,82 @@
+name: Bug report
+description: Report something that's broken or not working as expected
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > ⚠️ **PRIVACY — READ BEFORE ATTACHING ANYTHING / ПРИВАТНОСТЬ — ПРОЧТИТЕ ПЕРЕД ТЕМ, КАК ЧТО-ЛИБО ПРИКЛАДЫВАТЬ**
+        >
+        > **English:** This is a public repository. Do **NOT** paste the raw
+        > `mac_report.txt` file here, and do **NOT** attach screenshots that show
+        > folder names, disk names, or serial numbers. That report file (and those
+        > kinds of screenshots) is exactly the machine fingerprint the README's
+        > Privacy section warns about — once posted here, it's public forever.
+        >
+        > **What IS safe to share:** version numbers, the exact wording of an
+        > error message, and a screenshot cropped tightly to just the affected
+        > UI card/element (no window title bar, no Finder/menu-bar background).
+        >
+        > **Русский:** Это публичный репозиторий. **НЕ** вставляйте сюда сырой
+        > файл `mac_report.txt` и **НЕ** прикладывайте скриншоты, на которых видны
+        > имена папок, имена дисков или серийные номера. Этот файл отчёта (и такие
+        > скриншоты) — это ровно тот «отпечаток машины», о котором предупреждает
+        > раздел Privacy в README. Если это попадёт сюда — оно останется публичным
+        > навсегда.
+        >
+        > **Что можно прикладывать:** номера версий, точный текст сообщения об
+        > ошибке, скриншот, обрезанный вплотную к затронутой карточке/элементу
+        > интерфейса (без заголовка окна, без Finder/строки меню на фоне).
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      description: Apple menu → About This Mac (e.g. "macOS 14.5 Sonoma")
+      placeholder: macOS 14.5 Sonoma
+    validations:
+      required: true
+  - type: dropdown
+    id: mac-model
+    attributes:
+      label: Mac model
+      description: Apple menu → About This Mac
+      options:
+        - Apple Silicon (M1/M2/M3/M4 family)
+        - Intel
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: MacDashboard version
+      description: Open MacDashboard → Settings and copy the version shown there.
+      placeholder: as shown in Settings
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the bug clearly and concisely.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, as precise as you can make them.
+      placeholder: |
+        1. Open MacDashboard
+        2. ...
+        3. ...
+    validations:
+      required: true
