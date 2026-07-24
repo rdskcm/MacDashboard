@@ -27,8 +27,9 @@ someone else too.
 I plan to keep developing it further — I already have a few ideas. I'm
 building this on my own Claude subscription, which limits how much I can get
 done, but I find all of this genuinely fascinating. I also don't have an
-Apple Developer license yet — it isn't cheap — so for now the app ships as
-source only, with no ready-to-download .app. I've tried to respect privacy
+Apple Developer license yet — it isn't cheap — so the ready-to-download `.app`
+isn't notarized and needs a one-time Gatekeeper step on first launch (see
+**Install** below); you can also just build it yourself from source. I've tried to respect privacy
 and openness as much as realistically possible. I'd be glad to hear your
 feedback and comments. Hope you like it!
 
@@ -116,7 +117,34 @@ privacy notice before attaching anything.
   smartmontools`) to see SMART attributes for external NVMe drives — the app
   can also install it for you with one click.
 
-## Building from source
+## Install
+
+Two ways — pick one.
+
+### Download the ready-made app (easiest)
+
+1. Open the [Releases](../../releases) page and download `MacDashboard.zip` from the latest release.
+2. Unzip and move `MacDashboard.app` into `/Applications` (or `~/Applications`).
+3. **First launch — a one-time Gatekeeper step.** The app is ad-hoc signed but
+   *not notarized* (I don't have an Apple Developer certificate yet), so the first
+   time you open a copy downloaded from the internet macOS blocks it. Clear it once,
+   either way:
+
+   **Terminal — one command, always works:**
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/MacDashboard.app
+   ```
+   then open the app normally.
+
+   **Or via System Settings (no Terminal):**
+   1. Double-click `MacDashboard.app`. macOS shows **"MacDashboard" Not Opened** — click **Done** (this first dialog deliberately offers no "open" button).
+   2. Open **System Settings → Privacy & Security** and scroll down to the *Security* section. Next to **"MacDashboard" was blocked to protect your Mac** click **Open Anyway**.
+   3. In the **Open "MacDashboard"?** dialog click **Open Anyway** again, then authenticate with Touch ID or your password.
+
+   That's it — every later launch opens with no prompt.
+   > On macOS 15 (Sequoia) and later the old "right-click → Open" trick no longer bypasses Gatekeeper; you have to use System Settings.
+
+### Build from source
 
 ```bash
 cd MacDashboard
@@ -124,26 +152,24 @@ cd MacDashboard
 ./build_app.sh --install  # ...and copies it into ~/Applications
 ```
 
-## Moving to another Mac
+An app you build yourself carries no download quarantine, so it opens with no Gatekeeper prompt at all.
 
-Copy `MacDashboard.app` over (AirDrop, USB drive, whatever). The signature is
-ad-hoc, so on first launch macOS may complain ("can't be opened because the
-developer cannot be verified" / Gatekeeper quarantine):
-
-- right-click the app → "Open" → "Open", or
-- `xattr -dr com.apple.quarantine "MacDashboard.app"`.
+## First launch
 
 On first launch macOS will ask for a couple of permissions (you can decline —
-the corresponding sections will simply show "unavailable" instead of
-crashing):
+the corresponding sections will simply show "unavailable" instead of crashing):
 
-- access to the Downloads/Documents/Desktop folders — for the "what's taking
-  up space" breakdown;
+- access to the Downloads/Documents/Desktop folders — for the "what's taking up space" breakdown;
 - control over "System Events" — to read the Login Items (autostart) list.
 
-Missing hardware (no battery on a desktop Mac, no external disks, Time
-Machine not configured) is a normal, expected state: the relevant cards hide
-themselves or show a calm "not set up / none" instead of an error.
+Missing hardware (no battery on a desktop Mac, no external disks, Time Machine
+not configured) is a normal, expected state: the relevant cards hide themselves
+or show a calm "not set up / none" instead of an error.
+
+## Moving to another Mac
+
+Copy `MacDashboard.app` over (AirDrop, USB drive, whatever). If it picked up a
+quarantine flag along the way, clear it exactly as in the first-launch step above.
 
 ## Structure
 

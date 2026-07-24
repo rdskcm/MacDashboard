@@ -1,0 +1,110 @@
+name: Release
+
+# Builds the universal MacDashboard.app, packages it with `ditto` (which
+# preserves the ad-hoc signature across the zip round-trip), and attaches the
+# .zip to a GitHub Release. The app is ad-hoc signed (not notarized), so on
+# first launch users must clear Gatekeeper — see the README install section.
+#
+#   - push a tag `vX.Y`   -> builds that tag, creates the release if missing,
+#                            uploads the asset
+#   - "Run workflow" button -> builds the chosen ref (default: main), uploads
+#                            to an existing release tag (default: v1.0)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag to attach the build to'
+        required: true
+        default: 'v1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # macos-latest is the Tahoe (macOS 26) image; the step below selects an
+    # Xcode 26 toolchain so the app links against the macOS 26 SDK and renders
+    # with the native Tahoe "Liquid Glass" look. A macos-14 runner links the
+    # SDK 14 → the old compatibility appearance, which differs from a local
+    # build made with the current Command Line Tools on Tahoe.
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Use the macOS 26 (Tahoe) SDK
+        run: |
+          set -euo pipefail
+          xc="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          [ -n "$xc" ] || { echo "::error::no Xcode 26 on this runner — Tahoe SDK unavailable"; exit 1; }
+          echo "selecting: $xc"
+          sudo xcode-select -s "$xc/Contents/Developer"
+          xcodebuild -version
+          sdk="$(xcrun --show-sdk-version)"
+          echo "macOS SDK: $sdk"
+          case "$sdk" in
+            26.*) echo "SDK 26 OK — app will get the Tahoe appearance" ;;
+            *) echo "::error::selected SDK is $sdk, expected 26.x"; exit 1 ;;
+          esac
+
+      - name: Build universal .app
+        run: ./build_app.sh
+
+      - name: Assert universal binary
+        run: |
+          set -euo pipefail
+          archs="$(lipo -archs dist/MacDashboard.app/Contents/MacOS/MacDashboard)"
+          echo "archs: $archs"
+          case "$archs" in
+            *arm64*x86_64*|*x86_64*arm64*) echo "universal OK" ;;
+            *) echo "::error::binary is not universal ($archs)"; exit 1 ;;
+          esac
+
+      - name: Assert Tahoe SDK baked into the binary
+        run: |
+          set -euo pipefail
+          sdk="$(vtool -show-build dist/MacDashboard.app/Contents/MacOS/MacDashboard | awk '/sdk/{print $2; exit}')"
+          echo "linked macOS SDK: $sdk"
+          case "$sdk" in
+            26.*) echo "OK — matches the local build (Tahoe appearance)" ;;
+            *) echo "::error::binary linked against SDK $sdk, expected 26.x (Tahoe look would be wrong)"; exit 1 ;;
+          esac
+
+      - name: Package (ditto preserves the ad-hoc signature)
+        run: ditto -c -k --keepParent dist/MacDashboard.app MacDashboard.zip
+
+      - name: Verify signature survives the zip round-trip
+        run: |
+          set -euo pipefail
+          rm -rf _verify && mkdir _verify
+          ditto -x -k MacDashboard.zip _verify
+          # Signature must stay intact after packaging — this gates the release.
+          codesign --verify --deep --strict --verbose=2 "_verify/MacDashboard.app"
+          # Gatekeeper assessment is EXPECTED to be rejected (ad-hoc, not
+          # notarized). We log it to document the exact message users will see;
+          # never gate the release on it.
+          spctl -a -vvv --type execute "_verify/MacDashboard.app" || true
+
+      - name: Attach to release
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "MacDashboard $TAG" \
+              --notes "Universal (arm64 + x86_64) build. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
+          fi
+          gh release upload "$TAG" MacDashboard.zip --clobber
