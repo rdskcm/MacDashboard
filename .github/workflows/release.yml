@@ -108,3 +108,6 @@ jobs:
               --notes "Universal (arm64 + x86_64) build. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
           fi
           gh release upload "$TAG" MacDashboard.zip --clobber
+          sum="$(shasum -a 256 MacDashboard.zip | awk '{print $1}')"
+          echo "SHA-256: $sum"
+          echo "SHA-256 of \`MacDashboard.zip\`: \`$sum\`" >> "$GITHUB_STEP_SUMMARY"

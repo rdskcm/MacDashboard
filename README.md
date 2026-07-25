@@ -124,29 +124,35 @@ Two ways — pick one.
 ### Download the ready-made app (easiest)
 
 1. Open the [Releases](../../releases) page and download `MacDashboard.zip` from the latest release.
-2. Unzip and move `MacDashboard.app` into `/Applications` (or `~/Applications`).
-3. **First launch — a one-time Gatekeeper step.** The app is ad-hoc signed but
+2. *Optional — verify the download.* Compare the hash against the **SHA-256** line in the release notes:
+   ```bash
+   shasum -a 256 MacDashboard.zip
+   ```
+3. Unzip and move `MacDashboard.app` into `/Applications` (or `~/Applications`).
+4. **First launch — a one-time Gatekeeper step.** The app is ad-hoc signed but
    *not notarized* (I don't have an Apple Developer certificate yet), so the first
    time you open a copy downloaded from the internet macOS blocks it. Clear it once,
    either way:
 
-   **Terminal — one command, always works:**
+   **Via System Settings (no Terminal):**
+   1. Double-click `MacDashboard.app`. macOS shows **"MacDashboard" Not Opened** — click **Done** (this first dialog deliberately offers no "open" button).
+   2. Open **System Settings → Privacy & Security** and scroll down to the *Security* section. Next to **"MacDashboard" was blocked to protect your Mac** click **Open Anyway**.
+   3. In the **Open "MacDashboard"?** dialog click **Open Anyway** again, then authenticate with Touch ID or your password.
+
+   > On macOS 15 (Sequoia) and later the old "right-click → Open" trick no longer bypasses Gatekeeper — use System Settings or the Terminal command below.
+
+   **Or in Terminal — one command, same effect:**
    ```bash
    xattr -dr com.apple.quarantine /Applications/MacDashboard.app
    ```
    then open the app normally.
 
-   **Or via System Settings (no Terminal):**
-   1. Double-click `MacDashboard.app`. macOS shows **"MacDashboard" Not Opened** — click **Done** (this first dialog deliberately offers no "open" button).
-   2. Open **System Settings → Privacy & Security** and scroll down to the *Security* section. Next to **"MacDashboard" was blocked to protect your Mac** click **Open Anyway**.
-   3. In the **Open "MacDashboard"?** dialog click **Open Anyway** again, then authenticate with Touch ID or your password.
-
    That's it — every later launch opens with no prompt.
-   > On macOS 15 (Sequoia) and later the old "right-click → Open" trick no longer bypasses Gatekeeper; you have to use System Settings.
 
 ### Build from source
 
 ```bash
+git clone https://github.com/rdskcm/MacDashboard.git
 cd MacDashboard
 ./build_app.sh            # builds dist/MacDashboard.app
 ./build_app.sh --install  # ...and copies it into ~/Applications
