@@ -213,7 +213,7 @@ MIT — см. [`LICENSE`](LICENSE).
   [smctemp](https://github.com/narugit/smctemp) — сама техника (реверс
   приватных символов `IOHIDEventSystemClient*`, экспортируемых `IOKit.framework`,
   но не объявленных в публичных заголовках) взята оттуда, реализация написана
-  самостоятельно (декларации через `@_silgen_name` в Swift, C-спайк в
+  самостоятельно (рантайм-резолв символов через `dlopen`/`dlsym`, C-спайк в
   `tools/thermal_probe.c`).
 
 ---
