@@ -113,10 +113,10 @@ extension KPITileView where Extra == EmptyView {
 struct CardBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .padding(16)
+            .padding(.vertical, 15)
+            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.primary.opacity(0.08)))
+            .dsCardSurface()
     }
 }
 
@@ -475,67 +475,98 @@ struct LegendItem: View {
 /// while an active/hover state is true — it does not keep driving CoreAnimation
 /// in the background when inactive. The glow effect uses layered centered strokes
 /// with increasing blur for a soft fading outer edge.
+/// One shadow/glow layer of a rainbow ring, out→in: how far it sits outside the
+/// shape's edge (`inset`, negative = outward), its stroke `thickness`, its
+/// gaussian `blur` radius, and its `opacity`.
+struct RainbowRingLayer {
+    let inset: CGFloat
+    let thickness: CGFloat
+    let blur: CGFloat
+    let opacity: Double
+}
+
+/// The two named ring recipes (SPEC §4 / design handoff, ground truth verified
+/// at planning against the prototypes' 9 hover-ring button sites). Deliberately
+/// kept as two explicit presets rather than one recipe with a flag, so layer
+/// count and per-layer values stay reviewable at a glance — do not collapse.
+enum RainbowRingRecipe {
+    /// 4 layers (glow14/glow7/glow3/sharp) — the Overview-tab recipe.
+    case overview
+    /// 3 layers (glow14/glow7/sharp, no glow3) — the Settings-tab recipe;
+    /// brighter glows are intentional (0.85/0.7/0.9 vs Overview's 0.12/0.25/0.45/1.0).
+    case settings
+
+    var layers: [RainbowRingLayer] {
+        switch self {
+        case .overview:
+            return [
+                RainbowRingLayer(inset: -5, thickness: 10, blur: 14, opacity: 0.12),
+                RainbowRingLayer(inset: -3, thickness: 6, blur: 7, opacity: 0.25),
+                RainbowRingLayer(inset: -1.5, thickness: 3, blur: 3, opacity: 0.45),
+                RainbowRingLayer(inset: -0.75, thickness: 1.5, blur: 0, opacity: 1.0),
+            ]
+        case .settings:
+            return [
+                RainbowRingLayer(inset: -5, thickness: 10, blur: 14, opacity: 0.85),
+                RainbowRingLayer(inset: -3, thickness: 6, blur: 7, opacity: 0.7),
+                RainbowRingLayer(inset: -0.75, thickness: 1.5, blur: 0, opacity: 0.9),
+            ]
+        }
+    }
+}
+
 struct RainbowBorder: ViewModifier {
     /// Full 360° revolution period. Slow enough to read as a gentle shimmer rather
     /// than a spinner.
-    var period: Double = 6
+    var period: Double = DSMotion.rainbow
     var isActive: Bool = true
+    var recipe: RainbowRingRecipe = .overview
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase: Double = 0
 
     private var colors: [Color] {
-        [.red, .orange, .yellow, .green, .blue, .purple, .red]
+        [
+            Color(hex: 0xff3b30), Color(hex: 0xff9500), Color(hex: 0xffcc00),
+            Color(hex: 0x34c759), Color(hex: 0x0a84ff), Color(hex: 0xaf52de),
+            Color(hex: 0xff3b30),
+        ]
+    }
+
+    /// Reduce Motion still allows the opacity fade — it's a color/opacity
+    /// transition per the project-wide Reduce Motion contract — just at the
+    /// shortened 0.12 s fallback duration instead of the normal 0.25 s.
+    private var fadeDuration: Double {
+        reduceMotion ? DSMotion.reduceMotionFallback : 0.25
     }
 
     func body(content: Content) -> some View {
         content
             .overlay {
-                Capsule()
-                    .strokeBorder(
-                        AngularGradient(gradient: Gradient(colors: colors), center: .center, angle: .zero),
-                        lineWidth: 1.5
-                    )
-                    .hueRotation(.degrees(phase))
-                    .opacity(isActive ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.25), value: isActive)
-            }
-            .overlay {
-                Capsule()
-                    .stroke(
-                        AngularGradient(gradient: Gradient(colors: colors), center: .center, angle: .zero),
-                        lineWidth: 3
-                    )
-                    .hueRotation(.degrees(phase))
-                    .blur(radius: 3)
-                    .opacity(0.45)
-                    .opacity(isActive ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.25), value: isActive)
-            }
-            .overlay {
-                Capsule()
-                    .stroke(
-                        AngularGradient(gradient: Gradient(colors: colors), center: .center, angle: .zero),
-                        lineWidth: 6
-                    )
-                    .hueRotation(.degrees(phase))
-                    .blur(radius: 7)
-                    .opacity(0.25)
-                    .opacity(isActive ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.25), value: isActive)
-            }
-            .overlay {
-                Capsule()
-                    .stroke(
-                        AngularGradient(gradient: Gradient(colors: colors), center: .center, angle: .zero),
-                        lineWidth: 10
-                    )
-                    .hueRotation(.degrees(phase))
-                    .blur(radius: 14)
-                    .opacity(0.12)
-                    .opacity(isActive ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.25), value: isActive)
+                ZStack {
+                    ForEach(Array(recipe.layers.enumerated()), id: \.offset) { _, layer in
+                        Capsule()
+                            .strokeBorder(
+                                AngularGradient(gradient: Gradient(colors: colors), center: .center, angle: .zero),
+                                lineWidth: layer.thickness
+                            )
+                            .padding(layer.inset)
+                            .blur(radius: layer.blur)
+                            .hueRotation(.degrees(phase))
+                            .opacity(layer.opacity)
+                    }
+                }
+                .opacity(isActive ? 1 : 0)
+                .animation(.easeInOut(duration: fadeDuration), value: isActive)
             }
             .onChange(of: isActive, initial: true) { _, newValue in
+                guard !reduceMotion else {
+                    // Reduce Motion: ring appears static (no spin), fade only.
+                    var stillTransaction = Transaction()
+                    stillTransaction.disablesAnimations = true
+                    withTransaction(stillTransaction) { phase = 0 }
+                    return
+                }
                 if newValue {
                     var resetTransaction = Transaction()
                     resetTransaction.disablesAnimations = true
@@ -557,15 +588,19 @@ struct RainbowBorder: ViewModifier {
 }
 
 extension View {
-    func rainbowBorder(period: Double = 6, isActive: Bool = true) -> some View {
-        modifier(RainbowBorder(period: period, isActive: isActive))
+    func rainbowBorder(period: Double = DSMotion.rainbow, isActive: Bool = true, recipe: RainbowRingRecipe = .overview) -> some View {
+        modifier(RainbowBorder(period: period, isActive: isActive, recipe: recipe))
     }
 }
 
 /// Small capsule button with the shimmering rainbow hover border — the shared look for card-header actions (SMART «Обновить», battery «Детали»).
+/// `recipe` defaults to `.overview` — today's shipped look on every existing call
+/// site, including the Settings «Перезапустить сейчас» button, which keeps the
+/// Overview recipe until block V2-SET-GEN explicitly passes `recipe: .settings`.
 struct RainbowCapsuleButton: View {
     let title: String
     var busy: Bool = false
+    var recipe: RainbowRingRecipe = .overview
     let action: () -> Void
 
     @State private var hovering = false
@@ -583,7 +618,7 @@ struct RainbowCapsuleButton: View {
             .padding(.vertical, 4)
             .background(Capsule().fill(Color.primary.opacity(0.06)))
             .overlay { Capsule().strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1) }
-            .rainbowBorder(isActive: hovering)
+            .rainbowBorder(isActive: hovering, recipe: recipe)
         }
         .buttonStyle(.plain)
         .disabled(busy)
