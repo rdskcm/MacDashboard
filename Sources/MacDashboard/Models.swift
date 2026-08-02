@@ -144,6 +144,8 @@ struct Tip: Identifiable, Equatable {
 struct Assessment: Equatable {
     var problems: [Problem] = []        // sorted crit > serious > warn
     var tips: [Tip] = []
+    var items: [AttentionItem] = []       // v2 attention model — mirrors `problems`
+    var capsules: [TipCapsule] = []       // v2 attention model — mirrors `tips`
     var summarySev: Severity = .good
     var summaryText: String = L.recommendationsAllGood
     var diskSev: Severity = .good; var swapSev: Severity = .good

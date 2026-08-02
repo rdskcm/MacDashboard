@@ -485,4 +485,66 @@ struct StringsRU: AppStrings {
     var reportCollectorSmartWearHigh: String { "SMART: износ на исходе" }
     var reportCollectorSmartUnavailable: String { "SMART недоступен" }
     var reportCollectorSmartUnavailableNoTools: String { "SMART недоступен (нет smartmontools)" }
+
+    // MARK: v2 attention
+    var attnLabelDiskFull: String { "Диск" }
+    func attnDetailDiskFull(_ pct: String) -> String { "заполнен на \(pct) %" }
+    var attnLabelDiskFullSoon: String { "Диск" }
+    func attnDetailDiskFullSoon(_ pct: String) -> String { "заполнен на \(pct) %" }
+    var attnLabelSwapHigh: String { "Swap" }
+    func attnDetailSwapHigh(_ used: String) -> String { used }
+    var attnLabelBatteryCapacity: String { "Батарея" }
+    func attnDetailBatteryCapacity(_ cap: Int) -> String { "ёмкость \(cap) %" }
+    var attnLabelBatteryCondition: String { "Батарея" }
+    func attnDetailBatteryCondition(_ cond: String) -> String { "состояние: \(cond)" }
+    var attnLabelFileVaultOff: String { "FileVault" }
+    var attnDetailFileVaultOff: String { "выключен" }
+    var attnLabelGatekeeperOff: String { "Gatekeeper" }
+    var attnDetailGatekeeperOff: String { "выключен" }
+    var attnLabelSipOff: String { "SIP" }
+    var attnDetailSipOff: String { "выключен" }
+    var attnLabelFirewallOff: String { "Брандмауэр" }
+    var attnDetailFirewallOff: String { "выключен" }
+    var attnLabelUpdates: String { "Обновления" }
+    func attnDetailUpdates(_ n: Int) -> String { "\(n) доступно" }
+    var attnLabelCrashes: String { "Сбои" }
+    func attnDetailCrashes(_ n: Int) -> String { "\(n) отчётов" }
+    var attnLabelTimeMachine: String { "Time Machine" }
+    var attnDetailTimeMachine: String { "не настроена" }
+    func attnLabelSmartErrors(_ title: String) -> String { title }
+    var attnDetailSmartErrors: String { "ошибки SMART" }
+    func attnLabelSmartWear(_ title: String) -> String { title }
+    func attnDetailSmartWear(_ pu: Int) -> String { "износ \(pu) %" }
+
+    var attnVerbSettings: String { "Настройки" }
+    var attnVerbActivityMonitor: String { "Мониторинг системы" }
+    var attnVerbDiskUtility: String { "Дисковая утилита" }
+    var attnVerbShow: String { "Показать" }
+    var attnVerbEmpty: String { "Очистить" }
+    var attnVerbEnable: String { "Включить" }
+    var attnVerbUpgrade: String { "Обновить" }
+    var attnVerbOpen: String { "Открыть" }
+
+    var attnCapSwap: String { "Swap" }
+    var attnCapBattery: String { "Батарея" }
+    func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
+    var attnCapBrew: String { "Homebrew" }
+    func attnCapBrewValue(_ n: Int) -> String { "\(n) пакетов" }
+    var attnCapSmartNoData: String { "нет данных SMART" }
+    var attnCapDownloads: String { "Загрузки" }
+    var attnCapTrash: String { "Корзина" }
+    var attnCapCaches: String { "Кэши" }
+    var attnExplainSwap: String { "Система выгружает память на диск. Откроется «Мониторинг системы» — вкладка «Память» покажет, какие процессы её занимают." }
+    var attnExplainBattery: String { "Ёмкость снижается естественным образом со временем. Откроются системные настройки батареи; ничего не изменится без вашего подтверждения." }
+    var attnExplainBrew: String { "Запустит `brew upgrade` в фоне — прогресс виден в карточке Homebrew. Установленные пакеты заменяются на свежие версии." }
+    var attnExplainSmart: String { "Откроет «Дисковую утилиту». У внешних дисков SMART-атрибуты часто недоступны через USB — это не признак поломки." }
+    var attnExplainDownloads: String { "Откроет папку в Finder. Ничего не удаляется — вы сами решаете, что убрать." }
+    var attnExplainTrash: String { "Спросит подтверждение, затем очистит Корзину через Finder. Восстановить файлы после этого нельзя." }
+    var attnExplainCaches: String { "Откроет ~/Library/Caches в Finder. Приложения пересоздадут кэш при следующем запуске." }
+
+    var quietSecurityTitle: String { "Безопасность" }
+    var quietUpdatesTitle: String { "Обновления и краши" }
+    var quietSecurityStatus: String { "всё включено" }
+    var quietUpdatesStatus: String { "нет обновлений и сбоев" }
+    var quietNeedsAttention: String { "требует внимания" }
 }

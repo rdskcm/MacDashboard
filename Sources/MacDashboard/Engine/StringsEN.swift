@@ -485,4 +485,66 @@ struct StringsEN: AppStrings {
     var reportCollectorSmartWearHigh: String { "SMART: wear nearing end of life" }
     var reportCollectorSmartUnavailable: String { "SMART unavailable" }
     var reportCollectorSmartUnavailableNoTools: String { "SMART unavailable (no smartmontools)" }
+
+    // MARK: v2 attention
+    var attnLabelDiskFull: String { "Disk" }
+    func attnDetailDiskFull(_ pct: String) -> String { "\(pct) % full" }
+    var attnLabelDiskFullSoon: String { "Disk" }
+    func attnDetailDiskFullSoon(_ pct: String) -> String { "\(pct) % full" }
+    var attnLabelSwapHigh: String { "Swap" }
+    func attnDetailSwapHigh(_ used: String) -> String { used }
+    var attnLabelBatteryCapacity: String { "Battery" }
+    func attnDetailBatteryCapacity(_ cap: Int) -> String { "capacity \(cap) %" }
+    var attnLabelBatteryCondition: String { "Battery" }
+    func attnDetailBatteryCondition(_ cond: String) -> String { "condition: \(cond)" }
+    var attnLabelFileVaultOff: String { "FileVault" }
+    var attnDetailFileVaultOff: String { "off" }
+    var attnLabelGatekeeperOff: String { "Gatekeeper" }
+    var attnDetailGatekeeperOff: String { "off" }
+    var attnLabelSipOff: String { "SIP" }
+    var attnDetailSipOff: String { "off" }
+    var attnLabelFirewallOff: String { "Firewall" }
+    var attnDetailFirewallOff: String { "off" }
+    var attnLabelUpdates: String { "Updates" }
+    func attnDetailUpdates(_ n: Int) -> String { "\(n) available" }
+    var attnLabelCrashes: String { "Crashes" }
+    func attnDetailCrashes(_ n: Int) -> String { "\(n) reports" }
+    var attnLabelTimeMachine: String { "Time Machine" }
+    var attnDetailTimeMachine: String { "not set up" }
+    func attnLabelSmartErrors(_ title: String) -> String { title }
+    var attnDetailSmartErrors: String { "SMART errors" }
+    func attnLabelSmartWear(_ title: String) -> String { title }
+    func attnDetailSmartWear(_ pu: Int) -> String { "wear \(pu) %" }
+
+    var attnVerbSettings: String { "Settings" }
+    var attnVerbActivityMonitor: String { "Activity Monitor" }
+    var attnVerbDiskUtility: String { "Disk Utility" }
+    var attnVerbShow: String { "Show" }
+    var attnVerbEmpty: String { "Empty" }
+    var attnVerbEnable: String { "Enable" }
+    var attnVerbUpgrade: String { "Upgrade" }
+    var attnVerbOpen: String { "Open" }
+
+    var attnCapSwap: String { "Swap" }
+    var attnCapBattery: String { "Battery" }
+    func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
+    var attnCapBrew: String { "Homebrew" }
+    func attnCapBrewValue(_ n: Int) -> String { "\(n) packages" }
+    var attnCapSmartNoData: String { "no SMART data" }
+    var attnCapDownloads: String { "Downloads" }
+    var attnCapTrash: String { "Trash" }
+    var attnCapCaches: String { "Caches" }
+    var attnExplainSwap: String { "The system is paging memory to disk. Opens Activity Monitor — the Memory tab shows which processes are using it." }
+    var attnExplainBattery: String { "Capacity drops naturally over time. Opens the system Battery settings; nothing changes without your confirmation." }
+    var attnExplainBrew: String { "Runs `brew upgrade` in the background — progress shows in the Homebrew card. Installed packages are replaced with newer versions." }
+    var attnExplainSmart: String { "Opens Disk Utility. External drives often can't expose SMART attributes over USB — that is not a sign of failure." }
+    var attnExplainDownloads: String { "Opens the folder in Finder. Nothing is deleted — you decide what to remove." }
+    var attnExplainTrash: String { "Asks for confirmation, then empties the Trash via Finder. Files cannot be recovered afterwards." }
+    var attnExplainCaches: String { "Opens ~/Library/Caches in Finder. Apps rebuild their caches on next launch." }
+
+    var quietSecurityTitle: String { "Security" }
+    var quietUpdatesTitle: String { "Updates & crashes" }
+    var quietSecurityStatus: String { "all on" }
+    var quietUpdatesStatus: String { "no updates or crashes" }
+    var quietNeedsAttention: String { "needs attention" }
 }

@@ -490,6 +490,72 @@ protocol AppStrings {
     var reportCollectorSmartWearHigh: String { get }
     var reportCollectorSmartUnavailable: String { get }
     var reportCollectorSmartUnavailableNoTools: String { get }
+
+    // MARK: v2 attention
+    // Chip labels + details (one pair per AttentionKind; see Engine/AttentionModel.swift).
+    var attnLabelDiskFull: String { get }
+    func attnDetailDiskFull(_ pct: String) -> String
+    var attnLabelDiskFullSoon: String { get }
+    func attnDetailDiskFullSoon(_ pct: String) -> String
+    var attnLabelSwapHigh: String { get }
+    func attnDetailSwapHigh(_ used: String) -> String
+    var attnLabelBatteryCapacity: String { get }
+    func attnDetailBatteryCapacity(_ cap: Int) -> String
+    var attnLabelBatteryCondition: String { get }
+    func attnDetailBatteryCondition(_ cond: String) -> String
+    var attnLabelFileVaultOff: String { get }
+    var attnDetailFileVaultOff: String { get }
+    var attnLabelGatekeeperOff: String { get }
+    var attnDetailGatekeeperOff: String { get }
+    var attnLabelSipOff: String { get }
+    var attnDetailSipOff: String { get }
+    var attnLabelFirewallOff: String { get }
+    var attnDetailFirewallOff: String { get }
+    var attnLabelUpdates: String { get }
+    func attnDetailUpdates(_ n: Int) -> String
+    var attnLabelCrashes: String { get }
+    func attnDetailCrashes(_ n: Int) -> String
+    var attnLabelTimeMachine: String { get }
+    var attnDetailTimeMachine: String { get }
+    func attnLabelSmartErrors(_ title: String) -> String
+    var attnDetailSmartErrors: String { get }
+    func attnLabelSmartWear(_ title: String) -> String
+    func attnDetailSmartWear(_ pu: Int) -> String
+
+    // Verbs (single source of truth — see AttentionModel.verb(for:lang:)).
+    var attnVerbSettings: String { get }
+    var attnVerbActivityMonitor: String { get }
+    var attnVerbDiskUtility: String { get }
+    var attnVerbShow: String { get }
+    var attnVerbEmpty: String { get }
+    var attnVerbEnable: String { get }
+    var attnVerbUpgrade: String { get }
+    var attnVerbOpen: String { get }
+
+    // Capsule objects + values + explanations.
+    var attnCapSwap: String { get }
+    var attnCapBattery: String { get }
+    func attnCapBatteryValue(_ p: Int) -> String
+    var attnCapBrew: String { get }
+    func attnCapBrewValue(_ n: Int) -> String
+    var attnCapSmartNoData: String { get }
+    var attnCapDownloads: String { get }
+    var attnCapTrash: String { get }
+    var attnCapCaches: String { get }
+    var attnExplainSwap: String { get }
+    var attnExplainBattery: String { get }
+    var attnExplainBrew: String { get }
+    var attnExplainSmart: String { get }
+    var attnExplainDownloads: String { get }
+    var attnExplainTrash: String { get }
+    var attnExplainCaches: String { get }
+
+    // Quiet-strip strings (consumed by a later block — unused for now).
+    var quietSecurityTitle: String { get }
+    var quietUpdatesTitle: String { get }
+    var quietSecurityStatus: String { get }
+    var quietUpdatesStatus: String { get }
+    var quietNeedsAttention: String { get }
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",
