@@ -144,6 +144,7 @@ struct StringsEN: AppStrings {
     var processSignalError: String { "Couldn't send signal (no permission)" }
     var processForceQuit: String { "Force quit" }
     var processForceQuitConfirm: String { "Force quit" }
+    var processForceQuitInlineQuestion: String { "Force quit?" }
     func processForceQuitTitle(_ name: String) -> String { "Force quit “\(name)”?" }
     func processRevealA11y(_ name: String) -> String { "Show “\(name)” in Finder" }
     func processTerminateA11y(_ name: String) -> String { "Quit process “\(name)”" }

@@ -144,6 +144,7 @@ struct StringsRU: AppStrings {
     var processSignalError: String { "Не удалось отправить сигнал (нет прав)" }
     var processForceQuit: String { "Снять принудительно" }
     var processForceQuitConfirm: String { "Снять" }
+    var processForceQuitInlineQuestion: String { "Снять принудительно?" }
     func processForceQuitTitle(_ name: String) -> String { "Принудительно снять процесс „\(name)“?" }
     func processRevealA11y(_ name: String) -> String { "Показать „\(name)“ в Finder" }
     func processTerminateA11y(_ name: String) -> String { "Завершить процесс „\(name)“" }

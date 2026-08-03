@@ -29,19 +29,19 @@ struct ReportTab: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             if let updated = model.reportUpdatedAt {
                 Text(L.reportFileUpdatedCaption(reportUpdatedTimeString(updated)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
             }
 
             if model.isCollectingReport {
                 HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
+                    DSSpinner()
                     Text(L.reportCollecting)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(DS.muted)
                 }
             }
 

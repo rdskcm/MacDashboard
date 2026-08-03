@@ -98,7 +98,7 @@ enum AttentionModel {
         }
         if n == 0 { return "Всё в порядке" }
         let phrase = ruTaskPhrase(n)
-        if (1...20).contains(n) {
+        if (1...6).contains(n) {
             return "\(capitalized(ruWordForm(n))) \(phrase)"
         }
         return "\(n) \(phrase)"

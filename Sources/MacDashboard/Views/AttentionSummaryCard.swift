@@ -72,6 +72,7 @@ struct AttentionSummaryCard: View {
         .padding(.trailing, 16)
         .padding(.bottom, 12)
         .dsCardSurface()
+        .dsBorderHover()
         .adviceActionDialogs(dispatch)
         #if AI_ENABLED
         .onAppear { aiKeyExists = KeychainStore.exists() }

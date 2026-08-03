@@ -156,6 +156,7 @@ protocol AppStrings {
     var processSignalError: String { get }
     var processForceQuit: String { get }
     var processForceQuitConfirm: String { get }
+    var processForceQuitInlineQuestion: String { get }
     func processForceQuitTitle(_ name: String) -> String
     func processRevealA11y(_ name: String) -> String
     func processTerminateA11y(_ name: String) -> String

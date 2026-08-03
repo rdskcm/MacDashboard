@@ -37,6 +37,16 @@ enum DSMotion {
     static let reduceMotionFallback: Double = 0.12
 }
 
+// MARK: - Shadow color helper
+
+/// Navy-tinted black (rgba(20,30,50,·)) used for every light-appearance
+/// elevation/inset shadow layer below — plain black reads flat/muddy against
+/// the light ground, spec calls for this cool tint instead. Dark-appearance
+/// shadow layers stay plain `Color.black`.
+private func dsShadowNavy(_ opacity: Double) -> Color {
+    Color(red: 20 / 255, green: 30 / 255, blue: 50 / 255, opacity: opacity)
+}
+
 // MARK: - Card surface
 
 /// `.dsCardSurface()` — the load-bearing visual surface for every card in the
@@ -46,9 +56,9 @@ enum DSMotion {
 private enum DSCardSurfaceTokens {
     // Elevation shadows (color = black; radius values are already the
     // blur/2 SwiftUI translation — SwiftUI shadows have no CSS-style spread).
-    static let contact = Color(light: Color.black.opacity(0.10), dark: Color.black.opacity(0.45))
-    static let mid = Color(light: Color.black.opacity(0.13), dark: Color.black.opacity(0.50))
-    static let ambient = Color(light: Color.black.opacity(0.24), dark: Color.black.opacity(0.72))
+    static let contact = Color(light: dsShadowNavy(0.10), dark: Color.black.opacity(0.45))
+    static let mid = Color(light: dsShadowNavy(0.13), dark: Color.black.opacity(0.50))
+    static let ambient = Color(light: dsShadowNavy(0.24), dark: Color.black.opacity(0.72))
     // Top-edge highlight: bright in light appearance (white 85%), subtle in dark (white 10%).
     static let highlight = Color(light: Color.white.opacity(0.85), dark: Color.white.opacity(0.10))
 }
@@ -127,6 +137,35 @@ extension View {
     func dsHoverLift() -> some View { modifier(DSHoverLift()) }
 }
 
+/// `.dsBorderHover()` — a border-only hover treatment: transitions the card
+/// border from `DS.line` to `DS.lineStrong` on hover, with NO offset/lift
+/// (unlike `dsHoverLift`). Same `DSMotion.cardHover` duration as `dsHoverLift`
+/// normally; since this is purely a color/border transition (not a transform),
+/// it keeps running under Reduce Motion per this file's Reduce Motion contract
+/// — only the duration drops to `DSMotion.reduceMotionFallback`, mirroring how
+/// `dsHoverLift` degrades its own border/color half.
+struct DSBorderHover: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(hovering ? DS.lineStrong : DS.line, lineWidth: 1)
+            )
+            .animation(
+                reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
+                value: hovering
+            )
+            .onHover { hovering = $0 }
+    }
+}
+
+extension View {
+    func dsBorderHover() -> some View { modifier(DSBorderHover()) }
+}
+
 // MARK: - Recessed track
 
 /// `dsRecessedTrack(in:)` — the shared smooth-recess background reused by
@@ -140,9 +179,9 @@ extension View {
 private enum DSRecessedTrackTokens {
     // Three growing inner shadows (dark opacity > light — black has less
     // contrast against a dark ground, so it needs more alpha to read there).
-    static let inner1 = Color(light: Color.black.opacity(0.09), dark: Color.black.opacity(0.30))
-    static let inner2 = Color(light: Color.black.opacity(0.085), dark: Color.black.opacity(0.26))
-    static let inner3 = Color(light: Color.black.opacity(0.07), dark: Color.black.opacity(0.20))
+    static let inner1 = Color(light: dsShadowNavy(0.09), dark: Color.black.opacity(0.30))
+    static let inner2 = Color(light: dsShadowNavy(0.085), dark: Color.black.opacity(0.26))
+    static let inner3 = Color(light: dsShadowNavy(0.07), dark: Color.black.opacity(0.20))
     // Bottom "bounce" highlight (white opposite skew — light needs more alpha
     // to read a white highlight against an already-light ground).
     static let bounce = Color(light: Color.white.opacity(0.55), dark: Color.white.opacity(0.06))
@@ -171,9 +210,9 @@ func dsRecessedTrack<S: InsettableShape>(in shape: S) -> some View {
 /// (divides the available width by option count).
 private enum DSSlidingSegmentedTokens {
     // Thumb outward shadows (dark opacity > light, same reasoning as the track).
-    static let shadow1 = Color(light: Color.black.opacity(0.10), dark: Color.black.opacity(0.26))
-    static let shadow2 = Color(light: Color.black.opacity(0.13), dark: Color.black.opacity(0.34))
-    static let shadow3 = Color(light: Color.black.opacity(0.16), dark: Color.black.opacity(0.40))
+    static let shadow1 = Color(light: dsShadowNavy(0.10), dark: Color.black.opacity(0.26))
+    static let shadow2 = Color(light: dsShadowNavy(0.13), dark: Color.black.opacity(0.34))
+    static let shadow3 = Color(light: dsShadowNavy(0.16), dark: Color.black.opacity(0.40))
     // Top gleam (inner, white — light needs more alpha to read against the light ground).
     static let gleam = Color(light: Color.white.opacity(0.95), dark: Color.white.opacity(0.22))
 }
@@ -185,6 +224,13 @@ struct DSSlidingSegmented<T: Hashable>: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stretch: CGFloat = 1.0
+    /// Transform-origin for the stretch scale, direction-aware: anchored at
+    /// the side the thumb moved FROM, so it visually stretches toward the new
+    /// position. Updated in `select(_:)`, the sole mutator of `selection`.
+    @State private var stretchAnchor: UnitPoint = .trailing
+    /// Outer container inset (spec §2.3): track, thumb, and labels all sit
+    /// inset 3 pt from the control's own bounds.
+    private let containerPadding: CGFloat = 3
 
     init(options: [T], selection: Binding<T>, label: @escaping (T) -> String) {
         self.options = options
@@ -199,7 +245,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
     var body: some View {
         GeometryReader { geo in
             let count = max(options.count, 1)
-            let segmentWidth = geo.size.width / CGFloat(count)
+            let segmentWidth = max(0, geo.size.width - containerPadding * 2) / CGFloat(count)
 
             ZStack(alignment: .leading) {
                 dsRecessedTrack(in: Capsule())
@@ -207,11 +253,11 @@ struct DSSlidingSegmented<T: Hashable>: View {
                 thumb
                     .frame(width: max(0, segmentWidth))
                     .offset(x: segmentWidth * CGFloat(selectedIndex))
-                    .scaleEffect(x: stretch, y: 1, anchor: .trailing)
+                    .scaleEffect(x: stretch, y: 1, anchor: stretchAnchor)
                     .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.68), value: selection)
                     .zIndex(0)
 
-                HStack(spacing: 0) {
+                HStack(spacing: 2) {
                     ForEach(options, id: \.self) { option in
                         Button {
                             select(option)
@@ -233,6 +279,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
                 }
                 .zIndex(1)
             }
+            .padding(containerPadding)
         }
         .frame(height: 28)
     }
@@ -240,7 +287,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
     private var thumb: some View {
         Capsule()
             .fill(DS.glass3.shadow(.inner(color: DSSlidingSegmentedTokens.gleam, radius: 3, y: 3)))
-            .padding(2)
+            .padding(3)
             .shadow(color: DSSlidingSegmentedTokens.shadow1, radius: 1, x: 0, y: 1)
             .shadow(color: DSSlidingSegmentedTokens.shadow2, radius: 5, x: 0, y: 4)
             .shadow(color: DSSlidingSegmentedTokens.shadow3, radius: 10, x: 0, y: 10)
@@ -248,6 +295,11 @@ struct DSSlidingSegmented<T: Hashable>: View {
 
     private func select(_ option: T) {
         guard option != selection else { return }
+        let oldIndex = selectedIndex
+        let newIndex = options.firstIndex(of: option) ?? oldIndex
+        // Anchor at the side the thumb is leaving, so the stretch reads as
+        // motion toward the new position.
+        stretchAnchor = newIndex > oldIndex ? .leading : .trailing
         selection = option
         guard !reduceMotion else { return }
         stretch = 1.09
@@ -301,14 +353,44 @@ struct DSDisclosureBars: View {
 
 // MARK: - Kicker text style
 
-/// `.dsKicker()` — small uppercase eyebrow/kicker label style: semibold
-/// caption, wide tracking, muted color.
+/// `.dsKicker()` — section-header eyebrow/kicker: a 22×2 pt `DS.accent` bar
+/// followed by an uppercase label (spec §2.8, source OS:116-119). Label color
+/// is `DS.accentInk` — deliberate, per §2.8's component-level table, not the
+/// more ambiguous general token-role table.
 extension Text {
     func dsKicker() -> some View {
+        HStack(spacing: 9) {
+            dsKickerBar
+            dsKickerLabel
+        }
+        .padding(.top, 4)
+    }
+
+    /// `.dsKickerCentered()` — the СИСТЕМА section's variant: bar - label - bar,
+    /// horizontally centered in its container, instead of the standard
+    /// left-aligned single-bar-then-label layout every other kicker uses.
+    /// Reuses the same bar/label styling as `.dsKicker()` — only the layout differs.
+    func dsKickerCentered() -> some View {
+        HStack(spacing: 9) {
+            dsKickerBar
+            dsKickerLabel
+            dsKickerBar
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 4)
+    }
+
+    private var dsKickerBar: some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(DS.accent)
+            .frame(width: 22, height: 2)
+    }
+
+    private var dsKickerLabel: some View {
         self
-            .font(.caption.weight(.semibold))
-            .kerning(1.6)
+            .font(.system(size: 11.5, weight: .semibold))
+            .kerning(11.5 * 0.14) // 0.14em tracking
             .textCase(.uppercase)
-            .foregroundStyle(DS.muted)
+            .foregroundStyle(DS.accentInk)
     }
 }

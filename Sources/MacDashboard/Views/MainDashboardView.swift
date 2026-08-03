@@ -21,22 +21,7 @@ struct MainDashboardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 12)
-
-            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab) { t in
-                switch t {
-                case .overview: return L.mainTabOverview
-                case .report: return L.mainTabReport
-                }
-            }
-            .frame(maxWidth: 260)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-
-            Divider()
+            toolbar
 
             switch tab {
             case .overview: overview
@@ -47,21 +32,67 @@ struct MainDashboardView: View {
         .onChange(of: L10nStore.shared.language) { model.refreshReport() }
     }
 
-    // MARK: Header
+    // MARK: Toolbar (single row: title block · centered tab control · chips/status/refresh)
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L.appWindowTitle)
-                    .font(.title3.bold())
-                    .tracking(-0.285) // 19 pt · −0.015em
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+    private var toolbar: some View {
+        HStack(alignment: .center, spacing: 16) {
+            titleBlock
+            Spacer()
+            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab) { t in
+                switch t {
+                case .overview: return L.mainTabOverview
+                case .report: return L.mainTabReport
+                }
             }
+            .frame(maxWidth: 260)
             Spacer()
             HeaderChipsView(model: model)
         }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(toolbarChrome)
+    }
+
+    /// Fill `DS.glass2` layered over the same `.regularMaterial` blur backdrop
+    /// `dsCardSurface()` uses (DesignSystem.swift), a bottom hairline border, and
+    /// a 1 pt inset top highlight using the same fade-to-clear stroke technique
+    /// `dsCardSurface()` applies for its own sheen line — mirrored here on a
+    /// plain (unrounded) rectangle since the toolbar spans the full width.
+    private var toolbarChrome: some View {
+        ZStack {
+            Rectangle().fill(.regularMaterial)
+            Rectangle().fill(DS.glass2)
+        }
+        .overlay(
+            Rectangle()
+                .strokeBorder(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: DS.sheenLine, location: 0),
+                            .init(color: .clear, location: 0.15),
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DS.line).frame(height: 1)
+        }
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(L.appWindowTitle)
+                .font(.system(size: 19, weight: .bold))
+                .tracking(-0.285) // 19 pt · −0.015em
+                .lineSpacing(1.9) // 19 pt · 1.1 line-height
+            Text(subtitle)
+                .font(.system(size: 11.5))
+                .foregroundStyle(DS.muted)
+        }
+        .frame(minWidth: 250, alignment: .leading)
     }
 
     private var subtitle: String {
@@ -81,7 +112,7 @@ struct MainDashboardView: View {
 
     private var overview: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 AttentionSummaryCard(model: model)
 
                 Text(L.overviewKickerMetrics).dsKicker()
@@ -98,7 +129,7 @@ struct MainDashboardView: View {
                     ServiceDirsCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                Text(L.overviewKickerSystem).dsKicker()
+                Text(L.overviewKickerSystem).dsKickerCentered()
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 12) {
                         SecurityCard(model: model)
@@ -163,10 +194,14 @@ struct HeaderChipsView: View {
     }
 
     // Status chip is bound to the live assessment — never a static severity/text
-    // pair — so it can never disagree with `model.assessment`.
+    // pair — so it can never disagree with `model.assessment`. Tone comes from
+    // the SAME shared `tone(for:)` (SharedUI.swift) applied to the SAME
+    // `summarySev` that AttentionSummaryCard's title dot reads, instead of a
+    // second parallel "is this bad" computation — the two can no longer
+    // disagree because they're reading one computed value through one function.
     private var statusIsGood: Bool { model.assessment.problems.isEmpty }
-    private var statusHasCrit: Bool { model.assessment.problems.contains { $0.sev == .crit } }
-    private var statusTone: Color { statusIsGood ? DS.green : (statusHasCrit ? DS.hot : DS.amber) }
+    private var statusHasCrit: Bool { model.assessment.summarySev == .crit || model.assessment.summarySev == .serious }
+    private var statusTone: Color { tone(for: model.assessment.summarySev) }
     private var statusLabel: String { statusIsGood ? L.recommendationsAllGood : L.headerStatusNeedsAttention }
 
     private var refreshButton: some View {

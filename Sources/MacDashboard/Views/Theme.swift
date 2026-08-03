@@ -106,4 +106,11 @@ enum DS {
     /// Capsule/trigger glass fill — the only "glass" token that ships (cards use
     /// native materials, see `dsCardSurface()` in DesignSystem.swift).
     static let glass3 = Color(light: Color.white.opacity(0.92), dark: Color.white.opacity(0.11))
+    /// Card fill (spec token, not currently wired into `dsCardSurface()` — see
+    /// that modifier's doc comment for why it still uses `.regularMaterial`).
+    static let glass = Color(light: Color.white.opacity(0.62), dark: Color.white.opacity(0.045))
+    /// Toolbar/sidebar fill.
+    static let glass2 = Color(light: Color.white.opacity(0.80), dark: Color.white.opacity(0.075))
+    /// 1 pt inset top highlight on cards/buttons.
+    static let sheenLine = Color(light: Color.white.opacity(0.85), dark: Color.white.opacity(0.10))
 }

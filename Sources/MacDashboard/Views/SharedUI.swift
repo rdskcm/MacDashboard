@@ -11,11 +11,11 @@ struct Chip: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.caption)
-            .foregroundStyle(DS.inkSoft)
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .foregroundStyle(DS.muted)
             .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(DS.row))
+            .padding(.vertical, 6)
+            .background(Capsule().fill(DS.glass))
             .overlay(Capsule().strokeBorder(DS.line, lineWidth: 1))
     }
 }
@@ -39,18 +39,18 @@ struct SeverityChip: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Circle()
                 .fill(tone)
                 .frame(width: 6, height: 6)
             Text(label)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 11.5, weight: .semibold))
                 // DS.hot has no -ink light-mode text variant, so the critical case
                 // falls back to neutral DS.ink; the amber case has DS.amberInk and must use it.
                 .foregroundStyle(isGood ? DS.greenInk : (hasCrit ? DS.ink : DS.amberInk))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
         .background(Capsule().fill(tone.opacity(0.14)))
         .overlay(Capsule().strokeBorder(tone.opacity(0.32), lineWidth: 1))
         .animation(colorTransition, value: tone)
@@ -66,6 +66,13 @@ struct SeverityChip: View {
 struct MeterBar: View {
     var fraction: Double
     var color: Color
+    /// FIX-1 audit (V2-TILES follow-up): no call site carried a width-change
+    /// animation before this pass. Spec requires it ONLY on the Memory/Swap
+    /// tiles' live bars — .8 s `cubic-bezier(0.22,0.61,0.36,1)` — while Disk
+    /// and Battery must keep snapping instantly. Defaults to `false` so any
+    /// call site that doesn't opt in keeps the (correct, already-audited)
+    /// no-animation behavior.
+    var animated: Bool = false
 
     var body: some View {
         GeometryReader { geo in
@@ -73,6 +80,7 @@ struct MeterBar: View {
                 dsRecessedTrack(in: Capsule())
                 Capsule().fill(color)
                     .frame(width: max(2, geo.size.width * CGFloat(min(max(fraction, 0), 1))))
+                    .animation(animated ? .timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8) : nil, value: fraction)
             }
         }
         .frame(height: 6)
@@ -255,7 +263,7 @@ struct KPITileView<Satellite: View, Visual: View>: View {
                 Text(unit)
                     .font(.system(size: 13))
                     .foregroundStyle(DS.muted)
-                    .padding(.leading, 1)
+                    .padding(.leading, 2)
                     .fixedSize(horizontal: true, vertical: false)
             }
             if let outOf {
@@ -265,6 +273,16 @@ struct KPITileView<Satellite: View, Visual: View>: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.leading, 5)
+                    // Without an explicit width frame, this Text has no
+                    // well-defined layout width to truncate against inside
+                    // an HStack whose other siblings are `fixedSize` — it
+                    // renders at its intrinsic size and gets hard-clipped
+                    // by the surrounding layout with no ellipsis (e.g. the
+                    // Swap tile showing a stray "и" instead of "из 1,9…").
+                    // `.frame(maxWidth: .infinity, ...)` gives it the same
+                    // "take remaining space, then truncate" treatment the
+                    // header label already uses.
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(height: 30, alignment: .leading)
@@ -383,7 +401,9 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
     @State private var showTable = false
     @State private var showInfo = false
     @State private var hovering = false
+    @State private var infoHovering = false
     @State private var cursorPushed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewBuilder var chart: () -> ChartContent
     @ViewBuilder var table: () -> TableContent
 
@@ -395,9 +415,15 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
                         showInfo.toggle()
                     } label: {
                         Image(systemName: "info.circle")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(infoHovering ? DS.ink : DS.muted)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                    .onHover { infoHovering = $0 }
+                    .animation(
+                        reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
+                        value: infoHovering
+                    )
                     .accessibilityLabel(showInfo ? L.sharedInfoHide : L.sharedInfoShow)
                 }
                 Button {
@@ -406,8 +432,8 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
                     Text(showTable ? L.sharedToggleToChart : L.sharedToggleToTable)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(DS.inkSoft)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                         .background(Capsule().fill(DS.glass3))
                         .overlay { Capsule().strokeBorder(DS.lineStrong, lineWidth: 1) }
                         .rainbowBorder(isActive: hovering, recipe: .overview)
@@ -429,8 +455,9 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
             VStack(alignment: .leading, spacing: 10) {
                 if showInfo, let infoHelp {
                     Text(infoHelp)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(DS.muted)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
                 if showTable {
                     table()
@@ -438,6 +465,10 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
                     chart()
                 }
             }
+            .animation(
+                reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                value: showInfo
+            )
         }
     }
 }
@@ -527,6 +558,12 @@ struct SimpleTable: View {
     /// column listed in `sortableColumns` so sorting compares values rather
     /// than formatted display strings (e.g. "1.2 GB" vs "890 MB").
     var sortValues: [[Double]]? = nil
+    /// Optional leading color-swatch column, one entry per `rows` index. Nil
+    /// by default (no swatch column at all), so existing call sites render
+    /// exactly as before. When set, must have the same count as `rows`; pass
+    /// `.clear` for a row that should still reserve the swatch's layout space
+    /// without showing a visible color (e.g. a reference-only row).
+    var swatchColors: [Color]? = nil
 
     @State private var hoveredRow: Int? = nil
     @State private var sortColumn: Int? = nil
@@ -550,12 +587,17 @@ struct SimpleTable: View {
         let order = displayOrder
         Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
             GridRow {
+                if swatchColors != nil {
+                    // Blank placeholder so the header row has the same column
+                    // count as the data rows' leading swatch cell.
+                    Color.clear.frame(width: 10, height: 10)
+                }
                 ForEach(Array(headers.enumerated()), id: \.offset) { i, h in
                     let sortable = sortableColumns.contains(i) && sortValues != nil
                     HStack(spacing: 2) {
                         Text(h)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(DS.muted)
                         if sortable {
                             if sortColumn == i {
                                 Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
@@ -582,10 +624,15 @@ struct SimpleTable: View {
                     .gridColumnAlignment(numericColumns.contains(i) ? .trailing : .leading)
                 }
             }
-            Divider()
+            Rectangle().fill(DS.line).frame(height: 1)
             ForEach(order, id: \.self) { r in
                 let row = rows[r]
                 GridRow {
+                    if let swatchColors {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(r < swatchColors.count ? swatchColors[r] : Color.clear)
+                            .frame(width: 10, height: 10)
+                    }
                     ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
                         let isNumeric = numericColumns.contains(c)
                         let cellFont: Font = isNumeric
@@ -605,16 +652,18 @@ struct SimpleTable: View {
                         }
                     }
                 }
-                .background((rowAction != nil && hoveredRow == r) ? Color.primary.opacity(0.06) : Color.clear)
+                .background(RoundedRectangle(cornerRadius: 5).fill(hoveredRow == r ? DS.row : Color.clear))
                 .contentShape(Rectangle())
                 .onHover { hovering in
-                    guard rowAction != nil else { return }
+                    // Hover fill is a pure visual state on every row; the
+                    // pointing-hand cursor stays gated on an actual `rowAction`
+                    // so only genuinely clickable rows imply clickability.
                     if hovering {
                         hoveredRow = r
-                        NSCursor.pointingHand.push()
+                        if rowAction != nil { NSCursor.pointingHand.push() }
                     } else {
                         if hoveredRow == r { hoveredRow = nil }
-                        NSCursor.pop()
+                        if rowAction != nil { NSCursor.pop() }
                     }
                 }
                 .onTapGesture {
@@ -699,9 +748,13 @@ struct LegendItem: View {
     let value: String
     var body: some View {
         HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 10, height: 10)
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.caption.weight(.semibold))
+            RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(DS.muted)
+            Text(value)
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
         }
         .contentShape(Rectangle())
     }
@@ -832,6 +885,34 @@ struct RainbowBorder: ViewModifier {
 extension View {
     func rainbowBorder(period: Double = DSMotion.rainbow, isActive: Bool = true, recipe: RainbowRingRecipe = .overview) -> some View {
         modifier(RainbowBorder(period: period, isActive: isActive, recipe: recipe))
+    }
+}
+
+/// 11×11pt circular loading spinner (spec §2.7) — a `DS.lineStrong` base ring
+/// with a `DS.accent`-colored quarter-turn arc at the top, continuously
+/// rotating (360°/0.8 s, linear). Reduce Motion: mirrors `RainbowBorder`'s
+/// continuous-rotation contract (see above) — the ring stays static, no spin.
+struct DSSpinner: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(DS.lineStrong, lineWidth: 1.6)
+            Circle()
+                .trim(from: 0, to: 0.25)
+                .stroke(DS.accent, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 11, height: 11)
+        .rotationEffect(.degrees(rotation))
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                rotation = 360
+            }
+        }
     }
 }
 
