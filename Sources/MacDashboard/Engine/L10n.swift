@@ -38,6 +38,7 @@ protocol AppStrings {
     var overviewKickerMetrics: String { get }
     var overviewKickerMemory: String { get }
     var overviewKickerProcesses: String { get }
+    var overviewKickerFolders: String { get }
     var overviewKickerSystem: String { get }
     var overviewKickerHistory: String { get }
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String
@@ -131,6 +132,8 @@ protocol AppStrings {
     // MARK: Storage — Служебные папки
     var storageServiceDirsTitle: String { get }
     var storageServiceDirsCaption: String { get }
+    var folderTabHome: String { get }
+    var folderTabSvc: String { get }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { get }

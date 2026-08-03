@@ -1,10 +1,10 @@
 // Views/StorageCards.swift
-// Домашняя папка / Служебные папки / Диски (SMART) cards.
+// Папки (домашняя | служебные) / Диски (SMART) cards.
 
 import SwiftUI
 import AppKit
 
-// MARK: - Домашняя папка (report-time, chart/table)
+// MARK: - Папки (report-time, merged home/service tab card)
 
 /// Reveal a folder in Finder; silently no-op if it no longer exists (deleted
 /// between report collection and the click).
@@ -23,10 +23,70 @@ private func stripHome(_ path: String, home: String) -> String {
     return p
 }
 
-/// Process-card-style bar list for a `[DirSize]` list, reused by HomeDirsCard and
-/// ServiceDirsCard: each folder is a thick clickable row with a proportional gauge
-/// behind the content (widths relative to the largest entry), label left, size
-/// right, and a trailing chevron signalling that a click reveals it in Finder.
+// MARK: - Row (compact, gauge behind content) — mirrors ProcessRowView's recipe
+
+private struct DirBarRow: View {
+    let label: String
+    let bytes: Int64
+    let maxBytes: Int64
+    let onTap: () -> Void
+
+    @State private var hovering = false
+    // Row width, captured once via `onGeometryChange` instead of read live from
+    // a `GeometryReader` inside the ZStack — see ProcessRowView's rationale in
+    // Views/ProcessCards.swift (settled precedent, not relitigated here).
+    @State private var rowWidth: CGFloat = 0
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 9).fill(DS.row)
+            if maxBytes > 0 {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(DS.amber.opacity(0.18))
+                    .frame(width: max(0, rowWidth * CGFloat(min(Double(bytes) / Double(maxBytes), 1))))
+            }
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(DS.inkSoft)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 8)
+                Text(fmtBytes(bytes))
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(DS.inkSoft)
+                Text("›")
+                    .font(.system(size: 12))
+                    .foregroundStyle(DS.muted)
+            }
+            .padding(.horizontal, 9)
+        }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+            rowWidth = newWidth
+        }
+        .frame(height: 27)
+        .background(hovering ? DS.track : Color.clear)
+        .animation(.easeInOut(duration: 0.14), value: hovering)
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .contentShape(Rectangle())
+        .onHover { isHovering in
+            if isHovering {
+                hovering = true
+                NSCursor.pointingHand.push()
+            } else {
+                hovering = false
+                NSCursor.pop()
+            }
+        }
+        .onTapGesture { onTap() }
+    }
+}
+
+/// Row list for a `[DirSize]` list, shared by both tabs of `FoldersCard`: each
+/// folder is a thick clickable row with a proportional gauge behind the
+/// content (widths relative to the largest entry), label left, size right, and
+/// a trailing chevron signalling that a click reveals it in Finder.
 private struct DirBarList: View {
     let dirs: [DirSize]
     let label: (DirSize) -> String
@@ -43,114 +103,22 @@ private struct DirBarList: View {
     }
 }
 
-// MARK: - Row (compact, gauge behind content) — mirrors ProcessRowView's recipe
-
-private struct DirBarRow: View {
-    let label: String
-    let bytes: Int64
-    let maxBytes: Int64
-    let onTap: () -> Void
-
-    @State private var hovering = false
-
-    var body: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.035))
-            GeometryReader { geo in
-                if maxBytes > 0 {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(SeriesPalette.s3.opacity(0.18))
-                        .frame(width: max(0, geo.size.width * CGFloat(min(Double(bytes) / Double(maxBytes), 1))))
-                }
-            }
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(.callout)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 8)
-                Text(fmtBytes(bytes))
-                    .font(.callout.monospacedDigit().weight(.semibold))
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 8)
-        }
-        .frame(height: 24)
-        .background(hovering ? Color.primary.opacity(0.06) : Color.clear)
-        .contentShape(Rectangle())
-        .onHover { isHovering in
-            if isHovering {
-                hovering = true
-                NSCursor.pointingHand.push()
-            } else {
-                hovering = false
-                NSCursor.pop()
-            }
-        }
-        .onTapGesture { onTap() }
-    }
-}
+private enum FolderTab: Hashable { case home, service }
 
 @MainActor
-struct HomeDirsCard: View {
+struct FoldersCard: View {
     let model: DashboardModel
+    @State private var folderTab: FolderTab = .home
     private var home: String { NSHomeDirectory() }
 
-    private var dirs: [DirSize] { model.report.homeDirs ?? [] }
-    private var totalBytes: Int64 {
-        let h = home
-        if let total = dirs.first(where: { stripHome($0.path, home: h) == "~" })?.bytes { return total }
-        return dirs.map(\.bytes).max() ?? 0
-    }
+    private var homeDirs: [DirSize] { model.report.homeDirs ?? [] }
     private var chartDirs: [DirSize] {
         let h = home
-        return dirs.filter { stripHome($0.path, home: h) != "~" && $0.bytes > 0 }
+        return homeDirs.filter { stripHome($0.path, home: h) != "~" && $0.bytes > 0 }
             .sorted { $0.bytes > $1.bytes }
             .prefix(10)
             .map { $0 }
     }
-
-    var body: some View {
-        if model.report.homeDirs == nil {
-            CardChrome(title: L.storageHomeDirsTitle) {
-                SectionStateView(done: model.report.progress["homeDirs"] ?? false)
-            }
-        } else if dirs.isEmpty {
-            CardChrome(title: L.storageHomeDirsTitle) {
-                Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
-            }
-        } else {
-            ChartOrTableCard(title: L.storageHomeDirsTitle, caption: L.storageHomeDirsCaption) {
-                DirBarList(dirs: chartDirs) { stripHome($0.path, home: home) }
-            } table: {
-                let total = max(totalBytes, 1)
-                let sorted = dirs.sorted { $0.bytes > $1.bytes }
-                SimpleTable(
-                    headers: [L.storageColFolder, L.storageColSize, L.storageColShare],
-                    rows: sorted.map { d in
-                        [stripHome(d.path, home: home), fmtBytes(d.bytes),
-                         fmtNum(Double(d.bytes) / Double(total) * 100, decimals: 1) + "%"]
-                    },
-                    numericColumns: [1, 2],
-                    rowAction: { r in revealInFinder(sorted[r].path) },
-                    sortableColumns: [1, 2],
-                    sortValues: sorted.map { d in
-                        let bytes = Double(d.bytes)
-                        return [0, bytes, bytes / Double(total) * 100]
-                    }
-                )
-            }
-        }
-    }
-}
-
-// MARK: - Служебные папки (report-time, table only)
-
-struct ServiceDirsCard: View {
-    let model: DashboardModel
-    private var home: String { NSHomeDirectory() }
 
     private func label(for path: String) -> String {
         let h = home
@@ -159,30 +127,52 @@ struct ServiceDirsCard: View {
         return stripHome(path, home: h)
     }
 
+    private var title: String {
+        folderTab == .home ? L.storageHomeDirsTitle : L.storageServiceDirsTitle
+    }
+    private var caption: String {
+        folderTab == .home ? L.storageHomeDirsCaption : L.storageServiceDirsCaption
+    }
+
+    private var segmentedControl: some View {
+        DSSlidingSegmented(options: [FolderTab.home, .service], selection: $folderTab) { t in
+            t == .home ? L.folderTabHome : L.folderTabSvc
+        }
+        .frame(width: 168, height: 26)
+    }
+
     var body: some View {
-        if model.report.serviceDirs == nil {
-            CardChrome(title: L.storageServiceDirsTitle, caption: L.storageServiceDirsCaption) {
-                SectionStateView(done: model.report.progress["serviceDirs"] ?? false)
-            }
-        } else {
-            let dirs = model.report.serviceDirs ?? []
-            let sorted = dirs.filter { $0.bytes > 0 }.sorted { $0.bytes > $1.bytes }
-            if sorted.isEmpty {
-                CardChrome(title: L.storageServiceDirsTitle, caption: L.storageServiceDirsCaption) {
+        switch folderTab {
+        case .home:
+            if model.report.homeDirs == nil {
+                CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
+                    SectionStateView(done: model.report.progress["homeDirs"] ?? false)
+                }
+            } else if homeDirs.isEmpty {
+                CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
                     Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
                 }
             } else {
-                ChartOrTableCard(title: L.storageServiceDirsTitle, caption: L.storageServiceDirsCaption) {
-                    DirBarList(dirs: sorted) { label(for: $0.path) }
-                } table: {
-                    SimpleTable(
-                        headers: [L.storageColFolder, L.storageColSize],
-                        rows: sorted.map { [label(for: $0.path), fmtBytes($0.bytes)] },
-                        numericColumns: [1],
-                        rowAction: { r in revealInFinder(sorted[r].path) },
-                        sortableColumns: [1],
-                        sortValues: sorted.map { [0, Double($0.bytes)] }
-                    )
+                CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
+                    DirBarList(dirs: chartDirs) { stripHome($0.path, home: home) }
+                }
+            }
+        case .service:
+            if model.report.serviceDirs == nil {
+                CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
+                    SectionStateView(done: model.report.progress["serviceDirs"] ?? false)
+                }
+            } else {
+                let dirs = model.report.serviceDirs ?? []
+                let sorted = dirs.filter { $0.bytes > 0 }.sorted { $0.bytes > $1.bytes }
+                if sorted.isEmpty {
+                    CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
+                        Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
+                    }
+                } else {
+                    CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
+                        DirBarList(dirs: sorted) { label(for: $0.path) }
+                    }
                 }
             }
         }

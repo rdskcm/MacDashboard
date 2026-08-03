@@ -5,8 +5,8 @@
 // Память, История — sit in their own full-width rows; below that,
 // three side-by-side pair rows (each an HStack of two equal-width cards) group
 // related cards instead of a row-aligning LazyVGrid or a height-imbalanced
-// two-column masonry: Процессы (CPU | память), Хранилище (домашняя папка |
-// служебные папки), and Система (Безопасность/Автозапуск/Энергия/Обслуживание |
+// two-column masonry: Процессы (CPU | память) | Папки (домашняя | служебные),
+// and Система (Безопасность/Автозапуск/Энергия/Обслуживание |
 // Диски (SMART)/Time Machine).
 
 import SwiftUI
@@ -121,12 +121,13 @@ struct MainDashboardView: View {
                 Text(L.overviewKickerMemory).dsKicker()
                 MemoryCard(model: model)
 
-                Text(L.overviewKickerProcesses).dsKicker()
-                ProcessListCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-
                 HStack(alignment: .top, spacing: 12) {
-                    HomeDirsCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-                    ServiceDirsCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(L.overviewKickerProcesses).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
+                    Text(L.overviewKickerFolders).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
+                }
+                HStack(alignment: .top, spacing: 12) {
+                    ProcessListCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
+                    FoldersCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 Text(L.overviewKickerSystem).dsKickerCentered()

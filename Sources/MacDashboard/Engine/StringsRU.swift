@@ -28,6 +28,7 @@ struct StringsRU: AppStrings {
     var overviewKickerMetrics: String { "Метрики" }
     var overviewKickerMemory: String { "Память" }
     var overviewKickerProcesses: String { "Процессы" }
+    var overviewKickerFolders: String { "Папки" }
     var overviewKickerSystem: String { "Система" }
     var overviewKickerHistory: String { "История" }
 
@@ -119,6 +120,8 @@ struct StringsRU: AppStrings {
     // MARK: Storage — Служебные папки
     var storageServiceDirsTitle: String { "Служебные папки" }
     var storageServiceDirsCaption: String { "кэши, контейнеры, логи, программы" }
+    var folderTabHome: String { "Домашняя" }
+    var folderTabSvc: String { "Служебные" }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { "Диски (SMART)" }
