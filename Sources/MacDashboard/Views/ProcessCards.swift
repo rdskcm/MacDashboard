@@ -91,6 +91,12 @@ struct ProcessListCard: View {
                     // that mismatch is what let the gauge fill visibly detach from
                     // its row. `nil` under Reduce Motion: reordering is instant.
                     .animation(reduceMotion ? nil : processRowMotion, value: rows)
+                    // …but a metric switch replaces `rows` wholesale, and animating
+                    // THAT churns the whole list for 0.8 s after every tap on the
+                    // CPU|Память control. A fresh identity per metric drops the old
+                    // subtree instead of interpolating into the new one, so the
+                    // switch is instant while tick-to-tick re-sorts keep the curve.
+                    .id(procMetric)
                 }
             }
         }
