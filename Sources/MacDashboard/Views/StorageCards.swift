@@ -141,38 +141,38 @@ struct FoldersCard: View {
         .frame(width: 168, height: 26)
     }
 
+    // `CardChrome`/`segmentedControl` must sit OUTSIDE the folderTab switch:
+    // branching the whole card on `folderTab` gave the segmented control a
+    // fresh identity on every tap, so `DSSlidingSegmented`'s thumb spring
+    // (keyed on `value: selection`, DesignSystem.swift) never animates — the
+    // new instance just mounts pre-selected. Only the row content varies.
     var body: some View {
+        CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch folderTab {
         case .home:
             if model.report.homeDirs == nil {
-                CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
-                    SectionStateView(done: model.report.progress["homeDirs"] ?? false)
-                }
+                SectionStateView(done: model.report.progress["homeDirs"] ?? false)
             } else if homeDirs.isEmpty {
-                CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
-                    Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
-                }
+                Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
             } else {
-                CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
-                    DirBarList(dirs: chartDirs) { stripHome($0.path, home: home) }
-                }
+                DirBarList(dirs: chartDirs) { stripHome($0.path, home: home) }
             }
         case .service:
             if model.report.serviceDirs == nil {
-                CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
-                    SectionStateView(done: model.report.progress["serviceDirs"] ?? false)
-                }
+                SectionStateView(done: model.report.progress["serviceDirs"] ?? false)
             } else {
                 let dirs = model.report.serviceDirs ?? []
                 let sorted = dirs.filter { $0.bytes > 0 }.sorted { $0.bytes > $1.bytes }
                 if sorted.isEmpty {
-                    CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
-                        Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
-                    }
+                    Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
                 } else {
-                    CardChrome(title: title, caption: caption, trailing: { segmentedControl }) {
-                        DirBarList(dirs: sorted) { label(for: $0.path) }
-                    }
+                    DirBarList(dirs: sorted) { label(for: $0.path) }
                 }
             }
         }
