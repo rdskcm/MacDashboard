@@ -30,25 +30,8 @@ struct ReportTab: View {
 
     private var toolbar: some View {
         HStack(spacing: 12) {
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([model.reportURL])
-            } label: {
-                Label(L.reportShowInFinder, systemImage: "folder")
-            }
-
-            Button {
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.setString(model.reportText ?? "", forType: .string)
-            } label: {
-                Label(L.reportCopy, systemImage: "doc.on.doc")
-            }
-            .disabled(model.reportText == nil)
-
-            Spacer()
-
             if let updated = model.reportUpdatedAt {
-                Text(L.storageSmartUpdatedCaption(reportUpdatedTimeString(updated)))
+                Text(L.reportFileUpdatedCaption(reportUpdatedTimeString(updated)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -61,6 +44,21 @@ struct ReportTab: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Spacer()
+
+            RainbowCapsuleButton(title: L.reportShowInFinder, recipe: .overview) {
+                NSWorkspace.shared.activateFileViewerSelecting([model.reportURL])
+            }
+            .accessibilityLabel(L.reportShowInFinder)
+
+            RainbowCapsuleButton(title: L.reportCopy, recipe: .overview) {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(model.reportText ?? "", forType: .string)
+            }
+            .accessibilityLabel(L.reportCopy)
+            .disabled(model.reportText == nil)
         }
         .padding(12)
     }

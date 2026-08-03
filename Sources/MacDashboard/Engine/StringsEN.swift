@@ -23,9 +23,18 @@ struct StringsEN: AppStrings {
     var mainTabOverview: String { "Overview" }
     var mainTabReport: String { "Report" }
     var mainCollectingInfo: String { "Collecting system information…" }
+
+    // MARK: Overview page section kickers
+    var overviewKickerMetrics: String { "Metrics" }
+    var overviewKickerMemory: String { "Memory" }
+    var overviewKickerProcesses: String { "Processes" }
+    var overviewKickerSystem: String { "System" }
+    var overviewKickerHistory: String { "History" }
+
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String { "load \(load) · \(ncpu) cores" }
     func headerUptimeChip(_ uptime: String) -> String { "uptime \(uptime)" }
     var headerRefreshReport: String { "Refresh report" }
+    var headerStatusNeedsAttention: String { "Needs attention" }
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { "Processor (CPU)" }
@@ -64,6 +73,7 @@ struct StringsEN: AppStrings {
     var reportShowInFinder: String { "Show in Finder" }
     var reportCopy: String { "Copy" }
     var reportCollecting: String { "Generating report…" }
+    func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · updated \(time)" }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Recommendations" }

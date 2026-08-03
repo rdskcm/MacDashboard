@@ -12,27 +12,49 @@ struct Chip: View {
     var body: some View {
         Text(text)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DS.inkSoft)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(Capsule().fill(Color.primary.opacity(0.06)))
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12)))
+            .background(Capsule().fill(DS.row))
+            .overlay(Capsule().strokeBorder(DS.line, lineWidth: 1))
     }
 }
 
+/// Header status chip — bound to the live assessment, never a static label
+/// (see `HeaderChipsView` in MainDashboardView.swift, its one call site).
+/// `tone` drives the dot + 14%/32% fill/stroke; `isGood` only swaps the label's
+/// ink (green-ink text on the all-clear state, plain `DS.ink` otherwise — the
+/// "otherwise" tones (`DS.hot`/`DS.amber`) are containers/dot colors only, per
+/// the light-theme ink-role rule: `DS.hot` has no light-mode text role).
 struct SeverityChip: View {
-    let sev: Severity
-    let text: String
+    let isGood: Bool
+    let tone: Color
+    let label: String
+    var hasCrit: Bool = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var colorTransition: Animation {
+        .easeInOut(duration: reduceMotion ? DSMotion.reduceMotionFallback : 0.18)
+    }
+
     var body: some View {
-        HStack(spacing: 4) {
-            Text(sev.icon)
-            Text(text)
+        HStack(spacing: 6) {
+            Circle()
+                .fill(tone)
+                .frame(width: 6, height: 6)
+            Text(label)
+                .font(.caption.weight(.semibold))
+                // DS.hot has no -ink light-mode text variant, so the critical case
+                // falls back to neutral DS.ink; the amber case has DS.amberInk and must use it.
+                .foregroundStyle(isGood ? DS.greenInk : (hasCrit ? DS.ink : DS.amberInk))
         }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(sev.color)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(Capsule().fill(sev.color.opacity(0.14)))
+        .background(Capsule().fill(tone.opacity(0.14)))
+        .overlay(Capsule().strokeBorder(tone.opacity(0.32), lineWidth: 1))
+        .animation(colorTransition, value: tone)
+        .animation(colorTransition, value: label)
     }
 }
 

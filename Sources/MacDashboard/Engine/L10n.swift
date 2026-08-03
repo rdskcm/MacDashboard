@@ -33,9 +33,18 @@ protocol AppStrings {
     var mainTabOverview: String { get }
     var mainTabReport: String { get }
     var mainCollectingInfo: String { get }
+
+    // MARK: Overview page section kickers
+    var overviewKickerMetrics: String { get }
+    var overviewKickerMemory: String { get }
+    var overviewKickerProcesses: String { get }
+    var overviewKickerSystem: String { get }
+    var overviewKickerHistory: String { get }
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String
     func headerUptimeChip(_ uptime: String) -> String
     var headerRefreshReport: String { get }
+    /// Status chip label when `assessment.problems` is non-empty (pairs with `recommendationsAllGood`).
+    var headerStatusNeedsAttention: String { get }
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { get }
@@ -72,6 +81,7 @@ protocol AppStrings {
     var reportShowInFinder: String { get }
     var reportCopy: String { get }
     var reportCollecting: String { get }
+    func reportFileUpdatedCaption(_ time: String) -> String
 
     // MARK: Recommendations card
     var recommendationsTitle: String { get }

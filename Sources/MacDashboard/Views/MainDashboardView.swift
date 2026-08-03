@@ -26,12 +26,12 @@ struct MainDashboardView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 12)
 
-            Picker("", selection: $tab) {
-                Text(L.mainTabOverview).tag(Tab.overview)
-                Text(L.mainTabReport).tag(Tab.report)
+            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab) { t in
+                switch t {
+                case .overview: return L.mainTabOverview
+                case .report: return L.mainTabReport
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .frame(maxWidth: 260)
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
@@ -53,7 +53,8 @@ struct MainDashboardView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L.appWindowTitle)
-                    .font(.largeTitle.bold())
+                    .font(.title3.bold())
+                    .tracking(-0.285) // 19 pt · −0.015em
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -83,10 +84,13 @@ struct MainDashboardView: View {
             VStack(alignment: .leading, spacing: 16) {
                 RecommendationsCard(model: model)
 
+                Text(L.overviewKickerMetrics).dsKicker()
                 kpiRow
 
+                Text(L.overviewKickerMemory).dsKicker()
                 MemoryCard(model: model)
 
+                Text(L.overviewKickerProcesses).dsKicker()
                 HStack(alignment: .top, spacing: 12) {
                     ProcessesCPUCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                     ProcessesMemCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
@@ -97,6 +101,7 @@ struct MainDashboardView: View {
                     ServiceDirsCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                Text(L.overviewKickerSystem).dsKicker()
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 12) {
                         SecurityCard(model: model)
@@ -113,10 +118,12 @@ struct MainDashboardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                Text(L.overviewKickerHistory).dsKicker()
                 HistoryCard(model: model)
             }
             .padding(20)
         }
+        .background(DS.ground)
     }
 
     private var kpiRow: some View {
@@ -147,22 +154,22 @@ struct HeaderChipsView: View {
             if let uptime = model.report.system?.uptime {
                 Chip(text: L.headerUptimeChip(uptime))
             }
-            SeverityChip(sev: model.assessment.summarySev, text: model.assessment.summaryText)
+            SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
             refreshButton
         }
     }
 
+    // Status chip is bound to the live assessment — never a static severity/text
+    // pair — so it can never disagree with `model.assessment`.
+    private var statusIsGood: Bool { model.assessment.problems.isEmpty }
+    private var statusHasCrit: Bool { model.assessment.problems.contains { $0.sev == .crit } }
+    private var statusTone: Color { statusIsGood ? DS.green : (statusHasCrit ? DS.hot : DS.amber) }
+    private var statusLabel: String { statusIsGood ? L.recommendationsAllGood : L.headerStatusNeedsAttention }
+
     private var refreshButton: some View {
-        Button {
+        RainbowCapsuleButton(title: L.headerRefreshReport, busy: model.isCollectingReport, recipe: .overview) {
             model.refreshReport()
-        } label: {
-            HStack(spacing: 6) {
-                if model.isCollectingReport {
-                    ProgressView().controlSize(.small)
-                }
-                Text(L.headerRefreshReport)
-            }
         }
-        .disabled(model.isCollectingReport)
+        .accessibilityLabel(L.headerRefreshReport)
     }
 }
