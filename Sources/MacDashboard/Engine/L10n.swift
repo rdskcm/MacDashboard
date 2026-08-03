@@ -560,6 +560,10 @@ protocol AppStrings {
     var attnExplainTrash: String { get }
     var attnExplainCaches: String { get }
 
+    // Attention summary card overflow toggles (Block V2-SUMMARY).
+    func attnMore(_ n: Int) -> String
+    var attnCollapse: String { get }
+
     // Quiet-strip strings (consumed by a later block — unused for now).
     var quietSecurityTitle: String { get }
     var quietUpdatesTitle: String { get }

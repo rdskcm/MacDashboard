@@ -12,8 +12,24 @@ enum AdviceActionRunner {
     static func openApp(_ path: String) {
         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: .init(), completionHandler: nil)
     }
+    /// Reveals `path` in Finder. Regular directories are opened directly (users expect
+    /// the folder itself, not its parent with the folder selected); files, missing paths,
+    /// and file packages (bundles, .rtfd, etc.) use "select in enclosing folder" instead.
+    /// This prevents opening a bundle, which would launch the app instead of revealing it.
     static func reveal(_ path: String) {
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+        if exists, isDirectory.boolValue {
+            // Check if this directory is actually a file package (bundle, .rtfd, etc.)
+            let isPackage = (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.isPackageKey]))?.isPackage == true
+            if isPackage {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            } else {
+                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            }
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        }
     }
     /// Empties the Trash via Finder (our own confirmation dialog precedes this).
     /// Runs the AppleScript off-main; completion is delivered on the main actor.

@@ -209,8 +209,11 @@ private struct ProcessDetailView: View {
                 HStack(spacing: 8) {
                     Button(L.reportShowInFinder) {
                         guard let path = detail?.path else { return }
-                        NSWorkspace.shared.activateFileViewerSelecting(
-                            [URL(fileURLWithPath: ProcessInspector.revealTarget(for: path))])
+                        // Shared rule (AdviceActionRunner.reveal): plain folders open, files
+                        // and bundles are selected in their enclosing folder — `revealTarget`
+                        // returns the .app bundle for app-hosted executables, so the package
+                        // branch there is what keeps this from launching the app.
+                        AdviceActionRunner.reveal(ProcessInspector.revealTarget(for: path))
                     }
                     .disabled(detail?.path == nil)
 

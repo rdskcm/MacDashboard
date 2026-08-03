@@ -10,7 +10,7 @@ import AppKit
 /// between report collection and the click).
 private func revealInFinder(_ path: String) {
     guard FileManager.default.fileExists(atPath: path) else { return }
-    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    AdviceActionRunner.reveal(path)
 }
 
 private func stripHome(_ path: String, home: String) -> String {

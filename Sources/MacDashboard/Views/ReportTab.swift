@@ -48,7 +48,7 @@ struct ReportTab: View {
             Spacer()
 
             RainbowCapsuleButton(title: L.reportShowInFinder, recipe: .overview) {
-                NSWorkspace.shared.activateFileViewerSelecting([model.reportURL])
+                AdviceActionRunner.reveal(model.reportURL.path)
             }
             .accessibilityLabel(L.reportShowInFinder)
 

@@ -552,6 +552,9 @@ struct StringsRU: AppStrings {
     var attnExplainTrash: String { "Спросит подтверждение, затем очистит Корзину через Finder. Восстановить файлы после этого нельзя." }
     var attnExplainCaches: String { "Откроет ~/Library/Caches в Finder. Приложения пересоздадут кэш при следующем запуске." }
 
+    func attnMore(_ n: Int) -> String { "Ещё \(n)" }
+    var attnCollapse: String { "Свернуть" }
+
     var quietSecurityTitle: String { "Безопасность" }
     var quietUpdatesTitle: String { "Обновления и краши" }
     var quietSecurityStatus: String { "всё включено" }

@@ -552,6 +552,9 @@ struct StringsEN: AppStrings {
     var attnExplainTrash: String { "Asks for confirmation, then empties the Trash via Finder. Files cannot be recovered afterwards." }
     var attnExplainCaches: String { "Opens ~/Library/Caches in Finder. Apps rebuild their caches on next launch." }
 
+    func attnMore(_ n: Int) -> String { "More \(n)" }
+    var attnCollapse: String { "Less" }
+
     var quietSecurityTitle: String { "Security" }
     var quietUpdatesTitle: String { "Updates & crashes" }
     var quietSecurityStatus: String { "all on" }

@@ -82,7 +82,7 @@ struct MainDashboardView: View {
     private var overview: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                RecommendationsCard(model: model)
+                AttentionSummaryCard(model: model)
 
                 Text(L.overviewKickerMetrics).dsKicker()
                 kpiRow
