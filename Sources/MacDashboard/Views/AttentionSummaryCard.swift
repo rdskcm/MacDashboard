@@ -3,8 +3,10 @@
 // title + item chips/last-check time) followed by an item grid (3+ items) and a
 // recommendation-capsule strip, replacing the legacy Рекомендации card.
 // Tone mapping (crit/serious -> DS.hot, warn/info -> DS.amber, good -> DS.green)
-// is authoritative here and NEVER falls back to the legacy `Severity.color`
-// (Theme.swift) — see the design handoff's tone table.
+// NEVER falls back to the legacy `Severity.color` (Theme.swift) — see the design
+// handoff's tone table. The `tone(for:)` mapping itself was hoisted to
+// SharedUI.swift in V2-TILES (KPITiles.swift needs the same map), so this file
+// is a consumer, not the source, of the table now.
 
 import SwiftUI
 import AppKit
@@ -213,18 +215,6 @@ struct AttentionSummaryCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-// MARK: - Tone map (v2 attention model, authoritative — see spec Tone mapping)
-
-/// crit/serious -> DS.hot, warn/info -> DS.amber, good -> DS.green. Never the
-/// legacy `Severity.color` (Theme.swift) — that palette belongs to the v1 UI.
-private func tone(for sev: Severity) -> Color {
-    switch sev {
-    case .crit, .serious: return DS.hot
-    case .warn, .info: return DS.amber
-    case .good: return DS.green
     }
 }
 

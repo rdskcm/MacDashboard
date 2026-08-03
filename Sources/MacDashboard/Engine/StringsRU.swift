@@ -41,6 +41,7 @@ struct StringsRU: AppStrings {
     func kpiLoad(_ v: String) -> String { "load \(v)" }
     var kpiLoadUnavailable: String { "load —" }
     func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String { "\(loadStr) · \(ncpu) ядер" }
+    func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String { "нагрузка \(l1) · \(l2) · \(l3)" }
     func kpiCpuSocTemp(_ t: Int) -> String { "SOC \(t) °C" }
     var kpiCpuChartTimeLabel: String { "Время" }
     var kpiMemLabel: String { "Память" }
@@ -50,7 +51,8 @@ struct StringsRU: AppStrings {
     func kpiSwapUnit(_ total: String) -> String { "из \(total)" }
     func kpiSwapSub(_ free: String) -> String { "свободно \(free)" }
     var kpiDiskLabel: String { "Диск" }
-    func kpiDiskUnit(_ size: String) -> String { "свободно из \(size)" }
+    func kpiDiskUnit(_ size: String) -> String { "из \(size)" }
+    var kpiDiskFreeLabel: String { "свободно" }
     func kpiDiskUsedPct(_ pct: Int) -> String { "занято \(pct)%" }
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
         base + " · данные \(dataUsed), система \(sysUsed)"

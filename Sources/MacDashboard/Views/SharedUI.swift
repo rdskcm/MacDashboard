@@ -58,8 +58,11 @@ struct SeverityChip: View {
     }
 }
 
-// MARK: - Meter bar (6px, severity/series tinted)
+// MARK: - Meter bar (6px, severity/series tinted, recessed track)
 
+/// V2-TILES: the track is `dsRecessedTrack` (DesignSystem.swift) rather than a
+/// flat translucent capsule — same 6pt height, now matching the KPI tile
+/// Visual band's recessed look. The fill capsule on top is unchanged.
 struct MeterBar: View {
     var fraction: Double
     var color: Color
@@ -67,7 +70,7 @@ struct MeterBar: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(color.opacity(0.18))
+                dsRecessedTrack(in: Capsule())
                 Capsule().fill(color)
                     .frame(width: max(2, geo.size.width * CGFloat(min(max(fraction, 0), 1))))
             }
@@ -76,54 +79,244 @@ struct MeterBar: View {
     }
 }
 
-// MARK: - KPI tile chrome
+// MARK: - Severity -> v2 tone map
 
-struct KPITileView<Extra: View>: View {
-    let label: String
-    let value: String
-    let unit: String
-    var sub: String? = nil
-    var meterFraction: Double? = nil
-    var meterColor: Color = SeriesPalette.s1
-    @ViewBuilder var extra: () -> Extra
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(.system(size: 25, weight: .semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            extra()
-            if let meterFraction {
-                MeterBar(fraction: meterFraction, color: meterColor)
-            }
-            if let sub {
-                Text(sub)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardBackground()
+/// crit/serious -> DS.hot, warn/info -> DS.amber, good -> DS.green. Never the
+/// legacy `Severity.color` (Theme.swift) — that palette belongs to the v1 UI.
+/// Hoisted here (V2-TILES) from `AttentionSummaryCard.swift`, its original
+/// (private) home, since KPITiles.swift now needs the same mapping for the
+/// swap/disk/battery meter-bar tints — single source of truth, no second copy.
+func tone(for sev: Severity) -> Color {
+    switch sev {
+    case .crit, .serious: return DS.hot
+    case .warn, .info: return DS.amber
+    case .good: return DS.green
     }
 }
 
-extension KPITileView where Extra == EmptyView {
-    init(label: String, value: String, unit: String, sub: String? = nil,
-         meterFraction: Double? = nil, meterColor: Color = SeriesPalette.s1) {
-        self.init(label: label, value: value, unit: unit, sub: sub,
-                   meterFraction: meterFraction, meterColor: meterColor, extra: { EmptyView() })
+// MARK: - KPI temperature capsule (header-band satellite, CPU/disk)
+
+/// Small pill shown in a KPI tile's header band (CPU SOC temp, disk NVMe
+/// temp): value 12pt monospaced + unit 9.5pt, tinted by how close `celsius`
+/// is to `warn`/`crit`. "Cool" is more than 12°C below `warn` — everything
+/// between cool and warn reads as "normal".
+struct KPITempBadge: View {
+    let celsius: Int
+    let warn: Int
+    let crit: Int
+
+    private enum Band { case cool, normal, high, critical }
+
+    private var band: Band {
+        if celsius >= crit { return .critical }
+        if celsius >= warn { return .high }
+        if celsius < warn - 12 { return .cool }
+        return .normal
+    }
+
+    /// Fill/border/dot color (non-ink; appearance-aware on its own via
+    /// `Color(light:dark:)`, never the -ink variant — see the light-theme rule).
+    private var tone: Color {
+        switch band {
+        case .cool: return DS.accent
+        case .normal: return DS.green
+        case .high: return DS.amber
+        case .critical: return DS.hot
+        }
+    }
+
+    /// Text color: the -ink variant in every non-critical band (light-theme
+    /// contrast rule), plain white on the solid critical fill.
+    private var textTone: Color {
+        switch band {
+        case .cool: return DS.accentInk
+        case .normal: return DS.greenInk
+        case .high: return DS.amberInk
+        case .critical: return .white
+        }
+    }
+
+    private var unitTone: Color {
+        band == .critical ? Color.white.opacity(0.72) : textTone
+    }
+
+    private var fillOpacity: Double {
+        switch band {
+        case .cool, .normal: return 0.11
+        case .high: return 0.15
+        case .critical: return 1.0
+        }
+    }
+
+    private var borderOpacity: Double {
+        switch band {
+        case .cool, .normal: return 0.34
+        case .high: return 0.48
+        case .critical: return 1.0
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 1) {
+            Text("\(celsius)")
+                .font(.system(size: 12, design: .monospaced))
+            Text("°C")
+                .font(.system(size: 9.5))
+                .foregroundStyle(unitTone)
+        }
+        .foregroundStyle(textTone)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .padding(.top, 2)   // optical centering: the text has no descenders
+        .background(Capsule().fill(tone.opacity(fillOpacity)))
+        .overlay(Capsule().strokeBorder(tone.opacity(borderOpacity), lineWidth: 1))
+    }
+}
+
+// MARK: - KPI tile chrome
+
+/// One state chip in a KPI tile's header band: a 6pt severity dot + a short
+/// word (`DS.inkSoft`). Distinct from `SeverityChip` (the header-level capsule
+/// chip) — this one is bare (no capsule background), sized for the tile header.
+struct KPITileStateChip {
+    let color: Color
+    let word: String
+}
+
+/// KPI tile chrome (Spec §5.3): a four fixed-height-band card —
+/// 1. header (22pt): nowrap+ellipsis label taking the slack, at most one
+///    `satellite` view (temperature capsule / battery "Детали" pill), then an
+///    optional state chip;
+/// 2. value (30pt, one line, never wraps): tabular monospaced `value` +
+///    `unit` (both keep their intrinsic width) + the shrinkable/ellipsizable
+///    `outOf` ("из N");
+/// 3. visual (46pt): whatever `visual` supplies — typically a `MeterBar`, or
+///    for CPU the sparkline occupying the same zone;
+/// 4. footer (31pt): `footer` text pinned to the band's bottom edge.
+///
+/// Generic over the two optional per-tile views, following the same
+/// `Extra`/`EmptyView` convention as `CardChrome`/`ChartOrTableCard` above —
+/// callers that need neither/either/both closures get a matching convenience
+/// initializer instead of writing `{ EmptyView() }` by hand.
+struct KPITileView<Satellite: View, Visual: View>: View {
+    let label: String
+    var chip: KPITileStateChip? = nil
+    let value: String
+    var unit: String? = nil
+    var outOf: String? = nil
+    var footer: String? = nil
+    @ViewBuilder var satellite: () -> Satellite
+    @ViewBuilder var visual: () -> Visual
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            valueRow
+            visualZone
+            footerZone
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCardSurface()
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 11.5))
+                .foregroundStyle(DS.muted)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            satellite()
+            if let chip {
+                HStack(spacing: 4) {
+                    Circle().fill(chip.color).frame(width: 6, height: 6)
+                    Text(chip.word)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(DS.inkSoft)
+                }
+            }
+        }
+        .frame(height: 22)
+    }
+
+    /// `value`/`unit` keep their intrinsic width (`fixedSize`) so they never
+    /// truncate; `outOf` is the one element allowed to shrink/ellipsize when
+    /// the column is tight (the five-equal-column grid depends on this).
+    private var valueRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text(value)
+                .font(.system(size: 27, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            if let unit {
+                Text(unit)
+                    .font(.system(size: 13))
+                    .foregroundStyle(DS.muted)
+                    .padding(.leading, 1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            if let outOf {
+                Text(outOf)
+                    .font(.system(size: 13))
+                    .foregroundStyle(DS.muted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.leading, 5)
+            }
+        }
+        .frame(height: 30, alignment: .leading)
+    }
+
+    private var visualZone: some View {
+        visual()
+            .frame(maxWidth: .infinity)
+            .frame(height: 46, alignment: .center)
+    }
+
+    /// Pinned to the bottom of the band (not vertically centered) so a
+    /// short one-line footer sits flush with the card's bottom edge.
+    private var footerZone: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Spacer(minLength: 0)
+            if let footer {
+                Text(footer)
+                    .font(.system(size: 11))
+                    .lineSpacing(4.4)   // 11pt * 1.4 line-height, minus the 11pt itself
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .foregroundStyle(DS.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(height: 31, alignment: .bottom)
+    }
+}
+
+extension KPITileView where Satellite == EmptyView, Visual == EmptyView {
+    init(label: String, chip: KPITileStateChip? = nil, value: String, unit: String? = nil,
+         outOf: String? = nil, footer: String? = nil) {
+        self.init(label: label, chip: chip, value: value, unit: unit, outOf: outOf, footer: footer,
+                   satellite: { EmptyView() }, visual: { EmptyView() })
+    }
+}
+
+extension KPITileView where Satellite == EmptyView {
+    init(label: String, chip: KPITileStateChip? = nil, value: String, unit: String? = nil,
+         outOf: String? = nil, footer: String? = nil, @ViewBuilder visual: @escaping () -> Visual) {
+        self.init(label: label, chip: chip, value: value, unit: unit, outOf: outOf, footer: footer,
+                   satellite: { EmptyView() }, visual: visual)
+    }
+}
+
+extension KPITileView where Visual == EmptyView {
+    init(label: String, chip: KPITileStateChip? = nil, value: String, unit: String? = nil,
+         outOf: String? = nil, footer: String? = nil, @ViewBuilder satellite: @escaping () -> Satellite) {
+        self.init(label: label, chip: chip, value: value, unit: unit, outOf: outOf, footer: footer,
+                   satellite: satellite, visual: { EmptyView() })
     }
 }
 

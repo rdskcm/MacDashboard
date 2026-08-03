@@ -1624,6 +1624,35 @@ do {
 }
 
 // =====================================================================
+// MARK: - fmtCapacity (decimal GB/TB disk-capacity formatting)
+// =====================================================================
+do {
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+
+    // (bytes, expected-ru, expected-en, case label)
+    let cases: [(Int64, String, String, String)] = [
+        (Int64(228.3 * 1e9), "228,3 ГБ", "228.3 GB", "228.3 GB"),
+        (Int64(999.9 * 1e9), "999,9 ГБ", "999.9 GB", "999.9 GB"),
+        // Rounding-before-thresholding trap: 999.95 GB rounds to "1000.0" at
+        // one decimal, which must NOT render as "1000,0 ГБ" — the unit switch
+        // has to happen before formatting, giving "1 ТБ" instead.
+        (Int64(999.95 * 1e9), "1 ТБ", "1 TB", "999.95 GB (rounding trap)"),
+        (1_000_000_000_000, "1 ТБ", "1 TB", "1 TB"),
+        (Int64(2.24 * 1e12), "2,24 ТБ", "2.24 TB", "2.24 TB"),
+        (4_000_000_000_000, "4 ТБ", "4 TB", "4 TB (trailing zeros trimmed)"),
+        (Int64(10.5 * 1e12), "10,5 ТБ", "10.5 TB", "10.5 TB (one decimal at/above 10 TB)"),
+    ]
+
+    for (bytes, expectedRU, expectedEN, label) in cases {
+        L10nStore.shared.language = .ru
+        check(fmtCapacity(bytes) == expectedRU, "fmtCapacity: \(label) (ru) == \"\(expectedRU)\"")
+        L10nStore.shared.language = .en
+        check(fmtCapacity(bytes) == expectedEN, "fmtCapacity: \(label) (en) == \"\(expectedEN)\"")
+    }
+}
+
+// =====================================================================
 // MARK: - Summary
 // =====================================================================
 

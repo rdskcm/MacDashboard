@@ -51,6 +51,9 @@ protocol AppStrings {
     func kpiLoad(_ v: String) -> String
     var kpiLoadUnavailable: String { get }
     func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String
+    /// V2-TILES footer: all three load averages, e.g. "нагрузка 1,73 · 2,05 · 2,20".
+    /// The core count is NOT repeated here — it already lives in the header's load chip.
+    func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String
     func kpiCpuSocTemp(_ t: Int) -> String
     var kpiCpuChartTimeLabel: String { get }
     var kpiMemLabel: String { get }
@@ -61,6 +64,9 @@ protocol AppStrings {
     func kpiSwapSub(_ free: String) -> String
     var kpiDiskLabel: String { get }
     func kpiDiskUnit(_ size: String) -> String
+    /// V2-TILES: standalone "свободно"/"free" word, prefixed onto the disk tile's
+    /// footer (which otherwise reuses `kpiDiskUsedPct`/`kpiDiskUsedDetail` verbatim).
+    var kpiDiskFreeLabel: String { get }
     func kpiDiskUsedPct(_ pct: Int) -> String
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String
     func kpiDiskTemp(_ t: Int) -> String

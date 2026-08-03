@@ -18,6 +18,25 @@ func fmtNum(_ v: Double, decimals: Int = 1) -> String {
     return s.replacingOccurrences(of: ".", with: L.decimalSeparator)
 }
 
+/// Deterministic decimal capacity formatter: ГБ/ТБ (GB/TB), matching how macOS
+/// reports disk sizes (decimal, 10^9/10^12) — unlike `fmtBytes`, which is binary
+/// and used for memory/swap. One decimal place under 1000 GB; two decimals from
+/// 1 TB up to (not including) 10 TB, one decimal at/above 10 TB; trailing zeros
+/// trimmed, comma as decimal separator. Used by the disk tile value, «из N»
+/// slot, and footer sizes ("2,24 ТБ из 4 ТБ").
+func fmtCapacity(_ bytes: Int64) -> String {
+    let gb = Double(bytes) / 1_000_000_000
+    // Decide the unit using the value AFTER rounding to the digits it will be
+    // displayed with, so e.g. 999.95 GB (which rounds to "1000.0") reports as
+    // TB instead of the misleading "1000,0 ГБ".
+    if (gb * 10).rounded() / 10 >= 1000 {
+        let tb = Double(bytes) / 1_000_000_000_000
+        let decimals = (tb * 100).rounded() / 100 >= 10 ? 1 : 2
+        return "\(fmtNum(tb, decimals: decimals)) \(L.byteUnitTB)"
+    }
+    return "\(fmtNum(gb, decimals: 1)) \(L.byteUnitGB)"
+}
+
 /// Deterministic Russian byte formatter: КБ/МБ/ГБ/ТБ, one decimal place
 /// (trimmed), comma as decimal separator. Intentionally NOT ByteCountFormatter,
 /// which is locale-dependent and uses Latin unit abbreviations.

@@ -126,8 +126,14 @@ struct MainDashboardView: View {
         .background(DS.ground)
     }
 
+    // Five equal columns (the CSS `minmax(0,1fr)` fix): `GridItem(.flexible())`
+    // divides the row width equally regardless of content, unlike `.adaptive`
+    // which sizes columns to their content. `.flexible()` still has a 10pt
+    // default minimum, so equal width depends on every tile's content being
+    // shrinkable — see KPITileView's nowrap+ellipsis label and ellipsizable
+    // "из N" slot.
     private var kpiRow: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 12) {
             CPUTile(model: model)
             MemoryTile(model: model)
             SwapTile(model: model)
