@@ -259,31 +259,42 @@ struct DSSlidingSegmented<T: Hashable>: View {
 
 // MARK: - Disclosure chevron
 
-/// `DSDisclosureBars(expanded:)` — two 7×1.7 pt rounded bars sharing a trailing
-/// pivot: rotated ±45° they form a right chevron (further rotated −90° as a
-/// group when collapsed); rotated to 0° they perfectly overlap into what reads
-/// as one straight horizontal bar. `.spring(response: 0.22, dampingFraction:
-/// 0.62)`. Reduce Motion: the rotation jumps (no animation) — this is a
-/// transform, not a color/opacity/border/shadow transition.
+/// `DSDisclosureBars(expanded:)` — the prototype's two-bar disclosure indicator
+/// (`Overview Screen.dc.html`: 13×13 container, 13×2 track, two 7×1.7 pt bars).
+/// Collapsed, the container is rotated −90° and the bars sit at ±45° around their
+/// inner ends, reading as a right-pointing chevron. Expanded, everything returns
+/// to 0° and the two bars — pinned to opposite edges of the 13 pt track, so they
+/// overlap by 1 pt — merge into one seamless horizontal bar. The prototype's
+/// `.22s cubic-bezier(0.34, 1.3, 0.64, 1)` maps to `.spring(response: 0.22,
+/// dampingFraction: 0.62)`. Reduce Motion: the transforms jump, since this is a
+/// transform rather than a color/opacity/border/shadow transition.
 struct DSDisclosureBars: View {
     let expanded: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let barSize = CGSize(width: 7, height: 1.7)
+    private let boxSize: CGFloat = 13
 
     var body: some View {
         ZStack {
-            bar.rotationEffect(.degrees(expanded ? 0 : -45), anchor: .trailing)
-            bar.rotationEffect(.degrees(expanded ? 0 : 45), anchor: .trailing)
+            HStack(spacing: 0) {
+                bar.rotationEffect(.degrees(expanded ? 0 : 45), anchor: .trailing)
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                bar.rotationEffect(.degrees(expanded ? 0 : -45), anchor: .leading)
+            }
         }
+        .frame(width: boxSize, height: boxSize)
         .rotationEffect(.degrees(expanded ? 0 : -90))
         .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.62), value: expanded)
     }
 
     private var bar: some View {
         RoundedRectangle(cornerRadius: barSize.height / 2)
-            .fill(DS.inkSoft)
+            .fill(DS.muted)
             .frame(width: barSize.width, height: barSize.height)
     }
 }

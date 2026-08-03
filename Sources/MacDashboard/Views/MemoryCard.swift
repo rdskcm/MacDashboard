@@ -78,14 +78,14 @@ private struct MemoryStackChart: View {
 
                 FlowLayout(spacing: 14) {
                     ForEach(segments, id: \.key) { seg in
-                        LegendItem(color: seg.color, label: seg.label, value: fmtBytes(seg.bytes))
+                        MemoryLegendItem(color: seg.color, label: seg.label, value: fmtBytes(seg.bytes))
                             .hoverTip(memoryNotes[seg.label] ?? "")
                     }
                 }
 
                 Text(footerNote(mem))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(DS.muted)
             }
         }
     }
@@ -97,6 +97,30 @@ private struct MemoryStackChart: View {
         }
         bits.append(L.memoryOtherNote)
         return bits.joined(separator: " · ")
+    }
+}
+
+/// Legend swatch + series name + mono value (memory stack chart only). A local
+/// replacement for the shared `LegendItem` (SharedUI.swift): the shared component
+/// renders its value in the default (non-mono) font and this card needs tabular
+/// mono numbers, but `SharedUI.swift` is out of scope for this block beyond the
+/// chart/table toggle — see block spec.
+private struct MemoryLegendItem: View {
+    let color: Color
+    let label: String
+    let value: String
+    var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 10, height: 10)
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(DS.inkSoft)
+            Text(value)
+                .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(DS.inkSoft)
+        }
+        .contentShape(Rectangle())
     }
 }
 

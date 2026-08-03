@@ -131,8 +131,10 @@ struct StringsEN: AppStrings {
     func storageSmartInstallFailed(_ msg: String) -> String { "Install failed: \(msg)" }
 
     // MARK: Process cards
-    var processCpuTitle: String { "Top processes by CPU" }
-    var processMemTitle: String { "Top processes by memory" }
+    var processesTitle: String { "Processes" }
+    var processSegCPU: String { "CPU" }
+    var processSegMem: String { "Memory" }
+    var processesMetricA11y: String { "Process metric" }
     var processListCaption: String { "live snapshot from top" }
     var processLoadingDetails: String { "Loading details…" }
     var processDetailThreads: String { "Threads" }
@@ -143,6 +145,9 @@ struct StringsEN: AppStrings {
     var processForceQuit: String { "Force quit" }
     var processForceQuitConfirm: String { "Force quit" }
     func processForceQuitTitle(_ name: String) -> String { "Force quit “\(name)”?" }
+    func processRevealA11y(_ name: String) -> String { "Show “\(name)” in Finder" }
+    func processTerminateA11y(_ name: String) -> String { "Quit process “\(name)”" }
+    func processKillA11y(_ name: String) -> String { "Force quit process “\(name)”" }
 
     // MARK: Maintenance card
     var maintenanceTitle: String { "System maintenance" }

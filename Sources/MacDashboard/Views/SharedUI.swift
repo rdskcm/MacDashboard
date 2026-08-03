@@ -382,6 +382,8 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
     var infoHelp: String? = nil
     @State private var showTable = false
     @State private var showInfo = false
+    @State private var hovering = false
+    @State private var cursorPushed = false
     @ViewBuilder var chart: () -> ChartContent
     @ViewBuilder var table: () -> TableContent
 
@@ -398,11 +400,29 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel(showInfo ? L.sharedInfoHide : L.sharedInfoShow)
                 }
-                Button(showTable ? L.sharedToggleToChart : L.sharedToggleToTable) {
+                Button {
                     showTable.toggle()
+                } label: {
+                    Text(showTable ? L.sharedToggleToChart : L.sharedToggleToTable)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(DS.inkSoft)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(DS.glass3))
+                        .overlay { Capsule().strokeBorder(DS.lineStrong, lineWidth: 1) }
+                        .rainbowBorder(isActive: hovering, recipe: .overview)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.plain)
+                .onHover { isHovering in
+                    hovering = isHovering
+                    if isHovering {
+                        NSCursor.pointingHand.push()
+                        cursorPushed = true
+                    } else if cursorPushed {
+                        NSCursor.pop()
+                        cursorPushed = false
+                    }
+                }
                 .accessibilityLabel(showTable ? L.sharedToggleShowChart : L.sharedToggleShowTable)
             }
         }) {
@@ -567,8 +587,15 @@ struct SimpleTable: View {
                 let row = rows[r]
                 GridRow {
                     ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
+                        let isNumeric = numericColumns.contains(c)
+                        let cellFont: Font = isNumeric
+                            ? .system(size: 12.5, weight: .regular, design: .monospaced)
+                            : .system(size: 13, weight: .medium)
+                        let cellColor: Color = isNumeric ? .primary : DS.inkSoft
                         let text = Text(cell)
-                            .font(.callout)
+                            .font(cellFont)
+                            .monospacedDigit()
+                            .foregroundStyle(cellColor)
                             .lineLimit(2)
                             .truncationMode(.middle)
                         if let tip = cellTooltip?(r, c) {

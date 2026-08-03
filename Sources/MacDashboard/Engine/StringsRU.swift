@@ -131,8 +131,10 @@ struct StringsRU: AppStrings {
     func storageSmartInstallFailed(_ msg: String) -> String { "Установка не удалась: \(msg)" }
 
     // MARK: Process cards
-    var processCpuTitle: String { "Процессы по CPU" }
-    var processMemTitle: String { "Процессы по памяти" }
+    var processesTitle: String { "Процессы" }
+    var processSegCPU: String { "CPU" }
+    var processSegMem: String { "Память" }
+    var processesMetricA11y: String { "Метрика процессов" }
     var processListCaption: String { "живой снимок top" }
     var processLoadingDetails: String { "Загружаем детали…" }
     var processDetailThreads: String { "Потоки" }
@@ -143,6 +145,9 @@ struct StringsRU: AppStrings {
     var processForceQuit: String { "Снять принудительно" }
     var processForceQuitConfirm: String { "Снять" }
     func processForceQuitTitle(_ name: String) -> String { "Принудительно снять процесс „\(name)“?" }
+    func processRevealA11y(_ name: String) -> String { "Показать „\(name)“ в Finder" }
+    func processTerminateA11y(_ name: String) -> String { "Завершить процесс „\(name)“" }
+    func processKillA11y(_ name: String) -> String { "Принудительно снять процесс „\(name)“" }
 
     // MARK: Maintenance card
     var maintenanceTitle: String { "Обслуживание системы" }

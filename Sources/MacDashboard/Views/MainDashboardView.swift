@@ -91,10 +91,7 @@ struct MainDashboardView: View {
                 MemoryCard(model: model)
 
                 Text(L.overviewKickerProcesses).dsKicker()
-                HStack(alignment: .top, spacing: 12) {
-                    ProcessesCPUCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-                    ProcessesMemCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-                }
+                ProcessListCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(alignment: .top, spacing: 12) {
                     HomeDirsCard(model: model).frame(maxWidth: .infinity, alignment: .leading)

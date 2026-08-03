@@ -143,8 +143,10 @@ protocol AppStrings {
     func storageSmartInstallFailed(_ msg: String) -> String
 
     // MARK: Process cards
-    var processCpuTitle: String { get }
-    var processMemTitle: String { get }
+    var processesTitle: String { get }
+    var processSegCPU: String { get }
+    var processSegMem: String { get }
+    var processesMetricA11y: String { get }
     var processListCaption: String { get }
     var processLoadingDetails: String { get }
     var processDetailThreads: String { get }
@@ -155,6 +157,9 @@ protocol AppStrings {
     var processForceQuit: String { get }
     var processForceQuitConfirm: String { get }
     func processForceQuitTitle(_ name: String) -> String
+    func processRevealA11y(_ name: String) -> String
+    func processTerminateA11y(_ name: String) -> String
+    func processKillA11y(_ name: String) -> String
 
     // MARK: Maintenance card
     var maintenanceTitle: String { get }

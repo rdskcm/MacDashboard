@@ -1,80 +1,108 @@
 // Views/ProcessCards.swift
-// Процессы по CPU / по памяти cards (LIVE): compact clickable process lists with
-// a single-expansion accordion per card. Expanding a row (only rows with a known
-// PID are expandable) fetches on-demand detail (path, thread count) via
+// Процессы card (LIVE): a single compact clickable process list, switchable
+// between CPU and memory ranking via a sliding segmented control, with a
+// single-expansion accordion (only rows with a known PID are expandable).
+// Expanding a row fetches on-demand detail (path, thread count) via
 // ProcessInspector and offers Reveal-in-Finder / Quit (SIGTERM) / Force Quit
 // (SIGKILL). No energy metric anywhere — CPU/mem only.
 
 import SwiftUI
 import AppKit
 
-/// Which ProcEntry field drives a ProcessListCard's row gauge/bold value — the
-/// CPU card reads `.cpu`, the Mem card reads `.mem` (the other field becomes the
-/// row's dimmer secondary annotation).
-enum Metric { case cpu, mem }
+/// Which ProcEntry field drives a ProcessListCard's row gauge/bold value —
+/// `.cpu` reads CPU%, `.mem` reads memory bytes (the other field becomes the
+/// row's dimmer secondary annotation). `Hashable` so `DSSlidingSegmented<T>`
+/// (Views/DesignSystem.swift) can track the current selection.
+enum Metric: Hashable { case cpu, mem }
 
-// MARK: - Thin card wrappers (keep call sites in MainDashboardView unchanged)
-
-struct ProcessesCPUCard: View {
-    let model: DashboardModel
-    var body: some View {
-        ProcessListCard(title: L.processCpuTitle, rows: model.topCPU, primary: .cpu)
-    }
-}
-
-struct ProcessesMemCard: View {
-    let model: DashboardModel
-    var body: some View {
-        ProcessListCard(title: L.processMemTitle, rows: model.topMem, primary: .mem)
-    }
-}
+/// Shared curve for the row gauge width transition AND row-reorder movement —
+/// deliberately the SAME `Animation` value for both, so a row and its own
+/// gauge move as one object when a live tick both re-sorts and re-values the
+/// list (prototype's `cubic-bezier(0.22, 0.61, 0.36, 1)`, 0.8 s).
+private let processRowMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8)
 
 // MARK: - Shared list card
 
+/// Single entry point (v2 restyle, Spec §6): one card, `CPU | Память` sliding
+/// segmented control in the header's trailing slot (mirrors how
+/// `ChartOrTableCard` places its trailing content in `CardChrome`). Rows are
+/// read live off `model.topCPU`/`model.topMem` inside the body every tick —
+/// never snapshotted into `@State` — so whichever metric is selected keeps
+/// ticking live.
 struct ProcessListCard: View {
-    let title: String            // L.processCpuTitle / L.processMemTitle
-    let rows: [ProcEntry]
-    let primary: Metric          // .cpu or .mem — which value drives the gauge & right-aligned bold value
+    let model: DashboardModel
 
-    // Single-expansion accordion per card: expanding one row collapses any other.
+    @State private var procMetric: Metric = .cpu
+    // Single-expansion accordion: expanding one row collapses any other.
+    // Switching metric also collapses it — the accordion never carries a PID
+    // from the other list.
     @State private var expandedPID: Int32? = nil
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var rows: [ProcEntry] {
+        procMetric == .cpu ? model.topCPU : model.topMem
+    }
+
     /// Row gauges are proportional to the FIRST row's value (rows already arrive
-    /// sorted descending by `primary` from LiveCollector.sampleProcesses).
+    /// sorted descending by `procMetric` from LiveCollector.sampleProcesses).
     private var maxValue: Double {
         guard let first = rows.first else { return 0 }
-        switch primary {
+        switch procMetric {
         case .cpu: return first.cpu ?? 0
         case .mem: return Double(first.memBytes ?? 0)
         }
     }
 
     var body: some View {
-        if rows.isEmpty {
-            CardChrome(title: title) { SectionStateView(done: false) }
-        } else {
-            CardChrome(title: title, caption: L.processListCaption) {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(rows) { row in
-                        VStack(alignment: .leading, spacing: 0) {
-                            ProcessRowView(
-                                row: row, primary: primary, maxValue: maxValue,
-                                expanded: row.pid != nil && expandedPID == row.pid,
-                                onTap: {
-                                    guard let pid = row.pid else { return }
-                                    expandedPID = (expandedPID == pid) ? nil : pid
+        Group {
+            if rows.isEmpty {
+                CardChrome(title: L.processesTitle, trailing: { metricControl }) {
+                    SectionStateView(done: false)
+                }
+            } else {
+                CardChrome(title: L.processesTitle, caption: L.processListCaption, trailing: { metricControl }) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(rows) { row in
+                            VStack(alignment: .leading, spacing: 0) {
+                                ProcessRowView(
+                                    row: row, primary: procMetric, maxValue: maxValue,
+                                    expanded: row.pid != nil && expandedPID == row.pid,
+                                    onTap: {
+                                        guard let pid = row.pid else { return }
+                                        expandedPID = (expandedPID == pid) ? nil : pid
+                                    }
+                                )
+                                if let pid = row.pid, expandedPID == pid {
+                                    ProcessDetailView(row: row)
+                                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                                 }
-                            )
-                            if let pid = row.pid, expandedPID == pid {
-                                ProcessDetailView(row: row)
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
                             }
                         }
                     }
+                    .animation(
+                        reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                        value: expandedPID
+                    )
+                    // Row reordering (a live tick re-sorting `rows`) moves with the
+                    // SAME curve/duration as the gauge width transition below, so a
+                    // row and its own gauge travel together instead of the row
+                    // snapping to its new slot while the gauge is still animating —
+                    // that mismatch is what let the gauge fill visibly detach from
+                    // its row. `nil` under Reduce Motion: reordering is instant.
+                    .animation(reduceMotion ? nil : processRowMotion, value: rows)
                 }
-                .animation(.easeInOut(duration: 0.15), value: expandedPID)
             }
         }
+        .onChange(of: procMetric) { expandedPID = nil }
+    }
+
+    private var metricControl: some View {
+        DSSlidingSegmented(options: [Metric.cpu, .mem], selection: $procMetric) { m in
+            m == .cpu ? L.processSegCPU : L.processSegMem
+        }
+        .frame(width: 168, height: 26)
+        .accessibilityLabel(L.processesMetricA11y)
     }
 }
 
@@ -88,6 +116,21 @@ private struct ProcessRowView: View {
     let onTap: () -> Void
 
     @State private var hovering = false
+    // Row width, captured once via `onGeometryChange` (below) instead of read
+    // live from a `GeometryReader` sitting inside the animated gauge subtree.
+    // A `GeometryReader` inside a view that's simultaneously (a) reordering
+    // within its `ForEach` and (b) mid-way through the `.animation(value:)`
+    // width transition reports its size as part of that SAME transaction —
+    // for one committed frame it can hand the animated `RoundedRectangle` a
+    // stale/transitional size (and, since GeometryReader top-leading-aligns
+    // its content by default, a collapsed height reads as a thin mis-placed
+    // sliver instead of a properly clipped bar). Caching the width in
+    // `@State` and feeding the animated rectangle from that plain `CGFloat`
+    // removes GeometryReader from the animated subtree entirely, so its
+    // geometry read can no longer race the reorder.
+    @State private var rowWidth: CGFloat = 0
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var primaryValue: Double {
         switch primary {
@@ -114,36 +157,43 @@ private struct ProcessRowView: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.035))
-            GeometryReader { geo in
-                if maxValue > 0 {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(gaugeColor.opacity(0.18))
-                        .frame(width: max(0, geo.size.width * CGFloat(min(primaryValue / maxValue, 1))))
-                }
+            RoundedRectangle(cornerRadius: 9).fill(DS.row)
+            if maxValue > 0 {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(gaugeColor.opacity(0.22))
+                    .frame(width: max(0, rowWidth * CGFloat(min(primaryValue / maxValue, 1))))
+                    .animation(reduceMotion ? nil : processRowMotion, value: primaryValue)
             }
             HStack(spacing: 6) {
                 if isExpandable {
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    DSDisclosureBars(expanded: expanded)
                 }
                 Text(row.name)
-                    .font(.callout)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(DS.inkSoft)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 8)
                 Text(primaryText)
-                    .font(.callout.monospacedDigit().weight(.semibold))
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(DS.inkSoft)
                 Text(secondaryText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(DS.muted)
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 9)
         }
-        .frame(height: 24)
-        .background(isExpandable && hovering ? Color.primary.opacity(0.06) : Color.clear)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+            rowWidth = newWidth
+        }
+        .frame(height: 27)
+        // Hover highlight only for expandable rows — DS.track token (prototype's
+        // `style-hover="background:var(--track)"`), 0.14 s ease transition
+        // (already Reduce-Motion-safe: color-only).
+        .background(isExpandable && hovering ? DS.track : Color.clear)
+        .animation(.easeInOut(duration: 0.14), value: hovering)
+        .clipShape(RoundedRectangle(cornerRadius: 9))
         .contentShape(Rectangle())
         .onHover { isHovering in
             guard isExpandable else { return }
@@ -179,27 +229,27 @@ private struct ProcessDetailView: View {
                     Text(L.processLoadingDetails).font(.caption2).foregroundStyle(.secondary)
                 }
             } else {
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 4) {
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 5) {
                     GridRow {
-                        Text("PID").font(.caption2).foregroundStyle(.secondary)
-                        Text(String(pid)).font(.caption2)
+                        Text("PID").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                        Text(String(pid)).font(.system(size: 11.5))
                     }
                     GridRow {
-                        Text(L.processDetailThreads).font(.caption2).foregroundStyle(.secondary)
-                        Text(detail?.threads.map(String.init) ?? "—").font(.caption2)
+                        Text(L.processDetailThreads).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                        Text(detail?.threads.map(String.init) ?? "—").font(.system(size: 11.5))
                     }
                     GridRow {
-                        Text("CPU").font(.caption2).foregroundStyle(.secondary)
-                        Text(row.cpu.map { fmtNum($0, decimals: 1) + "%" } ?? "—").font(.caption2)
+                        Text("CPU").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                        Text(row.cpu.map { fmtNum($0, decimals: 1) + "%" } ?? "—").font(.system(size: 11.5))
                     }
                     GridRow {
-                        Text(L.processDetailMemory).font(.caption2).foregroundStyle(.secondary)
-                        Text(fmtBytes(row.memBytes)).font(.caption2)
+                        Text(L.processDetailMemory).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                        Text(fmtBytes(row.memBytes)).font(.system(size: 11.5))
                     }
                     GridRow {
-                        Text(L.processDetailPath).font(.caption2).foregroundStyle(.secondary)
+                        Text(L.processDetailPath).font(.system(size: 11.5)).foregroundStyle(.secondary)
                         Text(detail?.path ?? "—")
-                            .font(.caption2)
+                            .font(.system(size: 11.5))
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .help(detail?.path ?? "")
@@ -216,16 +266,19 @@ private struct ProcessDetailView: View {
                         AdviceActionRunner.reveal(ProcessInspector.revealTarget(for: path))
                     }
                     .disabled(detail?.path == nil)
+                    .accessibilityLabel(L.processRevealA11y(row.name))
 
                     Button(L.processQuit) {
                         signalError = ProcessInspector.sendSignal(SIGTERM, to: pid)
                             ? nil : L.processSignalError
                     }
+                    .accessibilityLabel(L.processTerminateA11y(row.name))
 
                     Button(L.processForceQuit, role: .destructive) {
                         showForceQuitConfirm = true
                     }
                     .foregroundStyle(.red)
+                    .accessibilityLabel(L.processKillA11y(row.name))
                 }
                 .controlSize(.small)
                 .confirmationDialog(
@@ -243,7 +296,7 @@ private struct ProcessDetailView: View {
                 }
             }
         }
-        .padding(8)
+        .padding(EdgeInsets(top: 9, leading: 19, bottom: 8, trailing: 10))
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
         // Keyed on pid (stable across live ticks), NOT the whole `row` — path/threads
         // are only refetched when the expanded process changes, while `row.cpu`/
