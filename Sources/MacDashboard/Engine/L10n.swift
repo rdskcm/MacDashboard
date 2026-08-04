@@ -144,6 +144,9 @@ protocol AppStrings {
     var storageSmartInstallButton: String { get }
     var storageSmartNeedsHomebrew: String { get }
     func storageSmartInstallFailed(_ msg: String) -> String
+    // MARK: Storage — SMART disk capsule kind sublabel (V2-CARD-DISK)
+    var storageSmartKindInternal: String { get }
+    var storageSmartKindExternal: String { get }
 
     // MARK: Process cards
     var processesTitle: String { get }

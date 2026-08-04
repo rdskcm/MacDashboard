@@ -181,9 +181,117 @@ struct FoldersCard: View {
 
 // MARK: - Диски (SMART)
 
+/// SMART status dot/text tone (spec §5.9, DO:642) — a literal hex per status,
+/// same value in light/dark (mirrors `Severity.color`'s existing single-hex
+/// convention in Theme.swift, NOT the appearance-aware `DS`/`tone(for:)`
+/// tables). `fail` is its OWN literal `#E6784E` — a documented correction from
+/// a prior planning session, deliberately distinct from `DS.hot`; do not
+/// "fix" it to route through `tone(for:)`.
+private func smartStatusColor(_ sev: Severity) -> Color {
+    switch sev {
+    case .good: return Color(hex: 0x2BBD8F)
+    case .warn: return Color(hex: 0xEDA100)
+    case .crit, .serious: return Color(hex: 0xE6784E)
+    case .info: return Color(hex: 0x7E8896)
+    }
+}
+
+/// One disk capsule (spec §5.9): 6 pt status dot · name · uppercase kind
+/// sublabel. Internal disks tint `DS.accent`, external `DS.amber`. Selection
+/// state drives fill/border opacity + an inset 30%-tint selection ring;
+/// unselected capsules dim (whole-capsule opacity, so the kind sublabel's
+/// "own ink color at full strength" in light theme still reads correctly
+/// dimmed together with everything else, never separately washed out).
+private struct SmartDiskCapsule: View {
+    let disk: SmartDisk
+    let isInternal: Bool
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var cursorPushed = false
+
+    private var tint: Color { isInternal ? DS.accent : DS.amber }
+    private var kindLabel: String { isInternal ? L.storageSmartKindInternal : L.storageSmartKindExternal }
+
+    /// `DS.muted` in dark; the capsule's own -ink variant at full strength in
+    /// light (grey fails 4.5:1 on the tinted fill in light theme — see the
+    /// light-theme ink-role rule in Theme.swift).
+    private var kindLabelColor: Color {
+        guard colorScheme == .light else { return DS.muted }
+        return isInternal ? DS.accentInk : DS.amberInk
+    }
+
+    private var fillOpacity: Double {
+        switch (colorScheme, isSelected) {
+        case (.light, true): return 0.22
+        case (.light, false): return 0.11
+        case (_, true): return 0.20
+        default: return 0.09
+        }
+    }
+
+    private var borderOpacity: Double {
+        switch (colorScheme, isSelected) {
+        case (.light, true): return 0.62
+        case (.light, false): return 0.32
+        case (_, true): return 0.55
+        default: return 0.24
+        }
+    }
+
+    private var dimOpacity: Double {
+        guard !isSelected else { return 1.0 }
+        return colorScheme == .light ? 0.96 : 0.62
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Circle().fill(smartStatusColor(disk.severity)).frame(width: 6, height: 6)
+            Text(disk.title)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(DS.ink)
+                .lineLimit(1)
+            Text(kindLabel)
+                .font(.system(size: 10.5, weight: .semibold))
+                .tracking(0.63)   // 0.06em @ 10.5 pt
+                .foregroundStyle(kindLabelColor)
+        }
+        .padding(.vertical, 7)
+        .padding(.horizontal, 12)
+        .background(Capsule().fill(tint.opacity(fillOpacity)))
+        .overlay(Capsule().strokeBorder(tint.opacity(borderOpacity), lineWidth: 1))
+        .overlay {
+            if isSelected {
+                Capsule().inset(by: 1).strokeBorder(tint.opacity(0.30), lineWidth: 1)
+            }
+        }
+        .opacity(dimOpacity)
+        .contentShape(Capsule())
+        .onTapGesture(perform: onTap)
+        .onHover { isHovering in
+            if isHovering {
+                NSCursor.pointingHand.push()
+                cursorPushed = true
+            } else if cursorPushed {
+                NSCursor.pop()
+                cursorPushed = false
+            }
+        }
+        .accessibilityLabel("\(disk.title), \(kindLabel)")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
 @MainActor
 struct SmartDisksCard: View {
     let model: DashboardModel
+
+    /// Click-to-select capsule state; the attribute table below follows this.
+    /// Defaults (when nil) to the first disk in report order — internal disks
+    /// are always collected first, so a lone/just-loaded disk list opens on
+    /// the internal disk. A single disk is therefore always selected, per spec.
+    @State private var selectedDevice: String? = nil
 
     /// «обновлено HH:MM» — time of the last SMART collection (launch report, manual
     /// refresh, or periodic sampler), whichever most recently landed.
@@ -191,11 +299,23 @@ struct SmartDisksCard: View {
         model.smartUpdatedAt.map { L.storageSmartUpdatedCaption($0.formatted(date: .omitted, time: .shortened)) }
     }
 
+    private var disks: [SmartDisk] { model.report.smart ?? [] }
+    private var internalDisk: SmartDisk? { disks.first { $0.device == "internal" } }
+    private var externalDisks: [SmartDisk] { disks.filter { $0.device != "internal" } }
+
+    private var selectedDisk: SmartDisk? {
+        if let selectedDevice, let found = disks.first(where: { $0.device == selectedDevice }) {
+            return found
+        }
+        return disks.first
+    }
+
     var body: some View {
         CardChrome(title: L.storageSmartTitle, caption: updatedCaption, trailing: {
             RainbowCapsuleButton(title: L.storageSmartRefreshButton, busy: model.smartRefreshing) {
                 model.refreshSmartNow()
             }
+            .accessibilityLabel(L.storageSmartRefreshButton)
         }) {
             VStack(alignment: .leading, spacing: 10) {
                 // Install-smartmontools affordance (Block N8): only relevant when
@@ -209,6 +329,7 @@ struct SmartDisksCard: View {
                         RainbowCapsuleButton(title: L.storageSmartInstallButton, busy: model.smartInstalling) {
                             model.installSmartmontoolsNow()
                         }
+                        .accessibilityLabel(L.storageSmartInstallButton)
                         if let err = model.smartInstallError {
                             Text(err).font(.caption2).foregroundStyle(.red)
                         }
@@ -217,28 +338,50 @@ struct SmartDisksCard: View {
                     Text(L.storageSmartNeedsHomebrew).font(.caption).foregroundStyle(.secondary)
                 }
 
-                if let disks = model.report.smart {
+                if model.report.smart != nil {
                     if disks.isEmpty {
                         Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
                     } else {
-                        VStack(alignment: .leading, spacing: 14) {
-                            ForEach(Array(disks.enumerated()), id: \.element.id) { index, disk in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(disk.title).font(.callout.weight(.semibold))
-                                    HStack(spacing: 6) {
-                                        SeverityDot(sev: disk.severity)
-                                        Text(smartLocalizedLabel(disk.status)).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    if !disk.attrs.isEmpty {
-                                        SimpleTable(
-                                            headers: [L.storageSmartColAttribute, L.storageSmartColValue],
-                                            rows: disk.attrs.map { [smartLocalizedLabel($0.0), $0.0 == "Critical Warning" ? smartCriticalWarningRU($0.1) : $0.1] },
-                                            numericColumns: [1]
-                                        )
-                                        .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 7) {
+                            // Internal disk ALWAYS alone on the first line under the
+                            // card title; externals flow left→right below it.
+                            if let internalDisk {
+                                SmartDiskCapsule(
+                                    disk: internalDisk, isInternal: true,
+                                    isSelected: selectedDisk?.device == internalDisk.device
+                                ) { selectedDevice = internalDisk.device }
+                            }
+                            if !externalDisks.isEmpty {
+                                FlowLayout(spacing: 7) {
+                                    ForEach(externalDisks) { disk in
+                                        SmartDiskCapsule(
+                                            disk: disk, isInternal: false,
+                                            isSelected: selectedDisk?.device == disk.device
+                                        ) { selectedDevice = disk.device }
                                     }
                                 }
-                                if index != disks.count - 1 { Divider() }
+                            }
+                        }
+
+                        if let sel = selectedDisk {
+                            // Problem/error text only on an actual SMART failure (not on
+                            // wear/warn or unknown) — spec §5.9 correction.
+                            let isFailing = sel.severity == .crit || sel.severity == .serious
+                            if isFailing || !sel.attrs.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    if isFailing {
+                                        Text(smartLocalizedLabel(sel.status))
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(smartStatusColor(sel.severity))
+                                    }
+                                    if !sel.attrs.isEmpty {
+                                        SimpleTable(
+                                            headers: [L.storageSmartColAttribute, L.storageSmartColValue],
+                                            rows: sel.attrs.map { [smartLocalizedLabel($0.0), $0.0 == "Critical Warning" ? smartCriticalWarningRU($0.1) : $0.1] },
+                                            numericColumns: [1]
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

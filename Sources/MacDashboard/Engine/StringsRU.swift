@@ -132,6 +132,8 @@ struct StringsRU: AppStrings {
     var storageSmartInstallButton: String { "Установить smartmontools" }
     var storageSmartNeedsHomebrew: String { "Для SMART внешних дисков нужны Homebrew и smartmontools" }
     func storageSmartInstallFailed(_ msg: String) -> String { "Установка не удалась: \(msg)" }
+    var storageSmartKindInternal: String { "ВНУТРЕННИЙ" }
+    var storageSmartKindExternal: String { "ВНЕШНИЙ" }
 
     // MARK: Process cards
     var processesTitle: String { "Процессы" }
