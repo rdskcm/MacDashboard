@@ -47,12 +47,12 @@ struct ReportTab: View {
 
             Spacer()
 
-            RainbowCapsuleButton(title: L.reportShowInFinder, recipe: .overview) {
+            RainbowCapsuleButton(title: L.reportShowInFinder, recipe: .overview, size: .toolbar) {
                 AdviceActionRunner.reveal(model.reportURL.path)
             }
             .accessibilityLabel(L.reportShowInFinder)
 
-            RainbowCapsuleButton(title: L.reportCopy, recipe: .overview) {
+            RainbowCapsuleButton(title: L.reportCopy, recipe: .overview, size: .toolbar) {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString(model.reportText ?? "", forType: .string)

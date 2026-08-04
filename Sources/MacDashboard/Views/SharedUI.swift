@@ -165,9 +165,10 @@ struct KPITempBadge: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 1) {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
             Text("\(celsius)")
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
             Text("°C")
                 .font(.system(size: 9.5))
                 .foregroundStyle(unitTone)
@@ -175,7 +176,7 @@ struct KPITempBadge: View {
         .foregroundStyle(textTone)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .padding(.top, 2)   // optical centering: the text has no descenders
+        .frame(height: 22)
         .background(Capsule().fill(tone.opacity(fillOpacity)))
         .overlay(Capsule().strokeBorder(tone.opacity(borderOpacity), lineWidth: 1))
     }
@@ -917,6 +918,42 @@ struct DSSpinner: View {
     }
 }
 
+/// Size variants for `RainbowCapsuleButton`, matching the prototype's four
+/// capsule sizes (C1/C4/C5/C6): `(font, horizontal padding, vertical padding)`.
+enum DSCapsuleSize {
+    case primary
+    case card
+    case toolbar
+    case compact
+
+    var font: Font {
+        switch self {
+        case .primary: return .system(size: 12, weight: .semibold)
+        case .card: return .system(size: 11, weight: .semibold)
+        case .toolbar: return .system(size: 11, weight: .semibold)
+        case .compact: return .system(size: 10.5, weight: .semibold)
+        }
+    }
+
+    var hPad: CGFloat {
+        switch self {
+        case .primary: return 14
+        case .card: return 12
+        case .toolbar: return 13
+        case .compact: return 10
+        }
+    }
+
+    var vPad: CGFloat {
+        switch self {
+        case .primary: return 8
+        case .card: return 6
+        case .toolbar: return 7
+        case .compact: return 5
+        }
+    }
+}
+
 /// Small capsule button with the shimmering rainbow hover border — the shared look for card-header actions (SMART «Обновить», battery «Детали»).
 /// `recipe` defaults to `.overview` — today's shipped look on every existing call
 /// site, including the Settings «Перезапустить сейчас» button, which keeps the
@@ -925,6 +962,7 @@ struct RainbowCapsuleButton: View {
     let title: String
     var busy: Bool = false
     var recipe: RainbowRingRecipe = .overview
+    var size: DSCapsuleSize = .card
     let action: () -> Void
 
     @State private var hovering = false
@@ -936,12 +974,12 @@ struct RainbowCapsuleButton: View {
                 if busy {
                     ProgressView().controlSize(.small)
                 }
-                Text(title).font(.caption)
+                Text(title).font(size.font)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(Color.primary.opacity(0.06)))
-            .overlay { Capsule().strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1) }
+            .padding(.horizontal, size.hPad)
+            .padding(.vertical, size.vPad)
+            .background(Capsule().fill(DS.glass3))
+            .overlay { Capsule().strokeBorder(DS.lineStrong, lineWidth: 1) }
             .rainbowBorder(isActive: hovering, recipe: recipe)
         }
         .buttonStyle(.plain)

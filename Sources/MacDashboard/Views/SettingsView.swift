@@ -225,7 +225,7 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        RainbowCapsuleButton(title: L.settingsRelaunchNow) { relaunchApp() }
+                        RainbowCapsuleButton(title: L.settingsRelaunchNow, size: .primary) { relaunchApp() }
                     }
                 }
 

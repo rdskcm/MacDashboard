@@ -40,7 +40,7 @@ struct MaintenanceCard: View {
                                 if updates.count > 5 {
                                     Text(L.maintenanceAndMore(updates.count - 5)).font(.caption).foregroundStyle(.secondary)
                                 }
-                                RainbowCapsuleButton(title: L.maintenanceOpenSoftwareUpdate) {
+                                RainbowCapsuleButton(title: L.maintenanceOpenSoftwareUpdate, size: .card) {
                                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!)
                                 }
                             }

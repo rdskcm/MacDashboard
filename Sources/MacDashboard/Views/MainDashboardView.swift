@@ -206,7 +206,7 @@ struct HeaderChipsView: View {
     private var statusLabel: String { statusIsGood ? L.recommendationsAllGood : L.headerStatusNeedsAttention }
 
     private var refreshButton: some View {
-        RainbowCapsuleButton(title: L.headerRefreshReport, busy: model.isCollectingReport, recipe: .overview) {
+        RainbowCapsuleButton(title: L.headerRefreshReport, busy: model.isCollectingReport, recipe: .overview, size: .primary) {
             model.refreshReport()
         }
         .accessibilityLabel(L.headerRefreshReport)

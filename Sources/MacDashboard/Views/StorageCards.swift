@@ -312,7 +312,7 @@ struct SmartDisksCard: View {
 
     var body: some View {
         CardChrome(title: L.storageSmartTitle, caption: updatedCaption, trailing: {
-            RainbowCapsuleButton(title: L.storageSmartRefreshButton, busy: model.smartRefreshing) {
+            RainbowCapsuleButton(title: L.storageSmartRefreshButton, busy: model.smartRefreshing, size: .card) {
                 model.refreshSmartNow()
             }
             .accessibilityLabel(L.storageSmartRefreshButton)
@@ -326,7 +326,7 @@ struct SmartDisksCard: View {
                     EmptyView()
                 case .installable:
                     VStack(alignment: .leading, spacing: 4) {
-                        RainbowCapsuleButton(title: L.storageSmartInstallButton, busy: model.smartInstalling) {
+                        RainbowCapsuleButton(title: L.storageSmartInstallButton, busy: model.smartInstalling, size: .card) {
                             model.installSmartmontoolsNow()
                         }
                         .accessibilityLabel(L.storageSmartInstallButton)

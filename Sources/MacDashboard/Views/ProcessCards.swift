@@ -448,7 +448,7 @@ private struct ProcessCapsuleButton: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(hovering ? DS.ink : DS.inkSoft)
                 .padding(.vertical, 6)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 11)
                 .background(Capsule().fill(DS.glass3))
                 .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
         }
@@ -476,7 +476,7 @@ private struct ProcessOutlineHotButton: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(DS.hot)
                 .padding(.vertical, 6)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 11)
                 .background(Capsule().fill(DS.hot.opacity(hovering ? 0.14 : 0)))
                 .overlay(Capsule().strokeBorder(DS.hot.opacity(0.45), lineWidth: 1))
         }
@@ -504,7 +504,7 @@ private struct ProcessOutlineNeutralButton: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(hovering ? DS.ink : DS.inkSoft)
                 .padding(.vertical, 6)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 11)
                 .background(Capsule().fill(hovering ? DS.row : Color.clear))
                 .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
         }
@@ -528,7 +528,7 @@ private struct ProcessFilledHotButton: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white)
                 .padding(.vertical, 6)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 11)
                 .background(Capsule().fill(DS.hot))
         }
         .buttonStyle(.plain)

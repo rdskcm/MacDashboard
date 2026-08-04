@@ -290,7 +290,7 @@ struct BatteryTile: View {
                 // Satellite: the "Детали" pill — the rainbow hover ring lives in
                 // the header itself now (it belongs to the tile header per the
                 // Overview recipe), not floated over the tile as a v1 overlay.
-                RainbowCapsuleButton(title: L.kpiBatteryDetailsButton) { showDetails = true }
+                RainbowCapsuleButton(title: L.kpiBatteryDetailsButton, size: .compact) { showDetails = true }
                     .accessibilityLabel(L.kpiBatteryDetailsButton)
             } visual: {
                 // TRAP: never `assessment.battSev.color` — go through the v2 tone table.
