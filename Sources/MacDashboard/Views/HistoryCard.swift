@@ -35,12 +35,28 @@ struct HistoryCard: View {
 
     var body: some View {
         if entries.count >= 2 {
-            ChartOrTableCard(title: L.historyTitle, caption: L.historyCaption(entries.count)) {
-                chart
-            } table: {
-                table
-            }
+            ChartOrTableCard(
+                title: L.historyTitle,
+                caption: L.historyCaption(entries.count),
+                headerAccessory: { metricControl },
+                chart: { chart },
+                table: { table }
+            )
         }
+    }
+
+    // The metric picker (`DSSlidingSegmented`, stateful, spring-animated thumb)
+    // lives in `ChartOrTableCard`'s header slot — OUTSIDE both the chart/table
+    // toggle branch and the `points.count < 2` branch inside `chart` below. A
+    // control bound to `$metric` that gets a fresh identity whenever the
+    // surrounding view also branches on data loses its thumb-slide animation
+    // (fresh instance mounts pre-selected instead of sliding; see FoldersCard's
+    // segmentedControl note in StorageCards.swift for the reference precedent).
+    private var metricControl: some View {
+        DSSlidingSegmented(options: HistoryMetric.allCases, selection: $metric) { m in
+            label(for: m)
+        }
+        .accessibilityLabel(L.historyMetricA11y)
     }
 
     private var metricYLabel: String {
@@ -68,21 +84,11 @@ struct HistoryCard: View {
         return parsed.filter { range.contains($0.date) }
     }
 
-    // The metric picker (`DSSlidingSegmented`, stateful, spring-animated thumb)
-    // sits OUTSIDE the `points.count < 2` branch below — a control bound to
-    // `$metric` that gets a fresh identity whenever the surrounding view also
-    // branches on data loses its thumb-slide animation (fresh instance mounts
-    // pre-selected instead of sliding; see FoldersCard's segmentedControl note
-    // in StorageCards.swift for the reference precedent). Only the innermost
-    // plot content — empty-state text vs. the real chart — varies with data.
+    // The metric picker moved to `ChartOrTableCard`'s header slot (see
+    // `metricControl` / `body` above); only the plot content — empty-state
+    // text vs. the real chart — varies with `metric` here.
     private var chart: some View {
         VStack(alignment: .leading, spacing: 8) {
-            DSSlidingSegmented(options: HistoryMetric.allCases, selection: $metric) { m in
-                label(for: m)
-            }
-            .frame(width: 260, height: 26)
-            .accessibilityLabel(L.historyMetricA11y)
-
             let points = chartPoints(for: metric)
             if points.count < 2 {
                 Text(L.historyMetricInsufficientData)

@@ -392,13 +392,19 @@ extension CardChrome where Trailing == EmptyView {
 /// where BOTH the chart and table closures read the same observable model data
 /// passed in by the caller, so whichever is visible keeps ticking live. This is
 /// the regression-test target for the old dashboard's "table view goes stale" bug.
-struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
+struct ChartOrTableCard<ChartContent: View, TableContent: View, HeaderAccessory: View>: View {
     let title: String
     var caption: String? = nil
     /// Optional always-visible "ⓘ" affordance in the header (nil by default,
     /// so most callers are unaffected). Sits in CardChrome's trailing area, so
     /// it stays visible in both chart and table sub-views.
     var infoHelp: String? = nil
+    /// Extra header content (e.g. a metric picker) rendered in the trailing
+    /// header row, BEFORE the ⓘ and the chart/table toggle. Lives here — not
+    /// inside `chart`/`table` — so a stateful control bound to it keeps its
+    /// identity across the chart/table switch instead of remounting. Defaults
+    /// to `EmptyView` via the extension below, so most callers are unaffected.
+    @ViewBuilder var headerAccessory: () -> HeaderAccessory
     @State private var showTable = false
     @State private var showInfo = false
     @State private var hovering = false
@@ -411,6 +417,7 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
     var body: some View {
         CardChrome(title: title, caption: caption, trailing: {
             HStack(spacing: 10) {
+                headerAccessory()
                 if infoHelp != nil {
                     Button {
                         showInfo.toggle()
@@ -471,6 +478,18 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View>: View {
                 value: showInfo
             )
         }
+    }
+}
+
+extension ChartOrTableCard where HeaderAccessory == EmptyView {
+    init(
+        title: String,
+        caption: String? = nil,
+        infoHelp: String? = nil,
+        @ViewBuilder chart: @escaping () -> ChartContent,
+        @ViewBuilder table: @escaping () -> TableContent
+    ) {
+        self.init(title: title, caption: caption, infoHelp: infoHelp, headerAccessory: { EmptyView() }, chart: chart, table: table)
     }
 }
 

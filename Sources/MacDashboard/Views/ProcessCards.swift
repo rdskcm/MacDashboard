@@ -145,7 +145,6 @@ struct ProcessListCard: View {
         DSSlidingSegmented(options: [Metric.cpu, .mem], selection: $procMetric) { m in
             m == .cpu ? L.processSegCPU : L.processSegMem
         }
-        .frame(width: 168, height: 26)
         .accessibilityLabel(L.processesMetricA11y)
     }
 }

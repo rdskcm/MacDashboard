@@ -38,13 +38,12 @@ struct MainDashboardView: View {
         HStack(alignment: .center, spacing: 16) {
             titleBlock
             Spacer()
-            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab) { t in
+            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab, size: .tabs) { t in
                 switch t {
                 case .overview: return L.mainTabOverview
                 case .report: return L.mainTabReport
                 }
             }
-            .frame(maxWidth: 260)
             Spacer()
             HeaderChipsView(model: model)
         }

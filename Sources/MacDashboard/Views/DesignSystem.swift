@@ -217,8 +217,36 @@ func dsRecessedTrack<S: InsettableShape>(in shape: S) -> some View {
 /// thumb is rendered BEHIND the labels (zIndex 0 vs 1); its motion is a
 /// `.spring(response: 0.38, dampingFraction: 0.68)` slide plus a `scaleX(1.09)`
 /// stretch anchored to the trailing edge that relaxes back to 1.0 over 0.19 s
-/// ease-out. Labels cross-fade color over 0.18 s. Segments are equal-width
-/// (divides the available width by option count).
+/// ease-out. Labels cross-fade color over 0.18 s. Each segment is sized from
+/// its own label + padding (`DSSegmentedSize`) — the control never fixes its
+/// own width; callers must not pin one via `.frame`.
+enum DSSegmentedSize {
+    /// Toolbar-level tabs (e.g. the Overview/Report switch): larger type, more
+    /// breathing room.
+    case tabs
+    /// In-card controls (metric pickers, folder tabs): the default, tighter fit.
+    case card
+
+    var font: Font {
+        switch self {
+        case .tabs: return .system(size: 12.5, weight: .semibold)
+        case .card: return .system(size: 11, weight: .semibold)
+        }
+    }
+    var hPad: CGFloat {
+        switch self {
+        case .tabs: return 16
+        case .card: return 11
+        }
+    }
+    var vPad: CGFloat {
+        switch self {
+        case .tabs: return 6
+        case .card: return 5
+        }
+    }
+}
+
 private enum DSSlidingSegmentedTokens {
     // Thumb outward shadows (dark opacity > light, same reasoning as the track).
     static let shadow1 = Color(light: dsShadowNavy(0.10), dark: Color.black.opacity(0.26))
@@ -232,6 +260,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
     let options: [T]
     @Binding var selection: T
     let label: (T) -> String
+    let size: DSSegmentedSize
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stretch: CGFloat = 1.0
@@ -242,10 +271,16 @@ struct DSSlidingSegmented<T: Hashable>: View {
     /// Outer container inset (spec §2.3): track, thumb, and labels all sit
     /// inset 3 pt from the control's own bounds.
     private let containerPadding: CGFloat = 3
+    /// Each segment's rendered width, keyed by index — read from the label's
+    /// own laid-out geometry (`.onGeometryChange`, not a `GeometryReader`
+    /// inside the animated subtree: that previously collapsed the row to
+    /// ~6 pt mid-transition). Drives both the thumb's width and its offset.
+    @State private var widths: [Int: CGFloat] = [:]
 
-    init(options: [T], selection: Binding<T>, label: @escaping (T) -> String) {
+    init(options: [T], selection: Binding<T>, size: DSSegmentedSize = .card, label: @escaping (T) -> String) {
         self.options = options
         self._selection = selection
+        self.size = size
         self.label = label
     }
 
@@ -253,46 +288,53 @@ struct DSSlidingSegmented<T: Hashable>: View {
         options.firstIndex(of: selection) ?? 0
     }
 
+    private var thumbWidth: CGFloat {
+        widths[selectedIndex] ?? 0
+    }
+
+    private var thumbOffset: CGFloat {
+        let precedingWidths = (0..<selectedIndex).reduce(CGFloat(0)) { $0 + (widths[$1] ?? 0) }
+        return precedingWidths + 2 * CGFloat(selectedIndex)
+    }
+
     var body: some View {
-        GeometryReader { geo in
-            let count = max(options.count, 1)
-            let segmentWidth = max(0, geo.size.width - containerPadding * 2) / CGFloat(count)
+        ZStack(alignment: .leading) {
+            dsRecessedTrack(in: Capsule())
 
-            ZStack(alignment: .leading) {
-                dsRecessedTrack(in: Capsule())
+            thumb
+                .frame(width: thumbWidth)
+                .offset(x: thumbOffset)
+                .scaleEffect(x: stretch, y: 1, anchor: stretchAnchor)
+                .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.68), value: selection)
+                .zIndex(0)
 
-                thumb
-                    .frame(width: max(0, segmentWidth))
-                    .offset(x: segmentWidth * CGFloat(selectedIndex))
-                    .scaleEffect(x: stretch, y: 1, anchor: stretchAnchor)
-                    .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.68), value: selection)
-                    .zIndex(0)
-
-                HStack(spacing: 2) {
-                    ForEach(options, id: \.self) { option in
-                        Button {
-                            select(option)
-                        } label: {
-                            Text(label(option))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(option == selection ? DS.ink : DS.muted)
-                                .frame(width: segmentWidth)
-                                .frame(maxHeight: .infinity)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(label(option))
-                        .animation(
-                            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : .easeInOut(duration: 0.18),
-                            value: selection
-                        )
+            HStack(spacing: 2) {
+                ForEach(Array(options.enumerated()), id: \.element) { index, option in
+                    Button {
+                        select(option)
+                    } label: {
+                        Text(label(option))
+                            .font(size.font)
+                            .foregroundStyle(option == selection ? DS.ink : DS.muted)
+                            .padding(.horizontal, size.hPad)
+                            .padding(.vertical, size.vPad)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(label(option))
+                    .animation(
+                        reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : .easeInOut(duration: 0.18),
+                        value: selection
+                    )
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+                        widths[index] = newWidth
                     }
                 }
-                .zIndex(1)
             }
-            .padding(containerPadding)
+            .zIndex(1)
         }
-        .frame(height: 28)
+        .padding(containerPadding)
+        .fixedSize()
     }
 
     private var thumb: some View {

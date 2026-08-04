@@ -138,7 +138,6 @@ struct FoldersCard: View {
         DSSlidingSegmented(options: [FolderTab.home, .service], selection: $folderTab) { t in
             t == .home ? L.folderTabHome : L.folderTabSvc
         }
-        .frame(width: 168, height: 26)
     }
 
     // `CardChrome`/`segmentedControl` must sit OUTSIDE the folderTab switch:
