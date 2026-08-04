@@ -175,6 +175,8 @@ struct MemoryTile: View {
 struct SwapTile: View {
     let model: DashboardModel
 
+    static func isVisible(_ model: DashboardModel) -> Bool { if let s = model.swap { return s.total > 0 }; return false }
+
     var body: some View {
         if let swap = model.swap, swap.total > 0 {
             KPITileView(
@@ -250,6 +252,9 @@ struct DiskTile: View {
 struct BatteryTile: View {
     let model: DashboardModel
     @State private var showDetails = false
+
+    static func isVisible(_ model: DashboardModel) -> Bool { (model.battery ?? model.report.battery) != nil }
+
     private var battery: BatteryInfo? {
         guard let live = model.battery ?? model.report.battery else { return nil }
         // For static fields (maxCapacity, cycles, condition), prefer report; for dynamic fields, use live

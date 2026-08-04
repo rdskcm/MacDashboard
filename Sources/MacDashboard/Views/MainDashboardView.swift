@@ -160,14 +160,17 @@ struct MainDashboardView: View {
     // which sizes columns to their content. `.flexible()` still has a 10pt
     // default minimum, so equal width depends on every tile's content being
     // shrinkable — see KPITileView's nowrap+ellipsis label and ellipsizable
-    // "из N" slot.
+    // "из N" slot. Column count is now dynamic based on tile visibility.
     private var kpiRow: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 12) {
+        let showSwap = SwapTile.isVisible(model)
+        let showBattery = BatteryTile.isVisible(model)
+        let count = 3 + (showSwap ? 1 : 0) + (showBattery ? 1 : 0)
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: count), spacing: 12) {
             CPUTile(model: model)
             MemoryTile(model: model)
-            SwapTile(model: model)
+            if showSwap { SwapTile(model: model) }
             DiskTile(model: model)
-            BatteryTile(model: model)
+            if showBattery { BatteryTile(model: model) }
         }
     }
 }
