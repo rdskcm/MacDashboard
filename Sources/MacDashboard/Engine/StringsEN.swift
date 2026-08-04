@@ -242,6 +242,7 @@ struct StringsEN: AppStrings {
     var historyMetricPickerBattery: String { "Battery" }
     var historyMetricPickerCycles: String { "Cycles" }
     var historyMetricPickerSwap: String { "Swap" }
+    var historyMetricA11y: String { "History metric" }
     var historyMetricYLabelDisk: String { "Used, GB" }
     var historyMetricYLabelBattery: String { "%" }
     var historyMetricYLabelCycles: String { "cycles" }

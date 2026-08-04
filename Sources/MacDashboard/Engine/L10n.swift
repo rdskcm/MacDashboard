@@ -251,6 +251,7 @@ protocol AppStrings {
     var historyMetricPickerBattery: String { get }
     var historyMetricPickerCycles: String { get }
     var historyMetricPickerSwap: String { get }
+    var historyMetricA11y: String { get }
     var historyMetricYLabelDisk: String { get }
     var historyMetricYLabelBattery: String { get }
     var historyMetricYLabelCycles: String { get }

@@ -242,6 +242,7 @@ struct StringsRU: AppStrings {
     var historyMetricPickerBattery: String { "Батарея" }
     var historyMetricPickerCycles: String { "Циклы" }
     var historyMetricPickerSwap: String { "Swap" }
+    var historyMetricA11y: String { "Метрика истории" }
     var historyMetricYLabelDisk: String { "Занято, ГБ" }
     var historyMetricYLabelBattery: String { "%" }
     var historyMetricYLabelCycles: String { "циклы" }
