@@ -35,6 +35,17 @@ enum DSMotion {
     static let rainbow: Double = 6
     /// Reduce Motion fallback duration for color/opacity/border/shadow transitions.
     static let reduceMotionFallback: Double = 0.12
+    /// Hover transition for controls that ALSO carry a `.rainbowBorder()` glow
+    /// (e.g. EnergyCard's Reset button). `RainbowBorder` fades its own ring with
+    /// a hardcoded internal `.easeInOut(duration: 0.25)` (SharedUI.swift); a
+    /// caller-side hover animation on a *different* curve/duration (e.g. the
+    /// plain `cardHover` easeOut/0.16 s used by non-glow hover controls) settles
+    /// before the ring's own fade does, so the color and the glow visibly move
+    /// out of step — read as an abrupt, two-stage hover instead of one smooth
+    /// motion. Same 0.25 s response as the ring's fade keeps them in lockstep;
+    /// `dampingFraction: 0.86` reuses `barRelayout`'s established "smooth,
+    /// no-overshoot" damping instead of inventing a new ratio.
+    static let rainbowHover = Animation.spring(response: 0.25, dampingFraction: 0.86)
 }
 
 // MARK: - Shadow color helper
