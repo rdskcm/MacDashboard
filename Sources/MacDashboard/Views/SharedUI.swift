@@ -13,6 +13,8 @@ struct Chip: View {
         Text(text)
             .font(.system(size: 11, weight: .medium, design: .monospaced))
             .foregroundStyle(DS.muted)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(Capsule().fill(DS.glass))
@@ -48,6 +50,8 @@ struct SeverityChip: View {
                 // DS.hot has no -ink light-mode text variant, so the critical case
                 // falls back to neutral DS.ink; the amber case has DS.amberInk and must use it.
                 .foregroundStyle(isGood ? DS.greenInk : (hasCrit ? DS.ink : DS.amberInk))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 6)
@@ -994,6 +998,8 @@ struct RainbowCapsuleButton: View {
                     ProgressView().controlSize(.small)
                 }
                 Text(title).font(size.font)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, size.hPad)
             .padding(.vertical, size.vPad)

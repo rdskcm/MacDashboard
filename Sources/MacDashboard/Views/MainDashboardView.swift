@@ -44,8 +44,9 @@ struct MainDashboardView: View {
                 case .report: return L.mainTabReport
                 }
             }
-            Spacer()
+            Spacer(minLength: 8)
             HeaderChipsView(model: model)
+                .layoutPriority(1)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -91,7 +92,7 @@ struct MainDashboardView: View {
                 .font(.system(size: 11.5))
                 .foregroundStyle(DS.muted)
         }
-        .frame(minWidth: 250, alignment: .leading)
+        .frame(minWidth: 170, alignment: .leading)
     }
 
     private var subtitle: String {
@@ -181,15 +182,28 @@ struct HeaderChipsView: View {
     let model: DashboardModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            if let load = model.load, !load.isEmpty {
-                Chip(text: L.headerLoadChip(load.map { fmtNum($0, decimals: 2) }.joined(separator: " / "), model.ncpu))
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                if let load = model.load, !load.isEmpty {
+                    Chip(text: L.headerLoadChip(load.map { fmtNum($0, decimals: 2) }.joined(separator: " / "), model.ncpu))
+                }
+                if let uptime = model.report.system?.uptime {
+                    Chip(text: L.headerUptimeChip(uptime))
+                }
+                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
+                refreshButton
             }
-            if let uptime = model.report.system?.uptime {
-                Chip(text: L.headerUptimeChip(uptime))
+            HStack(spacing: 8) {
+                if let uptime = model.report.system?.uptime {
+                    Chip(text: L.headerUptimeChip(uptime))
+                }
+                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
+                refreshButton
             }
-            SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
-            refreshButton
+            HStack(spacing: 8) {
+                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
+                refreshButton
+            }
         }
     }
 
