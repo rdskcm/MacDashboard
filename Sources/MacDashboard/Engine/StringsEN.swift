@@ -197,15 +197,14 @@ struct StringsEN: AppStrings {
     var autostartSystemDaemons: String { "System daemons" }
     var autostartBackgroundTasks: String { "Background tasks (non-Apple)" }
     var autostartCheckOutdated: String { "Check for outdated" }
-    func autostartCheckOutdatedCount(_ n: Int) -> String { "Check for outdated: \(n)" }
+    func autostartCheckOutdatedCount(_ n: Int) -> String { "Outdated: \(n)" }
+    var autostartOrphanEmptyText: String { "No outdated plists" }
     var autostartOrphanTooltip: String { "Orphaned — app no longer installed, safe to remove" }
     var autostartDeleteButton: String { "Delete" }
-    var autostartDeleteConfirmTitle: String { "Delete outdated startup item?" }
     var autostartDeleteConfirmMessageUser: String { "The file will be moved to the Trash. The change takes effect after the next login or restart." }
     var autostartDeleteConfirmMessageSystem: String { "The file will be permanently deleted (requires Touch ID or an admin password). The change takes effect after the next login or restart." }
     func autostartDeleteError(_ detail: String) -> String { "Couldn't delete: \(detail)" }
     var autostartOkTooltip: String { "OK" }
-    var autostartNoOrphans: String { "No outdated items found" }
 
     // MARK: Memory card
     var memoryLegendActive: String { "Active" }

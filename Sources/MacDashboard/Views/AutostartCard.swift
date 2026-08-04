@@ -12,6 +12,8 @@ import SwiftUI
 struct AutostartCard: View {
     let model: DashboardModel
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     // Login Items expanded by default: it's the one section users most often
     // need to check/act on at a glance (the others are mostly Apple's own
     // agents/daemons, rarely actionable). The rest start collapsed.
@@ -21,40 +23,52 @@ struct AutostartCard: View {
     @State private var systemDaemonsExpanded = false
     @State private var backgroundExpanded = false
 
-    /// Reveals the orphan cleanup list below the button; toggled by tapping
-    /// `L.autostartCheckOutdated`.
+    /// Reveals the orphan cleanup list below the header; toggled by tapping
+    /// `L.autostartCheckOutdated` in the card header.
     @State private var showOrphans = false
-    /// Path of the orphan awaiting the delete confirmation dialog; nil = none pending.
+    /// Hover state for the header "check for outdated" capsule.
+    @State private var checkButtonHovering = false
+    /// Path of the orphan whose inline delete confirmation line is expanded;
+    /// nil = none pending. Gates the inline confirm/cancel row in place of a
+    /// system `.confirmationDialog` sheet.
     @State private var pendingDeletePath: String? = nil
 
     var body: some View {
-        CardChrome(title: L.autostartTitle) {
-            if let auto = model.report.autostart {
+        if let auto = model.report.autostart {
+            let orphans = (auto.userAgents + auto.systemAgents + auto.systemDaemons).filter(\.isOrphan)
+
+            CardChrome(title: L.autostartTitle, trailing: { orphanHeader(orphans: orphans) }) {
                 VStack(alignment: .leading, spacing: 12) {
-                    orphanCleanupSection(auto)
+                    orphanListSection(orphans: orphans)
 
                     autoSection("Login Items", count: auto.loginItems?.count, isExpanded: $loginItemsExpanded) {
                         if let items = auto.loginItems {
                             PillFlow(items: items)
                         } else {
-                            Text(L.autostartNoPermission).font(.caption).foregroundStyle(.secondary)
+                            Text(L.autostartNoPermission).font(.system(size: 11.5)).foregroundStyle(DS.muted)
                         }
                     }
-                    autoSection(L.autostartUserAgents, count: auto.userAgents.count, isExpanded: $userAgentsExpanded, hasOrphans: auto.userAgents.contains(where: \.isOrphan)) { PlistPillFlow(items: auto.userAgents) }
-                    autoSection(L.autostartSystemAgents, count: auto.systemAgents.count, isExpanded: $systemAgentsExpanded, hasOrphans: auto.systemAgents.contains(where: \.isOrphan)) { PlistPillFlow(items: auto.systemAgents) }
-                    autoSection(L.autostartSystemDaemons, count: auto.systemDaemons.count, isExpanded: $systemDaemonsExpanded, hasOrphans: auto.systemDaemons.contains(where: \.isOrphan)) { PlistPillFlow(items: auto.systemDaemons) }
+                    autoSection(L.autostartUserAgents, count: auto.userAgents.count, isExpanded: $userAgentsExpanded) { PlistPillFlow(items: auto.userAgents) }
+                    autoSection(L.autostartSystemAgents, count: auto.systemAgents.count, isExpanded: $systemAgentsExpanded) { PlistPillFlow(items: auto.systemAgents) }
+                    autoSection(L.autostartSystemDaemons, count: auto.systemDaemons.count, isExpanded: $systemDaemonsExpanded) { PlistPillFlow(items: auto.systemDaemons) }
                     if !auto.background.isEmpty {
                         autoSection(L.autostartBackgroundTasks, count: auto.background.count, isExpanded: $backgroundExpanded) {
                             FlowLayout(spacing: 6) {
                                 ForEach(Array(auto.background.enumerated()), id: \.offset) { _, bg in
                                     Pill(text: bg.label)
-                                        .help("PID \(bg.pid)")
+                                        .hoverTip("PID \(bg.pid)")
                                 }
                             }
                         }
                     }
                 }
-            } else {
+                .animation(
+                    reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                    value: showOrphans
+                )
+            }
+        } else {
+            CardChrome(title: L.autostartTitle) {
                 SectionStateView(done: model.report.progress["autostart"] ?? false)
             }
         }
@@ -85,15 +99,15 @@ struct AutostartCard: View {
             if reduceMotion {
                 content.background(
                     Capsule()
-                        .strokeBorder(Severity.warn.color, lineWidth: 1.5)
-                        .shadow(color: Severity.warn.color.opacity(0.5), radius: 6)
+                        .strokeBorder(DS.amber, lineWidth: 1.5)
+                        .shadow(color: DS.amber.opacity(0.5), radius: 6)
                 )
             } else {
                 content
                     .background(
                         Capsule()
-                            .strokeBorder(Severity.warn.color.opacity(isAnimating ? 1.0 : 0.5), lineWidth: 1.5)
-                            .shadow(color: Severity.warn.color.opacity(isAnimating ? 0.6 : 0.25), radius: 6)
+                            .strokeBorder(DS.amber.opacity(isAnimating ? 1.0 : 0.5), lineWidth: 1.5)
+                            .shadow(color: DS.amber.opacity(isAnimating ? 0.6 : 0.25), radius: 6)
                     )
                     .onAppear(perform: startBreathing)
                     .onDisappear { isAnimating = false }
@@ -108,7 +122,7 @@ struct AutostartCard: View {
         /// (`isAnimating == true`) — so the animation finishes without a visible snap.
         private func startBreathing() {
             guard !paused, !isAnimating else { return }
-            withAnimation(.easeInOut(duration: 2.0).repeatCount(5, autoreverses: true)) {
+            withAnimation(DSMotion.breathing) {
                 isAnimating = true
             }
         }
@@ -121,87 +135,140 @@ struct AutostartCard: View {
         }
     }
 
-    /// "Check for outdated" button + (once tapped) the list of orphaned plists across
-    /// all three launchd sections, each with a delete affordance.
+    /// Card-header content: the "no outdated plists" reveal text (once checked and
+    /// clean) plus the "check for outdated" capsule itself. Lives in `CardChrome`'s
+    /// `trailing:` closure, after the `Spacer(minLength: 8)` it already renders.
     @ViewBuilder
-    private func orphanCleanupSection(_ auto: AutostartInfo) -> some View {
-        let orphans = (auto.userAgents + auto.systemAgents + auto.systemDaemons).filter(\.isOrphan)
-
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                showOrphans.toggle()
-            } label: {
-                if orphans.isEmpty {
-                    Text(L.autostartCheckOutdated)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                } else {
-                    Text(L.autostartCheckOutdatedCount(orphans.count))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Severity.warn.color)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .modifier(BreathingWarnBackground(paused: model.isPaused))
-                }
+    private func orphanHeader(orphans: [LaunchdPlistInfo]) -> some View {
+        HStack(spacing: 8) {
+            if showOrphans && orphans.isEmpty {
+                Text(L.autostartOrphanEmptyText)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.greenInk)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
-            .buttonStyle(.plain)
+            checkButton(orphans: orphans)
+        }
+        .animation(
+            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+            value: showOrphans
+        )
+    }
 
-            if showOrphans {
-                if orphans.isEmpty {
-                    Text(L.autostartNoOrphans).font(.caption).foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 4) {
+    @ViewBuilder
+    private func checkButton(orphans: [LaunchdPlistInfo]) -> some View {
+        Button {
+            showOrphans.toggle()
+        } label: {
+            if orphans.isEmpty {
+                Text(L.autostartCheckOutdated)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(checkButtonHovering ? DS.ink : DS.inkSoft)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(DS.glass3))
+                    .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
+            } else {
+                Text(L.autostartCheckOutdatedCount(orphans.count))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(DS.amberInk)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(DS.glass3))
+                    .overlay(Capsule().strokeBorder(DS.amber.opacity(0.62), lineWidth: 1))
+                    .modifier(BreathingWarnBackground(paused: model.isPaused))
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { checkButtonHovering = $0 }
+        .animation(
+            reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
+            value: checkButtonHovering
+        )
+        .accessibilityLabel(orphans.isEmpty ? L.autostartCheckOutdated : L.autostartCheckOutdatedCount(orphans.count))
+    }
+
+    /// The orphan list itself (once revealed) plus any delete error — lives in the
+    /// card's main content column, above the launchd sections.
+    @ViewBuilder
+    private func orphanListSection(orphans: [LaunchdPlistInfo]) -> some View {
+        if showOrphans {
+            VStack(alignment: .leading, spacing: 6) {
+                if !orphans.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
                         ForEach(orphans, id: \.path) { info in
                             orphanRow(info)
                         }
                     }
                 }
                 if let plistDeleteError = model.plistDeleteError {
-                    Text(L.autostartDeleteError(plistDeleteError)).font(.caption2).foregroundStyle(.red)
+                    Text(L.autostartDeleteError(plistDeleteError))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(DS.hot)
                 }
             }
-        }
-        .confirmationDialog(L.autostartDeleteConfirmTitle, isPresented: pendingDeleteBinding) {
-            if let path = pendingDeletePath {
-                Button(L.autostartDeleteButton, role: .destructive) {
-                    model.deleteOrphanPlist(path: path, isSystemLevel: isSystemLevel(path))
-                }
-                Button(L.adviceCancel, role: .cancel) {}
-            }
-        } message: {
-            if let path = pendingDeletePath {
-                Text(isSystemLevel(path) ? L.autostartDeleteConfirmMessageSystem : L.autostartDeleteConfirmMessageUser)
-            }
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
         }
     }
 
     @ViewBuilder
     private func orphanRow(_ info: LaunchdPlistInfo) -> some View {
         let busy = model.deletingPlistPaths.contains(info.path)
-        HStack(spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.caption2)
-                    .foregroundStyle(Severity.warn.color)
-                Text(URL(fileURLWithPath: info.path).lastPathComponent)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .hoverTip(orphanTooltip(info))
-            Spacer(minLength: 8)
-            if busy {
-                ProgressView().controlSize(.small)
-            } else {
-                Button {
-                    pendingDeletePath = info.path
-                } label: {
-                    Image(systemName: "trash").font(.caption)
+        let isPending = pendingDeletePath == info.path
+        let fileName = URL(fileURLWithPath: info.path).lastPathComponent
+
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(DS.amber)
+                    Text(fileName)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(DS.inkSoft)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .hoverTip(orphanTooltip(info))
+                Spacer(minLength: 8)
+                if busy {
+                    DSSpinner()
+                } else if !isPending {
+                    OrphanAskButton(title: L.autostartDeleteButton) {
+                        pendingDeletePath = info.path
+                    }
+                    .accessibilityLabel("\(L.autostartDeleteButton) \(fileName)")
+                }
+            }
+
+            if isPending {
+                HStack(spacing: 8) {
+                    Text(isSystemLevel(info.path) ? L.autostartDeleteConfirmMessageSystem : L.autostartDeleteConfirmMessageUser)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(DS.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 8)
+                    OrphanCancelButton(title: L.adviceCancel) {
+                        pendingDeletePath = nil
+                    }
+                    .accessibilityLabel(L.adviceCancel)
+                    OrphanConfirmDeleteButton(title: L.autostartDeleteButton) {
+                        model.deleteOrphanPlist(path: info.path, isSystemLevel: isSystemLevel(info.path))
+                        pendingDeletePath = nil
+                    }
+                    .accessibilityLabel("\(L.autostartDeleteButton) \(fileName)")
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 10).fill(DS.row))
+        .animation(
+            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+            value: isPending
+        )
     }
 
     private func orphanTooltip(_ info: LaunchdPlistInfo) -> String {
@@ -212,29 +279,154 @@ struct AutostartCard: View {
         return parts.joined(separator: "\n")
     }
 
-    private var pendingDeleteBinding: Binding<Bool> {
-        Binding(get: { pendingDeletePath != nil }, set: { if !$0 { pendingDeletePath = nil } })
-    }
-
     /// Paths under `~/Library/LaunchAgents` never start with `/Library/`, so this is
     /// unambiguous: system-level plists live at `/Library/LaunchAgents` or
     /// `/Library/LaunchDaemons`.
     private func isSystemLevel(_ path: String) -> Bool { path.hasPrefix("/Library/") }
 
     /// `count` is nil when the item list itself is unavailable (e.g. Login
-    /// Items without permission) — shown without a "(N)" suffix in that case.
+    /// Items without permission) — shown without a "(N)" suffix in that case,
+    /// and never tinted for containing orphans (only the pills inside are).
     @ViewBuilder
     private func autoSection<Content: View>(
-        _ title: String, count: Int?, isExpanded: Binding<Bool>, hasOrphans: Bool = false, @ViewBuilder content: @escaping () -> Content
+        _ title: String, count: Int?, isExpanded: Binding<Bool>, @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        let label = count.map { "\(title) (\($0))" } ?? title
-        DisclosureGroup(isExpanded: isExpanded) {
-            content().padding(.top, 6)
-        } label: {
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(hasOrphans ? Severity.warn.color : .secondary)
+        AutoSectionRow(title: title, count: count, isExpanded: isExpanded, content: content)
+    }
+}
+
+/// A single collapsible launchd/Login-Items section header + its expanded pill
+/// flow. Broken out as its own `View` (rather than a plain function returning
+/// `some View`) so its hover `@State` is a real per-instance property — a helper
+/// *function* on `AutostartCard` can't own `@State` of its own.
+private struct AutoSectionRow<Content: View>: View {
+    let title: String
+    let count: Int?
+    @Binding var isExpanded: Bool
+    @ViewBuilder var content: () -> Content
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    /// A concrete zero count (e.g. an empty agents/daemons list) never
+    /// expands and reads muted; `nil` (permission unknown, e.g. Login Items)
+    /// stays at the normal ink and remains tappable.
+    private var isEmptySection: Bool { count == 0 }
+
+    private var label: String {
+        if let count { return "\(title) (\(count))" }
+        return title
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 7) {
+                DSDisclosureBars(expanded: isExpanded)
+                Text(label)
+                    .font(.system(size: 13))
+                    .foregroundStyle(isEmptySection ? DS.muted : DS.inkSoft)
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 3)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 7)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? DS.row : Color.clear))
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .onTapGesture {
+                guard !isEmptySection else { return }
+                isExpanded.toggle()
+            }
+
+            if isExpanded {
+                content()
+                    .padding(.leading, 18)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
         }
+        .animation(
+            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+            value: isExpanded
+        )
+    }
+}
+
+// MARK: - Orphan-row action buttons
+
+/// Per-orphan "Удалить" trigger — swaps itself out for the inline confirm/cancel
+/// line in place. Mirrors `ProcessCards.swift`'s `ProcessOutlineNeutralButton`
+/// shape at this card's own smaller padding (h10/v5), but tints `DS.hot` on
+/// hover (unlike that button's neutral "Отмена") since this IS the entry point
+/// into a destructive flow, not a cancel.
+private struct OrphanAskButton: View {
+    let title: String
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(hovering ? DS.hot : DS.muted)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().strokeBorder(hovering ? DS.hot.opacity(0.45) : DS.lineStrong, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(
+            reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
+            value: hovering
+        )
+    }
+}
+
+/// Inline confirm-line "Отмена" — mirrors `ProcessCards.swift`'s
+/// `ProcessOutlineNeutralButton`, at this card's own padding (h11/v5).
+private struct OrphanCancelButton: View {
+    let title: String
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(hovering ? DS.ink : DS.inkSoft)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(hovering ? DS.row : Color.clear))
+                .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(
+            reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
+            value: hovering
+        )
+    }
+}
+
+/// Inline confirm-line destructive "Удалить" — mirrors `ProcessCards.swift`'s
+/// `ProcessFilledHotButton`, at this card's own padding (h11/v5).
+private struct OrphanConfirmDeleteButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(DS.hot))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -247,7 +439,7 @@ private struct PlistPillFlow: View {
 
     var body: some View {
         if items.isEmpty {
-            Text(L.sharedEmpty).font(.caption).foregroundStyle(.secondary)
+            Text(L.sharedEmpty).font(.system(size: 11.5)).foregroundStyle(DS.muted)
         } else {
             FlowLayout(spacing: 6) {
                 ForEach(items, id: \.path) { info in
@@ -269,11 +461,11 @@ private struct PlistPill: View {
             }
             Text(URL(fileURLWithPath: info.path).lastPathComponent)
         }
-        .font(.caption)
-        .foregroundStyle(info.isOrphan ? Severity.warn.color : .primary)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 3)
-        .background(Capsule().strokeBorder(info.isOrphan ? Severity.warn.color.opacity(0.6) : Color.primary.opacity(0.18)))
+        .font(.system(size: 11.5))
+        .foregroundStyle(info.isOrphan ? DS.amberInk : DS.inkSoft)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Capsule().strokeBorder(info.isOrphan ? DS.amber.opacity(0.42) : DS.lineStrong, lineWidth: 1))
         .hoverTip(tooltip)
     }
 

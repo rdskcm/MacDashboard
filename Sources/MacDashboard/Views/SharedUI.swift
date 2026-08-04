@@ -680,10 +680,11 @@ struct Pill: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.caption)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 3)
-            .background(Capsule().strokeBorder(Color.primary.opacity(0.18)))
+            .font(.system(size: 11.5))
+            .foregroundStyle(DS.inkSoft)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
     }
 }
 
@@ -691,7 +692,7 @@ struct PillFlow: View {
     let items: [String]
     var body: some View {
         if items.isEmpty {
-            Text(L.sharedEmpty).font(.caption).foregroundStyle(.secondary)
+            Text(L.sharedEmpty).font(.system(size: 11.5)).foregroundStyle(DS.muted)
         } else {
             FlowLayout(spacing: 6) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in

@@ -207,14 +207,13 @@ protocol AppStrings {
     var autostartBackgroundTasks: String { get }
     var autostartCheckOutdated: String { get }
     func autostartCheckOutdatedCount(_ n: Int) -> String
+    var autostartOrphanEmptyText: String { get }
     var autostartOrphanTooltip: String { get }
     var autostartDeleteButton: String { get }
-    var autostartDeleteConfirmTitle: String { get }
     var autostartDeleteConfirmMessageUser: String { get }
     var autostartDeleteConfirmMessageSystem: String { get }
     func autostartDeleteError(_ detail: String) -> String
     var autostartOkTooltip: String { get }
-    var autostartNoOrphans: String { get }
 
     // MARK: Memory card
     var memoryLegendActive: String { get }

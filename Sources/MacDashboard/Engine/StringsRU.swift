@@ -197,15 +197,14 @@ struct StringsRU: AppStrings {
     var autostartSystemDaemons: String { "Системные демоны" }
     var autostartBackgroundTasks: String { "Фоновые задачи (не Apple)" }
     var autostartCheckOutdated: String { "Проверить устаревшие" }
-    func autostartCheckOutdatedCount(_ n: Int) -> String { "Проверить устаревшие: \(n)" }
+    func autostartCheckOutdatedCount(_ n: Int) -> String { "Устаревших: \(n)" }
+    var autostartOrphanEmptyText: String { "Устаревших плистов нет" }
     var autostartOrphanTooltip: String { "Устарел — приложение удалено, безопасно удалить" }
     var autostartDeleteButton: String { "Удалить" }
-    var autostartDeleteConfirmTitle: String { "Удалить устаревший пункт автозагрузки?" }
     var autostartDeleteConfirmMessageUser: String { "Файл будет перемещён в Корзину. Изменение вступит в силу после повторного входа в систему или перезагрузки." }
     var autostartDeleteConfirmMessageSystem: String { "Файл будет удалён без возможности восстановления (потребуется Touch ID или пароль администратора). Изменение вступит в силу после повторного входа в систему или перезагрузки." }
     func autostartDeleteError(_ detail: String) -> String { "Не удалось удалить: \(detail)" }
     var autostartOkTooltip: String { "В порядке" }
-    var autostartNoOrphans: String { "Устаревших не найдено" }
 
     // MARK: Memory card
     var memoryLegendActive: String { "Активная" }
