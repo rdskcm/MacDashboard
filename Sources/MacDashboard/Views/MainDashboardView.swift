@@ -36,16 +36,20 @@ struct MainDashboardView: View {
     private var toolbar: some View {
         HStack(alignment: .center, spacing: 16) {
             titleBlock
+                .layoutPriority(1)
             Spacer()
+            // Primary navigation must always win its ideal width over title and chips.
             DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab, size: .tabs) { t in
                 switch t {
                 case .overview: return L.mainTabOverview
                 case .report: return L.mainTabReport
                 }
             }
+            .layoutPriority(2)
             Spacer(minLength: 8)
+            // No layoutPriority here (default 0): chips own the progressive-hiding
+            // ViewThatFits tiers and must be the first child to lose space.
             HeaderChipsView(model: model)
-                .layoutPriority(1)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -87,9 +91,13 @@ struct MainDashboardView: View {
                 .font(.system(size: 19, weight: .bold))
                 .tracking(-0.285) // 19 pt · −0.015em
                 .lineSpacing(1.9) // 19 pt · 1.1 line-height
+                .lineLimit(1)
+                .truncationMode(.tail)
             Text(subtitle)
                 .font(.system(size: 11.5))
                 .foregroundStyle(DS.muted)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .frame(minWidth: 170, alignment: .leading)
     }
