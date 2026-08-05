@@ -311,9 +311,9 @@ struct EnergyCard: View {
             GridRow {
                 Text(L.energyColParam).font(.system(size: 11)).foregroundStyle(DS.muted)
                 Text(L.energyColBattery).font(.system(size: 11)).foregroundStyle(DS.muted)
-                    .frame(width: 110, alignment: .trailing)
+                    .frame(minWidth: 64, maxWidth: 110, alignment: .trailing)
                 Text(L.energyColAC).font(.system(size: 11)).foregroundStyle(DS.muted)
-                    .frame(width: 110, alignment: .trailing)
+                    .frame(minWidth: 64, maxWidth: 110, alignment: .trailing)
             }
             Rectangle().fill(DS.line).frame(height: 1).gridCellColumns(3)
             ForEach(knownKeys, id: \.key) { k in
@@ -325,9 +325,9 @@ struct EnergyCard: View {
                         }
                     }
                     controlView(bucket: .battery, key: k.key, energy: energy)
-                        .frame(width: 110, alignment: .trailing)
+                        .frame(minWidth: 64, maxWidth: 110, alignment: .trailing)
                     controlView(bucket: .ac, key: k.key, energy: energy)
-                        .frame(width: 110, alignment: .trailing)
+                        .frame(minWidth: 64, maxWidth: 110, alignment: .trailing)
                 }
                 if infoKey == k.key, let text = energyInfoText[k.key] {
                     GridRow {
@@ -347,9 +347,9 @@ struct EnergyCard: View {
                 GridRow {
                     Text(key).font(.system(size: 13)).foregroundStyle(DS.muted)
                     Text(energyValue(key, energy.battery)).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(DS.muted)
-                        .frame(width: 110, alignment: .trailing)
+                        .frame(minWidth: 64, maxWidth: 110, alignment: .trailing)
                     Text(energyValue(key, energy.ac)).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(DS.muted)
-                        .frame(width: 110, alignment: .trailing)
+                        .frame(minWidth: 64, maxWidth: 110, alignment: .trailing)
                 }
             }
         }

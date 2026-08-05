@@ -298,43 +298,43 @@ struct DSSlidingSegmented<T: Hashable>: View {
     }
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            dsRecessedTrack(in: Capsule())
-
-            thumb
-                .frame(width: thumbWidth)
-                .offset(x: thumbOffset)
-                .scaleEffect(x: stretch, y: 1, anchor: stretchAnchor)
-                .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.68), value: selection)
-                .zIndex(0)
-
-            HStack(spacing: 2) {
-                ForEach(Array(options.enumerated()), id: \.element) { index, option in
-                    Button {
-                        select(option)
-                    } label: {
-                        Text(label(option))
-                            .font(size.font)
-                            .foregroundStyle(option == selection ? DS.ink : DS.muted)
-                            .padding(.horizontal, size.hPad)
-                            .padding(.vertical, size.vPad)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(label(option))
-                    .animation(
-                        reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : .easeInOut(duration: 0.18),
-                        value: selection
-                    )
-                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-                        widths[index] = newWidth
-                    }
+        HStack(spacing: 2) {
+            ForEach(Array(options.enumerated()), id: \.element) { index, option in
+                Button {
+                    select(option)
+                } label: {
+                    Text(label(option))
+                        .font(size.font)
+                        .foregroundStyle(option == selection ? DS.ink : DS.muted)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.horizontal, size.hPad)
+                        .padding(.vertical, size.vPad)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(label(option))
+                .animation(
+                    reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : .easeInOut(duration: 0.18),
+                    value: selection
+                )
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+                    widths[index] = newWidth
                 }
             }
-            .zIndex(1)
+        }
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                dsRecessedTrack(in: Capsule())
+
+                thumb
+                    .frame(width: thumbWidth)
+                    .offset(x: thumbOffset)
+                    .scaleEffect(x: stretch, y: 1, anchor: stretchAnchor)
+                    .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.68), value: selection)
+            }
         }
         .padding(containerPadding)
-        .fixedSize()
     }
 
     private var thumb: some View {

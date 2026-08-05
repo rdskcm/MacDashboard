@@ -371,14 +371,16 @@ struct CardChrome<Content: View, Trailing: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(title).font(.headline)
+                Text(title).font(.headline).lineLimit(1).truncationMode(.tail)
                 if let caption {
                     Text(caption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 Spacer(minLength: 8)
-                trailing()
+                trailing().layoutPriority(1)
             }
             content()
         }

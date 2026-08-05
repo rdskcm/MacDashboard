@@ -28,7 +28,6 @@ struct MainDashboardView: View {
             case .report: ReportTab(model: model)
             }
         }
-        .frame(minWidth: 900, minHeight: 620)
         .onChange(of: L10nStore.shared.language) { model.refreshReport() }
     }
 
@@ -121,17 +120,17 @@ struct MainDashboardView: View {
                 Text(L.overviewKickerMemory).dsKicker()
                 MemoryCard(model: model)
 
-                HStack(alignment: .top, spacing: 12) {
+                LazyVGrid(columns: Self.twoColumns, spacing: 12) {
                     Text(L.overviewKickerProcesses).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
                     Text(L.overviewKickerFolders).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
                 }
-                HStack(alignment: .top, spacing: 12) {
+                LazyVGrid(columns: Self.twoColumns, spacing: 12) {
                     ProcessListCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                     FoldersCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 Text(L.overviewKickerSystem).dsKickerCentered()
-                HStack(alignment: .top, spacing: 12) {
+                LazyVGrid(columns: Self.twoColumns, spacing: 12) {
                     VStack(alignment: .leading, spacing: 12) {
                         SecurityCard(model: model)
                         AutostartCard(model: model)
@@ -154,6 +153,15 @@ struct MainDashboardView: View {
         }
         .background(DS.ground)
     }
+
+    /// Two truly equal columns. `.frame(maxWidth:.infinity)` inside an HStack only
+    /// splits leftovers AFTER each child's minimum is honoured, so a dense card
+    /// (ProcessListCard) starves its neighbour; `GridItem(.flexible())` divides the
+    /// row width equally regardless of content — same reasoning as `kpiRow`.
+    private static let twoColumns = [
+        GridItem(.flexible(), spacing: 12, alignment: .top),
+        GridItem(.flexible(), spacing: 12, alignment: .top),
+    ]
 
     // Five equal columns (the CSS `minmax(0,1fr)` fix): `GridItem(.flexible())`
     // divides the row width equally regardless of content, unlike `.adaptive`
