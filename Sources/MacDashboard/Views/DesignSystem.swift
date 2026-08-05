@@ -26,6 +26,9 @@ enum DSMotion {
     /// Paired with `tooltip`: the tooltip rises by this many points while it fades in.
     static let tooltipRiseY: CGFloat = -7
     static let expand = Animation.easeInOut(duration: 0.18)
+    /// Paired with `.dsDisclosure(reduceMotion:)`: the disclosed content rises by
+    /// this many points while it fades in/out.
+    static let discloseRiseY: CGFloat = -7
     /// Popover dismiss fade duration — a plain duration (not a curve); callers pick their own easing.
     static let popoverDismiss: Double = 0.16
     static let breathing = Animation.easeInOut(duration: 2).repeatCount(5, autoreverses: true)
@@ -46,6 +49,24 @@ enum DSMotion {
     /// `dampingFraction: 0.86` reuses `barRelayout`'s established "smooth,
     /// no-overshoot" damping instead of inventing a new ratio.
     static let rainbowHover = Animation.spring(response: 0.25, dampingFraction: 0.86)
+}
+
+// MARK: - Disclosure transition
+
+/// Fade + slight rise, shared by every collapse/expand disclosure in the v2.0 UI
+/// (AutostartCard, EnergyCard) so appearing/disappearing content reads as one
+/// consistent motion instead of each call site inventing its own combination.
+private struct DSFadeSlide: ViewModifier {
+    let progress: Double            // 1 = hidden, 0 = shown
+    func body(content: Content) -> some View {
+        content.opacity(1 - progress).offset(y: DSMotion.discloseRiseY * progress)
+    }
+}
+extension AnyTransition {
+    static func dsDisclosure(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity
+                     : .modifier(active: DSFadeSlide(progress: 1), identity: DSFadeSlide(progress: 0))
+    }
 }
 
 // MARK: - Shadow color helper
@@ -369,10 +390,11 @@ struct DSSlidingSegmented<T: Hashable>: View {
 /// Collapsed, the container is rotated −90° and the bars sit at ±45° around their
 /// inner ends, reading as a right-pointing chevron. Expanded, everything returns
 /// to 0° and the two bars — pinned to opposite edges of the 13 pt track, so they
-/// overlap by 1 pt — merge into one seamless horizontal bar. The prototype's
-/// `.22s cubic-bezier(0.34, 1.3, 0.64, 1)` maps to `.spring(response: 0.22,
-/// dampingFraction: 0.62)`. Reduce Motion: the transforms jump, since this is a
-/// transform rather than a color/opacity/border/shadow transition.
+/// overlap by 1 pt — merge into one seamless horizontal bar. Uses `DSMotion.expand`,
+/// the same curve as the disclosed content's own fade/slide, so the chevron and
+/// the section body move on one shared timing instead of two out-of-step curves.
+/// Reduce Motion: the transforms jump, since this is a transform rather than a
+/// color/opacity/border/shadow transition.
 struct DSDisclosureBars: View {
     let expanded: Bool
 
@@ -394,7 +416,7 @@ struct DSDisclosureBars: View {
         }
         .frame(width: boxSize, height: boxSize)
         .rotationEffect(.degrees(expanded ? 0 : -90))
-        .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.62), value: expanded)
+        .animation(reduceMotion ? nil : DSMotion.expand, value: expanded)
     }
 
     private var bar: some View {

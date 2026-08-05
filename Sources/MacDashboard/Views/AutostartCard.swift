@@ -145,7 +145,7 @@ struct AutostartCard: View {
                 Text(L.autostartOrphanEmptyText)
                     .font(.system(size: 11.5))
                     .foregroundStyle(DS.greenInk)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    .transition(.dsDisclosure(reduceMotion: reduceMotion))
             }
             checkButton(orphans: orphans)
         }
@@ -207,7 +207,7 @@ struct AutostartCard: View {
                         .foregroundStyle(DS.hot)
                 }
             }
-            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            .transition(.dsDisclosure(reduceMotion: reduceMotion))
         }
     }
 
@@ -259,7 +259,7 @@ struct AutostartCard: View {
                     }
                     .accessibilityLabel("\(L.autostartDeleteButton) \(fileName)")
                 }
-                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                .transition(.dsDisclosure(reduceMotion: reduceMotion))
             }
         }
         .padding(.horizontal, 9)
@@ -305,8 +305,71 @@ private struct AutoSectionRow<Content: View>: View {
     @Binding var isExpanded: Bool
     @ViewBuilder var content: () -> Content
 
+    init(title: String, count: Int?, isExpanded: Binding<Bool>, content: @escaping () -> Content) {
+        self.title = title
+        self.count = count
+        self._isExpanded = isExpanded
+        self.content = content
+        // Seeds `openAmount` from the CURRENT binding value (e.g. Login Items
+        // starts already-expanded, see `loginItemsExpanded` above) so the
+        // first frame renders fully open/closed instead of animating in from
+        // 0 on mount — see `openAmount`'s own doc comment for why this can't
+        // just default to 0 and rely on `.onChange(of:initial:)` to correct
+        // it post-mount (that would play one unwanted animated frame).
+        self._openAmount = State(initialValue: isExpanded.wrappedValue ? 1 : 0)
+    }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
+    /// Single source of truth for the disclosure's progress, 0 = fully
+    /// closed, 1 = fully open. Height/opacity/offset below are all PURE
+    /// functions of this one value (see its assignment in `.onChange` below)
+    /// instead of each being independently derived from `isExpanded` under a
+    /// shared `.animation(value:)` — three modifiers each reacting to the same
+    /// boolean can each set up their own implicit Core Animation transition,
+    /// which measured out to a small but consistent ~15 ms longer pre-motion
+    /// delay on collapse than on expand (live-testing wave 2: "same animation,
+    /// reversed" complaint after the guillotine fix). Driving everything off
+    /// one `Double`, mutated inside a single explicit `withAnimation` call,
+    /// makes open and close provably the same interpolation played forward
+    /// vs. backward — there is only one Animatable value, so there is nothing
+    /// left that could start on a different frame between the two directions.
+    @State private var openAmount: Double
+    /// Natural (fully-expanded) height of `content()`, captured once via
+    /// `.onGeometryChange` (below) instead of gating `content()`'s presence
+    /// behind `if isExpanded`. The old `if isExpanded { content() }` +
+    /// `.transition(.dsDisclosure)` shape let SwiftUI drive the removal via
+    /// its own implicit remove-transition machinery, which is NOT the same
+    /// per-frame interpolation as the container's `.clipped()` height
+    /// shrink — on expand both grow from nothing in lockstep and it reads
+    /// fine, but on collapse the already-fully-visible content raced the
+    /// shrinking `.clipped()` frame and got hard-clipped ("guillotined")
+    /// well before the fade/rise had sold the disappearance. Keeping
+    /// `content()` permanently mounted and driving its *visible* height via
+    /// `.frame(height:)` off this measured value — fed by the SAME
+    /// `.animation(value: isExpanded)` below — makes open and close two
+    /// directions of one continuous numeric interpolation, so they're
+    /// genuinely symmetric. `.onGeometryChange` reports the child's actual
+    /// rendered size, but the modifier chain still means `.frame(height:)`
+    /// *wraps* the measured child, so the frame's proposed height flows
+    /// DOWN into `content()` before geometry is read back up — this only
+    /// stays a faithful "natural height" reading because `content()` itself
+    /// has no height-flexible children (no bare `Spacer`, no layout that
+    /// consumes `proposal.height`) that would collapse under a tight
+    /// proposal; that's a documented constraint on what may go inside this
+    /// disclosure, not an accident. It also isn't itself a GeometryReader
+    /// sitting inside the animated/clipped subtree (the bug this project hit
+    /// twice before, V2-CARD-MEM).
+    ///
+    /// Starts `nil` rather than `0`: sections that begin already-expanded
+    /// (e.g. Login Items, see `loginItemsExpanded` above) must not be
+    /// frame-clamped to zero for the one frame before the first
+    /// `.onGeometryChange` callback fires. `nil` here means "no measurement
+    /// yet" and is read by `.frame(height:)` below as "impose no height
+    /// constraint," which lays the content out at its natural size — correct
+    /// for the already-expanded case and harmless for the collapsed case
+    /// (nothing is visible either way before first layout).
+    @State private var measuredHeight: CGFloat?
 
     /// A concrete zero count (e.g. an empty agents/daemons list) never
     /// expands and reads muted; `nil` (permission unknown, e.g. Login Items)
@@ -338,16 +401,35 @@ private struct AutoSectionRow<Content: View>: View {
                 isExpanded.toggle()
             }
 
-            if isExpanded {
-                content()
-                    .padding(.leading, 18)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-            }
+            content()
+                .padding(.leading, 18)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+                    measuredHeight = newHeight
+                }
+                .frame(height: measuredHeight.map { $0 * openAmount }, alignment: .top)
+                .clipped()
+                .opacity(openAmount)
+                .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
         }
-        .animation(
-            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-            value: isExpanded
-        )
+        // Backstop for the same offset-sliver case `EnergyCard` documents:
+        // the inner `.clipped()` above already clamps the frame itself, but
+        // that clamped box is offset by up to `DSMotion.discloseRiseY` while
+        // collapsing/collapsed, which can poke a sliver above the header;
+        // this outer clip re-clips to the current animated frame every frame.
+        .clipped()
+        // The single point where `isExpanded` (owned by the parent, e.g. by
+        // `AutostartCard`) is translated into this row's own `openAmount`
+        // progress — an explicit `withAnimation` here, rather than an
+        // `.animation(value:)` on the modifiers above, so the whole
+        // height/opacity/offset trio starts from the exact same transaction
+        // in both directions (see `openAmount`'s doc comment).
+        .onChange(of: isExpanded) { _, newValue in
+            let target: Double = newValue ? 1 : 0
+            let curve: Animation = reduceMotion
+                ? .easeInOut(duration: DSMotion.reduceMotionFallback)
+                : DSMotion.expand
+            withAnimation(curve) { openAmount = target }
+        }
     }
 }
 

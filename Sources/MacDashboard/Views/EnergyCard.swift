@@ -85,6 +85,33 @@ struct EnergyCard: View {
     /// header can use `DSDisclosureBars` instead of the system chevron.
     @State private var isExpanded = false
     @State private var resetHovering = false
+    /// Single source of truth for the disclosure's progress, 0 = fully
+    /// closed, 1 = fully open — see `AutoSectionRow.openAmount` in
+    /// AutostartCard.swift for the full writeup (both the original
+    /// guillotine-on-collapse root cause and the follow-up "collapse doesn't
+    /// read as expand-in-reverse" fix: driving height/opacity/offset off one
+    /// `Double`, mutated by a single explicit `withAnimation` in `.onChange`
+    /// below, instead of three modifiers each independently reacting to
+    /// `isExpanded` under a shared `.animation(value:)`). Starts at `0` to
+    /// match `isExpanded`'s own `false` default above — no custom init
+    /// needed here the way `AutoSectionRow` needs one for Login Items'
+    /// already-expanded start state.
+    @State private var openAmount: Double = 0
+    /// Natural (fully-expanded) height of the disclosed content below, captured
+    /// via `.onGeometryChange` — see `AutoSectionRow`'s `measuredHeight` in
+    /// AutostartCard.swift for the full root-cause writeup (guillotine-on-collapse
+    /// from mixing implicit remove-transition machinery with `.clipped()`'s
+    /// per-frame height crop) and for why the reading stays accurate despite
+    /// `.frame(height:)` wrapping (not following) the measured child. Same fix
+    /// here: content stays permanently mounted, its visible height is driven
+    /// off this measured value scaled by `openAmount`, so open/close are one
+    /// continuous interpolation instead of two different mechanisms. Optional,
+    /// and `nil` on first layout, for the same reason as `AutoSectionRow`: a
+    /// `.frame(height:)` clamp of 0 before the first measurement would be
+    /// wrong if `isExpanded` ever starts `true`; here it starts `false` so
+    /// it's not currently load-bearing, but the two disclosures are kept
+    /// structurally identical on purpose.
+    @State private var measuredHeight: CGFloat?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -92,35 +119,48 @@ struct EnergyCard: View {
         if let energy = model.report.energy, !(energy.battery.isEmpty && energy.ac.isEmpty) {
             VStack(alignment: .leading, spacing: 10) {
                 header
-                if isExpanded {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if !pending.isEmpty || resetAvailable(energy) {
-                            applyBar(energy)
-                        }
-                        energyTable(energy)
-                            .disabled(applying)
+                VStack(alignment: .leading, spacing: 10) {
+                    if !pending.isEmpty || resetAvailable(energy) {
+                        applyBar(energy)
                     }
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    energyTable(energy)
+                        .disabled(applying)
                 }
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+                    measuredHeight = newHeight
+                }
+                .frame(height: measuredHeight.map { $0 * openAmount }, alignment: .top)
+                .clipped()
+                .opacity(openAmount)
+                .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
             }
             // Bug fix (post-restyle regression): the old native `DisclosureGroup`
-            // clipped its own content implicitly; this custom `isExpanded` + `.move`
-            // transition does not. Without `.clipped()` here, the sliding/fading
-            // content renders at its own animated offset *before* this VStack's
-            // height has finished interpolating to match, so mid-animation frames
-            // show table/button content spilling above the header or past the
-            // still-growing/shrinking bottom edge — outside `.cardBackground()`'s
-            // rounded-rect. `.clipped()` (a plain-rect clip, not `.clipShape()`)
-            // is enough: it's applied to the pre-padding inner VStack, well inside
-            // the card's own rounded corners drawn further out by `.cardBackground()`
-            // /`dsCardSurface()`, so it never needs to match that shape's radius —
-            // and, applied below `.animation()`'s content, it re-clips to the
-            // CURRENT interpolated frame on every animated frame.
+            // clipped its own content implicitly; this custom `isExpanded`-driven
+            // disclosure does not. The content block above already self-clips to
+            // its own animated `.frame(height:)` (see `measuredHeight`'s comment),
+            // but that inner clip is itself offset by up to `DSMotion.discloseRiseY`
+            // (-7 pt) while collapsing/collapsed — an already-clipped-to-zero-height
+            // box shifted upward can still poke a sliver above the header. This
+            // outer `.clipped()` is the backstop: it's applied to the pre-padding
+            // outer VStack, well inside the card's own rounded corners drawn
+            // further out by `.cardBackground()`/`dsCardSurface()`, so it never
+            // needs to match that shape's radius — and, applied below
+            // `.animation()`'s content, it re-clips to the CURRENT interpolated
+            // frame on every animated frame.
             .clipped()
-            .animation(
-                reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-                value: isExpanded
-            )
+            // Single translation point from `isExpanded` to `openAmount` — see
+            // its doc comment above and `AutoSectionRow`'s matching `.onChange`
+            // in AutostartCard.swift for why an explicit `withAnimation` here
+            // (rather than `.animation(value:)` on the modifiers above) is what
+            // guarantees collapse is expand-in-reverse instead of merely
+            // resembling it.
+            .onChange(of: isExpanded) { _, newValue in
+                let target: Double = newValue ? 1 : 0
+                let curve: Animation = reduceMotion
+                    ? .easeInOut(duration: DSMotion.reduceMotionFallback)
+                    : DSMotion.expand
+                withAnimation(curve) { openAmount = target }
+            }
             .cardBackground()
         } else {
             CardChrome(title: L.energyCardTitle) {
@@ -339,7 +379,7 @@ struct EnergyCard: View {
                             .padding(.horizontal, 10)
                             .background(RoundedRectangle(cornerRadius: 8).fill(DS.row))
                             .gridCellColumns(3)
-                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                            .transition(.dsDisclosure(reduceMotion: reduceMotion))
                     }
                 }
             }
