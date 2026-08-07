@@ -247,23 +247,29 @@ enum DSSegmentedSize {
     case tabs
     /// In-card controls (metric pickers, folder tabs): the default, tighter fit.
     case card
+    /// Settings ▸ Monitoring interval switch (spec §2.3/§7.3, SW:92): monospaced
+    /// tabular digits, since the segments are all-numeric.
+    case settingsInterval
 
     var font: Font {
         switch self {
         case .tabs: return .system(size: 12.5, weight: .semibold)
         case .card: return .system(size: 11, weight: .semibold)
+        case .settingsInterval: return .system(size: 12, weight: .semibold, design: .monospaced)
         }
     }
     var hPad: CGFloat {
         switch self {
         case .tabs: return 16
         case .card: return 11
+        case .settingsInterval: return 11
         }
     }
     var vPad: CGFloat {
         switch self {
         case .tabs: return 6
         case .card: return 5
+        case .settingsInterval: return 6
         }
     }
 }

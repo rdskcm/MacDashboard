@@ -12,6 +12,9 @@ struct StringsRU: AppStrings {
     var settingsLanguageLabel: String { "Язык интерфейса" }
     var settingsIntervalLabel: String { "Интервал обновления (процессор/память)" }
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) с" }
+    var settingsIntervalNoteFast: String { "1 с — самый отзывчивый график, заметная фоновая нагрузка." }
+    var settingsIntervalNoteBalanced: String { "Рабочий диапазон: живые графики без заметной нагрузки." }
+    var settingsIntervalNoteEconomy: String { "Экономный режим: значения обновляются реже, батарея живёт дольше." }
     var settingsMenuLanguageHint: String { "Язык меню и системных диалогов применится после перезапуска приложения" }
     var settingsRelaunchNow: String { "Перезапустить сейчас" }
     var settingsSectionGeneral: String { "Общие" }

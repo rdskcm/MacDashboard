@@ -22,6 +22,11 @@ protocol AppStrings {
     var settingsLanguageLabel: String { get }
     var settingsIntervalLabel: String { get }
     func settingsIntervalOption(_ seconds: Int) -> String
+    /// Per-value note below the interval segmented control (§7.3, SW:96-99),
+    /// switching with the current `fastIntervalSeconds` selection.
+    var settingsIntervalNoteFast: String { get }
+    var settingsIntervalNoteBalanced: String { get }
+    var settingsIntervalNoteEconomy: String { get }
     var settingsMenuLanguageHint: String { get }
     var settingsRelaunchNow: String { get }
     var settingsSectionGeneral: String { get }

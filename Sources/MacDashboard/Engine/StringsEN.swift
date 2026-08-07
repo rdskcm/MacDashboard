@@ -12,6 +12,9 @@ struct StringsEN: AppStrings {
     var settingsLanguageLabel: String { "Interface language" }
     var settingsIntervalLabel: String { "Refresh interval (CPU/RAM)" }
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) s" }
+    var settingsIntervalNoteFast: String { "1 s — the most responsive chart, noticeable background load." }
+    var settingsIntervalNoteBalanced: String { "The working range: live charts with no noticeable load." }
+    var settingsIntervalNoteEconomy: String { "Economy: values update less often, the battery lasts longer." }
     var settingsMenuLanguageHint: String { "The menu bar and system dialogs follow the app language after a relaunch" }
     var settingsRelaunchNow: String { "Relaunch Now" }
     var settingsSectionGeneral: String { "General" }
