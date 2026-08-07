@@ -295,14 +295,14 @@ struct BatteryTile: View {
                 // Satellite: the "Детали" pill — the rainbow hover ring lives in
                 // the header itself now (it belongs to the tile header per the
                 // Overview recipe), not floated over the tile as a v1 overlay.
-                RainbowCapsuleButton(title: L.kpiBatteryDetailsButton, size: .compact) { showDetails = true }
+                RainbowCapsuleButton(title: L.kpiBatteryDetailsButton, size: .compact) { showDetails.toggle() }
                     .accessibilityLabel(L.kpiBatteryDetailsButton)
+                    .popover(isPresented: $showDetails, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+                        BatteryDetailView(condition: model.report.battery?.condition ?? model.battery?.condition)
+                    }
             } visual: {
                 // TRAP: never `assessment.battSev.color` — go through the v2 tone table.
                 MeterBar(fraction: batt.maxCapacity.map { Double($0) / 100 } ?? 0, color: tone(for: model.assessment.battSev))
-            }
-            .popover(isPresented: $showDetails, arrowEdge: .bottom) {
-                BatteryDetailView(condition: model.report.battery?.condition ?? model.battery?.condition)
             }
         }
     }
