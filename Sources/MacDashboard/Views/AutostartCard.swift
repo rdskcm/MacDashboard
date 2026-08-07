@@ -32,6 +32,40 @@ struct AutostartCard: View {
     /// nil = none pending. Gates the inline confirm/cancel row in place of a
     /// system `.confirmationDialog` sheet.
     @State private var pendingDeletePath: String? = nil
+    /// Gates the bulk "Удалить все (N)" confirm line, mirroring
+    /// `pendingDeletePath` for the per-row flow.
+    @State private var pendingBulkDelete = false
+
+    /// Local mirror of the model's live orphan list, kept one step "behind" on
+    /// removal so a just-deleted row can play its collapse animation (see
+    /// `OrphanRow`) before actually leaving the list — synced from the real
+    /// list via `syncDisplayOrphans`, called on every change.
+    @State private var displayOrphans: [LaunchdPlistInfo] = []
+    /// Paths currently playing their collapse-out animation (present in
+    /// `displayOrphans` but already gone from the model's real orphan list).
+    @State private var collapsingPaths: Set<String> = []
+
+    /// Reconciles `displayOrphans`/`collapsingPaths` with the model's current
+    /// orphan list: paths that disappeared from `orphans` are kept in
+    /// `displayOrphans` and marked `collapsing` for one animation cycle (see
+    /// `OrphanRow`'s `openAmount` writeup) instead of vanishing immediately;
+    /// newly-appeared paths are appended right away. Mirrors the
+    /// `EnergyCard`/`QuietStrip` collapse recipe applied per-row instead of
+    /// per-section.
+    private func syncDisplayOrphans(_ orphans: [LaunchdPlistInfo]) {
+        let newPaths = Set(orphans.map(\.path))
+        let removed = displayOrphans.filter { !newPaths.contains($0.path) && !collapsingPaths.contains($0.path) }
+        for row in removed {
+            collapsingPaths.insert(row.path)
+            let duration = reduceMotion ? DSMotion.reduceMotionFallback : 0.18 // DSMotion.expand's duration
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+                collapsingPaths.remove(row.path)
+                displayOrphans.removeAll { $0.path == row.path }
+            }
+        }
+        let displayedPaths = Set(displayOrphans.map(\.path))
+        displayOrphans.append(contentsOf: orphans.filter { !displayedPaths.contains($0.path) })
+    }
 
     var body: some View {
         if let auto = model.report.autostart {
@@ -194,12 +228,31 @@ struct AutostartCard: View {
     private func orphanListSection(orphans: [LaunchdPlistInfo]) -> some View {
         if showOrphans {
             VStack(alignment: .leading, spacing: 6) {
-                if !orphans.isEmpty {
+                if !displayOrphans.isEmpty {
                     VStack(alignment: .leading, spacing: 5) {
-                        ForEach(orphans, id: \.path) { info in
-                            orphanRow(info)
+                        ForEach(displayOrphans, id: \.path) { info in
+                            OrphanRow(
+                                info: info,
+                                isSystemLevel: isSystemLevel(info.path),
+                                busy: model.deletingPlistPaths.contains(info.path),
+                                isPending: pendingDeletePath == info.path,
+                                collapsing: collapsingPaths.contains(info.path),
+                                tooltip: orphanTooltip(info),
+                                onAsk: {
+                                    pendingDeletePath = info.path
+                                    pendingBulkDelete = false
+                                },
+                                onCancel: { pendingDeletePath = nil },
+                                onConfirm: {
+                                    model.deleteOrphanPlist(path: info.path, isSystemLevel: isSystemLevel(info.path))
+                                    pendingDeletePath = nil
+                                }
+                            )
                         }
                     }
+                }
+                if displayOrphans.count >= 2 {
+                    bulkDeleteRow(orphans: displayOrphans)
                 }
                 if let plistDeleteError = model.plistDeleteError {
                     Text(L.autostartDeleteError(plistDeleteError))
@@ -207,67 +260,68 @@ struct AutostartCard: View {
                         .foregroundStyle(DS.hot)
                 }
             }
+            .animation(
+                reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                value: displayOrphans.count
+            )
             .transition(.dsDisclosure(reduceMotion: reduceMotion))
+            .onChange(of: orphans, initial: true) { _, newOrphans in
+                syncDisplayOrphans(newOrphans)
+            }
         }
     }
 
+    /// Bulk "Удалить все (N)" row, shown under the orphan list once there are
+    /// ≥ 2 orphans. Same ask → confirm → busy shape as `orphanRow`, but acts
+    /// on the whole batch via `model.deleteOrphanPlists(paths:)` (one Touch
+    /// ID/admin prompt for the whole batch, see that function's doc comment).
     @ViewBuilder
-    private func orphanRow(_ info: LaunchdPlistInfo) -> some View {
-        let busy = model.deletingPlistPaths.contains(info.path)
-        let isPending = pendingDeletePath == info.path
-        let fileName = URL(fileURLWithPath: info.path).lastPathComponent
+    private func bulkDeleteRow(orphans: [LaunchdPlistInfo]) -> some View {
+        // A lone per-row delete only ever puts exactly one path into
+        // `deletingPlistPaths` at a time, so "every orphan path is present"
+        // is an unambiguous signal that a bulk delete (not a single row) is
+        // in flight.
+        let busy = orphans.allSatisfy { model.deletingPlistPaths.contains($0.path) }
+        let hasSystemLevel = orphans.contains { isSystemLevel($0.path) }
 
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(DS.amber)
-                    Text(fileName)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(DS.inkSoft)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .hoverTip(orphanTooltip(info))
+        HStack(spacing: 8) {
+            if busy {
+                DSSpinner()
+                Text(L.autostartDeletingAll)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+            } else if pendingBulkDelete {
+                Text(hasSystemLevel
+                    ? L.autostartDeleteAllConfirmMessageSystem(orphans.count)
+                    : L.autostartDeleteAllConfirmMessageUser(orphans.count))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 Spacer(minLength: 8)
-                if busy {
-                    DSSpinner()
-                } else if !isPending {
-                    OrphanAskButton(title: L.autostartDeleteButton) {
-                        pendingDeletePath = info.path
-                    }
-                    .accessibilityLabel("\(L.autostartDeleteButton) \(fileName)")
+                OrphanConfirmDeleteButton(title: L.autostartDeleteAllButton(orphans.count)) {
+                    model.deleteOrphanPlists(paths: orphans.map(\.path))
+                    pendingBulkDelete = false
                 }
-            }
-
-            if isPending {
-                HStack(spacing: 8) {
-                    Text(isSystemLevel(info.path) ? L.autostartDeleteConfirmMessageSystem : L.autostartDeleteConfirmMessageUser)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(DS.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Spacer(minLength: 8)
-                    OrphanCancelButton(title: L.adviceCancel) {
-                        pendingDeletePath = nil
-                    }
-                    .accessibilityLabel(L.adviceCancel)
-                    OrphanConfirmDeleteButton(title: L.autostartDeleteButton) {
-                        model.deleteOrphanPlist(path: info.path, isSystemLevel: isSystemLevel(info.path))
-                        pendingDeletePath = nil
-                    }
-                    .accessibilityLabel("\(L.autostartDeleteButton) \(fileName)")
+                .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))
+                OrphanCancelButton(title: L.adviceCancel) {
+                    pendingBulkDelete = false
                 }
-                .transition(.dsDisclosure(reduceMotion: reduceMotion))
+                .accessibilityLabel(L.adviceCancel)
+            } else {
+                BulkDeleteAskButton(title: L.autostartDeleteAllButton(orphans.count)) {
+                    pendingDeletePath = nil
+                    pendingBulkDelete = true
+                }
+                .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))
             }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 10).fill(DS.row))
+        .padding(.horizontal, 2)
+        .padding(.vertical, 1)
+        .transition(.dsDisclosure(reduceMotion: reduceMotion))
         .animation(
             reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-            value: isPending
+            value: pendingBulkDelete
         )
     }
 
@@ -433,6 +487,101 @@ private struct AutoSectionRow<Content: View>: View {
     }
 }
 
+/// A single orphan-plist row, with its own collapse-to-height-0 mechanism —
+/// same recipe as `AutoSectionRow.openAmount`/`measuredHeight` above and
+/// `EnergyCard.openAmount`/`QuietStrip.openAmount` (Security/Updates/Crashes):
+/// letting `ForEach`'s implicit remove-transition machinery drive a row's
+/// disappearance races its fade against the container's own layout pass and
+/// hard-clips it before the fade sells the exit ("guillotined"). Driving
+/// height/opacity/offset off one `openAmount: Double`, mutated by a single
+/// explicit `withAnimation` when `collapsing` flips true, fixes that — the
+/// row stays mounted (fed by `AutostartCard.displayOrphans`, which lags the
+/// model's real orphan list by one animation cycle on removal) until its own
+/// collapse finishes, instead of vanishing the instant the model drops it.
+private struct OrphanRow: View {
+    let info: LaunchdPlistInfo
+    let isSystemLevel: Bool
+    let busy: Bool
+    let isPending: Bool
+    let collapsing: Bool
+    let tooltip: String
+    let onAsk: () -> Void
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var openAmount: Double = 1
+    @State private var measuredHeight: CGFloat?
+
+    var body: some View {
+        rowContent
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+                measuredHeight = newHeight
+            }
+            .frame(height: measuredHeight.map { $0 * openAmount } ?? (openAmount == 0 ? 0 : nil), alignment: .top)
+            .clipped()
+            .opacity(openAmount)
+            .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
+            .onChange(of: collapsing, initial: true) { _, isCollapsing in
+                guard isCollapsing else { return }
+                let curve: Animation = reduceMotion
+                    ? .easeInOut(duration: DSMotion.reduceMotionFallback)
+                    : DSMotion.expand
+                withAnimation(curve) { openAmount = 0 }
+            }
+    }
+
+    private var rowContent: some View {
+        let fileName = URL(fileURLWithPath: info.path).lastPathComponent
+
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(DS.amber)
+                    Text(fileName)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(DS.inkSoft)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .hoverTip(tooltip)
+                Spacer(minLength: 8)
+                if busy {
+                    DSSpinner()
+                } else if !isPending {
+                    OrphanAskButton(title: L.autostartDeleteButton, action: onAsk)
+                        .accessibilityLabel("\(L.autostartDeleteButton) \(fileName)")
+                }
+            }
+
+            if isPending {
+                HStack(spacing: 8) {
+                    Text(isSystemLevel ? L.autostartDeleteConfirmMessageSystem : L.autostartDeleteConfirmMessageUser)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(DS.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 8)
+                    OrphanCancelButton(title: L.adviceCancel, action: onCancel)
+                        .accessibilityLabel(L.adviceCancel)
+                    OrphanConfirmDeleteButton(title: L.autostartDeleteButton, action: onConfirm)
+                        .accessibilityLabel("\(L.autostartDeleteButton) \(fileName)")
+                }
+                .transition(.dsDisclosure(reduceMotion: reduceMotion))
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 10).fill(DS.row))
+        .animation(
+            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+            value: isPending
+        )
+    }
+}
+
 // MARK: - Orphan-row action buttons
 
 /// Per-orphan "Удалить" trigger — swaps itself out for the inline confirm/cancel
@@ -454,6 +603,34 @@ private struct OrphanAskButton: View {
                 .foregroundStyle(hovering ? DS.hot : DS.muted)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
+                .background(Capsule().strokeBorder(hovering ? DS.hot.opacity(0.45) : DS.lineStrong, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(
+            reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
+            value: hovering
+        )
+    }
+}
+
+/// Bulk-row "Удалить все (N)" trigger — same hover-tint-to-hot shape as
+/// `OrphanAskButton`, but at the spec's own padding for this row (v6/h12
+/// rather than the per-row ask button's v5/h10).
+private struct BulkDeleteAskButton: View {
+    let title: String
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(hovering ? DS.hot : DS.muted)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
                 .background(Capsule().strokeBorder(hovering ? DS.hot.opacity(0.45) : DS.lineStrong, lineWidth: 1))
         }
         .buttonStyle(.plain)

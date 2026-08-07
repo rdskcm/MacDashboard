@@ -208,6 +208,10 @@ struct StringsEN: AppStrings {
     var autostartDeleteConfirmMessageUser: String { "The file will be moved to the Trash. The change takes effect after the next login or restart." }
     var autostartDeleteConfirmMessageSystem: String { "The file will be permanently deleted (requires Touch ID or an admin password). The change takes effect after the next login or restart." }
     func autostartDeleteError(_ detail: String) -> String { "Couldn't delete: \(detail)" }
+    func autostartDeleteAllButton(_ n: Int) -> String { "Delete all (\(n))" }
+    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String { "Move all \(n) plists to the Trash?" }
+    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String { "Some are system-level — a password is required. Delete all \(n)?" }
+    var autostartDeletingAll: String { "Deleting…" }
     var autostartOkTooltip: String { "OK" }
 
     // MARK: Memory card

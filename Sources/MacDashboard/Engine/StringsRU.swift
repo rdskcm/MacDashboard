@@ -208,6 +208,10 @@ struct StringsRU: AppStrings {
     var autostartDeleteConfirmMessageUser: String { "Файл будет перемещён в Корзину. Изменение вступит в силу после повторного входа в систему или перезагрузки." }
     var autostartDeleteConfirmMessageSystem: String { "Файл будет удалён без возможности восстановления (потребуется Touch ID или пароль администратора). Изменение вступит в силу после повторного входа в систему или перезагрузки." }
     func autostartDeleteError(_ detail: String) -> String { "Не удалось удалить: \(detail)" }
+    func autostartDeleteAllButton(_ n: Int) -> String { "Удалить все (\(n))" }
+    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String { "Переместить в Корзину все устаревшие плисты (\(n))?" }
+    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String { "Среди них есть системные — потребуется пароль. Удалить все (\(n))?" }
+    var autostartDeletingAll: String { "Удаляю…" }
     var autostartOkTooltip: String { "В порядке" }
 
     // MARK: Memory card

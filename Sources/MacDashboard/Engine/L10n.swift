@@ -219,6 +219,10 @@ protocol AppStrings {
     var autostartDeleteConfirmMessageUser: String { get }
     var autostartDeleteConfirmMessageSystem: String { get }
     func autostartDeleteError(_ detail: String) -> String
+    func autostartDeleteAllButton(_ n: Int) -> String
+    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String
+    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String
+    var autostartDeletingAll: String { get }
     var autostartOkTooltip: String { get }
 
     // MARK: Memory card
