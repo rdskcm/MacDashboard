@@ -383,6 +383,27 @@ struct DSSlidingSegmented<T: Hashable>: View {
     }
 }
 
+// MARK: - Bleed-rect clip shape
+
+/// A clip shape that crops the edges an animation needs cropped while letting
+/// a rainbow ring's outer glow survive (19 pt bleed, see SharedUI.swift:825
+/// `RainbowRingLayer`'s `.overview` layer) on the edges left at their default 0.
+struct BleedRect: Shape {
+    var top: CGFloat = 0
+    var leading: CGFloat = 0
+    var trailing: CGFloat = 0
+    var bottom: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(
+            x: rect.minX - leading,
+            y: rect.minY - top,
+            width: rect.width + leading + trailing,
+            height: rect.height + top + bottom
+        ))
+    }
+}
+
 // MARK: - Disclosure chevron
 
 /// `DSDisclosureBars(expanded:)` — the prototype's two-bar disclosure indicator

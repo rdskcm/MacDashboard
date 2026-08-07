@@ -139,7 +139,7 @@ struct EnergyCard: View {
                     measuredHeight = newHeight
                 }
                 .frame(height: measuredHeight.map { $0 * openAmount } ?? (openAmount == 0 ? 0 : nil), alignment: .top)
-                .clipped()
+                .clipShape(BleedRect(top: 20, leading: 20, trailing: 20))
                 .opacity(openAmount)
                 .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
             }
@@ -156,7 +156,7 @@ struct EnergyCard: View {
             // needs to match that shape's radius — and, applied below
             // `.animation()`'s content, it re-clips to the CURRENT interpolated
             // frame on every animated frame.
-            .clipped()
+            .clipShape(BleedRect(leading: 20, trailing: 20))
             // Single translation point from `isExpanded` to `openAmount` — see
             // its doc comment above and `AutoSectionRow`'s matching `.onChange`
             // in AutostartCard.swift for why an explicit `withAnimation` here
@@ -216,22 +216,8 @@ struct EnergyCard: View {
                 Text(applyError).font(.caption2).foregroundStyle(.red)
             }
         }
-        // Bug fix (live-testing wave 2): when there's nothing pending yet,
-        // `resetButton` is the FIRST item in the row above, so its leading
-        // edge lands exactly at this VStack's leading edge — which, one level
-        // up, is exactly where the card's `.clipped()` cuts (added for the
-        // expand/collapse-overflow fix; see the comment at that call site).
-        // Its `.rainbowBorder(recipe: .overview)` glow bleeds outward past the
-        // button's own frame by `|inset| + blur` for the widest layer —
-        // `RainbowRingLayer(inset: -5, thickness: 10, blur: 14, …)` in
-        // SharedUI.swift — i.e. up to 5 + 14 = 19 pt. 20 pt of horizontal
-        // margin here (19 rounded up for anti-aliasing slack) keeps the full
-        // ring inside the clip on both sides — this also covers the mirrored
-        // right-edge case where a long "Применить (N)"/cancel/reset row is
-        // wide enough to make this row (rather than the table below) the
-        // widest child of the clipped content — without touching the shared
-        // `.clipped()`/`cardBackground()` chain other cards rely on.
-        .padding(.horizontal, 20)
+        // Ring bleed is now handled by the `BleedRect` clips above, so this
+        // row is flush-left as intended; do not reintroduce horizontal padding here.
     }
 
     /// «Применить (N)» — Spec §2.4/§5.7: white on `accent` fill/border, 600 11, padding 6/12.
