@@ -106,18 +106,26 @@ struct EnergyCard: View {
     /// here: content stays permanently mounted, its visible height is driven
     /// off this measured value scaled by `openAmount`, so open/close are one
     /// continuous interpolation instead of two different mechanisms. Optional,
-    /// and `nil` on first layout, for the same reason as `AutoSectionRow`: a
-    /// `.frame(height:)` clamp of 0 before the first measurement would be
-    /// wrong if `isExpanded` ever starts `true`; here it starts `false` so
-    /// it's not currently load-bearing, but the two disclosures are kept
-    /// structurally identical on purpose.
+    /// and `nil` on first layout, for the same reason as `AutoSectionRow`.
+    /// EnergyCard always starts collapsed, so that first-layout `nil` is now
+    /// clamped to 0 for the collapsed case (see the `.frame(height:)` below)
+    /// to avoid a launch-time flash of full natural height before the first
+    /// measurement lands; an expanded-start case would still fall through
+    /// to `nil` as before.
     @State private var measuredHeight: CGFloat?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if let energy = model.report.energy, !(energy.battery.isEmpty && energy.ac.isEmpty) {
-            VStack(alignment: .leading, spacing: 10) {
+            // spacing: 0 — the content block below stays permanently mounted
+            // and only animates to zero *height*, so a nonzero VStack spacing
+            // here would still be paid even while collapsed, pushing the
+            // header off-center in the collapsed row. See `AutoSectionRow`
+            // (Views/AutostartCard.swift:302, also `spacing: 0` with row
+            // padding instead) — the reference shape for this pattern. Do
+            // not "fix" this back to spacing: 10.
+            VStack(alignment: .leading, spacing: 0) {
                 header
                 VStack(alignment: .leading, spacing: 10) {
                     if !pending.isEmpty || resetAvailable(energy) {
@@ -126,10 +134,11 @@ struct EnergyCard: View {
                     energyTable(energy)
                         .disabled(applying)
                 }
+                .padding(.top, 10)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
                     measuredHeight = newHeight
                 }
-                .frame(height: measuredHeight.map { $0 * openAmount }, alignment: .top)
+                .frame(height: measuredHeight.map { $0 * openAmount } ?? (openAmount == 0 ? 0 : nil), alignment: .top)
                 .clipped()
                 .opacity(openAmount)
                 .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
