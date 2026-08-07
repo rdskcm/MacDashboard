@@ -1,14 +1,10 @@
 // Views/MaintenanceCard.swift
 // Homebrew card (Обслуживание системы) — v2 restyle, Block V2-CARD-SYS.
 //
-// Per Spec §5.8 this card now covers ONLY the Homebrew section: brew version,
+// Per Spec §5.8 this card covers ONLY the Homebrew section: brew version,
 // outdated packages list, and the upgrade button with live `BrewProgress`
-// state. The macOS-updates and crashes sections previously merged into this
-// same card (see the old block comment this replaces) move out to a future
-// "quiet strip" block (§5.2, V2-QUIET) that doesn't exist yet — kept rendered
-// exactly as before under the `v2-quiet-pending` marker below so nothing
-// disappears from the UI before that block lands. Their logic/state is
-// untouched; only the Homebrew section above the marker got the v2 restyle.
+// state. Updates and crashes sections have moved to `UpdatesCrashesCard`
+// in QuietStrip.swift (block V2-QUIET, Spec §5.2).
 
 import AppKit
 import SwiftUI
@@ -21,56 +17,7 @@ struct MaintenanceCard: View {
 
     var body: some View {
         CardChrome(title: L.maintenanceTitle) {
-            VStack(alignment: .leading, spacing: 14) {
-                homebrewSection
-
-                // v2-quiet-pending — moves to V2-QUIET (Spec §5.2); rendering
-                // and logic below are exactly as before the v2 restyle.
-                Divider()
-
-                maintenanceSection(L.maintenanceUpdatesSection) {
-                    if let updates = model.report.updates {
-                        if updates.isEmpty {
-                            Text(L.maintenanceUpdatesAllUpdated).font(.callout).foregroundStyle(DS.greenInk)
-                        } else {
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(Array(updates.prefix(5).enumerated()), id: \.offset) { _, u in
-                                    Text(u).font(.callout)
-                                }
-                                if updates.count > 5 {
-                                    Text(L.maintenanceAndMore(updates.count - 5)).font(.caption).foregroundStyle(.secondary)
-                                }
-                                RainbowCapsuleButton(title: L.maintenanceOpenSoftwareUpdate, size: .card) {
-                                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!)
-                                }
-                            }
-                        }
-                    } else {
-                        SectionStateView(done: model.report.progress["updates"] ?? false)
-                    }
-                }
-
-                Divider()
-
-                maintenanceSection(L.maintenanceCrashesSection) {
-                    if let crashes = model.report.crashes {
-                        if crashes.isEmpty {
-                            Text(L.maintenanceCrashesNone).font(.callout).foregroundStyle(DS.greenInk)
-                        } else {
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(Array(crashes.prefix(5).enumerated()), id: \.offset) { _, c in
-                                    Text(c).font(.callout).lineLimit(1).truncationMode(.middle)
-                                }
-                                if crashes.count > 5 {
-                                    Text(L.maintenanceAndMore(crashes.count - 5)).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    } else {
-                        SectionStateView(done: model.report.progress["crashes"] ?? false)
-                    }
-                }
-            }
+            homebrewSection
         }
     }
 
@@ -145,16 +92,6 @@ struct MaintenanceCard: View {
         )
         .asBreathe()
         .accessibilityLabel(L.maintenanceBrewUpgradeButton)
-    }
-
-    @ViewBuilder
-    private func maintenanceSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title.uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            content()
-        }
     }
 }
 

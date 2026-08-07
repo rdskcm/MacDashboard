@@ -37,23 +37,53 @@ struct TipCapsule: Identifiable, Equatable {
     var id: String { "\(object)|\(value)" }
 }
 
-/// Whether the security / updates groups have nothing to show — used by a later
-/// block to collapse them into a single quiet line instead of an empty section.
+/// Three-state status for a section: not yet collected, nothing to show, or
+/// something needs attention. "Not yet collected" is neither quiet nor loud —
+/// used by a later block to collapse quiet sections into a single quiet line
+/// instead of an empty section, while collecting sections stay visibly pending.
+enum SectionStatus: Equatable { case collecting, quiet, loud }
+
 struct QuietState: Equatable {
-    var securityQuiet: Bool
-    var updatesQuiet: Bool
+    var security: SectionStatus
+    var updates: SectionStatus
+    var securityOffCount: Int       // of the 4 fields, how many are explicitly false
+    var securityUnknownCount: Int   // how many are nil while report.security != nil
+    var updatesCount: Int
+    var crashesCount: Int
+
+    var securityQuiet: Bool { security == .quiet }   // back-compat accessors
+    var updatesQuiet: Bool { updates == .quiet }
+    var anyQuiet: Bool { securityQuiet || updatesQuiet }
 
     static func quiet(report: FullReport) -> QuietState {
-        let securityQuiet: Bool
-        if let sec = report.security,
-           let fileVault = sec.fileVault, let gatekeeper = sec.gatekeeper,
-           let sip = sec.sip, let firewall = sec.firewall {
-            securityQuiet = fileVault && gatekeeper && sip && firewall
+        let security: SectionStatus
+        var securityOffCount = 0
+        var securityUnknownCount = 0
+        if let sec = report.security {
+            let fields = [sec.fileVault, sec.gatekeeper, sec.sip, sec.firewall]
+            for field in fields {
+                if field == false { securityOffCount += 1 }
+                if field == nil { securityUnknownCount += 1 }
+            }
+            security = (securityOffCount == 0 && securityUnknownCount == 0) ? .quiet : .loud
         } else {
-            securityQuiet = false   // not-yet-collected (or any nil field) is not quiet
+            security = .collecting
         }
-        let updatesQuiet = (report.updates?.isEmpty ?? false) && (report.crashes?.isEmpty ?? false)
-        return QuietState(securityQuiet: securityQuiet, updatesQuiet: updatesQuiet)
+
+        let updates: SectionStatus
+        var updatesCount = 0
+        var crashesCount = 0
+        if let upd = report.updates, let crash = report.crashes {
+            updatesCount = upd.count
+            crashesCount = crash.count
+            updates = (updatesCount == 0 && crashesCount == 0) ? .quiet : .loud
+        } else {
+            updates = .collecting
+        }
+
+        return QuietState(security: security, updates: updates,
+                           securityOffCount: securityOffCount, securityUnknownCount: securityUnknownCount,
+                           updatesCount: updatesCount, crashesCount: crashesCount)
     }
 }
 

@@ -19,6 +19,13 @@ struct MainDashboardView: View {
     private enum Tab { case overview, report }
     @State private var tab: Tab = .overview
 
+    // System band column-height balance: `bal > 0` means the left column is
+    // taller (pad the right column inside SmartDisksCard), `bal < 0` means the
+    // right column is taller (pad the left column just above the quiet strip).
+    @State private var bal: CGFloat = 0
+    @State private var leftMeasured: CGFloat = 0
+    @State private var rightMeasured: CGFloat = 0
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
@@ -138,21 +145,7 @@ struct MainDashboardView: View {
                 }
 
                 Text(L.overviewKickerSystem).dsKickerCentered()
-                LazyVGrid(columns: Self.twoColumns, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SecurityCard(model: model)
-                        AutostartCard(model: model)
-                        EnergyCard(model: model)
-                        MaintenanceCard(model: model)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        SmartDisksCard(model: model)
-                        TimeMachineCard(model: model)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                systemBand
 
                 Text(L.overviewKickerHistory).dsKicker()
                 HistoryCard(model: model)
@@ -160,6 +153,72 @@ struct MainDashboardView: View {
             .padding(20)
         }
         .background(DS.ground)
+    }
+
+    // MARK: System band (Security/Autostart/Energy/Maintenance | SMART/Time Machine)
+
+    /// Security and Updates/Crashes move out of their fixed left-column slots
+    /// once quiet (nothing to report) and collapse into `QuietStrip` rows
+    /// instead — a loud card only occupies column space while it has something
+    /// to say. The two columns can therefore end up different heights, which
+    /// `bal` corrects by padding whichever column is shorter.
+    private var systemBand: some View {
+        let q = QuietState.quiet(report: model.report)
+        let sections = quietSections(q)
+        let stripPresent = !sections.isEmpty
+
+        return LazyVGrid(columns: Self.twoColumns, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                AutostartCard(model: model)
+                EnergyCard(model: model)
+                MaintenanceCard(model: model)
+                if q.security != .quiet { SecurityCard(model: model, state: q) }
+                if q.updates != .quiet { UpdatesCrashesCard(model: model, state: q) }
+                if bal < 0 { Color.clear.frame(height: -bal) }
+                QuietStrip(sections: sections)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+                leftMeasured = newHeight
+                recomputeBalance(stripPresent: stripPresent)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                SmartDisksCard(model: model, balanceSpacer: max(0, bal))
+                TimeMachineCard(model: model)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+                rightMeasured = newHeight
+                recomputeBalance(stripPresent: stripPresent)
+            }
+        }
+        .onChange(of: stripPresent) { recomputeBalance(stripPresent: stripPresent) }
+    }
+
+    private func quietSections(_ q: QuietState) -> [QuietSection] {
+        var sections: [QuietSection] = []
+        if q.security == .quiet {
+            sections.append(QuietSection(id: "sec", title: L.securityTitle, status: L.quietStatusAllEnabled,
+                                          rows: securityRows(model.report.security ?? SecurityState())))
+        }
+        if q.updates == .quiet {
+            sections.append(QuietSection(id: "maint", title: L.quietUpdatesTitle, status: L.quietStatusAllClear,
+                                          rows: updatesRows(updates: model.report.updates ?? [], crashes: model.report.crashes ?? [])))
+        }
+        return sections
+    }
+
+    /// Subtracts our own spacer injection from each side's measured height
+    /// before comparing, so the two-way feedback loop (bal → spacer → height →
+    /// bal) converges in a single pass instead of needing repeated iterations.
+    private func recomputeBalance(stripPresent: Bool) {
+        guard stripPresent else { if bal != 0 { bal = 0 }; return }
+        let naturalLeft = leftMeasured - max(0, -bal)
+        let naturalRight = rightMeasured - max(0, bal)
+        let raw = naturalLeft - naturalRight
+        let next: CGFloat = abs(raw) > 44 ? 0 : (raw * 2).rounded() / 2
+        if abs(next - bal) >= 0.5 { bal = next }
     }
 
     /// Two truly equal columns. `.frame(maxWidth:.infinity)` inside an HStack only

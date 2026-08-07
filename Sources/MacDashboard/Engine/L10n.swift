@@ -82,6 +82,7 @@ protocol AppStrings {
     var securityFileVault: String { get }
     var securitySip: String { get }
     var securityFirewall: String { get }
+    var securityGatekeeper: String { get }
 
     // MARK: Report tab
     var reportPlaceholder: String { get }
@@ -588,6 +589,11 @@ protocol AppStrings {
     var quietSecurityStatus: String { get }
     var quietUpdatesStatus: String { get }
     var quietNeedsAttention: String { get }
+    var quietStatusAllEnabled: String { get }
+    var quietStatusAllClear: String { get }
+    var quietMarkOff: String { get }
+    var quietMarkUnknown: String { get }
+    func quietCountItems(_ n: Int) -> String
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",

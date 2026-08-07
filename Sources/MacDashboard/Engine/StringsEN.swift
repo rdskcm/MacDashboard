@@ -70,6 +70,7 @@ struct StringsEN: AppStrings {
     var securityFileVault: String { "FileVault (disk encryption)" }
     var securitySip: String { "SIP (system integrity protection)" }
     var securityFirewall: String { "Firewall" }
+    var securityGatekeeper: String { "Gatekeeper" }
 
     // MARK: Report tab
     var reportPlaceholder: String { "Report not generated yet. Click “Refresh report”." }
@@ -573,4 +574,9 @@ struct StringsEN: AppStrings {
     var quietSecurityStatus: String { "all on" }
     var quietUpdatesStatus: String { "no updates or crashes" }
     var quietNeedsAttention: String { "needs attention" }
+    var quietStatusAllEnabled: String { "all enabled" }
+    var quietStatusAllClear: String { "all clear" }
+    var quietMarkOff: String { "off" }
+    var quietMarkUnknown: String { "unknown" }
+    func quietCountItems(_ n: Int) -> String { "\(n)" }
 }

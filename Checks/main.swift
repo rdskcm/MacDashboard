@@ -1623,6 +1623,47 @@ do {
     check(a.summaryText == L.assessSummaryCount(a.problems.count), "AttentionModel regression guard: summaryText form unchanged")
 }
 
+// 9. QuietState three-state SectionStatus (.collecting / .quiet / .loud)
+do {
+    var report = FullReport()
+    report.security = nil
+    check(QuietState.quiet(report: report).security == .collecting, "QuietState: security==nil -> .collecting")
+
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true)
+    check(QuietState.quiet(report: report).security == .quiet, "QuietState: all four true -> .quiet")
+
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
+    do {
+        let qs = QuietState.quiet(report: report)
+        check(qs.security == .loud, "QuietState: one field false -> .loud")
+        check(qs.securityOffCount == 1 && qs.securityUnknownCount == 0, "QuietState: one field false -> offCount 1, unknownCount 0")
+    }
+
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: nil)
+    do {
+        let qs = QuietState.quiet(report: report)
+        check(qs.security == .loud, "QuietState: one field nil (rest true) -> .loud")
+        check(qs.securityUnknownCount == 1 && qs.securityOffCount == 0, "QuietState: one field nil -> unknownCount 1, offCount 0")
+    }
+
+    var r2 = FullReport()
+    r2.updates = nil; r2.crashes = []
+    check(QuietState.quiet(report: r2).updates == .collecting, "QuietState: updates==nil -> .collecting")
+
+    r2.updates = []; r2.crashes = nil
+    check(QuietState.quiet(report: r2).updates == .collecting, "QuietState: crashes==nil -> .collecting")
+
+    r2.updates = []; r2.crashes = []
+    check(QuietState.quiet(report: r2).updates == .quiet, "QuietState: updates=[] & crashes=[] -> .quiet")
+
+    r2.updates = ["u1", "u2"]; r2.crashes = []
+    do {
+        let qs = QuietState.quiet(report: r2)
+        check(qs.updates == .loud, "QuietState: 2 updates + 0 crashes -> .loud")
+        check(qs.updatesCount == 2 && qs.crashesCount == 0, "QuietState: 2 updates + 0 crashes -> counts (2, 0)")
+    }
+}
+
 // =====================================================================
 // MARK: - fmtCapacity (decimal GB/TB disk-capacity formatting)
 // =====================================================================
