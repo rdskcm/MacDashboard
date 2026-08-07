@@ -183,23 +183,23 @@ private struct MemoryTable: View {
     // cells with its leading swatch color (FIX 4): the two reference-only
     // rows ("Выгружаемая"/"Файловый кэш") get `.clear` so the swatch column
     // still reserves its layout space without showing a color.
-    private var tableRows: [(cells: [String], swatch: Color)]? {
+    private var tableRows: [(cells: [String], swatch: TableSwatch)]? {
         guard let mem = model.mem else { return nil }
         let segments = memorySegments(mem)
         let total = max(mem.total, 1)
-        var r: [(cells: [String], swatch: Color)] = segments.map { seg in
+        var r: [(cells: [String], swatch: TableSwatch)] = segments.map { seg in
             (cells: [seg.label, fmtBytes(seg.bytes), fmtNum(Double(seg.bytes) / Double(total) * 100, decimals: 1) + "%"],
-             swatch: seg.legendColor)
+             swatch: .filled(seg.legendColor))
         }
         if mem.purgeable > 0 {
             r.append((cells: [L.memoryLegendPurgeable, fmtBytes(mem.purgeable),
                        fmtNum(Double(mem.purgeable) / Double(total) * 100, decimals: 1) + "%"],
-                      swatch: .clear))
+                      swatch: .outline))
         }
         if mem.fileBacked > 0 {
             r.append((cells: [L.memoryLegendFileCache, fmtBytes(mem.fileBacked),
                        fmtNum(Double(mem.fileBacked) / Double(total) * 100, decimals: 1) + "%"],
-                      swatch: .clear))
+                      swatch: .outline))
         }
         return r
     }
@@ -214,7 +214,8 @@ private struct MemoryTable: View {
                     guard c == 0, r < tableRows.count else { return nil }
                     return memoryNotes[tableRows[r].cells[0]]
                 },
-                swatchColors: tableRows.map(\.swatch)
+                swatches: tableRows.map(\.swatch),
+                columnSpacing: 10
             )
         }
     }

@@ -563,6 +563,15 @@ struct LabeledRow: View {
 
 // MARK: - Simple table (Grid-based; lighter than SwiftUI Table for our read-only case)
 
+/// Leading-column swatch kind for `SimpleTable` rows (MEMORY-ONLY today):
+/// `.filled` draws a solid color chip, `.outline` draws a hollow outline chip
+/// for rows that don't map to an actual chart color (e.g. reference-only rows
+/// that overlap other buckets) while still reserving the same swatch slot.
+enum TableSwatch: Equatable {
+    case filled(Color)
+    case outline
+}
+
 struct SimpleTable: View {
     let headers: [String]
     let rows: [[String]]
@@ -584,12 +593,16 @@ struct SimpleTable: View {
     /// column listed in `sortableColumns` so sorting compares values rather
     /// than formatted display strings (e.g. "1.2 GB" vs "890 MB").
     var sortValues: [[Double]]? = nil
-    /// Optional leading color-swatch column, one entry per `rows` index. Nil
-    /// by default (no swatch column at all), so existing call sites render
-    /// exactly as before. When set, must have the same count as `rows`; pass
-    /// `.clear` for a row that should still reserve the swatch's layout space
-    /// without showing a visible color (e.g. a reference-only row).
-    var swatchColors: [Color]? = nil
+    /// Optional per-row leading swatch, one entry per `rows` index. Nil by
+    /// default (no swatch affordance at all), so existing call sites render
+    /// exactly as before. When set, must have the same count as `rows`; the
+    /// swatch is inlined into column 0 (name column), not a separate Grid
+    /// column, so header alignment matches the data columns 1:1.
+    var swatches: [TableSwatch]? = nil
+    /// Grid column spacing. Defaults to 16 (the historical value), so
+    /// existing call sites are unaffected; MEMORY-ONLY call sites may pass a
+    /// tighter value to compensate for the inlined swatch's extra width.
+    var columnSpacing: CGFloat = 16
 
     @State private var hoveredRow: Int? = nil
     @State private var sortColumn: Int? = nil
@@ -611,13 +624,8 @@ struct SimpleTable: View {
 
     var body: some View {
         let order = displayOrder
-        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+        Grid(alignment: .leading, horizontalSpacing: columnSpacing, verticalSpacing: 6) {
             GridRow {
-                if swatchColors != nil {
-                    // Blank placeholder so the header row has the same column
-                    // count as the data rows' leading swatch cell.
-                    Color.clear.frame(width: 10, height: 10)
-                }
                 ForEach(Array(headers.enumerated()), id: \.offset) { i, h in
                     let sortable = sortableColumns.contains(i) && sortValues != nil
                     HStack(spacing: 2) {
@@ -654,11 +662,6 @@ struct SimpleTable: View {
             ForEach(order, id: \.self) { r in
                 let row = rows[r]
                 GridRow {
-                    if let swatchColors {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(r < swatchColors.count ? swatchColors[r] : Color.clear)
-                            .frame(width: 10, height: 10)
-                    }
                     ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
                         let isNumeric = numericColumns.contains(c)
                         let cellFont: Font = isNumeric
@@ -671,7 +674,14 @@ struct SimpleTable: View {
                             .foregroundStyle(cellColor)
                             .lineLimit(2)
                             .truncationMode(.middle)
-                        if let tip = cellTooltip?(r, c) {
+                        if c == 0, swatches != nil {
+                            let content = HStack(spacing: 8) { swatchView(row: r); text }
+                            if let tip = cellTooltip?(r, c) {
+                                content.hoverTip(tip)
+                            } else {
+                                content
+                            }
+                        } else if let tip = cellTooltip?(r, c) {
                             text.hoverTip(tip)
                         } else {
                             text
@@ -696,6 +706,27 @@ struct SimpleTable: View {
                     rowAction?(r)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func swatchView(row: Int) -> some View {
+        let swatch = swatches.flatMap { row < $0.count ? $0[row] : nil }
+        RoundedRectangle(cornerRadius: 3)
+            .fill(fillColor(for: swatch))
+            .overlay {
+                if case .outline = swatch {
+                    RoundedRectangle(cornerRadius: 3).strokeBorder(DS.line, lineWidth: 1)
+                }
+            }
+            .frame(width: 10, height: 10)
+    }
+
+    private func fillColor(for swatch: TableSwatch?) -> Color {
+        switch swatch {
+        case .filled(let c): return c
+        case .outline: return .clear
+        case nil: return .clear
         }
     }
 }
