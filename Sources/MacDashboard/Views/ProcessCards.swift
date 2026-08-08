@@ -92,53 +92,63 @@ struct ProcessListCard: View {
         }
     }
 
+    // `CardChrome`/`metricControl` must sit OUTSIDE the rows.isEmpty branch
+    // (V2-FIX-PROCESS-SEGMENT): branching the whole card gave the CPU|Память
+    // segmented control a fresh identity on every state flip, so
+    // `DSSlidingSegmented`'s thumb spring never animated — the new instance
+    // just mounted pre-selected. Only the row content varies.
     var body: some View {
-        Group {
-            if rows.isEmpty {
-                CardChrome(title: L.processesTitle, trailing: { metricControl }) {
-                    SectionStateView(done: false)
-                }
-            } else {
-                CardChrome(title: L.processesTitle, caption: L.processListCaption, trailing: { metricControl }) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(rows) { row in
-                            VStack(alignment: .leading, spacing: 0) {
-                                ProcessRowView(
-                                    row: row, primary: procMetric, maxValue: maxValue,
-                                    expanded: row.pid != nil && expandedPID == row.pid,
-                                    onTap: {
-                                        guard let pid = row.pid else { return }
-                                        expandedPID = (expandedPID == pid) ? nil : pid
-                                    }
-                                )
-                                if let pid = row.pid, expandedPID == pid {
-                                    ProcessDetailView(row: row)
-                                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                                }
-                            }
-                        }
-                    }
-                    .animation(
-                        reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-                        value: expandedPID
-                    )
-                    // Row reordering (a live tick re-sorting `rows`) moves with the
-                    // SAME curve/duration as the gauge width transition below, so a
-                    // row and its own gauge travel together instead of the row
-                    // snapping to its new slot while the gauge is still animating —
-                    // that mismatch is what let the gauge fill visibly detach from
-                    // its row. `nil` under Reduce Motion: reordering is instant.
-                    .animation(reduceMotion ? nil : processRowMotion, value: rows)
-                    // …but a metric switch replaces `rows` wholesale, and animating
-                    // THAT churns the whole list for 0.8 s after every tap on the
-                    // CPU|Память control. A fresh identity per metric drops the old
-                    // subtree instead of interpolating into the new one, so the
-                    // switch is instant while tick-to-tick re-sorts keep the curve.
-                    .id(procMetric)
-                }
-            }
+        CardChrome(
+            title: L.processesTitle,
+            caption: rows.isEmpty ? nil : L.processListCaption,
+            trailing: { metricControl }
+        ) {
+            content
         }
         .onChange(of: procMetric) { expandedPID = nil }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if rows.isEmpty {
+            SectionStateView(done: false)
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(rows) { row in
+                    VStack(alignment: .leading, spacing: 0) {
+                        ProcessRowView(
+                            row: row, primary: procMetric, maxValue: maxValue,
+                            expanded: row.pid != nil && expandedPID == row.pid,
+                            onTap: {
+                                guard let pid = row.pid else { return }
+                                expandedPID = (expandedPID == pid) ? nil : pid
+                            }
+                        )
+                        if let pid = row.pid, expandedPID == pid {
+                            ProcessDetailView(row: row)
+                                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                }
+            }
+            .animation(
+                reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                value: expandedPID
+            )
+            // Row reordering (a live tick re-sorting `rows`) moves with the
+            // SAME curve/duration as the gauge width transition below, so a
+            // row and its own gauge travel together instead of the row
+            // snapping to its new slot while the gauge is still animating —
+            // that mismatch is what let the gauge fill visibly detach from
+            // its row. `nil` under Reduce Motion: reordering is instant.
+            .animation(reduceMotion ? nil : processRowMotion, value: rows)
+            // …but a metric switch replaces `rows` wholesale, and animating
+            // THAT churns the whole list for 0.8 s after every tap on the
+            // CPU|Память control. A fresh identity per metric drops the old
+            // subtree instead of interpolating into the new one, so the
+            // switch is instant while tick-to-tick re-sorts keep the curve.
+            .id(procMetric)
+        }
     }
 
     private var metricControl: some View {
