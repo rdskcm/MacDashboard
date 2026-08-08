@@ -77,6 +77,7 @@ struct MeterBar: View {
     /// call site that doesn't opt in keeps the (correct, already-audited)
     /// no-animation behavior.
     var animated: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geo in
@@ -84,7 +85,7 @@ struct MeterBar: View {
                 dsRecessedTrack(in: Capsule())
                 Capsule().fill(color)
                     .frame(width: max(2, geo.size.width * CGFloat(min(max(fraction, 0), 1))))
-                    .animation(animated ? .timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8) : nil, value: fraction)
+                    .animation((animated && !reduceMotion) ? .timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8) : nil, value: fraction)
             }
         }
         .frame(height: 6)

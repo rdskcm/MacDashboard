@@ -317,7 +317,7 @@ struct LanguageDropdown: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.16), value: hovering)
+        .animation(DSMotion.cardHover, value: hovering)
         .background(LanguageDropdownAnchor { view in
             if anchorView !== view {
                 anchorView = view

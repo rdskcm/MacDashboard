@@ -86,6 +86,7 @@ struct MemoryCard: View {
 @MainActor
 private struct MemoryStackChart: View {
     let model: DashboardModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if let mem = model.mem {
@@ -98,7 +99,7 @@ private struct MemoryStackChart: View {
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(seg.color)
                                 .frame(width: max(3, geo.size.width * CGFloat(Double(seg.bytes) / Double(total))))
-                                .animation(memoryAnimatedSegmentKeys.contains(seg.key) ? memorySegmentMotion : nil,
+                                .animation((memoryAnimatedSegmentKeys.contains(seg.key) && !reduceMotion) ? memorySegmentMotion : nil,
                                            value: seg.bytes)
                         }
                     }

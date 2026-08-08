@@ -78,7 +78,7 @@ private struct SettingsSidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.16), value: hovering)
+        .animation(DSMotion.cardHover, value: hovering)
         .onHover { hovering = $0 }
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -444,7 +444,7 @@ struct SettingsView: View {
                 }
                 .padding(.top, 11)
                 .animation(
-                    reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : .easeInOut(duration: 0.18),
+                    reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
                     value: settings.fastIntervalSeconds
                 )
             }

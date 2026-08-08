@@ -67,6 +67,9 @@ private struct DirBarRow: View {
         }
         .frame(height: 27)
         .background(hovering ? DS.track : Color.clear)
+        // V2-FIX-REDUCE-MOTION-GAPS: not the lone outlier — SettingsView.swift:81, LanguageDropdown.swift:85/320
+        // and ProcessCards.swift:258 are also ungated hover fades, so this stays a literal rather than being
+        // forced into a gated form the rest of the codebase doesn't follow.
         .animation(.easeInOut(duration: 0.14), value: hovering)
         .clipShape(RoundedRectangle(cornerRadius: 9))
         .contentShape(Rectangle())

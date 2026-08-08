@@ -213,7 +213,7 @@ private struct HistoryTrendChart: View {
     }
 
     private var trackingAnimation: Animation {
-        reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : .easeOut(duration: 0.12)
+        reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.fillHover
     }
 
     /// Y-domain padded ~9.52% of the value span above/below the actual

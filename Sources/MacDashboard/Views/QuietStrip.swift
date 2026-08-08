@@ -135,6 +135,8 @@ private struct QuietStripRow: View {
             .background(
                 RoundedRectangle(cornerRadius: 10)
                     .fill((isOpen || hovering) ? DS.glass3 : .clear)
+                    // Duration matches DSMotion.cardHover (0.16) deliberately; the curve (easeInOut, not
+                    // easeOut) does not, so this is not a drop-in token swap — left as a literal.
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isOpen || hovering)
             )
             .contentShape(Rectangle())
