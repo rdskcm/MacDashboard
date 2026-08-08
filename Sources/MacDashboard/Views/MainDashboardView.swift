@@ -38,14 +38,15 @@ struct MainDashboardView: View {
         .onChange(of: L10nStore.shared.language) { model.refreshReport() }
     }
 
-    // MARK: Toolbar (single row: title block · centered tab control · chips/status/refresh)
+    // MARK: Toolbar (single row: title block · leading-anchored tab control · flexible gap · chips/status/refresh)
 
     private var toolbar: some View {
         HStack(alignment: .center, spacing: 16) {
             titleBlock
                 .layoutPriority(1)
-            Spacer()
-            // Primary navigation must always win its ideal width over title and chips.
+            // Anchored immediately after the title at a fixed gap (spacing: 16 above) —
+            // this control's x position must never depend on window width. All slack
+            // and all shrink pressure live to its right, past the flexible Spacer below.
             DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab, size: .tabs) { t in
                 switch t {
                 case .overview: return L.mainTabOverview
@@ -53,7 +54,7 @@ struct MainDashboardView: View {
                 }
             }
             .layoutPriority(2)
-            Spacer(minLength: 8)
+            Spacer(minLength: 12)
             // No layoutPriority here (default 0): chips own the progressive-hiding
             // ViewThatFits tiers and must be the first child to lose space.
             HeaderChipsView(model: model)
@@ -100,26 +101,60 @@ struct MainDashboardView: View {
                 .lineSpacing(1.9) // 19 pt · 1.1 line-height
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Text(subtitle)
-                .font(.system(size: 11.5))
-                .foregroundStyle(DS.muted)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            subtitleView
         }
-        .frame(minWidth: 170, alignment: .leading)
     }
 
-    private var subtitle: String {
-        guard let sys = model.report.system else { return L.mainCollectingInfo }
-        var bits: [String] = []
-        if let m = sys.modelName { bits.append(m) }
-        if let chip = sys.chip { bits.append(chip) }
-        if let mem = sys.memBytes { bits.append(fmtBytes(mem)) }
-        if let ver = sys.osVersion {
-            let build = sys.osBuild.map { " (\($0))" } ?? ""
-            bits.append("macOS \(ver)\(build)")
+    /// Tiered subtitle: model · chip · RAM · macOS ver (build) → …ver → …RAM → …chip → model.
+    /// Mirrors `HeaderChipsView`'s `ViewThatFits` idiom — the row DROPS a trailing
+    /// segment when it doesn't fit rather than ellipsizing mid-string, so `.fixedSize`
+    /// on every tier forces `ViewThatFits` to measure intrinsic width and pick a tier,
+    /// not truncate one. `L.mainCollectingInfo` is a single segment, so it's one tier.
+    private var subtitleView: some View {
+        ViewThatFits(in: .horizontal) {
+            ForEach(subtitleTiers.indices, id: \.self) { i in
+                Text(subtitleTiers[i])
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .truncationMode(i == subtitleTiers.count - 1 ? .tail : .head)
+            }
         }
-        return bits.isEmpty ? L.mainCollectingInfo : bits.joined(separator: " · ")
+    }
+
+    private var subtitleTiers: [String] {
+        guard let sys = model.report.system else { return [L.mainCollectingInfo] }
+        let modelName = sys.modelName
+        let chip = sys.chip
+        let ram = sys.memBytes.map { fmtBytes($0) }
+        let osFull: String? = sys.osVersion.map { ver in
+            let build = sys.osBuild.map { " (\($0))" } ?? ""
+            return "macOS \(ver)\(build)"
+        }
+        let osShort: String? = sys.osVersion.map { "macOS \($0)" }
+
+        func join(_ parts: [String?]) -> String? {
+            let present = parts.compactMap { $0 }
+            return present.isEmpty ? nil : present.joined(separator: " · ")
+        }
+
+        let candidates: [String?] = [
+            join([modelName, chip, ram, osFull]),
+            join([modelName, chip, ram, osShort]),
+            join([modelName, chip, ram]),
+            join([modelName, chip]),
+            join([modelName]),
+        ]
+
+        // Optional fields collapse out of the join, so adjacent tiers can come out
+        // identical (e.g. no osBuild ⇒ tier 1 == tier 2; no chip ⇒ tier 3 == tier 4).
+        // Dedup consecutive duplicates so ViewThatFits never wastes a measurement slot.
+        var tiers: [String] = []
+        for t in candidates.compactMap({ $0 }) where tiers.last != t {
+            tiers.append(t)
+        }
+        return tiers.isEmpty ? [L.mainCollectingInfo] : tiers
     }
 
     // MARK: Обзор
