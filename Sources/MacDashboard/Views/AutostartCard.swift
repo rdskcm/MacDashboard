@@ -55,13 +55,14 @@ struct AutostartCard: View {
     private func syncDisplayOrphans(_ orphans: [LaunchdPlistInfo]) {
         let newPaths = Set(orphans.map(\.path))
         let removed = displayOrphans.filter { !newPaths.contains($0.path) && !collapsingPaths.contains($0.path) }
+        // Just flips `collapsing` on — `OrphanRow` reacts via its own
+        // `.onChange(of: collapsing)` and commits `displayOrphans.removeAll`
+        // from a `withAnimation(..., completion:)` callback tied to its own
+        // collapse actually finishing (see `OrphanRow.onCollapsed`), instead
+        // of a `DispatchQueue.main.asyncAfter` racing a hardcoded duration
+        // against the real animation.
         for row in removed {
             collapsingPaths.insert(row.path)
-            let duration = reduceMotion ? DSMotion.reduceMotionFallback : 0.18 // DSMotion.expand's duration
-            DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
-                collapsingPaths.remove(row.path)
-                displayOrphans.removeAll { $0.path == row.path }
-            }
         }
         let displayedPaths = Set(displayOrphans.map(\.path))
         displayOrphans.append(contentsOf: orphans.filter { !displayedPaths.contains($0.path) })
@@ -75,31 +76,44 @@ struct AutostartCard: View {
                 VStack(alignment: .leading, spacing: 12) {
                     orphanListSection(orphans: orphans)
 
-                    autoSection("Login Items", count: auto.loginItems?.count, isExpanded: $loginItemsExpanded) {
-                        if let items = auto.loginItems {
-                            PillFlow(items: items)
-                        } else {
-                            Text(L.autostartNoPermission).font(.system(size: 11.5)).foregroundStyle(DS.muted)
+                    // Scoped to just the launchd sections below, NOT
+                    // `orphanListSection` above: `OrphanRow`/`BulkDeleteRow`
+                    // each drive their own removal off a single `openAmount`
+                    // mutated by one explicit `withAnimation` (see their doc
+                    // comments) — an ambient `.animation(value:)` reaching
+                    // into that subtree reintroduces exactly the "several
+                    // things independently reacting to the same value"
+                    // failure mode `EnergyCard.swift:89-98` documents. This
+                    // still needs to stay keyed on `showOrphans` for the
+                    // launchd sections themselves, which visibly shift
+                    // up/down as the orphan list above them reveals/hides.
+                    VStack(alignment: .leading, spacing: 12) {
+                        autoSection("Login Items", count: auto.loginItems?.count, isExpanded: $loginItemsExpanded) {
+                            if let items = auto.loginItems {
+                                PillFlow(items: items)
+                            } else {
+                                Text(L.autostartNoPermission).font(.system(size: 11.5)).foregroundStyle(DS.muted)
+                            }
                         }
-                    }
-                    autoSection(L.autostartUserAgents, count: auto.userAgents.count, isExpanded: $userAgentsExpanded) { PlistPillFlow(items: auto.userAgents) }
-                    autoSection(L.autostartSystemAgents, count: auto.systemAgents.count, isExpanded: $systemAgentsExpanded) { PlistPillFlow(items: auto.systemAgents) }
-                    autoSection(L.autostartSystemDaemons, count: auto.systemDaemons.count, isExpanded: $systemDaemonsExpanded) { PlistPillFlow(items: auto.systemDaemons) }
-                    if !auto.background.isEmpty {
-                        autoSection(L.autostartBackgroundTasks, count: auto.background.count, isExpanded: $backgroundExpanded) {
-                            FlowLayout(spacing: 6) {
-                                ForEach(Array(auto.background.enumerated()), id: \.offset) { _, bg in
-                                    Pill(text: bg.label)
-                                        .hoverTip("PID \(bg.pid)")
+                        autoSection(L.autostartUserAgents, count: auto.userAgents.count, isExpanded: $userAgentsExpanded) { PlistPillFlow(items: auto.userAgents) }
+                        autoSection(L.autostartSystemAgents, count: auto.systemAgents.count, isExpanded: $systemAgentsExpanded) { PlistPillFlow(items: auto.systemAgents) }
+                        autoSection(L.autostartSystemDaemons, count: auto.systemDaemons.count, isExpanded: $systemDaemonsExpanded) { PlistPillFlow(items: auto.systemDaemons) }
+                        if !auto.background.isEmpty {
+                            autoSection(L.autostartBackgroundTasks, count: auto.background.count, isExpanded: $backgroundExpanded) {
+                                FlowLayout(spacing: 6) {
+                                    ForEach(Array(auto.background.enumerated()), id: \.offset) { _, bg in
+                                        Pill(text: bg.label)
+                                            .hoverTip("PID \(bg.pid)")
+                                    }
                                 }
                             }
                         }
                     }
+                    .animation(
+                        reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                        value: showOrphans
+                    )
                 }
-                .animation(
-                    reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-                    value: showOrphans
-                )
             }
         } else {
             CardChrome(title: L.autostartTitle) {
@@ -227,9 +241,19 @@ struct AutostartCard: View {
     @ViewBuilder
     private func orphanListSection(orphans: [LaunchdPlistInfo]) -> some View {
         if showOrphans {
-            VStack(alignment: .leading, spacing: 6) {
+            // spacing: 0 on both nested stacks (was 6/5): `OrphanRow` and
+            // `BulkDeleteRow` each collapse to height 0 on their own via
+            // `openAmount` (see their doc comments); a fixed VStack `spacing`
+            // here would still be paid while a row's animated height is
+            // already 0, only snapping shut when the array element is
+            // finally dropped — the source of the reported "delay, then too
+            // abrupt". Each row instead carries its own trailing gap as
+            // `.padding(.bottom, …)` INSIDE its `openAmount`-scaled content,
+            // so the gap shrinks together with the row instead of surviving
+            // it.
+            VStack(alignment: .leading, spacing: 0) {
                 if !displayOrphans.isEmpty {
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(displayOrphans, id: \.path) { info in
                             OrphanRow(
                                 info: info,
@@ -244,85 +268,64 @@ struct AutostartCard: View {
                                 },
                                 onCancel: { pendingDeletePath = nil },
                                 onConfirm: {
+                                    // Starts the collapse the instant the user confirms,
+                                    // instead of waiting for the real Trash/`rm` operation
+                                    // (a background disk op with real, user-visible latency)
+                                    // to land in the model — that wait was read as "delay,
+                                    // then abrupt" since nothing moved until the file op
+                                    // finished. `syncDisplayOrphans` still marks this path
+                                    // collapsing on its own if this optimistic insert is
+                                    // ever missed, so a rare delete failure just leaves a
+                                    // gone row that quietly reappears on the next report
+                                    // refresh (surfaced via `plistDeleteError` either way).
+                                    collapsingPaths.insert(info.path)
                                     model.deleteOrphanPlist(path: info.path, isSystemLevel: isSystemLevel(info.path))
                                     pendingDeletePath = nil
+                                },
+                                onCollapsed: {
+                                    // Commits the removal on the animation
+                                    // finishing, not on a wall clock — see
+                                    // `OrphanRow`'s own `withAnimation(...,
+                                    // completion:)` call for where this fires.
+                                    collapsingPaths.remove(info.path)
+                                    displayOrphans.removeAll { $0.path == info.path }
                                 }
                             )
                         }
                     }
                 }
-                if displayOrphans.count >= 2 {
-                    bulkDeleteRow(orphans: displayOrphans)
-                }
+                // Always mounted (not gated behind `displayOrphans.count >=
+                // 2`): see `BulkDeleteRow`'s own doc comment for why it needs
+                // the same `openAmount` collapse treatment as a row instead
+                // of an `if`-gated appear/disappear.
+                BulkDeleteRow(
+                    orphans: displayOrphans,
+                    busy: !displayOrphans.isEmpty && displayOrphans.allSatisfy { model.deletingPlistPaths.contains($0.path) },
+                    pendingBulkDelete: $pendingBulkDelete,
+                    onAsk: {
+                        pendingDeletePath = nil
+                        pendingBulkDelete = true
+                    },
+                    onConfirm: {
+                        // Same optimistic-collapse reasoning as the single-row
+                        // `onConfirm` above, applied to the whole batch.
+                        for orphan in displayOrphans { collapsingPaths.insert(orphan.path) }
+                        model.deleteOrphanPlists(paths: displayOrphans.map(\.path))
+                        pendingBulkDelete = false
+                    },
+                    onCancel: { pendingBulkDelete = false }
+                )
                 if let plistDeleteError = model.plistDeleteError {
                     Text(L.autostartDeleteError(plistDeleteError))
                         .font(.system(size: 11.5))
                         .foregroundStyle(DS.hot)
+                        .padding(.top, 6)
                 }
             }
-            .animation(
-                reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-                value: displayOrphans.count
-            )
-            .transition(.dsDisclosure(reduceMotion: reduceMotion))
             .onChange(of: orphans, initial: true) { _, newOrphans in
                 syncDisplayOrphans(newOrphans)
             }
         }
-    }
-
-    /// Bulk "Удалить все (N)" row, shown under the orphan list once there are
-    /// ≥ 2 orphans. Same ask → confirm → busy shape as `orphanRow`, but acts
-    /// on the whole batch via `model.deleteOrphanPlists(paths:)` (one Touch
-    /// ID/admin prompt for the whole batch, see that function's doc comment).
-    @ViewBuilder
-    private func bulkDeleteRow(orphans: [LaunchdPlistInfo]) -> some View {
-        // A lone per-row delete only ever puts exactly one path into
-        // `deletingPlistPaths` at a time, so "every orphan path is present"
-        // is an unambiguous signal that a bulk delete (not a single row) is
-        // in flight.
-        let busy = orphans.allSatisfy { model.deletingPlistPaths.contains($0.path) }
-        let hasSystemLevel = orphans.contains { isSystemLevel($0.path) }
-
-        HStack(spacing: 8) {
-            if busy {
-                DSSpinner()
-                Text(L.autostartDeletingAll)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(DS.muted)
-            } else if pendingBulkDelete {
-                Text(hasSystemLevel
-                    ? L.autostartDeleteAllConfirmMessageSystem(orphans.count)
-                    : L.autostartDeleteAllConfirmMessageUser(orphans.count))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(DS.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer(minLength: 8)
-                OrphanConfirmDeleteButton(title: L.autostartDeleteAllButton(orphans.count)) {
-                    model.deleteOrphanPlists(paths: orphans.map(\.path))
-                    pendingBulkDelete = false
-                }
-                .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))
-                OrphanCancelButton(title: L.adviceCancel) {
-                    pendingBulkDelete = false
-                }
-                .accessibilityLabel(L.adviceCancel)
-            } else {
-                BulkDeleteAskButton(title: L.autostartDeleteAllButton(orphans.count)) {
-                    pendingDeletePath = nil
-                    pendingBulkDelete = true
-                }
-                .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))
-            }
-        }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 1)
-        .transition(.dsDisclosure(reduceMotion: reduceMotion))
-        .animation(
-            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-            value: pendingBulkDelete
-        )
     }
 
     private func orphanTooltip(_ info: LaunchdPlistInfo) -> String {
@@ -508,6 +511,11 @@ private struct OrphanRow: View {
     let onAsk: () -> Void
     let onCancel: () -> Void
     let onConfirm: () -> Void
+    /// Fires once this row's own collapse animation has actually finished —
+    /// the single commit point for `AutostartCard.displayOrphans.removeAll`
+    /// (see its call site), replacing a `DispatchQueue.main.asyncAfter`
+    /// racing a hardcoded duration against the real animation.
+    let onCollapsed: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var openAmount: Double = 1
@@ -519,15 +527,27 @@ private struct OrphanRow: View {
                 measuredHeight = newHeight
             }
             .frame(height: measuredHeight.map { $0 * openAmount } ?? (openAmount == 0 ? 0 : nil), alignment: .top)
-            .clipped()
+            .clipShape(BleedRect(top: 20, leading: 20, trailing: 20))
             .opacity(openAmount)
             .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
+            // Outer backstop clip — same rationale as `EnergyCard`'s (see
+            // its comment above `.clipShape(BleedRect(leading:trailing:))`,
+            // EnergyCard.swift:146-159): the inner clip above is itself
+            // offset upward by up to `DSMotion.discloseRiseY` while
+            // collapsing/collapsed, so an already-clipped-to-zero-height row
+            // can still poke a sliver above its neighbor without this outer
+            // re-clip.
+            .clipShape(BleedRect(leading: 20, trailing: 20))
             .onChange(of: collapsing, initial: true) { _, isCollapsing in
                 guard isCollapsing else { return }
                 let curve: Animation = reduceMotion
                     ? .easeInOut(duration: DSMotion.reduceMotionFallback)
                     : DSMotion.expand
-                withAnimation(curve) { openAmount = 0 }
+                withAnimation(curve) {
+                    openAmount = 0
+                } completion: {
+                    onCollapsed()
+                }
             }
     }
 
@@ -575,9 +595,129 @@ private struct OrphanRow: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: 10).fill(DS.row))
+        // Inter-row gap, carried here (inside `rowContent`, i.e. inside the
+        // `openAmount`-scaled block in `body` above) instead of as the
+        // parent `VStack`'s own `spacing` — see that VStack's doc comment in
+        // `orphanListSection`. Applied to every row including the last, so
+        // this is a ~1pt approximation of the former 6pt gap before
+        // `BulkDeleteRow`/the error text, not a pixel-exact carry-over.
+        .padding(.bottom, 5)
         .animation(
             reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
             value: isPending
+        )
+    }
+}
+
+/// Bulk "Удалить все (N)" row, shown under the orphan list once there are
+/// ≥ 2 orphans. Same ask → confirm → busy shape as `OrphanRow`'s own inline
+/// confirm line, but acts on the whole batch via `model.deleteOrphanPlists(paths:)`
+/// (one Touch ID/admin prompt for the whole batch).
+///
+/// Same `openAmount` collapse recipe as `OrphanRow` above — permanently
+/// mounted, height/opacity/offset driven off one `Double` mutated by a
+/// single explicit `withAnimation` — instead of the former `if
+/// displayOrphans.count >= 2 { }.transition(...)` conditional mount/unmount:
+/// that shape popped in/out unanimated the moment `displayOrphans.count`
+/// crossed the threshold (which, after `OrphanRow.onCollapsed` started
+/// committing that count change exactly when a row's own collapse finishes,
+/// would otherwise be the one remaining "structural change landing
+/// mid-collapse" left in this card). Picked over "hold mounted until the
+/// collapse completes" because that alternative still needs an animated
+/// mount/unmount transition of its own once `orphanListSection`'s ambient
+/// `.animation(value: displayOrphans.count)` is gone (see that VStack's doc
+/// comment) — this recipe already *is* that animated transition, reusing
+/// the exact same one `OrphanRow` and `AutoSectionRow` use.
+private struct BulkDeleteRow: View {
+    let orphans: [LaunchdPlistInfo]
+    let busy: Bool
+    @Binding var pendingBulkDelete: Bool
+    let onAsk: () -> Void
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    init(
+        orphans: [LaunchdPlistInfo],
+        busy: Bool,
+        pendingBulkDelete: Binding<Bool>,
+        onAsk: @escaping () -> Void,
+        onConfirm: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.orphans = orphans
+        self.busy = busy
+        self._pendingBulkDelete = pendingBulkDelete
+        self.onAsk = onAsk
+        self.onConfirm = onConfirm
+        self.onCancel = onCancel
+        // Seeds `openAmount` from the CURRENT count so a launch with ≥ 2
+        // orphans already showing doesn't animate in from 0 — same
+        // rationale as `AutoSectionRow`'s init.
+        _openAmount = State(initialValue: orphans.count >= 2 ? 1 : 0)
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var openAmount: Double
+    @State private var measuredHeight: CGFloat?
+
+    private var visible: Bool { orphans.count >= 2 }
+
+    var body: some View {
+        rowContent
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+                measuredHeight = newHeight
+            }
+            .frame(height: measuredHeight.map { $0 * openAmount } ?? (openAmount == 0 ? 0 : nil), alignment: .top)
+            .clipShape(BleedRect(top: 20, leading: 20, trailing: 20))
+            .opacity(openAmount)
+            .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
+            .clipShape(BleedRect(leading: 20, trailing: 20))
+            .onChange(of: visible, initial: true) { _, isVisible in
+                let curve: Animation = reduceMotion
+                    ? .easeInOut(duration: DSMotion.reduceMotionFallback)
+                    : DSMotion.expand
+                withAnimation(curve) { openAmount = isVisible ? 1 : 0 }
+            }
+    }
+
+    private var rowContent: some View {
+        let hasSystemLevel = orphans.contains { $0.path.hasPrefix("/Library/") }
+
+        return HStack(spacing: 8) {
+            if busy {
+                DSSpinner()
+                Text(L.autostartDeletingAll)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+            } else if pendingBulkDelete {
+                Text(hasSystemLevel
+                    ? L.autostartDeleteAllConfirmMessageSystem(orphans.count)
+                    : L.autostartDeleteAllConfirmMessageUser(orphans.count))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer(minLength: 8)
+                OrphanConfirmDeleteButton(title: L.autostartDeleteAllButton(orphans.count), action: onConfirm)
+                    .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))
+                OrphanCancelButton(title: L.adviceCancel, action: onCancel)
+                    .accessibilityLabel(L.adviceCancel)
+            } else {
+                BulkDeleteAskButton(title: L.autostartDeleteAllButton(orphans.count), action: onAsk)
+                    .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))
+            }
+        }
+        .padding(.horizontal, 2)
+        .padding(.vertical, 1)
+        // Trailing gap before the error text below, carried here instead of
+        // in the parent `VStack`'s own `spacing` — see `OrphanRow.rowContent`'s
+        // matching `.padding(.bottom, 5)` and `orphanListSection`'s doc
+        // comment. Collapses to 0 together with this row since it lives
+        // inside the `openAmount`-scaled block above.
+        .padding(.bottom, 6)
+        .animation(
+            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+            value: pendingBulkDelete
         )
     }
 }
