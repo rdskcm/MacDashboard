@@ -91,7 +91,8 @@ struct AttentionSummaryCard: View {
                 .font(.system(size: 15, weight: .bold))
                 .tracking(-0.15) // -0.01em @ 15 pt
                 .foregroundStyle(DS.ink)
-                .fixedSize()
+                .lineLimit(1)
+                .truncationMode(.tail)
             trailingArea
             #if AI_ENABLED
             if AppSettings.shared.aiConfig.isComplete && aiKeyExists {
@@ -149,7 +150,8 @@ struct AttentionSummaryCard: View {
             Text(reportUpdatedTimeString(updated))
                 .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(DS.muted)
-                .fixedSize()
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 
@@ -266,11 +268,26 @@ private struct ItemPlate: View {
     private var chipBody: some View {
         HStack(spacing: 7) {
             Circle().fill(itemTone).frame(width: 5, height: 5)
-            Text(item.label).font(.system(size: 12.5)).foregroundStyle(DS.ink)
-            Text(detailText).font(.system(size: 12.5)).foregroundStyle(DS.inkSoft)
-            trailingSlot.padding(.leading, 1)
+            // V2-FIX-NARROW-OVERLAP (V2-SWEEP item 7): the whole chip used to be
+            // `.fixedSize()` ("never wraps/truncates in the title row"), but that
+            // made the title row's total width unshrinkable — with 2 items and
+            // realistic label/detail lengths (e.g. "Батарея"/"состояние: Service
+            // Recommended" + "Брандмауэр"/"выключен") the row exceeded even the
+            // card's full width at the 900pt minimum window. `item.label`
+            // (`.layoutPriority(1)`, same idiom as `listBody`'s never-truncate
+            // label) keeps its full text; `detailText` shrinks/truncates first.
+            Text(item.label)
+                .font(.system(size: 12.5))
+                .foregroundStyle(DS.ink)
+                .lineLimit(1)
+                .layoutPriority(1)
+            Text(detailText)
+                .font(.system(size: 12.5))
+                .foregroundStyle(DS.inkSoft)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            trailingSlot.padding(.leading, 1).layoutPriority(1)
         }
-        .fixedSize() // never wraps/truncates in the title row
         .padding(.horizontal, 12)
         .frame(height: 30)
         .background(Capsule().fill(itemTone.opacity(0.13)))
@@ -308,7 +325,11 @@ private struct ItemPlate: View {
         } else if done {
             Text("\u{2713}").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.greenInk)
         } else {
-            Text(item.verb).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.accentInk)
+            // `.lineLimit(1)`: chipBody no longer wraps this slot in `.fixedSize()`
+            // (V2-FIX-NARROW-OVERLAP) — without it, a squeezed chip would wrap
+            // the verb onto a second line instead of letting `detailText` above
+            // absorb the shrink.
+            Text(item.verb).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.accentInk).lineLimit(1)
         }
     }
 }
