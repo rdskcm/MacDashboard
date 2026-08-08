@@ -616,6 +616,24 @@ final class DashboardModel {
         }
     }
 
+    /// Removes `paths` from `report.autostart`'s three plist arrays in place and
+    /// recomputes the assessment, WITHOUT a full `refreshReport()` recollect.
+    /// `refreshReport()` rebuilds from a blank `FullReport()` and streams sections
+    /// back in one by one, so calling it just to drop a deleted plist from the list
+    /// makes the whole Автозагрузка card (and every other section) flash through its
+    /// "collecting" placeholder before repopulating — a disproportionate, ugly
+    /// reset for a change this narrow. A local, targeted mutation lets SwiftUI's
+    /// own array diffing (and this card's `.animation(value: orphans)`) animate
+    /// just the removed row instead.
+    private func removeAutostartPlistsLocally(_ paths: Set<String>) {
+        guard var auto = report.autostart, !paths.isEmpty else { return }
+        auto.userAgents.removeAll { paths.contains($0.path) }
+        auto.systemAgents.removeAll { paths.contains($0.path) }
+        auto.systemDaemons.removeAll { paths.contains($0.path) }
+        report.autostart = auto
+        setAssessment(Assess.assess(report: report, live: live))
+    }
+
     /// Deletes an orphaned launchd .plist detected by the Автозагрузка card's
     /// "check for outdated" flow. `isSystemLevel` selects the deletion path:
     /// user-level (~/Library/LaunchAgents) goes to Trash via FileManager (reversible);
@@ -623,8 +641,9 @@ final class DashboardModel {
     /// PrivilegedRunner (Touch ID/admin password), since Trash semantics don't apply
     /// across privilege boundaries. Neither unloads a currently-running agent/daemon
     /// (no `launchctl bootout` in v1) — the UI confirmation dialog must say so; the
-    /// change takes effect after relogin/reboot. Re-collects the full report on
-    /// success so the deleted entry drops out of the list.
+    /// change takes effect after relogin/reboot. Removes the deleted entry from
+    /// `report.autostart` locally on success (see `removeAutostartPlistsLocally`)
+    /// so it drops out of the list without a full report recollect.
     func deleteOrphanPlist(path: String, isSystemLevel: Bool) {
         guard !deletingPlistPaths.contains(path) else { return }
         guard LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel) else {
@@ -663,11 +682,97 @@ final class DashboardModel {
 
             switch outcome {
             case .success:
-                self.refreshReport()
+                self.removeAutostartPlistsLocally([path])
             case .cancelled:
                 break   // user dismissed Touch ID/admin prompt — no error banner
             case .failed(let msg):
                 self.plistDeleteError = msg
+            }
+        }
+    }
+
+    /// Bulk variant of `deleteOrphanPlist` (Автозагрузка card's "select multiple,
+    /// delete all" flow). Deletes user-level (~/Library) plists first, each
+    /// independently via Trash, so one failure doesn't block the rest; THEN — if any
+    /// system-level (/Library) paths survive validation — issues exactly one
+    /// `PrivilegedRunner` call covering an `rm -f` of all of them together, so the
+    /// whole batch costs a single Touch ID/admin prompt instead of one per path. A
+    /// cancelled or failed system-level batch never overwrites or hides the outcome
+    /// of the user-level paths that already succeeded — every row's spinner is
+    /// cleared independently and a combined error (if any) is reported once.
+    func deleteOrphanPlists(paths: [String]) {
+        let batch = paths.filter { path in
+            guard !deletingPlistPaths.contains(path) else { return false }
+            let isSystemLevel = path.hasPrefix("/Library/")
+            return LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel)
+        }
+        guard !batch.isEmpty else { return }
+
+        for path in batch { deletingPlistPaths.insert(path) }
+        plistDeleteError = nil
+
+        let userPaths = batch.filter { !$0.hasPrefix("/Library/") }
+        let systemPaths = batch.filter { $0.hasPrefix("/Library/") }
+
+        Task { [weak self] in
+            guard let self else { return }
+            defer {
+                for path in batch { self.deletingPlistPaths.remove(path) }
+            }
+
+            enum DeleteOutcome { case success, cancelled, failed(String) }
+
+            var results: [(path: String, outcome: DeleteOutcome)] = []
+
+            for path in userPaths {
+                let outcome: DeleteOutcome = await withCheckedContinuation { continuation in
+                    DispatchQueue.global(qos: .utility).async {
+                        do {
+                            try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+                            continuation.resume(returning: .success)
+                        } catch {
+                            continuation.resume(returning: .failed(error.localizedDescription))
+                        }
+                    }
+                }
+                guard !Task.isCancelled else { return }
+                results.append((path, outcome))
+            }
+
+            if !systemPaths.isEmpty {
+                let command = "/bin/rm -f " + systemPaths.map { path in
+                    "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+                }.joined(separator: " ")
+
+                let systemOutcome: DeleteOutcome = await withCheckedContinuation { continuation in
+                    DispatchQueue.global(qos: .utility).async {
+                        switch PrivilegedRunner.run(command) {
+                        case .success: continuation.resume(returning: .success)
+                        case .cancelled: continuation.resume(returning: .cancelled)
+                        case .failed(let msg): continuation.resume(returning: .failed(msg))
+                        }
+                    }
+                }
+                guard !Task.isCancelled else { return }
+                for path in systemPaths { results.append((path, systemOutcome)) }
+            }
+
+            let failures = results.compactMap { result -> String? in
+                if case .failed(let msg) = result.outcome { return msg }
+                return nil
+            }
+            if let firstFailure = failures.first {
+                self.plistDeleteError = failures.count > 1
+                    ? "\(failures.count) of \(results.count) failed: \(firstFailure)"
+                    : firstFailure
+            }
+
+            let succeededPaths = Set(results.compactMap { result -> String? in
+                if case .success = result.outcome { return result.path }
+                return nil
+            })
+            if !succeededPaths.isEmpty {
+                self.removeAutostartPlistsLocally(succeededPaths)
             }
         }
     }

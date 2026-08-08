@@ -12,6 +12,9 @@ struct StringsEN: AppStrings {
     var settingsLanguageLabel: String { "Interface language" }
     var settingsIntervalLabel: String { "Refresh interval (CPU/RAM)" }
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) s" }
+    var settingsIntervalNoteFast: String { "1 s — the most responsive chart, noticeable background load." }
+    var settingsIntervalNoteBalanced: String { "The working range: live charts with no noticeable load." }
+    var settingsIntervalNoteEconomy: String { "Economy: values update less often, the battery lasts longer." }
     var settingsMenuLanguageHint: String { "The menu bar and system dialogs follow the app language after a relaunch" }
     var settingsRelaunchNow: String { "Relaunch Now" }
     var settingsSectionGeneral: String { "General" }
@@ -23,15 +26,26 @@ struct StringsEN: AppStrings {
     var mainTabOverview: String { "Overview" }
     var mainTabReport: String { "Report" }
     var mainCollectingInfo: String { "Collecting system information…" }
+
+    // MARK: Overview page section kickers
+    var overviewKickerMetrics: String { "Metrics" }
+    var overviewKickerMemory: String { "Memory" }
+    var overviewKickerProcesses: String { "Processes" }
+    var overviewKickerFolders: String { "Folders" }
+    var overviewKickerSystem: String { "System" }
+    var overviewKickerHistory: String { "History" }
+
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String { "load \(load) · \(ncpu) cores" }
     func headerUptimeChip(_ uptime: String) -> String { "uptime \(uptime)" }
     var headerRefreshReport: String { "Refresh report" }
+    var headerStatusNeedsAttention: String { "Needs attention" }
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { "Processor (CPU)" }
     func kpiLoad(_ v: String) -> String { "load \(v)" }
     var kpiLoadUnavailable: String { "load —" }
     func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String { "\(loadStr) · \(ncpu) cores" }
+    func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String { "load \(l1) · \(l2) · \(l3)" }
     func kpiCpuSocTemp(_ t: Int) -> String { "SOC \(t) °C" }
     var kpiCpuChartTimeLabel: String { "Time" }
     var kpiMemLabel: String { "Memory" }
@@ -41,7 +55,8 @@ struct StringsEN: AppStrings {
     func kpiSwapUnit(_ total: String) -> String { "of \(total)" }
     func kpiSwapSub(_ free: String) -> String { "free \(free)" }
     var kpiDiskLabel: String { "Disk" }
-    func kpiDiskUnit(_ size: String) -> String { "free of \(size)" }
+    func kpiDiskUnit(_ size: String) -> String { "of \(size)" }
+    var kpiDiskFreeLabel: String { "free" }
     func kpiDiskUsedPct(_ pct: Int) -> String { "used \(pct)%" }
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
         base + " · data \(dataUsed), system \(sysUsed)"
@@ -58,12 +73,14 @@ struct StringsEN: AppStrings {
     var securityFileVault: String { "FileVault (disk encryption)" }
     var securitySip: String { "SIP (system integrity protection)" }
     var securityFirewall: String { "Firewall" }
+    var securityGatekeeper: String { "Gatekeeper" }
 
     // MARK: Report tab
     var reportPlaceholder: String { "Report not generated yet. Click “Refresh report”." }
     var reportShowInFinder: String { "Show in Finder" }
     var reportCopy: String { "Copy" }
     var reportCollecting: String { "Generating report…" }
+    func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · updated \(time)" }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Recommendations" }
@@ -107,6 +124,8 @@ struct StringsEN: AppStrings {
     // MARK: Storage — Служебные папки
     var storageServiceDirsTitle: String { "Service folders" }
     var storageServiceDirsCaption: String { "caches, containers, logs, apps" }
+    var folderTabHome: String { "Home" }
+    var folderTabSvc: String { "System" }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { "Disks (SMART)" }
@@ -117,10 +136,14 @@ struct StringsEN: AppStrings {
     var storageSmartInstallButton: String { "Install smartmontools" }
     var storageSmartNeedsHomebrew: String { "External-disk SMART needs Homebrew and smartmontools" }
     func storageSmartInstallFailed(_ msg: String) -> String { "Install failed: \(msg)" }
+    var storageSmartKindInternal: String { "INTERNAL" }
+    var storageSmartKindExternal: String { "EXTERNAL" }
 
     // MARK: Process cards
-    var processCpuTitle: String { "Top processes by CPU" }
-    var processMemTitle: String { "Top processes by memory" }
+    var processesTitle: String { "Processes" }
+    var processSegCPU: String { "CPU" }
+    var processSegMem: String { "Memory" }
+    var processesMetricA11y: String { "Process metric" }
     var processListCaption: String { "live snapshot from top" }
     var processLoadingDetails: String { "Loading details…" }
     var processDetailThreads: String { "Threads" }
@@ -130,7 +153,11 @@ struct StringsEN: AppStrings {
     var processSignalError: String { "Couldn't send signal (no permission)" }
     var processForceQuit: String { "Force quit" }
     var processForceQuitConfirm: String { "Force quit" }
+    var processForceQuitInlineQuestion: String { "Force quit?" }
     func processForceQuitTitle(_ name: String) -> String { "Force quit “\(name)”?" }
+    func processRevealA11y(_ name: String) -> String { "Show “\(name)” in Finder" }
+    func processTerminateA11y(_ name: String) -> String { "Quit process “\(name)”" }
+    func processKillA11y(_ name: String) -> String { "Force quit process “\(name)”" }
 
     // MARK: Maintenance card
     var maintenanceTitle: String { "System maintenance" }
@@ -174,15 +201,18 @@ struct StringsEN: AppStrings {
     var autostartSystemDaemons: String { "System daemons" }
     var autostartBackgroundTasks: String { "Background tasks (non-Apple)" }
     var autostartCheckOutdated: String { "Check for outdated" }
-    func autostartCheckOutdatedCount(_ n: Int) -> String { "Check for outdated: \(n)" }
+    func autostartCheckOutdatedCount(_ n: Int) -> String { "Outdated: \(n)" }
+    var autostartOrphanEmptyText: String { "No outdated plists" }
     var autostartOrphanTooltip: String { "Orphaned — app no longer installed, safe to remove" }
     var autostartDeleteButton: String { "Delete" }
-    var autostartDeleteConfirmTitle: String { "Delete outdated startup item?" }
     var autostartDeleteConfirmMessageUser: String { "The file will be moved to the Trash. The change takes effect after the next login or restart." }
     var autostartDeleteConfirmMessageSystem: String { "The file will be permanently deleted (requires Touch ID or an admin password). The change takes effect after the next login or restart." }
     func autostartDeleteError(_ detail: String) -> String { "Couldn't delete: \(detail)" }
+    func autostartDeleteAllButton(_ n: Int) -> String { "Delete all (\(n))" }
+    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String { "Move all \(n) plists to the Trash?" }
+    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String { "Some are system-level — a password is required. Delete all \(n)?" }
+    var autostartDeletingAll: String { "Deleting…" }
     var autostartOkTooltip: String { "OK" }
-    var autostartNoOrphans: String { "No outdated items found" }
 
     // MARK: Memory card
     var memoryLegendActive: String { "Active" }
@@ -220,6 +250,7 @@ struct StringsEN: AppStrings {
     var historyMetricPickerBattery: String { "Battery" }
     var historyMetricPickerCycles: String { "Cycles" }
     var historyMetricPickerSwap: String { "Swap" }
+    var historyMetricA11y: String { "History metric" }
     var historyMetricYLabelDisk: String { "Used, GB" }
     var historyMetricYLabelBattery: String { "%" }
     var historyMetricYLabelCycles: String { "cycles" }
@@ -485,4 +516,74 @@ struct StringsEN: AppStrings {
     var reportCollectorSmartWearHigh: String { "SMART: wear nearing end of life" }
     var reportCollectorSmartUnavailable: String { "SMART unavailable" }
     var reportCollectorSmartUnavailableNoTools: String { "SMART unavailable (no smartmontools)" }
+
+    // MARK: v2 attention
+    var attnLabelDiskFull: String { "Disk" }
+    func attnDetailDiskFull(_ pct: String) -> String { "\(pct) % full" }
+    var attnLabelDiskFullSoon: String { "Disk" }
+    func attnDetailDiskFullSoon(_ pct: String) -> String { "\(pct) % full" }
+    var attnLabelSwapHigh: String { "Swap" }
+    func attnDetailSwapHigh(_ used: String) -> String { used }
+    var attnLabelBatteryCapacity: String { "Battery" }
+    func attnDetailBatteryCapacity(_ cap: Int) -> String { "capacity \(cap) %" }
+    var attnLabelBatteryCondition: String { "Battery" }
+    func attnDetailBatteryCondition(_ cond: String) -> String { "condition: \(cond)" }
+    var attnLabelFileVaultOff: String { "FileVault" }
+    var attnDetailFileVaultOff: String { "off" }
+    var attnLabelGatekeeperOff: String { "Gatekeeper" }
+    var attnDetailGatekeeperOff: String { "off" }
+    var attnLabelSipOff: String { "SIP" }
+    var attnDetailSipOff: String { "off" }
+    var attnLabelFirewallOff: String { "Firewall" }
+    var attnDetailFirewallOff: String { "off" }
+    var attnLabelUpdates: String { "Updates" }
+    func attnDetailUpdates(_ n: Int) -> String { "\(n) available" }
+    var attnLabelCrashes: String { "Crashes" }
+    func attnDetailCrashes(_ n: Int) -> String { "\(n) reports" }
+    var attnLabelTimeMachine: String { "Time Machine" }
+    var attnDetailTimeMachine: String { "not set up" }
+    func attnLabelSmartErrors(_ title: String) -> String { title }
+    var attnDetailSmartErrors: String { "SMART errors" }
+    func attnLabelSmartWear(_ title: String) -> String { title }
+    func attnDetailSmartWear(_ pu: Int) -> String { "wear \(pu) %" }
+
+    var attnVerbSettings: String { "Settings" }
+    var attnVerbActivityMonitor: String { "Activity Monitor" }
+    var attnVerbDiskUtility: String { "Disk Utility" }
+    var attnVerbShow: String { "Show" }
+    var attnVerbEmpty: String { "Empty" }
+    var attnVerbEnable: String { "Enable" }
+    var attnVerbUpgrade: String { "Upgrade" }
+    var attnVerbOpen: String { "Open" }
+
+    var attnCapSwap: String { "Swap" }
+    var attnCapBattery: String { "Battery" }
+    func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
+    var attnCapBrew: String { "Homebrew" }
+    func attnCapBrewValue(_ n: Int) -> String { "\(n) packages" }
+    var attnCapSmartNoData: String { "no SMART data" }
+    var attnCapDownloads: String { "Downloads" }
+    var attnCapTrash: String { "Trash" }
+    var attnCapCaches: String { "Caches" }
+    var attnExplainSwap: String { "The system is paging memory to disk. Opens Activity Monitor — the Memory tab shows which processes are using it." }
+    var attnExplainBattery: String { "Capacity drops naturally over time. Opens the system Battery settings; nothing changes without your confirmation." }
+    var attnExplainBrew: String { "Runs `brew upgrade` in the background — progress shows in the Homebrew card. Installed packages are replaced with newer versions." }
+    var attnExplainSmart: String { "Opens Disk Utility. External drives often can't expose SMART attributes over USB — that is not a sign of failure." }
+    var attnExplainDownloads: String { "Opens the folder in Finder. Nothing is deleted — you decide what to remove." }
+    var attnExplainTrash: String { "Asks for confirmation, then empties the Trash via Finder. Files cannot be recovered afterwards." }
+    var attnExplainCaches: String { "Opens ~/Library/Caches in Finder. Apps rebuild their caches on next launch." }
+
+    func attnMore(_ n: Int) -> String { "More \(n)" }
+    var attnCollapse: String { "Less" }
+
+    var quietSecurityTitle: String { "Security" }
+    var quietUpdatesTitle: String { "Updates & crashes" }
+    var quietSecurityStatus: String { "all on" }
+    var quietUpdatesStatus: String { "no updates or crashes" }
+    var quietNeedsAttention: String { "needs attention" }
+    var quietStatusAllEnabled: String { "all enabled" }
+    var quietStatusAllClear: String { "all clear" }
+    var quietMarkOff: String { "off" }
+    var quietMarkUnknown: String { "unknown" }
+    func quietCountItems(_ n: Int) -> String { "\(n)" }
 }

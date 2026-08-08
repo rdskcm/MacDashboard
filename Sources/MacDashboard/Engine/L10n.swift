@@ -22,6 +22,11 @@ protocol AppStrings {
     var settingsLanguageLabel: String { get }
     var settingsIntervalLabel: String { get }
     func settingsIntervalOption(_ seconds: Int) -> String
+    /// Per-value note below the interval segmented control (§7.3, SW:96-99),
+    /// switching with the current `fastIntervalSeconds` selection.
+    var settingsIntervalNoteFast: String { get }
+    var settingsIntervalNoteBalanced: String { get }
+    var settingsIntervalNoteEconomy: String { get }
     var settingsMenuLanguageHint: String { get }
     var settingsRelaunchNow: String { get }
     var settingsSectionGeneral: String { get }
@@ -33,15 +38,28 @@ protocol AppStrings {
     var mainTabOverview: String { get }
     var mainTabReport: String { get }
     var mainCollectingInfo: String { get }
+
+    // MARK: Overview page section kickers
+    var overviewKickerMetrics: String { get }
+    var overviewKickerMemory: String { get }
+    var overviewKickerProcesses: String { get }
+    var overviewKickerFolders: String { get }
+    var overviewKickerSystem: String { get }
+    var overviewKickerHistory: String { get }
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String
     func headerUptimeChip(_ uptime: String) -> String
     var headerRefreshReport: String { get }
+    /// Status chip label when `assessment.problems` is non-empty (pairs with `recommendationsAllGood`).
+    var headerStatusNeedsAttention: String { get }
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { get }
     func kpiLoad(_ v: String) -> String
     var kpiLoadUnavailable: String { get }
     func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String
+    /// V2-TILES footer: all three load averages, e.g. "нагрузка 1,73 · 2,05 · 2,20".
+    /// The core count is NOT repeated here — it already lives in the header's load chip.
+    func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String
     func kpiCpuSocTemp(_ t: Int) -> String
     var kpiCpuChartTimeLabel: String { get }
     var kpiMemLabel: String { get }
@@ -52,6 +70,9 @@ protocol AppStrings {
     func kpiSwapSub(_ free: String) -> String
     var kpiDiskLabel: String { get }
     func kpiDiskUnit(_ size: String) -> String
+    /// V2-TILES: standalone "свободно"/"free" word, prefixed onto the disk tile's
+    /// footer (which otherwise reuses `kpiDiskUsedPct`/`kpiDiskUsedDetail` verbatim).
+    var kpiDiskFreeLabel: String { get }
     func kpiDiskUsedPct(_ pct: Int) -> String
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String
     func kpiDiskTemp(_ t: Int) -> String
@@ -66,12 +87,14 @@ protocol AppStrings {
     var securityFileVault: String { get }
     var securitySip: String { get }
     var securityFirewall: String { get }
+    var securityGatekeeper: String { get }
 
     // MARK: Report tab
     var reportPlaceholder: String { get }
     var reportShowInFinder: String { get }
     var reportCopy: String { get }
     var reportCollecting: String { get }
+    func reportFileUpdatedCaption(_ time: String) -> String
 
     // MARK: Recommendations card
     var recommendationsTitle: String { get }
@@ -115,6 +138,8 @@ protocol AppStrings {
     // MARK: Storage — Служебные папки
     var storageServiceDirsTitle: String { get }
     var storageServiceDirsCaption: String { get }
+    var folderTabHome: String { get }
+    var folderTabSvc: String { get }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { get }
@@ -125,10 +150,15 @@ protocol AppStrings {
     var storageSmartInstallButton: String { get }
     var storageSmartNeedsHomebrew: String { get }
     func storageSmartInstallFailed(_ msg: String) -> String
+    // MARK: Storage — SMART disk capsule kind sublabel (V2-CARD-DISK)
+    var storageSmartKindInternal: String { get }
+    var storageSmartKindExternal: String { get }
 
     // MARK: Process cards
-    var processCpuTitle: String { get }
-    var processMemTitle: String { get }
+    var processesTitle: String { get }
+    var processSegCPU: String { get }
+    var processSegMem: String { get }
+    var processesMetricA11y: String { get }
     var processListCaption: String { get }
     var processLoadingDetails: String { get }
     var processDetailThreads: String { get }
@@ -138,7 +168,11 @@ protocol AppStrings {
     var processSignalError: String { get }
     var processForceQuit: String { get }
     var processForceQuitConfirm: String { get }
+    var processForceQuitInlineQuestion: String { get }
     func processForceQuitTitle(_ name: String) -> String
+    func processRevealA11y(_ name: String) -> String
+    func processTerminateA11y(_ name: String) -> String
+    func processKillA11y(_ name: String) -> String
 
     // MARK: Maintenance card
     var maintenanceTitle: String { get }
@@ -179,14 +213,17 @@ protocol AppStrings {
     var autostartBackgroundTasks: String { get }
     var autostartCheckOutdated: String { get }
     func autostartCheckOutdatedCount(_ n: Int) -> String
+    var autostartOrphanEmptyText: String { get }
     var autostartOrphanTooltip: String { get }
     var autostartDeleteButton: String { get }
-    var autostartDeleteConfirmTitle: String { get }
     var autostartDeleteConfirmMessageUser: String { get }
     var autostartDeleteConfirmMessageSystem: String { get }
     func autostartDeleteError(_ detail: String) -> String
+    func autostartDeleteAllButton(_ n: Int) -> String
+    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String
+    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String
+    var autostartDeletingAll: String { get }
     var autostartOkTooltip: String { get }
-    var autostartNoOrphans: String { get }
 
     // MARK: Memory card
     var memoryLegendActive: String { get }
@@ -224,6 +261,7 @@ protocol AppStrings {
     var historyMetricPickerBattery: String { get }
     var historyMetricPickerCycles: String { get }
     var historyMetricPickerSwap: String { get }
+    var historyMetricA11y: String { get }
     var historyMetricYLabelDisk: String { get }
     var historyMetricYLabelBattery: String { get }
     var historyMetricYLabelCycles: String { get }
@@ -490,6 +528,81 @@ protocol AppStrings {
     var reportCollectorSmartWearHigh: String { get }
     var reportCollectorSmartUnavailable: String { get }
     var reportCollectorSmartUnavailableNoTools: String { get }
+
+    // MARK: v2 attention
+    // Chip labels + details (one pair per AttentionKind; see Engine/AttentionModel.swift).
+    var attnLabelDiskFull: String { get }
+    func attnDetailDiskFull(_ pct: String) -> String
+    var attnLabelDiskFullSoon: String { get }
+    func attnDetailDiskFullSoon(_ pct: String) -> String
+    var attnLabelSwapHigh: String { get }
+    func attnDetailSwapHigh(_ used: String) -> String
+    var attnLabelBatteryCapacity: String { get }
+    func attnDetailBatteryCapacity(_ cap: Int) -> String
+    var attnLabelBatteryCondition: String { get }
+    func attnDetailBatteryCondition(_ cond: String) -> String
+    var attnLabelFileVaultOff: String { get }
+    var attnDetailFileVaultOff: String { get }
+    var attnLabelGatekeeperOff: String { get }
+    var attnDetailGatekeeperOff: String { get }
+    var attnLabelSipOff: String { get }
+    var attnDetailSipOff: String { get }
+    var attnLabelFirewallOff: String { get }
+    var attnDetailFirewallOff: String { get }
+    var attnLabelUpdates: String { get }
+    func attnDetailUpdates(_ n: Int) -> String
+    var attnLabelCrashes: String { get }
+    func attnDetailCrashes(_ n: Int) -> String
+    var attnLabelTimeMachine: String { get }
+    var attnDetailTimeMachine: String { get }
+    func attnLabelSmartErrors(_ title: String) -> String
+    var attnDetailSmartErrors: String { get }
+    func attnLabelSmartWear(_ title: String) -> String
+    func attnDetailSmartWear(_ pu: Int) -> String
+
+    // Verbs (single source of truth — see AttentionModel.verb(for:lang:)).
+    var attnVerbSettings: String { get }
+    var attnVerbActivityMonitor: String { get }
+    var attnVerbDiskUtility: String { get }
+    var attnVerbShow: String { get }
+    var attnVerbEmpty: String { get }
+    var attnVerbEnable: String { get }
+    var attnVerbUpgrade: String { get }
+    var attnVerbOpen: String { get }
+
+    // Capsule objects + values + explanations.
+    var attnCapSwap: String { get }
+    var attnCapBattery: String { get }
+    func attnCapBatteryValue(_ p: Int) -> String
+    var attnCapBrew: String { get }
+    func attnCapBrewValue(_ n: Int) -> String
+    var attnCapSmartNoData: String { get }
+    var attnCapDownloads: String { get }
+    var attnCapTrash: String { get }
+    var attnCapCaches: String { get }
+    var attnExplainSwap: String { get }
+    var attnExplainBattery: String { get }
+    var attnExplainBrew: String { get }
+    var attnExplainSmart: String { get }
+    var attnExplainDownloads: String { get }
+    var attnExplainTrash: String { get }
+    var attnExplainCaches: String { get }
+
+    // Attention summary card overflow toggles (Block V2-SUMMARY).
+    func attnMore(_ n: Int) -> String
+    var attnCollapse: String { get }
+
+    // Quiet-strip strings (consumed by a later block — unused for now).
+    var quietSecurityTitle: String { get }
+    var quietUpdatesTitle: String { get }
+    var quietSecurityStatus: String { get }
+    var quietUpdatesStatus: String { get }
+    var quietNeedsAttention: String { get }
+    var quietStatusAllEnabled: String { get }
+    var quietStatusAllClear: String { get }
+    var quietMarkOff: String { get }
+    var quietMarkUnknown: String { get }
+    func quietCountItems(_ n: Int) -> String
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",

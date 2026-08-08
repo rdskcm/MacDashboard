@@ -6,10 +6,20 @@ on:
 
 jobs:
   build-and-check:
-    runs-on: macos-14
+    # Must match release.yml: the app uses SwiftUI API from the macOS 26 SDK
+    # (e.g. .onGeometryChange), which a macos-14 runner cannot compile.
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Use the macOS 26 (Tahoe) SDK
+        run: |
+          set -euo pipefail
+          xc="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          [ -n "$xc" ] || { echo "::error::no Xcode 26 on this runner"; exit 1; }
+          sudo xcode-select -s "$xc/Contents/Developer"
+          swift --version
 
       - name: swift build (default, AI off)
         run: swift build
