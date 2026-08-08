@@ -197,6 +197,16 @@ struct KPITileStateChip {
     let word: String
 }
 
+/// `KPITileView.unit` rendering: `.satellite` (default) is the small muted
+/// unit sitting beside the value; `.prominent` matches the value's own 27pt
+/// semibold monospaced style with only a 3pt gap — for tiles where a plain
+/// space between value and unit reads too wide in a monospaced face (see
+/// block V2-FIX-UNITS).
+enum KPIUnitStyle {
+    case satellite
+    case prominent
+}
+
 /// KPI tile chrome (Spec §5.3): a four fixed-height-band card —
 /// 1. header (22pt): nowrap+ellipsis label taking the slack, at most one
 ///    `satellite` view (temperature capsule / battery "Детали" pill), then an
@@ -217,6 +227,7 @@ struct KPITileView<Satellite: View, Visual: View>: View {
     var chip: KPITileStateChip? = nil
     let value: String
     var unit: String? = nil
+    var unitStyle: KPIUnitStyle = .satellite
     var outOf: String? = nil
     var footer: String? = nil
     @ViewBuilder var satellite: () -> Satellite
@@ -266,11 +277,19 @@ struct KPITileView<Satellite: View, Visual: View>: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             if let unit {
-                Text(unit)
-                    .font(.system(size: 13))
-                    .foregroundStyle(DS.muted)
-                    .padding(.leading, 2)
-                    .fixedSize(horizontal: true, vertical: false)
+                switch unitStyle {
+                case .satellite:
+                    Text(unit)
+                        .font(.system(size: 13))
+                        .foregroundStyle(DS.muted)
+                        .padding(.leading, 2)
+                        .fixedSize(horizontal: true, vertical: false)
+                case .prominent:
+                    Text(unit)
+                        .font(.system(size: 27, weight: .semibold, design: .monospaced))
+                        .padding(.leading, 3)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
             if let outOf {
                 Text(outOf)
@@ -330,9 +349,10 @@ extension KPITileView where Satellite == EmptyView, Visual == EmptyView {
 
 extension KPITileView where Satellite == EmptyView {
     init(label: String, chip: KPITileStateChip? = nil, value: String, unit: String? = nil,
-         outOf: String? = nil, footer: String? = nil, @ViewBuilder visual: @escaping () -> Visual) {
-        self.init(label: label, chip: chip, value: value, unit: unit, outOf: outOf, footer: footer,
-                   satellite: { EmptyView() }, visual: visual)
+         unitStyle: KPIUnitStyle = .satellite, outOf: String? = nil, footer: String? = nil,
+         @ViewBuilder visual: @escaping () -> Visual) {
+        self.init(label: label, chip: chip, value: value, unit: unit, unitStyle: unitStyle,
+                   outOf: outOf, footer: footer, satellite: { EmptyView() }, visual: visual)
     }
 }
 
@@ -604,6 +624,16 @@ struct SimpleTable: View {
     /// existing call sites are unaffected; MEMORY-ONLY call sites may pass a
     /// tighter value to compensate for the inlined swatch's extra width.
     var columnSpacing: CGFloat = 16
+    /// V2-FIX-UNITS follow-up: column indices whose cell text is a formatted
+    /// "value unit" pair (e.g. "1.9 GB") that should render as two `Text`s
+    /// with a tight `.padding(.leading, 1.5)` gap instead of one `Text` with
+    /// a literal space — this column is monospaced (see `cellFont` below), so
+    /// a plain space is a full glyph advance and a thin-space substitution
+    /// (verified empirically) doesn't narrow it in this font. Empty by
+    /// default, so existing call sites render exactly as before; splits on
+    /// the LAST regular space in the cell string, falling back to a single
+    /// `Text` unchanged if no space is found.
+    var unitSplitColumns: Set<Int> = []
 
     @State private var hoveredRow: Int? = nil
     @State private var sortColumn: Int? = nil
@@ -669,7 +699,17 @@ struct SimpleTable: View {
                             ? .system(size: 12.5, weight: .regular, design: .monospaced)
                             : .system(size: 13, weight: .medium)
                         let cellColor: Color = isNumeric ? .primary : DS.inkSoft
-                        let text = Text(cell)
+                        let text = Group {
+                            if unitSplitColumns.contains(c), let range = cell.range(of: " ", options: .backwards) {
+                                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                                    Text(cell[..<range.lowerBound])
+                                    Text(cell[range.upperBound...])
+                                        .padding(.leading, 1.5)
+                                }
+                            } else {
+                                Text(cell)
+                            }
+                        }
                             .font(cellFont)
                             .monospacedDigit()
                             .foregroundStyle(cellColor)
@@ -805,15 +845,28 @@ struct LegendItem: View {
     let color: Color
     let label: String
     let value: String
+    /// V2-FIX-UNITS follow-up: optional pre-split unit, mirroring `KPITileView`/
+    /// `TMRow` — this row is monospaced, so a literal space between `value` and
+    /// `unit` is a full glyph advance; splitting into two `Text`s lets a tight
+    /// `.padding(.leading, 1.5)` close the gap instead.
+    var unit: String? = nil
     var body: some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
             Text(label)
                 .font(.system(size: 12))
                 .foregroundStyle(DS.muted)
-            Text(value)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text(value)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                if let unit {
+                    Text(unit)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                        .padding(.leading, 1.5)
+                }
+            }
         }
         .contentShape(Rectangle())
     }

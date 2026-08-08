@@ -68,7 +68,7 @@ struct MemoryCard: View {
 
     var body: some View {
         if let mem = model.mem, mem.total > 0 {
-            ChartOrTableCard(title: L.memoryTitle(fmtBytes(mem.total)),
+            ChartOrTableCard(title: L.memoryTitle(tight(fmtBytesParts(mem.total))),
                               caption: L.memoryCaption,
                               infoHelp: L.memoryInfoHelp) {
                 MemoryStackChart(model: model)
@@ -111,7 +111,8 @@ private struct MemoryStackChart: View {
                 // SharedUI.swift is out of scope for this pass).
                 MemoryLegendFlowLayout(columnSpacing: 22, rowSpacing: 8) {
                     ForEach(segments, id: \.key) { seg in
-                        LegendItem(color: seg.legendColor, label: seg.label, value: fmtBytes(seg.bytes))
+                        let parts = fmtBytesParts(seg.bytes)
+                        LegendItem(color: seg.legendColor, label: seg.label, value: parts.value, unit: parts.unit)
                             .hoverTip(memoryNotes[seg.label] ?? "")
                     }
                 }
@@ -126,7 +127,7 @@ private struct MemoryStackChart: View {
     private func footerNote(_ mem: MemSnapshot) -> String {
         var bits: [String] = []
         if let swap = model.swap {
-            bits.append(L.memorySwapNote(fmtBytes(swap.used), fmtBytes(swap.total)))
+            bits.append(L.memorySwapNote(tight(fmtBytesParts(swap.used)), tight(fmtBytesParts(swap.total))))
         }
         bits.append(L.memoryOtherNote)
         return bits.joined(separator: " · ")
@@ -216,7 +217,8 @@ private struct MemoryTable: View {
                     return memoryNotes[tableRows[r].cells[0]]
                 },
                 swatches: tableRows.map(\.swatch),
-                columnSpacing: 10
+                columnSpacing: 10,
+                unitSplitColumns: [1]
             )
         }
     }

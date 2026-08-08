@@ -12,7 +12,7 @@ import SwiftUI
 /// `DirBarRow`/`DirBarList` already use in StorageCards.swift).
 private struct TMRow: View {
     let label: String
-    let value: String
+    var value: String = ""
     /// `DS.hot` for the "диск не подключён"/no-date state (OS:646); `DS.inkSoft`
     /// otherwise.
     var valueColor: Color = DS.inkSoft
@@ -20,6 +20,15 @@ private struct TMRow: View {
     /// mono font family so digit columns actually line up; text values (name,
     /// type, snapshot summary) keep the mono family but don't need it.
     var tabularNumerals: Bool = false
+    /// V2-FIX-UNITS follow-up: pre-split value/unit for the byte-quota call
+    /// site — this monospaced row renders a literal space as a full glyph
+    /// advance, so the quota row passes `fmtBytesParts` here instead of a
+    /// plain `value:` string, and gets a tight `.padding(.leading, 1.5)` gap.
+    /// (Second pass: this row's 13.5pt font makes a flat 3pt gap read
+    /// proportionally wide — ~22% of the em vs. ~11% at the 27pt tile the
+    /// value was copied from — so it's now 1.5pt here.)
+    /// Every other TMRow call site keeps using `value:` unchanged.
+    var valueParts: (String, String)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -27,16 +36,28 @@ private struct TMRow: View {
                 .font(.system(size: 11.5))
                 .foregroundStyle(DS.muted)
                 .frame(width: 150, alignment: .leading)
-            Group {
-                if tabularNumerals {
-                    Text(value).monospacedDigit()
-                } else {
-                    Text(value)
+            if let valueParts {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text(valueParts.0).monospacedDigit()
+                    Text(valueParts.1)
+                        .monospacedDigit()
+                        .padding(.leading, 1.5)
                 }
+                .font(.system(size: 13.5, design: .monospaced))
+                .foregroundStyle(valueColor)
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Group {
+                    if tabularNumerals {
+                        Text(value).monospacedDigit()
+                    } else {
+                        Text(value)
+                    }
+                }
+                .font(.system(size: 13.5, design: .monospaced))
+                .foregroundStyle(valueColor)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.system(size: 13.5, design: .monospaced))
-            .foregroundStyle(valueColor)
-            .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
     }
@@ -72,7 +93,8 @@ struct TimeMachineCard: View {
                         TMRow(label: L.timeMachineType, value: kind == "Local" ? L.timeMachineTypeLocal : kind)
                     }
                     if let quota = dest.quotaBytes {
-                        TMRow(label: L.timeMachineQuota, value: fmtBytes(quota), tabularNumerals: true)
+                        let quotaParts = fmtBytesParts(quota)
+                        TMRow(label: L.timeMachineQuota, valueParts: (quotaParts.value, quotaParts.unit ?? ""))
                     }
                     TMRow(
                         label: L.timeMachineLastBackup,

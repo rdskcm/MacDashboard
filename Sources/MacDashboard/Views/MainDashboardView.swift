@@ -127,7 +127,7 @@ struct MainDashboardView: View {
         guard let sys = model.report.system else { return [L.mainCollectingInfo] }
         let modelName = sys.modelName
         let chip = sys.chip
-        let ram = sys.memBytes.map { fmtBytes($0) }
+        let ram = sys.memBytes.map { tight(fmtBytesParts($0)) }
         let osFull: String? = sys.osVersion.map { ver in
             let build = sys.osBuild.map { " (\($0))" } ?? ""
             return "macOS \(ver)\(build)"

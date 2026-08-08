@@ -372,10 +372,22 @@ private struct HistoryTrendChart: View {
             Text(point.id)
                 .font(.system(size: 11))
                 .foregroundStyle(DS.muted)
-            Text(valueText(for: point))
+            let parts = valueParts(for: point)
+            if let unit = parts.unit {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text(parts.value)
+                    Text(unit)
+                        .padding(.leading, 1.5)
+                }
                 .font(.system(size: 12.5, weight: .regular, design: .monospaced))
                 .monospacedDigit()
                 .foregroundStyle(DS.ink)
+            } else {
+                Text(parts.value)
+                    .font(.system(size: 12.5, weight: .regular, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(DS.ink)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -383,18 +395,24 @@ private struct HistoryTrendChart: View {
     }
 
     /// Value + unit, reusing the same formatting the table already uses for
-    /// disk/battery/cycles, plus the existing swap y-axis-label unit string
-    /// (no new localization keys needed beyond the picker's a11y label).
-    private func valueText(for point: HistoryChartPoint) -> String {
+    /// disk/battery/cycles, plus the existing byte unit string (no new
+    /// localization keys needed). V2-FIX-UNITS follow-up: this monospaced
+    /// tooltip renders a literal space as a full glyph advance, so disk/swap
+    /// split value and unit into two `Text` views with a tight
+    /// `.padding(.leading, 1.5)` gap, matching TMRow.valueParts and
+    /// LegendItem elsewhere in this block. Battery/cycles don't have the
+    /// gap defect (`%` touches the number directly; cycles is a count + word
+    /// label, not a byte/capacity unit) so they stay single strings.
+    private func valueParts(for point: HistoryChartPoint) -> (value: String, unit: String?) {
         switch metric {
         case .disk:
-            return L.historyGbValue(Int(point.value.rounded()))
+            return (String(Int(point.value.rounded())), L.byteUnitGB)
         case .battery:
-            return "\(Int(point.value.rounded()))%"
+            return ("\(Int(point.value.rounded()))%", nil)
         case .cycles:
-            return "\(Int(point.value.rounded())) \(L.historyMetricYLabelCycles)"
+            return ("\(Int(point.value.rounded())) \(L.historyMetricYLabelCycles)", nil)
         case .swap:
-            return String(format: "%.1f %@", point.value, L.historyMetricYLabelSwap)
+            return (String(format: "%.1f", point.value), L.byteUnitGB)
         }
     }
 }

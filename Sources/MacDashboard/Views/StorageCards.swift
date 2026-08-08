@@ -52,10 +52,19 @@ private struct DirBarRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 8)
-                Text(fmtBytes(bytes))
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(DS.inkSoft)
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    let parts = fmtBytesParts(bytes)
+                    Text(parts.value)
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(DS.inkSoft)
+                    if let unit = parts.unit {
+                        Text(unit)
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .padding(.leading, 1.5)
+                            .foregroundStyle(DS.inkSoft)
+                    }
+                }
                 Text("›")
                     .font(.system(size: 12))
                     .foregroundStyle(DS.muted)

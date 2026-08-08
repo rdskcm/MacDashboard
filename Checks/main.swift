@@ -1691,6 +1691,47 @@ do {
         L10nStore.shared.language = .en
         check(fmtCapacity(bytes) == expectedEN, "fmtCapacity: \(label) (en) == \"\(expectedEN)\"")
     }
+
+    // Round-trip: fmtCapacityParts must never diverge from fmtCapacity (V2-FIX-UNITS).
+    for (bytes, _, _, label) in cases {
+        for lang in [AppLanguage.ru, .en] {
+            L10nStore.shared.language = lang
+            let p = fmtCapacityParts(bytes)
+            check(fmtCapacity(bytes) == "\(p.value) \(p.unit)",
+                  "fmtCapacityParts round-trip: \(label) (\(lang))")
+        }
+    }
+}
+
+// =====================================================================
+// MARK: - fmtBytes / fmtBytesParts round-trip (V2-FIX-UNITS)
+// =====================================================================
+do {
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+
+    // nil ⇒ ("—", nil), matching fmtBytes's "—".
+    check(fmtBytesParts(nil).value == "—" && fmtBytesParts(nil).unit == nil,
+          "fmtBytesParts: nil ⇒ (\"—\", nil)")
+    check(fmtBytes(nil) == "—", "fmtBytes: nil ⇒ \"—\"")
+
+    // Each binary unit step (B/KB/MB/GB/TB).
+    let byteCases: [Int64] = [
+        0, 1, 512, 1023,
+        1024, 1_048_575,
+        1_048_576, 1_073_741_823,
+        1_073_741_824, 1_099_511_627_775,
+        1_099_511_627_776, 2 * 1_099_511_627_776,
+    ]
+
+    for bytes in byteCases {
+        for lang in [AppLanguage.ru, .en] {
+            L10nStore.shared.language = lang
+            let p = fmtBytesParts(bytes)
+            check(fmtBytes(bytes) == "\(p.value) \(p.unit ?? "")",
+                  "fmtBytesParts round-trip: \(bytes) bytes (\(lang))")
+        }
+    }
 }
 
 // =====================================================================

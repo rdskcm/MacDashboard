@@ -197,9 +197,17 @@ private struct ProcessRowView: View {
         case .mem: return fmtBytes(row.memBytes)
         }
     }
+    /// V2-FIX-UNITS follow-up: mem-primary mode splits value/unit so the
+    /// literal-space gap (a full glyph advance in this monospaced face) can be
+    /// tightened to `.padding(.leading, 1.5)` — see `fmtBytesParts`. (1.5pt,
+    /// not the 27pt-tile's 3pt: at this 13pt size 3pt reads proportionally
+    /// wide.)
+    private var primaryMemParts: (value: String, unit: String?)? {
+        primary == .mem ? fmtBytesParts(row.memBytes) : nil
+    }
     private var secondaryText: String {
         switch primary {
-        case .cpu: return "· " + fmtBytes(row.memBytes)
+        case .cpu: return "· " + tight(fmtBytesParts(row.memBytes))
         case .mem: return "· CPU " + (row.cpu.map { fmtNum($0, decimals: 1) + "%" } ?? "—")
         }
     }
@@ -237,10 +245,25 @@ private struct ProcessRowView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 8)
-                Text(primaryText)
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(DS.inkSoft)
+                if let parts = primaryMemParts {
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Text(parts.value)
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .monospacedDigit()
+                            .foregroundStyle(DS.inkSoft)
+                        if let unit = parts.unit {
+                            Text(unit)
+                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                .padding(.leading, 1.5)
+                                .foregroundStyle(DS.inkSoft)
+                        }
+                    }
+                } else {
+                    Text(primaryText)
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(DS.inkSoft)
+                }
                 Text(secondaryText)
                     .font(.system(size: 11))
                     .foregroundStyle(DS.muted)
@@ -307,7 +330,7 @@ private struct ProcessDetailView: View {
                     }
                     GridRow {
                         Text(L.processDetailMemory).font(.system(size: 11.5)).foregroundStyle(.secondary)
-                        Text(fmtBytes(row.memBytes)).font(.system(size: 11.5))
+                        Text(tight(fmtBytesParts(row.memBytes))).font(.system(size: 11.5))
                     }
                     GridRow {
                         Text(L.processDetailPath).font(.system(size: 11.5)).foregroundStyle(.secondary)

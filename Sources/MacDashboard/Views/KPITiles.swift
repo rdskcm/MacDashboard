@@ -153,10 +153,13 @@ struct MemoryTile: View {
 
     var body: some View {
         if let mem = model.mem {
+            let usedParts = fmtBytesParts(mem.usedBytes)
             KPITileView(
                 label: L.kpiMemLabel,
-                value: fmtBytes(mem.usedBytes),
-                outOf: L.kpiMemUnit(fmtBytes(mem.total)),
+                value: usedParts.value,
+                unit: usedParts.unit,
+                unitStyle: .prominent,
+                outOf: L.kpiMemUnit(tight(fmtBytesParts(mem.total))),
                 footer: L.kpiMemSub(fmtBytes(mem.compressor), fmtBytes(mem.purgeable)),
                 // Explicit `visual:` label (not trailing-closure sugar): with no
                 // satellite, a bare trailing closure is ambiguous between the
@@ -179,10 +182,13 @@ struct SwapTile: View {
 
     var body: some View {
         if let swap = model.swap, swap.total > 0 {
+            let usedParts = fmtBytesParts(swap.used)
             KPITileView(
                 label: L.kpiSwapLabel,
-                value: fmtBytes(swap.used),
-                outOf: L.kpiSwapUnit(fmtBytes(swap.total)),
+                value: usedParts.value,
+                unit: usedParts.unit,
+                unitStyle: .prominent,
+                outOf: L.kpiSwapUnit(tight(fmtBytesParts(swap.total))),
                 footer: L.kpiSwapSub(fmtBytes(swap.free)),
                 // Explicit `visual:` label — see MemoryTile's comment above.
                 visual: {
@@ -228,10 +234,13 @@ struct DiskTile: View {
 
     var body: some View {
         if let disk = model.disk, disk.size > 0 {
+            let availParts = fmtCapacityParts(disk.avail)
             KPITileView(
                 label: L.kpiDiskLabel,
-                value: fmtCapacity(disk.avail),
-                outOf: L.kpiDiskUnit(fmtCapacity(disk.size)),
+                value: availParts.value,
+                unit: availParts.unit,
+                unitStyle: .prominent,
+                outOf: L.kpiDiskUnit(tight(fmtCapacityParts(disk.size))),
                 footer: footer(for: disk)
             ) {
                 // Satellite: internal NVMe temperature capsule — honest-empty when nil.
