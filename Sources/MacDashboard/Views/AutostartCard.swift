@@ -447,9 +447,12 @@ private struct AutoSectionRow<Content: View>: View {
                     .foregroundStyle(isEmptySection ? DS.muted : DS.inkSoft)
                 Spacer(minLength: 0)
             }
-            .padding(.top, 3)
+            // Vertical padding is deliberately symmetric (5/5) instead of the
+            // prototype's 3/7 (Overview Screen.dc.html:481) — user decision
+            // 2026-08-09: the asymmetric box read as visibly bottom-heavy on
+            // hover. Box height (25.5 pt) is unchanged.
+            .padding(.vertical, 5)
             .padding(.horizontal, 8)
-            .padding(.bottom, 7)
             .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? DS.row : Color.clear))
             .contentShape(Rectangle())
             .onHover { hovering = $0 }

@@ -1080,22 +1080,19 @@ struct RainbowCapsuleButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                if busy {
-                    ProgressView().controlSize(.small)
-                }
-                Text(title).font(size.font)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .padding(.horizontal, size.hPad)
-            .padding(.vertical, size.vPad)
-            .background(Capsule().fill(DS.glass3))
-            .overlay { Capsule().strokeBorder(DS.lineStrong, lineWidth: 1) }
-            .rainbowBorder(isActive: hovering, recipe: recipe)
+            Text(title).font(size.font)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
+                .padding(.horizontal, size.hPad)
+                .padding(.vertical, size.vPad)
+                .background(Capsule().fill(DS.glass3))
+                .overlay { Capsule().strokeBorder(DS.lineStrong, lineWidth: 1) }
+                .rainbowBorder(isActive: hovering, recipe: recipe)
         }
         .buttonStyle(.plain)
         .disabled(busy)
+        .accessibilityLabel(title)
         .onHover { isHovering in
             self.hovering = isHovering
             if isHovering && !busy {

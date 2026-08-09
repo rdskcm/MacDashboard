@@ -317,20 +317,25 @@ private struct ItemPlate: View {
     }
 
     /// Verb (default) / spinner (busy) / checkmark (done) — the one slot that
-    /// changes meaning across states, shared between both plate forms.
-    @ViewBuilder
+    /// changes meaning across states, shared between both plate forms. The verb
+    /// is always the layout participant (`dsSwapInPlace`): mounting the spinner
+    /// or the ✓ in its stead used to shrink the plate by ~48 pt mid-action and
+    /// reflow every sibling capsule in the FlowLayout (V2-FIX-OPTICAL).
     private var trailingSlot: some View {
-        if busy {
-            ProgressView().controlSize(.mini)
-        } else if done {
-            Text("\u{2713}").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.greenInk)
-        } else {
-            // `.lineLimit(1)`: chipBody no longer wraps this slot in `.fixedSize()`
-            // (V2-FIX-NARROW-OVERLAP) — without it, a squeezed chip would wrap
-            // the verb onto a second line instead of letting `detailText` above
-            // absorb the shrink.
-            Text(item.verb).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.accentInk).lineLimit(1)
-        }
+        // `.lineLimit(1)`: chipBody no longer wraps this slot in `.fixedSize()`
+        // (V2-FIX-NARROW-OVERLAP) — without it, a squeezed chip would wrap the
+        // verb onto a second line instead of letting `detailText` above absorb
+        // the shrink.
+        Text(item.verb).font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(DS.accentInk)
+            .lineLimit(1)
+            .dsSwapInPlace(busy || done) {
+                if busy {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Text("\u{2713}").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.greenInk)
+                }
+            }
     }
 }
 

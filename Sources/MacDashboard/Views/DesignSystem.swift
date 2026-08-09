@@ -198,6 +198,34 @@ extension View {
     func dsBorderHover() -> some View { modifier(DSBorderHover()) }
 }
 
+// MARK: - In-place state swap
+
+/// Draws `replacement` in place of the receiver WITHOUT letting the container
+/// resize: the receiver stays the layout's size determinant (hidden, never
+/// removed) and the replacement is drawn centred on top of it.
+///
+/// Use wherever a spinner or a ✓ takes a label's place mid-action. Mounting
+/// them as `HStack` siblings instead measured a +22 pt width jump on
+/// `RainbowCapsuleButton` and a −48 pt swing on the attention chip
+/// (V2-FIX-OPTICAL, 2026-08-09) — enough to reflow the whole row around the
+/// control while a single action runs.
+struct DSSwapInPlace<Replacement: View>: ViewModifier {
+    let isActive: Bool
+    @ViewBuilder let replacement: () -> Replacement
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isActive ? 0 : 1)
+            .overlay { if isActive { replacement() } }
+    }
+}
+
+extension View {
+    func dsSwapInPlace<R: View>(_ isActive: Bool, @ViewBuilder replacement: @escaping () -> R) -> some View {
+        modifier(DSSwapInPlace(isActive: isActive, replacement: replacement))
+    }
+}
+
 // MARK: - Recessed track
 
 /// `dsRecessedTrack(in:)` — the shared smooth-recess background reused by
