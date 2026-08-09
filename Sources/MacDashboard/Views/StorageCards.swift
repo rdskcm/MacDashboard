@@ -32,49 +32,54 @@ private struct DirBarRow: View {
     let onTap: () -> Void
 
     @State private var hovering = false
-    // Row width, captured once via `onGeometryChange` instead of read live from
-    // a `GeometryReader` inside the ZStack — see ProcessRowView's rationale in
-    // Views/ProcessCards.swift (settled precedent, not relitigated here).
-    @State private var rowWidth: CGFloat = 0
+    // The gauge plate + bar live in a `.background` (see `body`), never as a
+    // sibling inside the row's own layout — see ProcessRowView's rationale in
+    // Views/ProcessCards.swift (settled precedent, not relitigated here): a
+    // `.background` can't feed its size back into the row, which is what
+    // breaks the one-way measurement ratchet that used to inflate the whole
+    // card on live-drag window resize. A `GeometryReader` must still never
+    // sit as a sibling in that background `ZStack`'s content.
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 9).fill(DS.row)
-            if maxBytes > 0 {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(DS.amber.opacity(0.18))
-                    .frame(width: max(0, rowWidth * CGFloat(min(Double(bytes) / Double(maxBytes), 1))))
-            }
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(.system(size: 13.5))
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 13.5))
+                .foregroundStyle(DS.inkSoft)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 8)
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                let parts = fmtBytesParts(bytes)
+                Text(parts.value)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
                     .foregroundStyle(DS.inkSoft)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 8)
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    let parts = fmtBytesParts(bytes)
-                    Text(parts.value)
+                if let unit = parts.unit {
+                    Text(unit)
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .monospacedDigit()
+                        .padding(.leading, 1.5)
                         .foregroundStyle(DS.inkSoft)
-                    if let unit = parts.unit {
-                        Text(unit)
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .padding(.leading, 1.5)
-                            .foregroundStyle(DS.inkSoft)
+                }
+            }
+            Text("›")
+                .font(.system(size: 12))
+                .foregroundStyle(DS.muted)
+        }
+        .padding(.horizontal, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 27)
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 9).fill(DS.row)
+                if maxBytes > 0 {
+                    GeometryReader { geo in
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill(DS.amber.opacity(0.18))
+                            .frame(width: max(0, geo.size.width * CGFloat(min(Double(bytes) / Double(maxBytes), 1))))
                     }
                 }
-                Text("›")
-                    .font(.system(size: 12))
-                    .foregroundStyle(DS.muted)
             }
-            .padding(.horizontal, 9)
         }
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-            rowWidth = newWidth
-        }
-        .frame(height: 27)
         .background(hovering ? DS.track : Color.clear)
         // V2-FIX-REDUCE-MOTION-GAPS: not the lone outlier — SettingsView.swift:81, LanguageDropdown.swift:85/320
         // and ProcessCards.swift:258 are also ungated hover fades, so this stays a literal rather than being

@@ -169,19 +169,16 @@ private struct ProcessRowView: View {
     let onTap: () -> Void
 
     @State private var hovering = false
-    // Row width, captured once via `onGeometryChange` (below) instead of read
-    // live from a `GeometryReader` sitting inside the animated gauge subtree.
-    // A `GeometryReader` inside a view that's simultaneously (a) reordering
-    // within its `ForEach` and (b) mid-way through the `.animation(value:)`
-    // width transition reports its size as part of that SAME transaction —
-    // for one committed frame it can hand the animated `RoundedRectangle` a
-    // stale/transitional size (and, since GeometryReader top-leading-aligns
-    // its content by default, a collapsed height reads as a thin mis-placed
-    // sliver instead of a properly clipped bar). Caching the width in
-    // `@State` and feeding the animated rectangle from that plain `CGFloat`
-    // removes GeometryReader from the animated subtree entirely, so its
-    // geometry read can no longer race the reorder.
-    @State private var rowWidth: CGFloat = 0
+    // The gauge plate + bar live in a `.background` (see `body`), never as a
+    // sibling inside the row's own layout — a `.background` sizes to its
+    // parent and can't feed anything back into it, which is what breaks the
+    // one-way measurement ratchet (row width -> bar width -> ZStack width ->
+    // row width, never shrinking) that used to inflate the whole card on
+    // live-drag window resize. A `GeometryReader` must still never sit as a
+    // sibling in that background `ZStack`'s content — top-leading-aligned by
+    // default, it can hand the animated `RoundedRectangle` a collapsed
+    // transitional size mid-`ForEach`-reorder, reading as a thin mis-placed
+    // sliver instead of a properly clipped bar.
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -227,53 +224,55 @@ private struct ProcessRowView: View {
     private var isExpandable: Bool { row.pid != nil }
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 9).fill(DS.row)
-            if maxValue > 0 {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(gaugeColor.opacity(gaugeOpacity))
-                    .frame(width: max(0, rowWidth * CGFloat(min(primaryValue / maxValue, 1))))
-                    .animation(reduceMotion ? nil : processRowMotion, value: primaryValue)
+        HStack(spacing: 6) {
+            if isExpandable {
+                DSDisclosureBars(expanded: expanded)
             }
-            HStack(spacing: 6) {
-                if isExpandable {
-                    DSDisclosureBars(expanded: expanded)
-                }
-                Text(row.name)
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(DS.inkSoft)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 8)
-                if let parts = primaryMemParts {
-                    HStack(alignment: .firstTextBaseline, spacing: 0) {
-                        Text(parts.value)
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .monospacedDigit()
-                            .foregroundStyle(DS.inkSoft)
-                        if let unit = parts.unit {
-                            Text(unit)
-                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                                .padding(.leading, 1.5)
-                                .foregroundStyle(DS.inkSoft)
-                        }
-                    }
-                } else {
-                    Text(primaryText)
+            Text(row.name)
+                .font(.system(size: 13.5))
+                .foregroundStyle(DS.inkSoft)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 8)
+            if let parts = primaryMemParts {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text(parts.value)
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
                         .foregroundStyle(DS.inkSoft)
+                    if let unit = parts.unit {
+                        Text(unit)
+                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .padding(.leading, 1.5)
+                            .foregroundStyle(DS.inkSoft)
+                    }
                 }
-                Text(secondaryText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(DS.muted)
+            } else {
+                Text(primaryText)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(DS.inkSoft)
             }
-            .padding(.horizontal, 9)
+            Text(secondaryText)
+                .font(.system(size: 11))
+                .foregroundStyle(DS.muted)
         }
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-            rowWidth = newWidth
-        }
+        .padding(.horizontal, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 27)
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 9).fill(DS.row)
+                if maxValue > 0 {
+                    GeometryReader { geo in
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill(gaugeColor.opacity(gaugeOpacity))
+                            .frame(width: max(0, geo.size.width * CGFloat(min(primaryValue / maxValue, 1))))
+                            .animation(reduceMotion ? nil : processRowMotion, value: primaryValue)
+                    }
+                }
+            }
+        }
         // Hover highlight only for expandable rows — DS.track token (prototype's
         // `style-hover="background:var(--track)"`), 0.14 s ease transition
         // (already Reduce-Motion-safe: color-only).
