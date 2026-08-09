@@ -197,6 +197,7 @@ struct LoudSectionCard<Extra: View>: View {
             extra()
         }
         .cardBackground()
+        .dsHoverLift()
     }
 
     private var titleRow: some View {

@@ -171,6 +171,7 @@ struct EnergyCard: View {
                 withAnimation(curve) { openAmount = target }
             }
             .cardBackground()
+            .dsHoverLift()
         } else {
             CardChrome(title: L.energyCardTitle) {
                 SectionStateView(done: model.report.progress["energy"] ?? false)

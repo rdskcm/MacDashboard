@@ -243,6 +243,7 @@ struct KPITileView<Satellite: View, Visual: View>: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .dsCardSurface()
+        .dsHoverLift()
     }
 
     private var header: some View {
@@ -406,6 +407,7 @@ struct CardChrome<Content: View, Trailing: View>: View {
             content()
         }
         .cardBackground()
+        .dsHoverLift()
     }
 }
 

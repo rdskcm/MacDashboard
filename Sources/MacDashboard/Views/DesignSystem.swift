@@ -150,18 +150,40 @@ struct DSHoverLift: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
 
+    private var lift: CGFloat { (hovering && !reduceMotion) ? -2 : 0 }
+
     func body(content: Content) -> some View {
-        content
-            .offset(y: (hovering && !reduceMotion) ? -2 : 0)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(hovering ? DS.lineStrong : .clear, lineWidth: 1)
-            )
-            .animation(
-                reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
-                value: hovering
-            )
-            .onHover { hovering = $0 }
+        // Hover/tap hit-testing is attached to this OUTER wrapper, not to a
+        // same-level sibling probe (both prior attempts — `.overlay` probe,
+        // then `.background` probe — failed in live testing: `.overlay` won
+        // front-to-back tap resolution over buttons in `content`; `.background`
+        // was itself occluded by `content`'s own opaque surface and never saw
+        // hover events at all). `.offset()` is a render-time transform applied
+        // after layout — it does not change what size/frame `content` reports
+        // to its parent — so this ZStack's own layout frame, and therefore its
+        // own `.contentShape`/`.onHover` hit region, stays pinned at the card's
+        // RESTING position even while the inner content visually shifts by
+        // `lift`. That keeps the hit area stable (no bottom-edge oscillation).
+        // `content` (with the real buttons) remains a distinct child node with
+        // its own hit-testing at its actual rendered position, so a plain
+        // `.onHover` + `.contentShape` on the parent — with no `.onTapGesture`
+        // attached here — never intercepts the child Buttons' own gesture
+        // recognizers; clicks still resolve normally on the controls.
+        ZStack {
+            content
+                .offset(y: lift)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(hovering ? DS.lineStrong : .clear, lineWidth: 1)
+                        .offset(y: lift)
+                )
+        }
+        .animation(
+            reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
+            value: hovering
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }
 
