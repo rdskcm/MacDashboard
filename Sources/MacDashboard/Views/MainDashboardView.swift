@@ -26,6 +26,16 @@ struct MainDashboardView: View {
     @State private var leftMeasured: CGFloat = 0
     @State private var rightMeasured: CGFloat = 0
 
+    // Процессы/Папки pair (V2-DRIFT-FIX): the pair is an `HStack` (the fix for
+    // the live-resize overlap, proven 2/2 in the hunt). Two follow-up attempts
+    // at an even 50/50 split under narrow widths (measuring the ScrollView, then
+    // measuring the true window via a root GeometryReader) each introduced a
+    // worse regression — see `specs/V2-DRIFT-FIX.md` HANDOFF and
+    // `specs/V2-DRIFT-FIX-B.md` — and were reverted. This file intentionally
+    // ships the plain `.frame(maxWidth: .infinity)` split: it does not guarantee
+    // an even 50/50 at narrow widths (tracked as anomaly B, NEEDS-HUMAN), but it
+    // does not reintroduce the card-over-card overlap either.
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
@@ -174,7 +184,7 @@ struct MainDashboardView: View {
                     Text(L.overviewKickerProcesses).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
                     Text(L.overviewKickerFolders).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
                 }
-                LazyVGrid(columns: Self.twoColumns, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
                     ProcessListCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                     FoldersCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                 }
