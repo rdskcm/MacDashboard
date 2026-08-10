@@ -147,7 +147,18 @@ struct ProcessListCard: View {
             // CPU|Память control. A fresh identity per metric drops the old
             // subtree instead of interpolating into the new one, so the
             // switch is instant while tick-to-tick re-sorts keep the curve.
-            .id(procMetric)
+            // The process-limit setting (V2-SETTINGS-PROCLIMIT) is folded into
+            // the same identity via `rows.count`, NOT `AppSettings.shared.processListLimit`
+            // directly — the setting changes the moment the segmented control moves, well
+            // before a resample (periodic tick or the Apply button) actually shortens
+            // `rows`; keying off the setting flipped identity too early (while `rows` was
+            // still the old length), so the ACTUAL shrink still landed inside the old
+            // identity and rode the 0.8 s `processRowMotion` reorder curve — visible as a
+            // sluggish "settle" after Apply instead of an instant cut. Keying off the
+            // count itself remounts exactly when the array actually changes length (e.g.
+            // 15 → 5 would otherwise animate ten rows out), while ordinary tick-to-tick
+            // re-sorts at a constant length still keep `processRowMotion` exactly as today.
+            .id("\(procMetric)-\(rows.count)")
         }
     }
 

@@ -10,6 +10,9 @@ final class AppSettings {
     static let fastIntervalKey = "fastIntervalSeconds"
     /// Allowed fast-loop polling intervals, seconds. 2 = historical default.
     static let allowedIntervals = [1, 2, 3, 5, 10]
+    static let processLimitKey = "processListLimit"
+    /// Rows shown in the process list. 12 = the pre-V2-SETTINGS-PROCLIMIT hardcoded value.
+    static let allowedProcessLimits = [5, 10, 15]
 
     // Compiled out of the default (public) build — see Package.swift/build_app.sh (AI_ENABLED).
     #if AI_ENABLED
@@ -23,6 +26,12 @@ final class AppSettings {
     /// next tick without restarting the task.
     var fastIntervalSeconds: Int {
         didSet { UserDefaults.standard.set(fastIntervalSeconds, forKey: Self.fastIntervalKey) }
+    }
+
+    /// Length of the CPU-/memory-sorted process tables. Read by LiveCollector on
+    /// every slow sample, so a change applies on the next tick without a restart.
+    var processListLimit: Int {
+        didSet { UserDefaults.standard.set(processListLimit, forKey: Self.processLimitKey) }
     }
 
     #if AI_ENABLED
@@ -46,6 +55,9 @@ final class AppSettings {
     private init() {
         let raw = UserDefaults.standard.integer(forKey: Self.fastIntervalKey) // 0 if unset
         fastIntervalSeconds = Self.allowedIntervals.contains(raw) ? raw : 2
+
+        let rawLimit = UserDefaults.standard.integer(forKey: Self.processLimitKey) // 0 if unset
+        processListLimit = Self.allowedProcessLimits.contains(rawLimit) ? rawLimit : 10
 
         #if AI_ENABLED
         let providerRaw = UserDefaults.standard.string(forKey: Self.aiProviderKey)

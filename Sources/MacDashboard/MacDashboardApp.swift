@@ -26,7 +26,7 @@ struct MacDashboardApp: App {
         .windowStyle(.hiddenTitleBar)
 
         Settings {
-            SettingsView()
+            SettingsView(model: model)
         }
     }
 }

@@ -36,12 +36,13 @@ final class LiveCollector {
     }
 
     // Slow sample: the single `top` subprocess plus the CPU- and memory-sorted
-    // process tables (prefix(12) + reranked()). Split out so it can run on a slower
-    // cadence than the native gauges.
+    // process tables (prefix(AppSettings.shared.processListLimit) + reranked()).
+    // Split out so it can run on a slower cadence than the native gauges.
     func sampleProcesses() -> (topCPU: [ProcEntry], topMem: [ProcEntry]) {
+        let limit = AppSettings.shared.processListLimit
         let procs = readTopProcesses()
-        let topCPU = Array(procs.sorted { ($0.cpu ?? 0) > ($1.cpu ?? 0) }.prefix(12)).reranked()
-        let topMem = Array(procs.sorted { ($0.memBytes ?? 0) > ($1.memBytes ?? 0) }.prefix(12)).reranked()
+        let topCPU = Array(procs.sorted { ($0.cpu ?? 0) > ($1.cpu ?? 0) }.prefix(limit)).reranked()
+        let topMem = Array(procs.sorted { ($0.memBytes ?? 0) > ($1.memBytes ?? 0) }.prefix(limit)).reranked()
         return (topCPU, topMem)
     }
 

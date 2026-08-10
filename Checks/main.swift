@@ -694,6 +694,25 @@ do {
     check(!snap2.topCPU.isEmpty, "smoke LiveCollector: topCPU non-empty (real top+leadingPID parse)")
     check(snap2.topCPU.first?.pid != nil, "smoke LiveCollector: live pid parsed through leadingPID path")
     check(!snap2.topMem.isEmpty, "smoke LiveCollector: topMem non-empty")
+    // readTopProcesses() may legitimately return fewer rows than the limit, so <=
+    // not ==.
+    check(snap2.topCPU.count <= AppSettings.shared.processListLimit,
+          "smoke LiveCollector: topCPU.count <= processListLimit")
+    check(snap2.topMem.count <= AppSettings.shared.processListLimit,
+          "smoke LiveCollector: topMem.count <= processListLimit")
+}
+
+do {
+    check(AppSettings.allowedProcessLimits == [5, 10, 15],
+          "AppSettings.allowedProcessLimits == [5, 10, 15]")
+    // Pure re-check of the resolution formula from AppSettings.init() — a fresh
+    // (unset, raw 0) default and an out-of-range stored value both fall back to 10.
+    let freshRaw = 0
+    let resolvedFresh = AppSettings.allowedProcessLimits.contains(freshRaw) ? freshRaw : 10
+    check(resolvedFresh == 10, "AppSettings: fresh default (unset) resolves to 10")
+    let outOfRangeRaw = 999
+    let resolvedOutOfRange = AppSettings.allowedProcessLimits.contains(outOfRangeRaw) ? outOfRangeRaw : 10
+    check(resolvedOutOfRange == 10, "AppSettings: out-of-range stored value resolves to 10")
 }
 
 do {

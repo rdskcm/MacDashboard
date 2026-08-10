@@ -27,6 +27,9 @@ protocol AppStrings {
     var settingsIntervalNoteFast: String { get }
     var settingsIntervalNoteBalanced: String { get }
     var settingsIntervalNoteEconomy: String { get }
+    var settingsProcessLimitLabel: String { get }
+    func settingsProcessLimitOption(_ count: Int) -> String
+    var settingsProcessLimitApply: String { get }
     var settingsMenuLanguageHint: String { get }
     var settingsRelaunchNow: String { get }
     var settingsSectionGeneral: String { get }

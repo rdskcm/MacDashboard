@@ -15,6 +15,9 @@ struct StringsEN: AppStrings {
     var settingsIntervalNoteFast: String { "1 s — the most responsive chart, noticeable background load." }
     var settingsIntervalNoteBalanced: String { "The working range: live charts with no noticeable load." }
     var settingsIntervalNoteEconomy: String { "Economy: values update less often, the battery lasts longer." }
+    var settingsProcessLimitLabel: String { "Processes listed" }
+    func settingsProcessLimitOption(_ count: Int) -> String { "\(count)" }
+    var settingsProcessLimitApply: String { "Apply" }
     var settingsMenuLanguageHint: String { "The menu bar and system dialogs follow the app language after a relaunch" }
     var settingsRelaunchNow: String { "Relaunch Now" }
     var settingsSectionGeneral: String { "General" }

@@ -47,6 +47,10 @@ final class DashboardModel {
     /// manual energy (pmset) refresh is in flight — mirrors `smartRefreshing`.
     var energyRefreshing = false
 
+    /// Re-entrancy guard for `refreshProcessesNow()`, true while a manual process-list
+    /// refresh is in flight — mirrors `smartRefreshing`.
+    var processesRefreshing = false
+
     /// Re-entrancy guard for `upgradeBrewNow()`, true while an in-app `brew upgrade`
     /// is in flight — mirrors `smartRefreshing`.
     var brewUpgrading = false
@@ -482,6 +486,33 @@ final class DashboardModel {
             await self.waitForReportRefreshToFinish()
             guard !Task.isCancelled else { return }
             if self.report.energy != settings { self.report.energy = settings }
+        }
+    }
+
+    /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up),
+    /// triggered by the «Применить» button next to the process-limit setting so a
+    /// limit change is visible immediately instead of waiting for the next ~6s slow
+    /// tick. One-shot, independent of the periodic slowTask sampler — a fresh
+    /// LiveCollector instance is created per call, never shared with a concurrent
+    /// sampler pass (see the fastBox/procBox/smartBox comment in start()).
+    func refreshProcessesNow() {
+        guard !processesRefreshing else { return }
+        processesRefreshing = true
+
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.processesRefreshing = false }
+
+            let collectorBox = UncheckedSendableBox(LiveCollector())
+            let procs = await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    continuation.resume(returning: collectorBox.value.sampleProcesses())
+                }
+            }
+            guard !Task.isCancelled else { return }
+
+            if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
+            if self.topMem != procs.topMem { self.topMem = procs.topMem }
         }
     }
 

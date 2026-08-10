@@ -245,10 +245,12 @@ private struct AISettingsForm: View {
 struct SettingsView: View {
     // Harness-only init param so offscreen renders can show any section without
     // clicks (same precedent as BatteryDetailView.startLifetimeExpanded).
-    init(startSection: SettingsSection = .general) {
+    init(model: DashboardModel, startSection: SettingsSection = .general) {
+        self.model = model
         _section = State(initialValue: startSection)
     }
 
+    var model: DashboardModel
     @State private var section: SettingsSection
     @Bindable private var store = L10nStore.shared
     @Bindable private var settings = AppSettings.shared
@@ -446,6 +448,36 @@ struct SettingsView: View {
                     reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
                     value: settings.fastIntervalSeconds
                 )
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                Rectangle().fill(DS.line).frame(height: 1)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(L.settingsProcessLimitLabel)
+                        .font(.system(size: 14))
+                        .lineSpacing(14 * 0.3)
+                        .foregroundStyle(DS.inkSoft)
+
+                    DSSlidingSegmented(
+                        options: AppSettings.allowedProcessLimits,
+                        selection: $settings.processListLimit,
+                        size: .settingsInterval
+                    ) { n in L.settingsProcessLimitOption(n) }
+                    .accessibilityLabel(L.settingsProcessLimitLabel)
+
+                    HStack {
+                        Spacer(minLength: 0)
+                        RainbowCapsuleButton(
+                            title: L.settingsProcessLimitApply,
+                            busy: model.processesRefreshing,
+                            size: .card
+                        ) {
+                            model.refreshProcessesNow()
+                        }
+                        .accessibilityLabel(L.settingsProcessLimitApply)
+                    }
+                }
+                .padding(.top, 11)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
