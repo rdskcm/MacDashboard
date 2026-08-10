@@ -43,6 +43,12 @@ struct AttentionSummaryCard: View {
     private var items: [AttentionItem] { model.assessment.items }
     private var capsules: [TipCapsule] { model.assessment.capsules }
 
+    /// V2-FIX-ATTENTION-COMPACT: with no item grid mounted the card holds only the
+    /// title row and (optionally) the recommendations row, and the prototype's
+    /// spacing reads as emptiness. Three paddings tighten in this state only; the
+    /// full state keeps the prototype geometry verbatim.
+    private var isSparse: Bool { items.count < 3 }
+
     /// Title-dot / plate tone from the v2 tone table — `summarySev` is already
     /// the worst item severity (`problems.first?.sev ?? .good`), so this is the
     /// single source of truth for the title dot; per-item tone below re-derives
@@ -50,7 +56,7 @@ struct AttentionSummaryCard: View {
     private var titleTone: Color { tone(for: model.assessment.summarySev) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: isSparse ? 8 : 11) {
             titleRow
             if items.count >= 3 {
                 itemGrid
@@ -70,7 +76,7 @@ struct AttentionSummaryCard: View {
         .padding(.top, 13)
         .padding(.leading, 16)
         .padding(.trailing, 16)
-        .padding(.bottom, 12)
+        .padding(.bottom, isSparse ? 10 : 12)
         .dsCardSurface()
         .dsBorderHover()
         .adviceActionDialogs(dispatch)
@@ -201,7 +207,12 @@ struct AttentionSummaryCard: View {
             capsuleFlow
         }
         .padding(.leading, 19)
-        .padding(.top, 11)
+        // isSparse: the outer VStack's own 8pt spacing already sits between the
+        // divider and this row, so this padding only needs to add 2pt more to
+        // match the card's 10pt bottom padding (8+2=10) — otherwise the two
+        // gaps stack to 16pt and the space above the capsule row reads larger
+        // than the space below it.
+        .padding(.top, isSparse ? 2 : 11)
     }
 
     @ViewBuilder
