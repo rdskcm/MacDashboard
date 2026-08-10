@@ -357,7 +357,12 @@ struct EnergyCard: View {
                     HStack(spacing: 4) {
                         Text(k.label).font(.system(size: 13)).foregroundStyle(DS.inkSoft)
                         EnergyInfoButton(isOn: infoKey == k.key) {
-                            infoKey = (infoKey == k.key) ? nil : k.key
+                            let curve: Animation = reduceMotion
+                                ? .easeInOut(duration: DSMotion.reduceMotionFallback)
+                                : DSMotion.expand
+                            withAnimation(curve) {
+                                infoKey = (infoKey == k.key) ? nil : k.key
+                            }
                         }
                     }
                     controlView(bucket: .battery, key: k.key, energy: energy)
@@ -375,7 +380,6 @@ struct EnergyCard: View {
                             .padding(.horizontal, 10)
                             .background(RoundedRectangle(cornerRadius: 8).fill(DS.row))
                             .gridCellColumns(3)
-                            .transition(.dsDisclosure(reduceMotion: reduceMotion))
                     }
                 }
             }
@@ -389,10 +393,6 @@ struct EnergyCard: View {
                 }
             }
         }
-        .animation(
-            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-            value: infoKey
-        )
     }
 
     // MARK: - Per-cell controls
