@@ -275,22 +275,24 @@ struct MainDashboardView: View {
         GridItem(.flexible(), spacing: 12, alignment: .top),
     ]
 
-    // Five equal columns (the CSS `minmax(0,1fr)` fix): `GridItem(.flexible())`
-    // divides the row width equally regardless of content, unlike `.adaptive`
-    // which sizes columns to their content. `.flexible()` still has a 10pt
-    // default minimum, so equal width depends on every tile's content being
-    // shrinkable — see KPITileView's nowrap+ellipsis label and ellipsizable
-    // "из N" slot. Column count is now dynamic based on tile visibility.
+    // Fixed 3-5 tile single row, non-lazy (V2-FIX-BARFLY): a `LazyVGrid` here
+    // bought nothing — it's never actually lazy at this size — and caused the
+    // tiles to remount on ordinary scrolling, replaying MeterBar's first-layout
+    // pass and making the Memory/Swap bar visibly "fly in". `.frame(maxWidth:
+    // .infinity)` per tile inside the `HStack` splits the row equally rather
+    // than sizing to content, same reasoning `MemoryFolderRow`'s two-column
+    // swap used (see `twoColumns` above) — equal width still depends on every
+    // tile's content being shrinkable: KPITileView's nowrap+ellipsis label and
+    // ellipsizable "из N" slot.
     private var kpiRow: some View {
         let showSwap = SwapTile.isVisible(model)
         let showBattery = BatteryTile.isVisible(model)
-        let count = 3 + (showSwap ? 1 : 0) + (showBattery ? 1 : 0)
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: count), spacing: 12) {
-            CPUTile(model: model)
-            MemoryTile(model: model)
-            if showSwap { SwapTile(model: model) }
-            DiskTile(model: model)
-            if showBattery { BatteryTile(model: model) }
+        return HStack(alignment: .top, spacing: 12) {
+            CPUTile(model: model).frame(maxWidth: .infinity)
+            MemoryTile(model: model).frame(maxWidth: .infinity)
+            if showSwap { SwapTile(model: model).frame(maxWidth: .infinity) }
+            DiskTile(model: model).frame(maxWidth: .infinity)
+            if showBattery { BatteryTile(model: model).frame(maxWidth: .infinity) }
         }
     }
 }

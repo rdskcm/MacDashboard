@@ -78,15 +78,23 @@ struct MeterBar: View {
     /// no-animation behavior.
     var animated: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var trackWidth: CGFloat = 0
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                dsRecessedTrack(in: Capsule())
-                Capsule().fill(color)
-                    .frame(width: max(2, geo.size.width * CGFloat(min(max(fraction, 0), 1))))
-                    .animation((animated && !reduceMotion) ? .timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8) : nil, value: fraction)
-            }
+        let f = CGFloat(min(max(fraction, 0), 1))
+        ZStack(alignment: .leading) {
+            dsRecessedTrack(in: Capsule())
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
+                    trackWidth = newWidth
+                }
+            Capsule().fill(color)
+                // Width comes from @State, never from a GeometryReader inside this
+                // animated subtree (V2-FIX-BARFLY): the 0 -> real-width settling of
+                // a fresh mount must NOT be swept into the fraction animation, or
+                // the bar "flies in" every time LazyVGrid remounts the tile on
+                // scroll. Same isolation as MemoryCard / BatteryDetailPopover.
+                .frame(width: trackWidth > 0 ? max(2, trackWidth * f) : 0)
+                .animation((animated && !reduceMotion) ? .timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8) : nil, value: f)
         }
         .frame(height: 6)
     }
