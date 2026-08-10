@@ -23,6 +23,7 @@ struct MacDashboardApp: App {
                 }
         }
         .defaultSize(width: 1150, height: 780)
+        .windowStyle(.hiddenTitleBar)
 
         Settings {
             SettingsView()

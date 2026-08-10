@@ -54,7 +54,11 @@ struct SeverityChip: View {
                 .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 11)
-        .padding(.vertical, 6)
+        // Prototype gives this chip 6pt vertical pad; this app uses 8.5 on
+        // purpose to match the header refresh button's (DSCapsuleSize.primary)
+        // height — user decision 2026-08-10 (V2-FIX-HEADER-CHROME). Do not
+        // "fix" this back to 6 in a future optical audit.
+        .padding(.vertical, 8.5)
         .background(Capsule().fill(tone.opacity(0.14)))
         .overlay(Capsule().strokeBorder(tone.opacity(0.32), lineWidth: 1))
         .animation(colorTransition, value: tone)

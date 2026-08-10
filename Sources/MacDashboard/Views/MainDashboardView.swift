@@ -30,15 +30,41 @@ struct MainDashboardView: View {
     // does not reintroduce the card-over-card overlap either.
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
+        ZStack {
+            DS.ground
+            orbLayer
+            VStack(spacing: 0) {
+                toolbar
 
-            switch tab {
-            case .overview: overview
-            case .report: ReportTab(model: model)
+                switch tab {
+                case .overview: overview
+                case .report: ReportTab(model: model)
+                }
+            }
+            .onChange(of: L10nStore.shared.language) { model.refreshReport() }
+        }
+        .ignoresSafeArea()
+    }
+
+    /// CSS `radial-gradient(70% 55% at 88% -8%, orb-a, transparent 62%)` → an
+    /// ellipse whose box is 140% × 110% of the window, centred at (0.88, −0.08),
+    /// fading to clear at 62% of its radius. Second orb: 120% × 100% at (0.02, 1.04),
+    /// clear at 58%. Static layer, never animated, never hit-tested.
+    private var orbLayer: some View {
+        GeometryReader { geo in
+            ZStack {
+                EllipticalGradient(gradient: Gradient(colors: [DS.orbA, .clear]),
+                                   center: .center, startRadiusFraction: 0, endRadiusFraction: 0.62)
+                    .frame(width: geo.size.width * 1.40, height: geo.size.height * 1.10)
+                    .position(x: geo.size.width * 0.88, y: geo.size.height * -0.08)
+                EllipticalGradient(gradient: Gradient(colors: [DS.orbB, .clear]),
+                                   center: .center, startRadiusFraction: 0, endRadiusFraction: 0.58)
+                    .frame(width: geo.size.width * 1.20, height: geo.size.height * 1.00)
+                    .position(x: geo.size.width * 0.02, y: geo.size.height * 1.04)
             }
         }
-        .onChange(of: L10nStore.shared.language) { model.refreshReport() }
+        .opacity(0.35)
+        .allowsHitTesting(false)
     }
 
     // MARK: Toolbar (single row: title block · leading-anchored tab control · flexible gap · chips/status/refresh)
@@ -62,7 +88,8 @@ struct MainDashboardView: View {
             // ViewThatFits tiers and must be the first child to lose space.
             HeaderChipsView(model: model)
         }
-        .padding(.horizontal, 18)
+        .padding(.leading, 78)
+        .padding(.trailing, 18)
         .padding(.vertical, 14)
         .background(toolbarChrome)
     }
@@ -76,6 +103,11 @@ struct MainDashboardView: View {
         ZStack {
             Rectangle().fill(.regularMaterial)
             Rectangle().fill(DS.glass2)
+            // Slightly darkens the header only (user request 2026-08-10) — a local
+            // tint on top of the shared `DS.glass2` fill rather than changing that
+            // token, since it's also shared with Settings' toolbar and the language
+            // dropdown's hover fill.
+            Rectangle().fill(Color(light: Color.black.opacity(0.035), dark: Color.black.opacity(0.12)))
         }
         .overlay(
             Rectangle()
@@ -190,7 +222,6 @@ struct MainDashboardView: View {
             }
             .padding(20)
         }
-        .background(DS.ground)
     }
 
     // MARK: System band (Security/Autostart/Energy/Maintenance | SMART/Time Machine)

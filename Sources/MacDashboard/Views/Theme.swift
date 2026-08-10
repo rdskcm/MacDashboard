@@ -113,4 +113,11 @@ enum DS {
     static let glass2 = Color(light: Color.white.opacity(0.80), dark: Color.white.opacity(0.075))
     /// 1 pt inset top highlight on cards/buttons.
     static let sheenLine = Color(light: Color.white.opacity(0.85), dark: Color.white.opacity(0.10))
+
+    /// Background orbs (Overview Screen.dc.html:35) — the prototype's shell layer,
+    /// missing from the app until V2-FIX-HEADER-CHROME. Layer opacity is 0.35.
+    static let orbA = Color(light: Color(red: 47/255, green: 127/255, blue: 224/255).opacity(0.18),
+                            dark:  Color(red: 91/255, green: 155/255, blue: 240/255).opacity(0.20))
+    static let orbB = Color(light: Color(red: 15/255, green: 154/255, blue: 112/255).opacity(0.12),
+                            dark:  Color(red: 43/255, green: 189/255, blue: 143/255).opacity(0.14))
 }
