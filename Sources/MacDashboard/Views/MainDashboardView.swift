@@ -19,13 +19,6 @@ struct MainDashboardView: View {
     private enum Tab { case overview, report }
     @State private var tab: Tab = .overview
 
-    // System band column-height balance: `bal > 0` means the left column is
-    // taller (pad the right column inside SmartDisksCard), `bal < 0` means the
-    // right column is taller (pad the left column just above the quiet strip).
-    @State private var bal: CGFloat = 0
-    @State private var leftMeasured: CGFloat = 0
-    @State private var rightMeasured: CGFloat = 0
-
     // Процессы/Папки pair (V2-DRIFT-FIX): the pair is an `HStack` (the fix for
     // the live-resize overlap, proven 2/2 in the hunt). Two follow-up attempts
     // at an even 50/50 split under narrow widths (measuring the ScrollView, then
@@ -205,12 +198,15 @@ struct MainDashboardView: View {
     /// Security and Updates/Crashes move out of their fixed left-column slots
     /// once quiet (nothing to report) and collapse into `QuietStrip` rows
     /// instead — a loud card only occupies column space while it has something
-    /// to say. The two columns can therefore end up different heights, which
-    /// `bal` corrects by padding whichever column is shorter.
+    /// to say. The two columns intentionally do NOT match heights: each
+    /// `VStack` sizes to its own content only (no `maxHeight: .infinity`), so
+    /// expanding/collapsing a card in one column never resizes the other
+    /// (V2-FIX-COLUMN-COUPLING — an earlier version of this fix stretched the
+    /// shorter column to match, which re-introduced visible coupling: growing
+    /// Energy on the left visibly stretched the SMART card on the right).
     private var systemBand: some View {
         let q = QuietState.quiet(report: model.report)
         let sections = quietSections(q)
-        let stripPresent = !sections.isEmpty
 
         return LazyVGrid(columns: Self.twoColumns, spacing: 12) {
             VStack(alignment: .leading, spacing: 12) {
@@ -219,26 +215,16 @@ struct MainDashboardView: View {
                 MaintenanceCard(model: model)
                 if q.security != .quiet { SecurityCard(model: model, state: q) }
                 if q.updates != .quiet { UpdatesCrashesCard(model: model, state: q) }
-                if bal < 0 { Color.clear.frame(height: -bal) }
-                QuietStrip(sections: sections)
+                if !sections.isEmpty { QuietStrip(sections: sections) }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
-                leftMeasured = newHeight
-                recomputeBalance(stripPresent: stripPresent)
-            }
+            .frame(maxWidth: .infinity, alignment: .top)
 
             VStack(alignment: .leading, spacing: 12) {
-                SmartDisksCard(model: model, balanceSpacer: max(0, bal))
+                SmartDisksCard(model: model)
                 TimeMachineCard(model: model)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
-                rightMeasured = newHeight
-                recomputeBalance(stripPresent: stripPresent)
-            }
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .onChange(of: stripPresent) { recomputeBalance(stripPresent: stripPresent) }
     }
 
     private func quietSections(_ q: QuietState) -> [QuietSection] {
@@ -252,18 +238,6 @@ struct MainDashboardView: View {
                                           rows: updatesRows(updates: model.report.updates ?? [], crashes: model.report.crashes ?? [])))
         }
         return sections
-    }
-
-    /// Subtracts our own spacer injection from each side's measured height
-    /// before comparing, so the two-way feedback loop (bal → spacer → height →
-    /// bal) converges in a single pass instead of needing repeated iterations.
-    private func recomputeBalance(stripPresent: Bool) {
-        guard stripPresent else { if bal != 0 { bal = 0 }; return }
-        let naturalLeft = leftMeasured - max(0, -bal)
-        let naturalRight = rightMeasured - max(0, bal)
-        let raw = naturalLeft - naturalRight
-        let next: CGFloat = abs(raw) > 44 ? 0 : (raw * 2).rounded() / 2
-        if abs(next - bal) >= 0.5 { bal = next }
     }
 
     /// Two truly equal columns. `.frame(maxWidth:.infinity)` inside an HStack only

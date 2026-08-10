@@ -302,7 +302,6 @@ private struct SmartDiskCapsule: View {
 @MainActor
 struct SmartDisksCard: View {
     let model: DashboardModel
-    var balanceSpacer: CGFloat = 0
 
     /// Click-to-select capsule state; the attribute table below follows this.
     /// Defaults (when nil) to the first disk in report order — internal disks
@@ -379,8 +378,6 @@ struct SmartDisksCard: View {
                                 }
                             }
                         }
-
-                        if balanceSpacer > 0 { Color.clear.frame(height: balanceSpacer) }
 
                         if let sel = selectedDisk {
                             // Problem/error text only on an actual SMART failure (not on
