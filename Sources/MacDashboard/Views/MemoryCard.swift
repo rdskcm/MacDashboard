@@ -18,12 +18,6 @@ private var memoryNotes: [String: String] {
     ]
 }
 
-/// Segment keys whose bar width animates on change (FIX 2): the three "live"
-/// buckets that actually move sample-to-sample. "inactive"/"speculative" are
-/// fixed placeholder fractions and "free" just fills the remainder — none of
-/// those three animate, they snap like before.
-private let memoryAnimatedSegmentKeys: Set<String> = ["active", "wired", "other"]
-
 /// Same curve/duration as `MeterBar`'s `animated` mode (SharedUI.swift) and
 /// `ProcessCards.swift`'s `processRowMotion` — the app-wide bar/gauge-width
 /// timing. Defined locally since neither of those constants is shared/public.
@@ -87,6 +81,7 @@ struct MemoryCard: View {
 private struct MemoryStackChart: View {
     let model: DashboardModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hoveredKey: String?
 
     var body: some View {
         if let mem = model.mem {
@@ -94,15 +89,25 @@ private struct MemoryStackChart: View {
             let total = max(mem.total, 1)
             VStack(alignment: .leading, spacing: 12) {
                 GeometryReader { geo in
+                    let gaps = 2 * CGFloat(max(0, segments.count - 1))
+                    let avail = max(0, geo.size.width - gaps)
                     HStack(spacing: 2) {
                         ForEach(segments, id: \.key) { seg in
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(seg.color)
-                                .frame(width: max(3, geo.size.width * CGFloat(Double(seg.bytes) / Double(total))))
-                                .animation((memoryAnimatedSegmentKeys.contains(seg.key) && !reduceMotion) ? memorySegmentMotion : nil,
-                                           value: seg.bytes)
+                                .frame(width: max(3, avail * CGFloat(Double(seg.bytes) / Double(total))))
+                                .opacity(hoveredKey == nil || hoveredKey == seg.key ? 1 : 0.45)
+                                .onHover { inside in
+                                    if inside { hoveredKey = seg.key }
+                                    else if hoveredKey == seg.key { hoveredKey = nil }
+                                }
                         }
                     }
+                    // V2-FIX-MEM: the prototype (design_handoff_macdashboard/
+                    // Overview Screen.dc.html:262-267) only CSS-transitions the
+                    // first three segments; this app deliberately animates all
+                    // six as one bar so the shared boundaries never desync.
+                    .animation(reduceMotion ? nil : memorySegmentMotion, value: segments.map(\.bytes))
                 }
                 .frame(height: 24)
 
@@ -112,8 +117,13 @@ private struct MemoryStackChart: View {
                 MemoryLegendFlowLayout(columnSpacing: 22, rowSpacing: 8) {
                     ForEach(segments, id: \.key) { seg in
                         let parts = fmtBytesParts(seg.bytes)
-                        LegendItem(color: seg.legendColor, label: seg.label, value: parts.value, unit: parts.unit)
+                        let emphasis: LegendEmphasis = hoveredKey == nil ? .neutral : (hoveredKey == seg.key ? .active : .dimmed)
+                        LegendItem(color: seg.legendColor, label: seg.label, value: parts.value, unit: parts.unit, emphasis: emphasis)
                             .hoverTip(memoryNotes[seg.label] ?? "")
+                            .onHover { inside in
+                                if inside { hoveredKey = seg.key }
+                                else if hoveredKey == seg.key { hoveredKey = nil }
+                            }
                     }
                 }
 
@@ -121,6 +131,7 @@ private struct MemoryStackChart: View {
                     .font(.system(size: 11.5))
                     .foregroundStyle(DS.muted)
             }
+            .animation(.easeOut(duration: 0.12), value: hoveredKey)
         }
     }
 

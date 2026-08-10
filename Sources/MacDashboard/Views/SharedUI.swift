@@ -843,6 +843,12 @@ struct FlowLayout: Layout {
 
 // MARK: - Legend item (memory stack, etc.)
 
+/// Reciprocal hover emphasis between a legend row and its matching bar
+/// segment (V2-FIX-MEM). `.neutral` is today's appearance verbatim.
+enum LegendEmphasis {
+    case neutral, active, dimmed
+}
+
 struct LegendItem: View {
     let color: Color
     let label: String
@@ -852,12 +858,16 @@ struct LegendItem: View {
     /// `unit` is a full glyph advance; splitting into two `Text`s lets a tight
     /// `.padding(.leading, 1.5)` close the gap instead.
     var unit: String? = nil
+    /// V2-FIX-MEM: when another legend row / bar segment is hovered, the
+    /// uninvolved rows dim and keep the muted label; the involved row goes to
+    /// full opacity with `DS.ink`. Default `.neutral` = today's appearance.
+    var emphasis: LegendEmphasis = .neutral
     var body: some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
             Text(label)
                 .font(.system(size: 12))
-                .foregroundStyle(DS.muted)
+                .foregroundStyle(emphasis == .active ? DS.ink : DS.muted)
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(value)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
@@ -871,6 +881,7 @@ struct LegendItem: View {
             }
         }
         .contentShape(Rectangle())
+        .opacity(emphasis == .dimmed ? 0.45 : 1)
     }
 }
 
