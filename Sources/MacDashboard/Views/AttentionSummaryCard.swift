@@ -154,7 +154,8 @@ struct AttentionSummaryCard: View {
             // Reuses ReportTab's own formatter verbatim (same-day -> time only,
             // older -> abbreviated date + time) rather than re-deriving HH:mm.
             Text(reportUpdatedTimeString(updated))
-                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .font(.system(size: 11.5, weight: .medium))
+                .monospacedDigit()
                 .foregroundStyle(DS.muted)
                 .lineLimit(1)
                 .truncationMode(.tail)

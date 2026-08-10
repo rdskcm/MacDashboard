@@ -16,17 +16,22 @@ private struct TMRow: View {
     /// `DS.hot` for the "диск не подключён"/no-date state (OS:646); `DS.inkSoft`
     /// otherwise.
     var valueColor: Color = DS.inkSoft
-    /// Numeric values (quota) get `.monospacedDigit()` on top of the shared
-    /// mono font family so digit columns actually line up; text values (name,
-    /// type, snapshot summary) keep the mono family but don't need it.
+    /// V2-FIX-MONO-FONT: this row renders in the system face, not mono — mono
+    /// is reserved for verbatim machine output and the few prototype-specified
+    /// sites elsewhere in the app. Numeric/quota values get `.monospacedDigit()`
+    /// so digit columns line up and don't jitter as they tick; prose values
+    /// (name, type, snapshot summary) get the plain system face.
     var tabularNumerals: Bool = false
     /// V2-FIX-UNITS follow-up: pre-split value/unit for the byte-quota call
-    /// site — this monospaced row renders a literal space as a full glyph
-    /// advance, so the quota row passes `fmtBytesParts` here instead of a
-    /// plain `value:` string, and gets a tight `.padding(.leading, 1.5)` gap.
+    /// site — this row renders a literal space as a full glyph advance, so
+    /// the quota row passes `fmtBytesParts` here instead of a plain `value:`
+    /// string, and gets a tight `.padding(.leading, 1.5)` gap.
     /// (Second pass: this row's 13.5pt font makes a flat 3pt gap read
     /// proportionally wide — ~22% of the em vs. ~11% at the 27pt tile the
-    /// value was copied from — so it's now 1.5pt here.)
+    /// value was copied from — so it's now 1.5pt here. V2-FIX-MONO-FONT:
+    /// this padding was originally sized for a mono glyph and is deliberately
+    /// held as-is rather than re-tuned now that the row is system-face —
+    /// re-tuning a gap is a size change and out of this block's scope.)
     /// Every other TMRow call site keeps using `value:` unchanged.
     var valueParts: (String, String)? = nil
 
@@ -43,7 +48,7 @@ private struct TMRow: View {
                         .monospacedDigit()
                         .padding(.leading, 1.5)
                 }
-                .font(.system(size: 13.5, design: .monospaced))
+                .font(.system(size: 13.5))
                 .foregroundStyle(valueColor)
                 .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -54,7 +59,7 @@ private struct TMRow: View {
                         Text(value)
                     }
                 }
-                .font(.system(size: 13.5, design: .monospaced))
+                .font(.system(size: 13.5))
                 .foregroundStyle(valueColor)
                 .fixedSize(horizontal: false, vertical: true)
             }

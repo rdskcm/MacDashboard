@@ -398,8 +398,7 @@ struct SettingsView: View {
                 .foregroundStyle(DS.inkSoft)
             Spacer(minLength: 0)
             Text(appVersionString)
-                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
-                .monospacedDigit()
+                .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(DS.muted)
         }
         .frame(minHeight: 30)

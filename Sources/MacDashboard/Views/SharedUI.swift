@@ -180,7 +180,7 @@ struct KPITempBadge: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
             Text("\(celsius)")
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .font(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
             Text("°C")
                 .font(.system(size: 9.5))
@@ -281,7 +281,7 @@ struct KPITileView<Satellite: View, Visual: View>: View {
     private var valueRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(value)
-                .font(.system(size: 27, weight: .semibold, design: .monospaced))
+                .font(.system(size: 27, weight: .semibold))
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -295,7 +295,7 @@ struct KPITileView<Satellite: View, Visual: View>: View {
                         .fixedSize(horizontal: true, vertical: false)
                 case .prominent:
                     Text(unit)
-                        .font(.system(size: 27, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 27, weight: .semibold))
                         .padding(.leading, 3)
                         .fixedSize(horizontal: true, vertical: false)
                 }
@@ -862,9 +862,12 @@ struct LegendItem: View {
     let label: String
     let value: String
     /// V2-FIX-UNITS follow-up: optional pre-split unit, mirroring `KPITileView`/
-    /// `TMRow` — this row is monospaced, so a literal space between `value` and
-    /// `unit` is a full glyph advance; splitting into two `Text`s lets a tight
-    /// `.padding(.leading, 1.5)` close the gap instead.
+    /// `TMRow` — a literal space between `value` and `unit` in one `Text` reads
+    /// as a wider gap than intended, so splitting into two `Text`s lets a tight
+    /// `.padding(.leading, 1.5)` close the gap instead. (V2-FIX-MONO-FONT: this
+    /// row is system-face, not mono, so `.padding(.leading, 1.5)` was originally
+    /// sized for a mono glyph and is deliberately held as-is — re-tuning a gap
+    /// is a size change and out of that block's scope.)
     var unit: String? = nil
     /// V2-FIX-MEM: when another legend row / bar segment is hovered, the
     /// uninvolved rows dim and keep the muted label; the involved row goes to
@@ -878,11 +881,11 @@ struct LegendItem: View {
                 .foregroundStyle(emphasis == .active ? DS.ink : DS.muted)
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(value)
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 12, weight: .semibold))
                     .monospacedDigit()
                 if let unit {
                     Text(unit)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 12, weight: .semibold))
                         .monospacedDigit()
                         .padding(.leading, 1.5)
                 }

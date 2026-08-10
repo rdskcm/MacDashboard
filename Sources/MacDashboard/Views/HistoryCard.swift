@@ -274,7 +274,8 @@ private struct HistoryTrendChart: View {
                 .foregroundStyle(DS.muted)
             Spacer()
             Text("\(points.first?.id ?? "") → \(points.last?.id ?? "")")
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 11))
+                .monospacedDigit()
                 .foregroundStyle(DS.muted)
         }
     }
@@ -379,12 +380,12 @@ private struct HistoryTrendChart: View {
                     Text(unit)
                         .padding(.leading, 1.5)
                 }
-                .font(.system(size: 12.5, weight: .regular, design: .monospaced))
+                .font(.system(size: 12.5, weight: .regular))
                 .monospacedDigit()
                 .foregroundStyle(DS.ink)
             } else {
                 Text(parts.value)
-                    .font(.system(size: 12.5, weight: .regular, design: .monospaced))
+                    .font(.system(size: 12.5, weight: .regular))
                     .monospacedDigit()
                     .foregroundStyle(DS.ink)
             }
