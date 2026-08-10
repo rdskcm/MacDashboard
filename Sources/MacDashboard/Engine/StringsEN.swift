@@ -70,10 +70,14 @@ struct StringsEN: AppStrings {
 
     // MARK: Security card
     var securityTitle: String { "Security" }
-    var securityFileVault: String { "FileVault (disk encryption)" }
-    var securitySip: String { "SIP (system integrity protection)" }
+    var securityFileVault: String { "FileVault" }
+    var securitySip: String { "SIP" }
     var securityFirewall: String { "Firewall" }
     var securityGatekeeper: String { "Gatekeeper" }
+    var securityFileVaultTip: String { "Full-disk encryption — without your password the data on the drive cannot be read." }
+    var securitySipTip: String { "System Integrity Protection — even an administrator cannot modify system files." }
+    var securityFirewallTip: String { "Blocks unsolicited incoming network connections." }
+    var securityGatekeeperTip: String { "Checks that the apps you launch are signed and notarized by Apple." }
 
     // MARK: Report tab
     var reportPlaceholder: String { "Report not generated yet. Click “Refresh report”." }
@@ -165,9 +169,11 @@ struct StringsEN: AppStrings {
     var maintenanceBrewAllFresh: String { "All packages up to date \u{2713}" }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Outdated packages: \(n)" }
     var maintenanceUpdatesSection: String { "macOS updates" }
-    var maintenanceUpdatesAllUpdated: String { "Everything up to date \u{2713}" }
+    var maintenanceUpdatesAllUpdated: String { "\u{2713}" }
     var maintenanceCrashesSection: String { "Recent crashes" }
-    var maintenanceCrashesNone: String { "No recent crashes \u{2713}" }
+    var maintenanceCrashesNone: String { "\u{2713}" }
+    var maintenanceUpdatesTip: String { "Pending macOS and App Store updates." }
+    var maintenanceCrashesTip: String { "Crash reports macOS has recorded recently." }
     func maintenanceAndMore(_ n: Int) -> String { "and \(n) more" }
     var maintenanceBrewUpgradeButton: String { "Upgrade packages" }
     var maintenanceBrewUpgrading: String { "Upgrading packages… (may take a few minutes)" }

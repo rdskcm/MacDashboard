@@ -45,6 +45,21 @@ func updatesRows(updates: [String], crashes: [String]) -> [SystemSectionRow] {
     ]
 }
 
+/// V2-FIX-SECURITY-ROWS: the explanation that used to live in the row label as a
+/// parenthetical now lives in the row's hover tooltip. Unknown id → "" → .hoverTip
+/// is a no-op (HoverTip.swift:417 guards on text.isEmpty).
+func sectionRowTip(_ id: String) -> String {
+    switch id {
+    case "fileVault": return L.securityFileVaultTip
+    case "sip": return L.securitySipTip
+    case "firewall": return L.securityFirewallTip
+    case "gatekeeper": return L.securityGatekeeperTip
+    case "updates": return L.maintenanceUpdatesTip
+    case "crashes": return L.maintenanceCrashesTip
+    default: return ""
+    }
+}
+
 // MARK: - QuietStrip
 
 struct QuietSection: Identifiable {
@@ -149,10 +164,12 @@ private struct QuietStripRow: View {
                       alignment: .leading, spacing: 5) {
                 ForEach(section.rows) { row in
                     HStack(spacing: 10) {
-                        Text(row.name).font(.system(size: 13)).foregroundStyle(DS.muted)
+                        Text(row.name).font(.system(size: 13)).foregroundStyle(DS.muted).lineLimit(1)
                         Spacer(minLength: 10)
                         Text(row.mark).font(.system(size: 13, weight: .bold)).foregroundStyle(DS.greenInk)
                     }
+                    .contentShape(Rectangle())
+                    .hoverTip(sectionRowTip(row.id))
                 }
             }
             .padding(EdgeInsets(top: 4, leading: 33, bottom: 10, trailing: 12))
@@ -214,12 +231,14 @@ struct LoudSectionCard<Extra: View>: View {
                   alignment: .leading, spacing: 6) {
             ForEach(rows) { row in
                 HStack(spacing: 10) {
-                    Text(row.name).font(.system(size: 13)).foregroundStyle(DS.inkSoft)
+                    Text(row.name).font(.system(size: 13)).foregroundStyle(DS.inkSoft).lineLimit(1)
                     Spacer(minLength: 10)
                     Text(row.mark)
                         .font(.system(size: 13, weight: row.ok ? .regular : .semibold))
                         .foregroundStyle(row.ok ? DS.greenInk : failTone)
                 }
+                .contentShape(Rectangle())
+                .hoverTip(sectionRowTip(row.id))
             }
         }
     }

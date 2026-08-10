@@ -88,6 +88,10 @@ protocol AppStrings {
     var securitySip: String { get }
     var securityFirewall: String { get }
     var securityGatekeeper: String { get }
+    var securityFileVaultTip: String { get }
+    var securitySipTip: String { get }
+    var securityFirewallTip: String { get }
+    var securityGatekeeperTip: String { get }
 
     // MARK: Report tab
     var reportPlaceholder: String { get }
@@ -183,6 +187,8 @@ protocol AppStrings {
     var maintenanceUpdatesAllUpdated: String { get }
     var maintenanceCrashesSection: String { get }
     var maintenanceCrashesNone: String { get }
+    var maintenanceUpdatesTip: String { get }
+    var maintenanceCrashesTip: String { get }
     func maintenanceAndMore(_ n: Int) -> String
     var maintenanceBrewUpgradeButton: String { get }
     var maintenanceBrewUpgrading: String { get }

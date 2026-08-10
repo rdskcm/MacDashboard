@@ -70,10 +70,14 @@ struct StringsRU: AppStrings {
 
     // MARK: Security card
     var securityTitle: String { "Безопасность" }
-    var securityFileVault: String { "FileVault (шифрование диска)" }
-    var securitySip: String { "SIP (защита системы)" }
+    var securityFileVault: String { "FileVault" }
+    var securitySip: String { "SIP" }
     var securityFirewall: String { "Файрвол" }
     var securityGatekeeper: String { "Gatekeeper" }
+    var securityFileVaultTip: String { "Шифрование диска — без вашего пароля данные на диске прочитать нельзя." }
+    var securitySipTip: String { "Защита целостности системы — даже администратор не может менять системные файлы." }
+    var securityFirewallTip: String { "Блокирует незапрошенные входящие сетевые подключения." }
+    var securityGatekeeperTip: String { "Проверяет, что запускаемые приложения подписаны и заверены Apple." }
 
     // MARK: Report tab
     var reportPlaceholder: String { "Отчёт ещё не собран. Нажмите «Обновить отчёт»." }
@@ -164,10 +168,12 @@ struct StringsRU: AppStrings {
     var maintenanceBrewNotInstalled: String { "не установлен" }
     var maintenanceBrewAllFresh: String { "Все пакеты свежие \u{2713}" }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Устаревших пакетов: \(n)" }
-    var maintenanceUpdatesSection: String { "Обновления macOS" }
-    var maintenanceUpdatesAllUpdated: String { "Всё обновлено \u{2713}" }
-    var maintenanceCrashesSection: String { "Недавние краши" }
-    var maintenanceCrashesNone: String { "Свежих крашей нет \u{2713}" }
+    var maintenanceUpdatesSection: String { "Обновления" }
+    var maintenanceUpdatesAllUpdated: String { "\u{2713}" }
+    var maintenanceCrashesSection: String { "Краши" }
+    var maintenanceCrashesNone: String { "\u{2713}" }
+    var maintenanceUpdatesTip: String { "Ожидающие обновления macOS и App Store." }
+    var maintenanceCrashesTip: String { "Отчёты о падениях приложений за последнее время." }
     func maintenanceAndMore(_ n: Int) -> String { "и ещё \(n)" }
     var maintenanceBrewUpgradeButton: String { "Обновить пакеты" }
     var maintenanceBrewUpgrading: String { "Обновляем пакеты… (может занять несколько минут)" }
