@@ -211,28 +211,55 @@ struct AutostartCard: View {
             if orphans.isEmpty {
                 Text(L.autostartCheckOutdated)
                     .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .foregroundStyle(checkButtonHovering ? DS.ink : DS.inkSoft)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(DS.glass3))
                     .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
+                    .rainbowBorder(isActive: checkButtonHovering, recipe: .overview)
             } else {
                 Text(L.autostartCheckOutdatedCount(orphans.count))
                     .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .foregroundStyle(DS.amberInk)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(DS.glass3))
                     .overlay(Capsule().strokeBorder(DS.amber.opacity(0.62), lineWidth: 1))
                     .modifier(BreathingWarnBackground(paused: model.isPaused))
+                    .rainbowBorder(isActive: checkButtonHovering, recipe: .overview)
+                    .animation(
+                        reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                        value: orphans.count
+                    )
             }
         }
         .buttonStyle(.plain)
-        .onHover { checkButtonHovering = $0 }
-        .animation(
-            reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
-            value: checkButtonHovering
-        )
+        // Drive the hover animation from the STATE MUTATION (`withAnimation` here)
+        // rather than an `.animation(_:value:)` modifier on the label Text. This
+        // button lives inside a card wrapped in `.dsHoverLift()`, which animates
+        // an inherited `.offset(y:)` on this whole subtree via its own
+        // `.animation(cardHover, value: hovering)`. Pointer entry near this
+        // button fires both `hovering` (card) and `checkButtonHovering` (button)
+        // in the same transaction; a `.animation(_:value:)` modifier attached
+        // directly to the Text was found to hijack that ancestor's inherited
+        // offset animation for the Text's own render updates — the capsule
+        // background/border (siblings outside that modifier's local scope) kept
+        // following the card's `cardHover` curve while the text glyphs followed
+        // `rainbowHover`'s spring, visibly desyncing text from capsule on hover.
+        // `withAnimation` around the mutation instead opens its own transaction
+        // that doesn't leak into/override the ancestor's, so the whole subtree
+        // (including the Text) rides `DSHoverLift`'s single curve together.
+        .onHover { isHovering in
+            withAnimation(
+                reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.rainbowHover
+            ) {
+                checkButtonHovering = isHovering
+            }
+        }
         .accessibilityLabel(orphans.isEmpty ? L.autostartCheckOutdated : L.autostartCheckOutdatedCount(orphans.count))
     }
 
