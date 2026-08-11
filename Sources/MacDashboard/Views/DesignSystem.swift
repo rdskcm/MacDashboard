@@ -322,10 +322,20 @@ enum DSSegmentedSize {
         case .settingsInterval: return 6
         }
     }
+    /// Gap between segments, matching the prototype track's `gap` (2px for
+    /// tabs/card, 3px for the monospaced Settings interval switch).
+    var gap: CGFloat {
+        switch self {
+        case .tabs: return 2
+        case .card: return 2
+        case .settingsInterval: return 3
+        }
+    }
 }
 
 private enum DSSlidingSegmentedTokens {
     // Thumb outward shadows (dark opacity > light, same reasoning as the track).
+    // Exact `--thumb-shadow` alphas per Desktop/Segmented Control Spec.md (2026-08-11).
     static let shadow1 = Color(light: dsShadowNavy(0.10), dark: Color.black.opacity(0.26))
     static let shadow2 = Color(light: dsShadowNavy(0.13), dark: Color.black.opacity(0.34))
     static let shadow3 = Color(light: dsShadowNavy(0.16), dark: Color.black.opacity(0.40))
@@ -348,11 +358,21 @@ struct DSSlidingSegmented<T: Hashable>: View {
     /// Outer container inset (spec §2.3): track, thumb, and labels all sit
     /// inset 3 pt from the control's own bounds.
     private let containerPadding: CGFloat = 3
+    /// Thumb inset beyond `containerPadding` — 0 per Desktop/Segmented Control Spec.md
+    /// §2 ("top: 3px; bottom: 3px — insets equal the capsule padding", nothing extra).
+    private let thumbInset: CGFloat = 0
     /// Each segment's rendered width, keyed by index — read from the label's
     /// own laid-out geometry (`.onGeometryChange`, not a `GeometryReader`
     /// inside the animated subtree: that previously collapsed the row to
     /// ~6 pt mid-transition). Drives both the thumb's width and its offset.
     @State private var widths: [Int: CGFloat] = [:]
+    /// Label row height, measured the same way as `widths`. The `.background`
+    /// this control's thumb sits in is proposed the FULL padded frame (labels
+    /// + `containerPadding` on every side), so without an explicit height the
+    /// thumb — constrained only in width — stretches to fill that full height
+    /// instead of matching the label row. Uniform across segments (same font/
+    /// `vPad` per size variant), so the last write wins.
+    @State private var rowHeight: CGFloat = 0
 
     init(options: [T], selection: Binding<T>, size: DSSegmentedSize = .card, label: @escaping (T) -> String) {
         self.options = options
@@ -371,11 +391,11 @@ struct DSSlidingSegmented<T: Hashable>: View {
 
     private var thumbOffset: CGFloat {
         let precedingWidths = (0..<selectedIndex).reduce(CGFloat(0)) { $0 + (widths[$1] ?? 0) }
-        return precedingWidths + 2 * CGFloat(selectedIndex)
+        return precedingWidths + size.gap * CGFloat(selectedIndex)
     }
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: size.gap) {
             ForEach(Array(options.enumerated()), id: \.element) { index, option in
                 Button {
                     select(option)
@@ -395,46 +415,111 @@ struct DSSlidingSegmented<T: Hashable>: View {
                     reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : .easeInOut(duration: 0.18),
                     value: selection
                 )
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-                    widths[index] = newWidth
+                .onGeometryChange(for: CGSize.self, of: { $0.size }) { newSize in
+                    widths[index] = newSize.width
+                    rowHeight = newSize.height
                 }
             }
         }
-        .background(alignment: .leading) {
-            ZStack(alignment: .leading) {
-                dsRecessedTrack(in: Capsule())
+        .padding(containerPadding)
+        .background(alignment: .topLeading) {
+            ZStack(alignment: .topLeading) {
+                track
 
                 thumb
-                    .frame(width: thumbWidth)
-                    .offset(x: thumbOffset)
+                    .frame(width: max(0, thumbWidth - 2 * thumbInset), height: max(0, rowHeight - 2 * thumbInset))
+                    .offset(x: containerPadding + thumbInset + thumbOffset, y: containerPadding + thumbInset)
                     .scaleEffect(x: stretch, y: 1, anchor: stretchAnchor)
+                    .animation(nil, value: widths)
+                    .animation(nil, value: rowHeight)
                     .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.68), value: selection)
             }
         }
-        .padding(containerPadding)
     }
 
+    // Local reimplementation of `dsRecessedTrack` (never edit that shared helper —
+    // `SharedUI.swift:90` reuses it for 6 pt progress bars) using the same
+    // opaque-layer technique as the thumb below: native `ShapeStyle.shadow(.inner(...))`
+    // on a translucent fill (`DS.track`, ~0.10 alpha) reads flat — confirmed live, twice,
+    // for both this and the GlassSegmented.swift reference port. Hand-rolled here as
+    // blurred, offset, opaque Capsules masked back to the track's own shape (so they
+    // stay INSET rather than haloing outward like the thumb's).
+    private var track: some View {
+        ZStack {
+            Capsule().fill(DS.track)
+            // A masked, shifted-then-blurred opaque copy reveals MORE of itself on the
+            // side it's shifted TOWARD, not away from — the inverse of a normal offset
+            // shadow's intuition. To darken the top inner edge (matching CSS positive-Y
+            // inset shadows) the copy must shift UP (negative y); the bottom "bounce"
+            // highlight (CSS y:-3) mirrors that and shifts DOWN (positive y).
+            // Full magnitudes per Desktop/Segmented Control Spec.md §1 (radius = blur / 2,
+            // same as `dsRecessedTrack`'s own untouched numbers: 18px blur → 9, 7px → 3.5,
+            // 2px → 1, 8px bounce → 4).
+            ZStack {
+                Capsule().fill(DSRecessedTrackTokens.inner3).blur(radius: 9).offset(y: -9)
+                Capsule().fill(DSRecessedTrackTokens.inner2).blur(radius: 3.5).offset(y: -3)
+                Capsule().fill(DSRecessedTrackTokens.inner1).blur(radius: 1).offset(y: -1)
+                Capsule().fill(DSRecessedTrackTokens.bounce).blur(radius: 4).offset(y: 3)
+            }
+            .compositingGroup()
+            .mask(Capsule())
+        }
+        .overlay(Capsule().strokeBorder(DS.line, lineWidth: 1))
+    }
+
+    // Radii use the app-wide CSS-blur→SwiftUI-radius convention (radius = blur / 2,
+    // spread not modeled) — the same one `dsRecessedTrack` uses for its own
+    // negative-spread shadows (`--thumb-shadow`: `0 4px 10px -3px` → radius 5 y 4,
+    // `inset 0 3px 6px -4px` → radius 3 y 3).
+    //
+    // These are hand-rolled as blurred, offset, opaque-filled Capsules BEHIND the
+    // visible thumb rather than `.shadow()` view modifiers — confirmed by an A/B
+    // test (solid white fill vs `DS.glass3`) that `.shadow()`'s effective strength
+    // is multiplied by the shadowed content's OWN alpha, and `DS.glass3` is ~0.11
+    // alpha, which crushed every one of these shadows to invisible. Filling a shape
+    // directly with a color that already carries its own alpha has no such dilution.
+    //
+    // The blurred core of each shadow is punched out exactly where it sits under the
+    // thumb's own footprint (`.blendMode(.destinationOut)` inside a `.compositingGroup()`)
+    // so only the halo bleeding past the visible edge shows — a `.padding`-based shrink
+    // alone still left enough full-alpha core under the translucent glass fill to
+    // darken the whole pill toward black instead of just haloing its edge (found live).
     private var thumb: some View {
-        Capsule()
-            .fill(DS.glass3.shadow(.inner(color: DSSlidingSegmentedTokens.gleam, radius: 3, y: 3)))
-            .padding(3)
-            .shadow(color: DSSlidingSegmentedTokens.shadow1, radius: 1, x: 0, y: 1)
-            .shadow(color: DSSlidingSegmentedTokens.shadow2, radius: 5, x: 0, y: 4)
-            .shadow(color: DSSlidingSegmentedTokens.shadow3, radius: 10, x: 0, y: 10)
+        ZStack {
+            ZStack {
+                Capsule().fill(DSSlidingSegmentedTokens.shadow3).blur(radius: 10).offset(y: 10)
+                Capsule().fill(DSSlidingSegmentedTokens.shadow2).blur(radius: 5).offset(y: 4)
+                Capsule().fill(DSSlidingSegmentedTokens.shadow1).blur(radius: 1).offset(y: 1)
+                Capsule().fill(Color.black).blendMode(.destinationOut)
+            }
+            .compositingGroup()
+
+            Capsule()
+                .fill(DS.glass3.shadow(.inner(color: DSSlidingSegmentedTokens.gleam, radius: 3, y: 3)))
+        }
     }
 
     private func select(_ option: T) {
         guard option != selection else { return }
         let oldIndex = selectedIndex
         let newIndex = options.firstIndex(of: option) ?? oldIndex
-        // Anchor at the side the thumb is leaving, so the stretch reads as
-        // motion toward the new position.
-        stretchAnchor = newIndex > oldIndex ? .leading : .trailing
+        // Anchor at the side the thumb is moving TO, so it visually smears
+        // back toward where it came from (prototype: transform-origin follows
+        // movement direction, not the departure side).
+        stretchAnchor = newIndex > oldIndex ? .trailing : .leading
         selection = option
         guard !reduceMotion else { return }
-        stretch = 1.09
+        // Two sequential eased legs (1 -> 1.09 -> 1), each 0.19s, mirroring the
+        // prototype's `transform .19s ease-out` transition being retriggered
+        // twice: once when the stretch is applied, once 190ms later when it's
+        // cleared.
         withAnimation(.easeOut(duration: 0.19)) {
-            stretch = 1.0
+            stretch = 1.09
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.19) { [self] in
+            withAnimation(.easeOut(duration: 0.19)) {
+                stretch = 1.0
+            }
         }
     }
 }
