@@ -398,6 +398,24 @@ private struct ProcessDetailView: View {
     @State private var showForceQuitConfirm = false
     @State private var signalError: String? = nil
 
+    /// True once the CURRENT open/close disclosure transaction (driven by
+    /// `.onChange(of: isOpen)` below) has actually finished animating — set
+    /// false the instant the transaction starts, true only from that
+    /// `withAnimation`'s own `completion:` callback. Deliberately NOT derived
+    /// from `openAmount == 1`: `openAmount` is a plain `@State` value and
+    /// reads back as its target immediately when the withAnimation block
+    /// runs, well before the animation has visually finished — so gating on
+    /// it would let the fetch-completion write below land mid-disclosure-
+    /// transaction, which is the root cause this state fixes (see
+    /// V2-FIX-PROCESS-GHOST). Starts `true`: a row is only ever mounted
+    /// collapsed and at rest.
+    @State private var disclosureSettled = true
+    /// Fetch result buffered here (instead of committed straight to
+    /// `detail`/`loading`) when it resolves while `disclosureSettled` is
+    /// still false — see `.task(id:)` below.
+    @State private var pendingDetail: ProcDetail?
+    @State private var hasPendingFetch = false
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Single source of truth for the disclosure's progress, 0 = fully
@@ -551,7 +569,27 @@ private struct ProcessDetailView: View {
         // its row without this outer re-clip.
         .clipShape(BleedRect(leading: 8, trailing: 8))
         .onChange(of: isOpen) { _, new in
-            withAnimation(disclosureCurve) { openAmount = new ? 1 : 0 }
+            disclosureSettled = false
+            withAnimation(disclosureCurve) {
+                openAmount = new ? 1 : 0
+            } completion: {
+                disclosureSettled = true
+                // The fetch completion below buffers instead of writing
+                // straight to `detail`/`loading` while this transaction is
+                // open — flush it now that the disclosure has actually
+                // settled. Re-checks `isOpen` (not just `hasPendingFetch`):
+                // if the row was closed again before this open transaction's
+                // completion fired, the buffered result belongs to a panel
+                // that's no longer open and must be dropped, not applied.
+                guard new, hasPendingFetch else { return }
+                hasPendingFetch = false
+                let result = pendingDetail
+                pendingDetail = nil
+                withAnimation(disclosureCurve) {
+                    detail = result
+                    loading = false
+                }
+            }
         }
         // Keyed on (pid, isOpen), NOT just pid — the panel is now permanently
         // mounted for every row (see the always-mounted `ProcessDetailView`
@@ -579,12 +617,45 @@ private struct ProcessDetailView: View {
                 loading = true
                 detail = nil
             }
+            // Discards any buffer left over from a previous open/fetch cycle
+            // on this same row (e.g. closed again before its own transaction
+            // settled, see `.onChange(of: isOpen)` above) — this cycle's own
+            // result, once it arrives, is what gets buffered/committed below.
+            hasPendingFetch = false
+            pendingDetail = nil
             // Off the main actor: proc_pidpath/proc_pidinfo are cheap syscalls but
             // the `ps -M` fallback shells out (up to 3s) — never block the UI on it.
             let fetched = await Task.detached { ProcessInspector.detail(pid: pid) }.value
-            withAnimation(disclosureCurve) {
-                detail = fetched
-                loading = false
+            // `.task(id:)` cancels the previous task the instant `isOpen`
+            // flips (id includes it) — but `Task.detached` above is
+            // unstructured and keeps running regardless, so without this
+            // check a row closed mid-fetch would still land its result here
+            // once the detached work finishes.
+            guard !Task.isCancelled else { return }
+            // THE FIX (V2-FIX-PROCESS-GHOST): this fetch-completion write is
+            // the second writer into the shared height/opacity/offset
+            // pipeline above (see :539-545) — `disclosureSettled` (set only
+            // by the disclosure's own `withAnimation` completion, above) is
+            // the gate that stops it from landing while the first writer's
+            // (the disclosure) transaction is still open. When the fetch
+            // resolves before the disclosure has settled (the common case:
+            // `expand` is 0.18s, the fetch typically takes longer, but a
+            // cached/very-fast fetch can still beat it), buffer the result
+            // instead of committing it — the disclosure's completion
+            // callback above applies it once `openAmount` has actually
+            // finished animating to 1. If the disclosure is already settled
+            // by the time the fetch resolves (the fetch was slow, or Reduce
+            // Motion made the disclosure's own short animation finish
+            // first), commit immediately — there is no open transaction left
+            // to collide with.
+            if disclosureSettled {
+                withAnimation(disclosureCurve) {
+                    detail = fetched
+                    loading = false
+                }
+            } else {
+                pendingDetail = fetched
+                hasPendingFetch = true
             }
         }
     }
