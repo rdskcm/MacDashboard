@@ -257,29 +257,33 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            Rectangle().fill(DS.line).frame(width: 1)
-            detail
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        ZStack {
+            VisualEffectBackground()
+            OrbLayer()
+            HStack(spacing: 0) {
+                sidebar
+                Rectangle().fill(DS.line).frame(width: 1)
+                detail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
+        // NO `.ignoresSafeArea()` here: the window keeps its system titlebar, so
+        // ignoring the safe area stretches the layout region by the titlebar height
+        // while this root stays pinned to 420 — the content slides up under the
+        // titlebar (top card clipped) and leaves an uncovered strip along the bottom,
+        // transparent because `VisualEffectBackground` sets the window background clear.
         .frame(width: 680, height: 420)
-        .background(DS.ground)
-        .navigationTitle(L.settingsWindowTitle)
     }
 
     /// Spec §7.1 (SW:14-35): 196 pt fixed, never scrolls; column gap 2, padding
     /// 12/10; fill `glass-2` over `.regularMaterial`, border-right `DS.line`
     /// (drawn by the shared `HStack` divider above), 1 pt inset top sheen highlight.
     private var sidebar: some View {
+        // No "SETTINGS" kicker: the prototype (SW:15) has one, but with the system
+        // titlebar already naming the window it is redundant — removed by user
+        // decision at acceptance (V2-SETTINGS-CHROME, 2026-08-11), rows start at the
+        // sidebar's own top padding.
         VStack(alignment: .leading, spacing: 2) {
-            Text(L.settingsWindowTitle)
-                .font(.system(size: 11, weight: .semibold))
-                .kerning(11 * 0.09)
-                .textCase(.uppercase)
-                .foregroundStyle(DS.muted)
-                .padding(.top, 2).padding(.horizontal, 9).padding(.bottom, 10)
-
             SettingsSidebarRow(icon: .gear, title: L.settingsSectionGeneral, selected: section == .general) {
                 section = .general
             }
@@ -293,7 +297,7 @@ struct SettingsView: View {
             #endif
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 12).padding(.horizontal, 10)
+        .padding(.top, 12).padding(.bottom, 12).padding(.horizontal, 10)
         .frame(width: 196, alignment: .topLeading)
         .frame(maxHeight: .infinity)
         .background(sidebarChrome)

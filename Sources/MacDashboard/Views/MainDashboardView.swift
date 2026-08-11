@@ -32,7 +32,7 @@ struct MainDashboardView: View {
     var body: some View {
         ZStack {
             DS.ground
-            orbLayer
+            OrbLayer()
             VStack(spacing: 0) {
                 toolbar
 
@@ -44,27 +44,6 @@ struct MainDashboardView: View {
             .onChange(of: L10nStore.shared.language) { model.refreshReport() }
         }
         .ignoresSafeArea()
-    }
-
-    /// CSS `radial-gradient(70% 55% at 88% -8%, orb-a, transparent 62%)` → an
-    /// ellipse whose box is 140% × 110% of the window, centred at (0.88, −0.08),
-    /// fading to clear at 62% of its radius. Second orb: 120% × 100% at (0.02, 1.04),
-    /// clear at 58%. Static layer, never animated, never hit-tested.
-    private var orbLayer: some View {
-        GeometryReader { geo in
-            ZStack {
-                EllipticalGradient(gradient: Gradient(colors: [DS.orbA, .clear]),
-                                   center: .center, startRadiusFraction: 0, endRadiusFraction: 0.62)
-                    .frame(width: geo.size.width * 1.40, height: geo.size.height * 1.10)
-                    .position(x: geo.size.width * 0.88, y: geo.size.height * -0.08)
-                EllipticalGradient(gradient: Gradient(colors: [DS.orbB, .clear]),
-                                   center: .center, startRadiusFraction: 0, endRadiusFraction: 0.58)
-                    .frame(width: geo.size.width * 1.20, height: geo.size.height * 1.00)
-                    .position(x: geo.size.width * 0.02, y: geo.size.height * 1.04)
-            }
-        }
-        .opacity(0.35)
-        .allowsHitTesting(false)
     }
 
     // MARK: Toolbar (single row: title block · leading-anchored tab control · flexible gap · chips/status/refresh)
