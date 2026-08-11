@@ -82,6 +82,40 @@ struct ProcessListCard: View {
         procMetric == .cpu ? model.topCPU : model.topMem
     }
 
+    /// V2-FIX-PROCESS-ROWS wave 2: the ONLY thing `:144`'s reorder animation
+    /// needs to react to is the row SEQUENCE changing — `rows` itself changes
+    /// on every live tick (CPU%/mem values drift a little each sample even
+    /// when nobody's rank changes), so keying `.animation(value:)` off the
+    /// full array made that ambient reorder-curve transaction open on
+    /// virtually every tick, not just on an actual re-sort. Keying off just
+    /// the row IDENTITY sequence instead makes the animated transaction open
+    /// only on a true re-sort (rarer), leaving per-tick value-only updates
+    /// alone — a real, verified improvement (fewer ambient-transaction opens
+    /// overall) and worth keeping regardless of the note below.
+    ///
+    /// NEEDS-HUMAN — does NOT fully fix the reported catastrophic
+    /// double-exposure glitch. Live rapid-screenshot repro (`swift run` app,
+    /// non-fullscreen window, ~180 screenshots/burst at ~60ms intervals while
+    /// clicking a row repeatedly across several live-tick boundaries) still
+    /// catches the same one-frame double-exposure (stale + fresh row content
+    /// composited together, occasionally bleeding past the card into the
+    /// SYSTEM section below) after this change, on genuine re-sort ticks —
+    /// just less often than before, since fewer ticks now qualify as a
+    /// "true" re-sort. A follow-up ABLATION (temporarily setting
+    /// `.animation(nil, value: rowOrder)` — reorder fully UNANIMATED)
+    /// disproved the original leading hypothesis: the glitch still
+    /// reproduced with no reorder animation running at all, so this is not
+    /// "two competing `Animation` curves fighting over a CATransaction" as
+    /// theorized. The defect appears to be in `ForEach(rows)`'s reorder-diff
+    /// itself (or how SwiftUI/AppKit commits the resulting frame) racing
+    /// SOME per-row content update — possibly the always-mounted
+    /// `ProcessDetailView`'s own `.onGeometryChange` writes now firing for
+    /// all ~10 rows instead of one, but not confirmed. Needs a fresh
+    /// `hunter`-style investigation (not a repeat of this reasoning) before
+    /// another fix attempt; do not re-scope `.animation(value:)` again
+    /// without new evidence.
+    private var rowOrder: [String] { rows.map(\.id) }
+
     /// Row gauges are proportional to the FIRST row's value (rows already arrive
     /// sorted descending by `procMetric` from LiveCollector.sampleProcesses).
     private var maxValue: Double {
@@ -115,33 +149,63 @@ struct ProcessListCard: View {
         } else {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(rows) { row in
+                    let isOpen = row.pid != nil && expandedPID == row.pid
                     VStack(alignment: .leading, spacing: 0) {
                         ProcessRowView(
                             row: row, primary: procMetric, maxValue: maxValue,
-                            expanded: row.pid != nil && expandedPID == row.pid,
+                            expanded: isOpen,
                             onTap: {
                                 guard let pid = row.pid else { return }
                                 expandedPID = (expandedPID == pid) ? nil : pid
                             }
                         )
-                        if let pid = row.pid, expandedPID == pid {
-                            ProcessDetailView(row: row)
-                                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                        }
+                        // Always mounted (never `if`-gated) — see
+                        // `ProcessDetailView.openAmount`'s doc comment for why:
+                        // its own `openAmount`/`.onGeometryChange`/single
+                        // `withAnimation` disclosure replaces the old
+                        // `.transition` + this container's `.animation(value:
+                        // expandedPID)`, matching `QuietStripRow`/
+                        // `AutoSectionRow`/`OrphanRow`.
+                        ProcessDetailView(row: row, isOpen: isOpen)
+                            // V2-FIX-PROCESS-ROWS wave 2 (`rowOrder` doc comment
+                            // above has the full writeup, INCLUDING the NEEDS-HUMAN
+                            // note — this does not fully resolve the defect either):
+                            // even keyed on row IDENTITY, `rowOrder`'s ambient
+                            // reorder transaction still reaches every row's
+                            // permanently-mounted panel, including the 9 COLLAPSED,
+                            // fully invisible (`opacity(0)`, height 0) ones. A
+                            // collapsed panel has nothing worth animating, so it has
+                            // no business sharing a CATransaction with 9 siblings'
+                            // worth of `.onGeometryChange` writes during a reorder —
+                            // only the row actually mid-disclosure (which drives
+                            // itself off its own explicit
+                            // `withAnimation(disclosureCurve)` regardless of ambient
+                            // context) needs to. Stripping the ambient animation
+                            // here for every OTHER row is a no-op for anything
+                            // visible and removes 9/10 panels from the shared
+                            // transaction — a defensible improvement kept for that
+                            // reason, but live re-repro after this change still
+                            // caught the same class of glitch, so it is NOT the
+                            // fix; see `rowOrder`'s NEEDS-HUMAN note.
+                            .transaction { t in
+                                if !isOpen { t.animation = nil }
+                            }
                     }
                 }
             }
-            .animation(
-                reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-                value: expandedPID
-            )
             // Row reordering (a live tick re-sorting `rows`) moves with the
             // SAME curve/duration as the gauge width transition below, so a
             // row and its own gauge travel together instead of the row
             // snapping to its new slot while the gauge is still animating —
             // that mismatch is what let the gauge fill visibly detach from
             // its row. `nil` under Reduce Motion: reordering is instant.
-            .animation(reduceMotion ? nil : processRowMotion, value: rows)
+            // Keyed on `rowOrder` (row IDENTITY sequence), NOT `rows` itself
+            // — see `rowOrder`'s doc comment above for why keying on the
+            // full array (which changes on every value-only tick too) kept
+            // this ambient transaction open almost continuously and fought
+            // each row's own permanently-mounted `ProcessDetailView`
+            // disclosure animation (V2-FIX-PROCESS-ROWS wave 2).
+            .animation(reduceMotion ? nil : processRowMotion, value: rowOrder)
             // …but a metric switch replaces `rows` wholesale, and animating
             // THAT churns the whole list for 0.8 s after every tap on the
             // CPU|Память control. A fresh identity per metric drops the old
@@ -316,13 +380,53 @@ private struct ProcessRowView: View {
 
 private struct ProcessDetailView: View {
     let row: ProcEntry
+    let isOpen: Bool
+
+    init(row: ProcEntry, isOpen: Bool) {
+        self.row = row
+        self.isOpen = isOpen
+        // Seeds `openAmount` from the CURRENT `isOpen` (never true on first
+        // mount here — a row is only ever mounted collapsed — but mirrors the
+        // seeding idiom of `QuietStripRow`/`AutoSectionRow` so this stays
+        // correct if that assumption ever changes) instead of defaulting to 0
+        // and animating in on the next tick.
+        _openAmount = State(initialValue: isOpen ? 1 : 0)
+    }
 
     @State private var detail: ProcDetail?
     @State private var loading = true
     @State private var showForceQuitConfirm = false
     @State private var signalError: String? = nil
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Single source of truth for the disclosure's progress, 0 = fully
+    /// closed, 1 = fully open — same recipe as `QuietStripRow.openAmount` /
+    /// `AutoSectionRow.openAmount` / `AutostartCard.OrphanRow.openAmount`:
+    /// permanently mounted, height/opacity/offset are pure functions of this
+    /// one value, committed by a single explicit `withAnimation` in
+    /// `.onChange(of: isOpen)` below — replaces the old `if expandedPID ==
+    /// pid { … }.transition(...)` + the row list's competing
+    /// `.animation(value: expandedPID)` (V2-FIX-PROCESS-ROWS).
+    @State private var openAmount: Double
+    /// Natural (fully-expanded) height of the panel, captured via
+    /// `.onGeometryChange` — see `QuietStripRow.measuredHeight` for the full
+    /// root-cause writeup.
+    @State private var measuredHeight: CGFloat?
+
     private var pid: Int32 { row.pid ?? 0 }
+
+    /// Shared with `.onChange(of: isOpen)` below AND the `.task` fetch's own
+    /// state writes — the fetch's loading→loaded content swap (spinner →
+    /// Grid + action row) is a SEPARATE, unrelated resize from the
+    /// open/close disclosure itself, but it still changes this view's
+    /// natural height (re-measured by the same `.onGeometryChange` below),
+    /// so it needs the identical curve or the two resizes visibly disagree.
+    private var disclosureCurve: Animation {
+        reduceMotion
+            ? .easeInOut(duration: DSMotion.reduceMotionFallback)
+            : DSMotion.expand
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -351,10 +455,15 @@ private struct ProcessDetailView: View {
                     }
                     GridRow {
                         Text(L.processDetailPath).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                        // `.frame(maxWidth: .infinity)` gives the grid cell a width
+                        // CEILING — without it this text proposes its own full ideal
+                        // width (a long path) and pushes the whole panel/card wider
+                        // than the window instead of truncating in place.
                         Text(detail?.path ?? "—")
                             .font(.system(size: 11.5))
                             .lineLimit(1)
                             .truncationMode(.middle)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .help(detail?.path ?? "")
                     }
                 }
@@ -407,6 +516,10 @@ private struct ProcessDetailView: View {
                             showForceQuitConfirm = true
                         }
                         .accessibilityLabel(L.processKillA11y(row.name))
+                        // Matches the confirm branch's trailing `Spacer(minLength: 8)`
+                        // above so the action row's width doesn't shift when
+                        // `showForceQuitConfirm` toggles.
+                        Spacer(minLength: 8)
                     }
                     .padding(.top, 2)
                 }
@@ -417,20 +530,62 @@ private struct ProcessDetailView: View {
             }
         }
         .padding(EdgeInsets(top: 9, leading: 19, bottom: 8, trailing: 10))
+        // Width tracked its widest child (long path → wide panel, short path →
+        // narrow panel) before this — the background stopped short of the
+        // card's right edge on short-path rows. Mirrors `ProcessRowView`'s own
+        // `.frame(maxWidth: .infinity, alignment: .leading)`.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
-        // Keyed on pid (stable across live ticks), NOT the whole `row` — path/threads
-        // are only refetched when the expanded process changes, while `row.cpu`/
-        // `row.memBytes` above still read live off the (re-passed-in, unchanged-id)
-        // `row` value on every tick.
-        .task(id: row.pid) {
-            loading = true
-            detail = nil
-            guard let pid = row.pid else { loading = false; return }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
+            measuredHeight = newHeight
+        }
+        .frame(height: measuredHeight.map { $0 * openAmount } ?? (openAmount == 0 ? 0 : nil), alignment: .top)
+        .clipShape(BleedRect(top: 8, leading: 8, trailing: 8))
+        .opacity(openAmount)
+        .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
+        // Outer backstop clip — same rationale as `QuietStripRow`'s (see its
+        // comment above its own second `.clipShape(BleedRect(leading:trailing:))`):
+        // the inner clip above is itself offset upward by up to
+        // `DSMotion.discloseRiseY` while collapsing/collapsed, so an
+        // already-clipped-to-zero-height panel can still poke a sliver above
+        // its row without this outer re-clip.
+        .clipShape(BleedRect(leading: 8, trailing: 8))
+        .onChange(of: isOpen) { _, new in
+            withAnimation(disclosureCurve) { openAmount = new ? 1 : 0 }
+        }
+        // Keyed on (pid, isOpen), NOT just pid — the panel is now permanently
+        // mounted for every row (see the always-mounted `ProcessDetailView`
+        // call site above), so fetching on mount alone would fire path/thread
+        // lookups for every visible row instead of staying on-demand. Only a
+        // row actually being opened (or the expanded pid changing while open)
+        // triggers a fetch; re-opening a row refetches, same as the old
+        // expandedPID-keyed behavior.
+        .task(id: "\(row.pid ?? -1)-\(isOpen)") {
+            guard isOpen, let pid = row.pid else { return }
+            // Animated, not a bare assignment: this swaps the panel's rendered
+            // content between the small "loading" spinner and the much taller
+            // Grid + action row, which re-measures via `.onGeometryChange`
+            // above and resizes this view's `.frame(height:)` — completely
+            // independent of `openAmount`'s own open/close progress. `expand`
+            // (0.18s) reliably finishes well before this fetch resolves (real
+            // syscalls, plus a `ps -M` fallback that can run up to 3s), so
+            // WITHOUT this `withAnimation` the loading→loaded swap lands as a
+            // plain, unanimated state write after the disclosure has already
+            // settled at `openAmount == 1` (opacity already 1, no offset) —
+            // the taller content pops in whole and instantly and the sudden
+            // height jump shoves the row below it, reading as the panel
+            // jittering/overlapping neighbours before "settling" downward.
+            withAnimation(disclosureCurve) {
+                loading = true
+                detail = nil
+            }
             // Off the main actor: proc_pidpath/proc_pidinfo are cheap syscalls but
             // the `ps -M` fallback shells out (up to 3s) — never block the UI on it.
             let fetched = await Task.detached { ProcessInspector.detail(pid: pid) }.value
-            detail = fetched
-            loading = false
+            withAnimation(disclosureCurve) {
+                detail = fetched
+                loading = false
+            }
         }
     }
 }
