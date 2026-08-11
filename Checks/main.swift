@@ -194,6 +194,43 @@ check(ProcEntry(rank: 3, name: "X", pid: 27120).id == "p27120", "ProcEntry.id: \
 check(ProcEntry(rank: 3, name: "X").id == "3-X", "ProcEntry.id: old rank-based form when pid is nil")
 
 // =====================================================================
+// MARK: - Array<ProcEntry>.stableOrdered(matching:) (V2-FIX-ROWID Step 2)
+// =====================================================================
+
+do {
+    let a = ProcEntry(rank: 0, name: "A", cpu: 10, pid: 1)
+    let b = ProcEntry(rank: 1, name: "B", cpu: 20, pid: 2)
+    let c = ProcEntry(rank: 2, name: "C", cpu: 5, pid: 3)
+
+    let empty = [a, b, c].stableOrdered(matching: [])
+    check(empty.map(\.pid) == [1, 2, 3], "stableOrdered: empty frozen ⇒ receiver unchanged")
+
+    // Input re-sorted (b now leads); frozen order should still win.
+    let resorted = [b, a, c].stableOrdered(matching: [1, 2, 3])
+    check(resorted.map(\.pid) == [1, 2, 3], "stableOrdered: frozen order honoured against differently-sorted input")
+
+    // A frozen pid missing from the input (process died / fell out of top-N) is skipped.
+    let missing = [a, c].stableOrdered(matching: [1, 2, 3])
+    check(missing.map(\.pid) == [1, 3], "stableOrdered: frozen pid absent from input is skipped")
+
+    // A new pid not in frozen lands after the frozen ones, in the receiver's own order.
+    let d = ProcEntry(rank: 3, name: "D", cpu: 1, pid: 4)
+    let withNew = [d, b, a].stableOrdered(matching: [1, 2])
+    check(withNew.map(\.pid) == [1, 2, 4], "stableOrdered: new pid not in frozen lands after frozen ones")
+
+    // nil-pid rows land in the trailing group.
+    let nilPidRow = ProcEntry(rank: 4, name: "E", cpu: 1)
+    let withNilPid = [nilPidRow, b, a].stableOrdered(matching: [1, 2])
+    check(withNilPid.map(\.pid) == [1, 2, nil], "stableOrdered: nil-pid row lands in trailing group")
+
+    // Returned elements carry the INPUT's (fresh) values/ids, not the frozen snapshot's.
+    let aFresh = ProcEntry(rank: 5, name: "A", cpu: 99, pid: 1)
+    let fresh = [aFresh, b].stableOrdered(matching: [1, 2])
+    check(fresh.first?.cpu == 99 && fresh.first?.id == aFresh.id,
+          "stableOrdered: returned elements are the input's fresh values/ids, not the frozen snapshot's")
+}
+
+// =====================================================================
 // MARK: - Parsers.parseSize
 // =====================================================================
 

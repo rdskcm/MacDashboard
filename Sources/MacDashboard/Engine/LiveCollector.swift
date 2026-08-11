@@ -222,3 +222,35 @@ private extension Array where Element == ProcEntry {
                                      pid: $0.element.pid) }
     }
 }
+
+// Separate, non-private extension (V2-FIX-ROWID Step 2): `reranked()` above lives in
+// a `private extension` (file-scope fileprivate), which `Checks/main.swift` — a
+// different file — cannot see. This helper needs Checks coverage, so it gets its
+// own non-private extension instead of joining that one.
+extension Array where Element == ProcEntry {
+    /// Reorders a freshly-sorted snapshot to match a previously captured pid
+    /// sequence, so the list holds still while a detail panel is open.
+    ///
+    /// - Rows whose `pid` appears in `frozen` come first, in `frozen`'s order.
+    /// - Rows absent from `frozen` (a process that newly entered the top-N) and
+    ///   rows with `pid == nil` follow, in the receiver's own relative order.
+    /// - Entries in `frozen` with no matching row in the receiver (the process
+    ///   died / fell out of the top-N) are skipped.
+    /// - Elements are passed through UNCHANGED — no re-ranking, no reconstruction.
+    ///   Preserving `rank`/`id` is the entire point; rebuilding them here would
+    ///   reintroduce the identity churn Step 1 examined.
+    func stableOrdered(matching frozen: [Int32]) -> [ProcEntry] {
+        guard !frozen.isEmpty else { return self }
+        var byPID: [Int32: ProcEntry] = [:]
+        for entry in self {
+            if let pid = entry.pid { byPID[pid] = entry }
+        }
+        let frozenOrdered = frozen.compactMap { byPID[$0] }
+        let frozenPIDs = Set(frozen)
+        let trailing = self.filter { entry in
+            guard let pid = entry.pid else { return true }
+            return !frozenPIDs.contains(pid)
+        }
+        return frozenOrdered + trailing
+    }
+}

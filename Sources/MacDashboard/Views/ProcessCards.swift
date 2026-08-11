@@ -75,11 +75,17 @@ struct ProcessListCard: View {
     // Switching metric also collapses it — the accordion never carries a PID
     // from the other list.
     @State private var expandedPID: Int32? = nil
+    // V2-FIX-ROWID Step 2: while a detail panel is open, freeze row ORDER (values
+    // keep updating in place) so a live-tick re-sort can't land under the user
+    // mid-drilldown. Captured/released in `onTap` below, not `.onChange`, so the
+    // snapshot is exactly the one the user just clicked.
+    @State private var frozenOrder: [Int32] = []
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var rows: [ProcEntry] {
-        procMetric == .cpu ? model.topCPU : model.topMem
+        let base = procMetric == .cpu ? model.topCPU : model.topMem
+        return frozenOrder.isEmpty ? base : base.stableOrdered(matching: frozenOrder)
     }
 
     /// V2-FIX-PROCESS-ROWS wave 2: the ONLY thing `:144`'s reorder animation
@@ -116,13 +122,16 @@ struct ProcessListCard: View {
     /// without new evidence.
     private var rowOrder: [String] { rows.map(\.id) }
 
-    /// Row gauges are proportional to the FIRST row's value (rows already arrive
-    /// sorted descending by `procMetric` from LiveCollector.sampleProcesses).
+    /// Row gauges are proportional to the LARGEST value currently in `rows` for
+    /// `procMetric`, which is the first row's value only when the list is not
+    /// frozen (V2-FIX-ROWID Step 2). While a detail panel is open, `rows` holds
+    /// its ORDER but values keep updating, so a row above the frozen leader can
+    /// legitimately exceed it — trusting `rows.first` in that state would scale
+    /// every gauge against the wrong reference and produce fill fractions > 1.
     private var maxValue: Double {
-        guard let first = rows.first else { return 0 }
         switch procMetric {
-        case .cpu: return first.cpu ?? 0
-        case .mem: return Double(first.memBytes ?? 0)
+        case .cpu: return rows.map { $0.cpu ?? 0 }.max() ?? 0
+        case .mem: return rows.map { Double($0.memBytes ?? 0) }.max() ?? 0
         }
     }
 
@@ -139,7 +148,22 @@ struct ProcessListCard: View {
         ) {
             content
         }
-        .onChange(of: procMetric) { expandedPID = nil }
+        .onChange(of: procMetric) { expandedPID = nil; frozenOrder = [] }
+        // V2-FIX-ROWID Step 2 follow-up: release the freeze if the expanded process
+        // itself disappears from the snapshot (dies, or falls out of the top-N —
+        // including via a process-limit shrink). Without this, `isOpen` goes false
+        // for every row (no panel visible) while `frozenOrder` stays non-empty, so
+        // the list stays frozen indefinitely with nothing open to justify it — a
+        // stuck state invisible to the user and unrecoverable without an unrelated
+        // tap. `rowOrder` (row IDENTITY sequence) changes the moment the expanded
+        // pid's row drops out, so it is the right hook; checked here, not during
+        // body evaluation, so it's a state write in response to a change, not a
+        // side effect of rendering.
+        .onChange(of: rowOrder) {
+            guard let pid = expandedPID, !rows.contains(where: { $0.pid == pid }) else { return }
+            expandedPID = nil
+            frozenOrder = []
+        }
     }
 
     @ViewBuilder
@@ -156,7 +180,16 @@ struct ProcessListCard: View {
                             expanded: isOpen,
                             onTap: {
                                 guard let pid = row.pid else { return }
-                                expandedPID = (expandedPID == pid) ? nil : pid
+                                if expandedPID == pid {
+                                    expandedPID = nil
+                                    frozenOrder = []
+                                } else {
+                                    expandedPID = pid
+                                    // Re-capturing from an already-frozen `rows` when
+                                    // switching directly between two open rows is
+                                    // correct — the order keeps holding still.
+                                    frozenOrder = rows.compactMap(\.pid)
+                                }
                             }
                         )
                         // Always mounted (never `if`-gated) — see
