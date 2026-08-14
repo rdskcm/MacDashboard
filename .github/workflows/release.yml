@@ -7,8 +7,11 @@ name: Release
 #
 #   - push a tag `vX.Y`   -> builds that tag, creates the release if missing,
 #                            uploads the asset
-#   - "Run workflow" button -> builds the chosen ref (default: main), uploads
-#                            to an existing release tag (default: v1.0)
+#   - "Run workflow" button -> select the TAG in the ref dropdown and type the
+#                            same tag below. There is deliberately no default:
+#                            a pre-filled tag plus `--clobber` is one click away
+#                            from overwriting an older release's asset, and the
+#                            v1.0 asset is this project's rollback anchor.
 on:
   push:
     tags:
@@ -16,9 +19,8 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing release tag to attach the build to'
+        description: 'Release tag to attach the build to (must equal the ref selected above)'
         required: true
-        default: 'v1.0'
 
 permissions:
   contents: write
@@ -38,12 +40,27 @@ jobs:
 
       - name: Resolve release tag
         id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.release_tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ github.event.inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          # Manual run: the asset is uploaded with --clobber, so the tag must name
+          # the very ref being built. Uploading a build of one ref onto another
+          # ref's release silently replaces that release's asset.
+          if [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::run this workflow from a tag — the ref dropdown currently points at '${REF_NAME}' (a ${{ github.ref_type }})"
+            exit 1
+          fi
+          if [ "$INPUT_TAG" != "$REF_NAME" ]; then
+            echo "::error::release_tag '$INPUT_TAG' does not match the ref being built ('$REF_NAME') — refusing to attach this build to a different release"
+            exit 1
+          fi
+          echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Use the macOS 26 (Tahoe) SDK
         run: |
@@ -82,6 +99,20 @@ jobs:
             26.*) echo "OK — matches the local build (Tahoe appearance)" ;;
             *) echo "::error::binary linked against SDK $sdk, expected 26.x (Tahoe look would be wrong)"; exit 1 ;;
           esac
+
+      - name: Assert the private IOKit symbols are not hard-linked
+        run: |
+          set -euo pipefail
+          # ThermalHIDReader resolves these six at runtime via dlopen/dlsym on
+          # purpose: hard-linking them means the app fails to LAUNCH on a macOS
+          # that dropped them. `nm` prints the Mach-O leading underscore.
+          bad="$(nm -u dist/MacDashboard.app/Contents/MacOS/MacDashboard | grep -E '_IOHID(EventSystemClient(Create|SetMatching|CopyServices)|ServiceClientCopy(Property|Event)|EventGetFloatValue)' || true)"
+          if [ -n "$bad" ]; then
+            echo "$bad"
+            echo "::error::private IOKit symbols are hard-linked again — they must stay behind dlopen/dlsym in ThermalHIDReader.swift"
+            exit 1
+          fi
+          echo "no hard-linked private IOKit symbols"
 
       - name: Package (ditto preserves the ad-hoc signature)
         run: ditto -c -k --keepParent dist/MacDashboard.app MacDashboard.zip
