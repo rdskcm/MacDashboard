@@ -109,7 +109,7 @@ struct MainDashboardView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(L.appWindowTitle)
+            Text(AppInfo.name)
                 .font(.system(size: 19, weight: .bold))
                 .tracking(-0.285) // 19 pt · −0.015em
                 .lineSpacing(1.9) // 19 pt · 1.1 line-height

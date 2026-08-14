@@ -15,7 +15,7 @@ struct MacDashboardApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(L.appWindowTitle) {
+        WindowGroup(AppInfo.name) {
             MainDashboardView(model: model)
                 .frame(minWidth: 900, minHeight: 620)
                 .onAppear {

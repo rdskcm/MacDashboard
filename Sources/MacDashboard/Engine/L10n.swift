@@ -14,7 +14,8 @@ enum AppLanguage: String, CaseIterable {
 /// (never LocalizedStringKey — avoids SwiftUI's interpolation-localization trap).
 protocol AppStrings {
     // MARK: App
-    var appWindowTitle: String { get }
+    // The app name is deliberately NOT here — it is a brand, not a phrase to
+    // translate, and lives in `AppInfo.name` (V2-NAME-ONE).
     /// Decimal separator for number formatting (`fmtNum`): "," RU, "." EN.
     var decimalSeparator: String { get }
 

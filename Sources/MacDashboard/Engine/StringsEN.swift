@@ -5,7 +5,6 @@ import Foundation
 
 struct StringsEN: AppStrings {
     // MARK: App
-    var appWindowTitle: String { "Mac Diagnostics" }
     var decimalSeparator: String { "." }
 
     // MARK: Settings

@@ -1147,7 +1147,7 @@ check(ruPlural(104, "цикл", "цикла", "циклов") == "цикла", "
 
 check(!L.kpiCpuLabel.isEmpty, "L.kpiCpuLabel: non-empty")
 check(!L.securityTitle.isEmpty, "L.securityTitle: non-empty")
-check(!L.appWindowTitle.isEmpty, "L.appWindowTitle: non-empty")
+check(!AppInfo.name.isEmpty, "AppInfo.name: non-empty")
 
 // =====================================================================
 // MARK: - L10nStore (live language switching)
