@@ -272,6 +272,12 @@ struct KPITileView<Satellite: View, Visual: View>: View {
     @ViewBuilder var satellite: () -> Satellite
     @ViewBuilder var visual: () -> Visual
 
+    /// Measured width of `outOf`'s flexible slot (see `valueRow`'s comment).
+    /// Starts at 0 — same "settle from zero" convention `MeterBar.trackWidth`
+    /// already uses in this file — so a fresh mount never has a stale/wrong
+    /// width to truncate against; it corrects within the same layout pass.
+    @State private var outOfSlotWidth: CGFloat = 0
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -306,9 +312,29 @@ struct KPITileView<Satellite: View, Visual: View>: View {
         .frame(height: 22)
     }
 
+    private static var outOfLeadingPad: CGFloat { 5 }
+    private static var outOfFontSize: CGFloat { 13 }
+
     /// `value`/`unit` keep their intrinsic width (`fixedSize`) so they never
     /// truncate; `outOf` is the one element allowed to shrink/ellipsize when
     /// the column is tight (the five-equal-column grid depends on this).
+    ///
+    /// `outOf` does NOT rely on `Text`'s own `lineLimit`/`truncationMode` —
+    /// confirmed by measuring the actual proposed widths at the 900pt window
+    /// minimum (V2-FIX-OPTICAL-2/C1): Disk's residual slot there was ~35pt
+    /// and truncated to "of…" correctly, but Swap's was ~14pt (one digit
+    /// wider `value` — "534.4" vs "91.4" — leaves less remainder) and
+    /// `Text` painted the *un*truncated string past its own reported bounds
+    /// instead of ellipsizing, with the overflow hard-clipped mid-glyph by
+    /// the card's rounded-rect surface. So `Text`'s built-in truncation is
+    /// only reliable above some width it doesn't document and this view
+    /// can't predict — the fix truncates the STRING ourselves with real
+    /// AppKit font metrics (`truncatedToFit`, using the *measured* slot
+    /// width) before it ever reaches `Text`, then renders it with
+    /// `fixedSize` so `Text` never needs to truncate at draw time: it either
+    /// gets a string already provably narrower than the slot (real ellipsis
+    /// if trimmed) or, when even a single trimmed character + "…" doesn't
+    /// fit, an empty string (renders nothing — never a partial glyph).
     private var valueRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(value)
@@ -332,25 +358,58 @@ struct KPITileView<Satellite: View, Visual: View>: View {
                 }
             }
             if let outOf {
-                Text(outOf)
-                    .font(.system(size: 13))
-                    .foregroundStyle(DS.muted)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.leading, 5)
-                    // Without an explicit width frame, this Text has no
-                    // well-defined layout width to truncate against inside
-                    // an HStack whose other siblings are `fixedSize` — it
-                    // renders at its intrinsic size and gets hard-clipped
-                    // by the surrounding layout with no ellipsis (e.g. the
-                    // Swap tile showing a stray "и" instead of "из 1,9…").
-                    // `.frame(maxWidth: .infinity, ...)` gives it the same
-                    // "take remaining space, then truncate" treatment the
-                    // header label already uses.
+                let budget = max(0, outOfSlotWidth - Self.outOfLeadingPad)
+                // The fitted string is drawn as an OVERLAY on an empty, zero-ideal
+                // slot, and never as a laid-out sibling. That separation is the
+                // whole point: a `fixedSize` Text placed directly in this HStack
+                // reports its fitted width as the slot's MINIMUM, so a tile whose
+                // `outOf` currently fits refuses to compress while its neighbours
+                // keep shrinking — the five columns stop being equal. And because
+                // the fitted width is itself derived from the measured slot, that
+                // version latched: widening the window and narrowing it again left
+                // the tiles unevenly sized until relaunch. An overlay contributes
+                // nothing to sizing, so the measurement stays a one-way read of
+                // what the HStack proposed.
+                //
+                // `Text("")` is the slot: zero width, but it still carries the
+                // 13pt font's baseline, which is what keeps `outOf` sitting on the
+                // same baseline as `value` under the HStack's `.firstTextBaseline`.
+                Text("")
+                    .font(.system(size: Self.outOfFontSize))
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)) {
+                        Text(Self.truncatedToFit(outOf, maxWidth: budget, fontSize: Self.outOfFontSize))
+                            .font(.system(size: Self.outOfFontSize))
+                            .foregroundStyle(DS.muted)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.leading, Self.outOfLeadingPad)
+                    }
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { w in
+                        outOfSlotWidth = w
+                    }
             }
         }
         .frame(height: 30, alignment: .leading)
+    }
+
+    /// Trims `text` to the longest prefix (+ "…") that measures at or under
+    /// `maxWidth` at `fontSize` using real AppKit glyph metrics — never
+    /// SwiftUI's own `Text` truncation, which this file's `valueRow` comment
+    /// documents as unreliable at very small proposed widths. Returns ""
+    /// (nothing drawn) if even one trimmed character + "…" doesn't fit.
+    private static func truncatedToFit(_ text: String, maxWidth: CGFloat, fontSize: CGFloat) -> String {
+        guard maxWidth > 0, !text.isEmpty else { return "" }
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: fontSize)]
+        func width(_ s: String) -> CGFloat { (s as NSString).size(withAttributes: attrs).width }
+        if width(text) <= maxWidth { return text }
+        var candidate = text
+        while !candidate.isEmpty {
+            candidate.removeLast()
+            let trimmed = candidate + "…"
+            if width(trimmed) <= maxWidth { return trimmed }
+        }
+        return ""
     }
 
     private var visualZone: some View {
