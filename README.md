@@ -182,7 +182,9 @@ quarantine flag along the way, clear it exactly as in the first-launch step abov
 - `Sources/MacDashboard/` — the app itself (SwiftUI, no external dependencies).
 - `Checks/` — parser/assessment checks (`swift run MacDashboardChecks`).
 - `build_app.sh` — universal build + `.app` packaging + ad-hoc codesign.
-- `SPEC.md` — the technical spec (module contracts).
+- `SPEC.md` — the original build-out brief. Part of it is still binding (data
+  contracts, collectors, packaging); the rest records how v1.0 was built. Each section
+  is labelled — see the status table at the top of the file.
 
 ## Feedback
 

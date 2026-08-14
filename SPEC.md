@@ -2,7 +2,28 @@
 
 Rewrite of the web pipeline (mac_checkup.sh → mac_report.txt → mac_dashboard.py →
 HTML + mac_live_server.py SSE) as ONE native macOS app. No browser, no HTTP server,
-no Python. This file is the binding contract for all implementation agents.
+no Python.
+
+## Status of this document — read this before using it as a contract
+
+This was the **build-out brief**: the ТЗ handed to the agents that constructed the app
+from nothing in July 2026. Its phases (§11) are complete and its per-agent file
+ownership (§3) describes a construction crew that no longer exists. The app has since
+been rebuilt visually on the `v2` branch, and this file was not part of that work.
+
+Its sections therefore have **two different lifetimes**, and they are labelled:
+
+| Still binding | Historical — describes the v1.0 build, not today's code |
+|---|---|
+| §1 Goals & hard constraints, §2 Locations, §4 Data contracts, §5 Collectors, §6 Assessment, §7 Report text, §9 Packaging, §12 AI_ENABLED flag | §3 Package layout & file ownership, §8 UI, §10 Testing, §11 Phases |
+
+**For anything in the right-hand column the code is the source of truth, not this file.**
+Do not "restore" something it describes; do not update it to match a refactor either —
+it is a record of how the app was built, and it is useful as that.
+
+Verified against the tree on 2026-08-14 (branch `v2`). §1.6 and §2's output path were
+wrong and were corrected then; the historical sections were labelled rather than
+rewritten.
 
 ## 1. Goals & hard constraints
 
@@ -23,8 +44,32 @@ no Python. This file is the binding contract for all implementation agents.
 5. UI language: **bilingual (English/Russian)**, switchable in Settings, via the
    `L10n` protocol with `StringsEN`/`StringsRU` witness files (see §8). Code +
    comments: English only, regardless of UI language.
-6. Read-only diagnostics: the app never modifies system state (only writes its own
-   report/state files).
+6. **Read-only by default, with an enumerated set of user-initiated exceptions.**
+   Collection never mutates anything: every collector and parser only reads. On top of
+   that the app offers repair actions, each reachable ONLY by an explicit click. The
+   list below is the complete set as of 2026-08-14 — **adding an entry to it is a spec
+   change**, and no code path may mutate system state without appearing here.
+
+   | # | Action | Call site | Privileges | Confirmed before running? |
+   |---|---|---|---|---|
+   | 1 | Empty the Trash | `Views/AdviceActionRunner.swift:39` (`NSAppleScript`, Finder) | user | yes — `Views/AdviceActionDispatch.swift:87` |
+   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:623` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:93` |
+   | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:696` (`/bin/rm -f`, bulk at `:773`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:604`/`:619` |
+   | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:704` (`trashItem`, bulk at `:762`) | user | yes — same gate as 3 |
+   | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | **no** |
+   | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:583` | user | **no** |
+   | 7 | Apply energy settings | `Views/EnergyCard.swift:311,320` (`pmset -b`/`-c`) | admin | **no** |
+
+   Rows 5–7 run immediately on the button press. That is the current state, recorded
+   here deliberately rather than papered over; whether to gate them is an open product
+   decision, not an invariant this file may assert. Note that 3 is irreversible (a
+   permanent `rm`, not a move to the Trash — see the reasoning at
+   `DashboardModel.swift:668-677`) and that 7 escalates privileges without asking first.
+
+   Two further boundaries hold with no exceptions: the app writes file **content** only
+   inside `~/Library/Application Support/MacDashboard/` (rows 1, 3, 4 delete or move
+   files elsewhere but never author them), and a default build contains no networking
+   at all — see §12.
 7. min deployment: **macOS 14** (needed for @Observable + Swift Charts). Build:
    SwiftPM, universal binary (arm64 + x86_64), hand-rolled .app bundle, ad-hoc codesign.
 
@@ -35,10 +80,25 @@ no Python. This file is the binding contract for all implementation agents.
   (create on first run via `FileManager.urls(for: .applicationSupportDirectory…)`).
   - `mac_report.txt` — the single report file (overwritten).
   - `mac_check_state.json` — history (same schema as legacy file, see §6).
-- Built app: `MacDashboard/dist/Дашборд Mac.app` (installed to `~/Applications/` at
-  the end, replacing the old AppleScript launcher).
+- Built app: `MacDashboard/dist/MacDashboard.app` — `APP_NAME="MacDashboard"` /
+  `DIST="dist/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` copies it to
+  `~/Applications/MacDashboard.app`, removing any stale bundle under the old
+  «Дашборд Mac» name first. The bundle's *display* name is still «Дашборд Mac» via the
+  localized InfoPlist.strings — that is what §9 means, and it is not the directory
+  name.)
 
 ## 3. Package layout & file ownership
+
+> **HISTORICAL — the v1.0 build-out layout.** The "owner" column assigned files to the
+> parallel agents of §11 phase 2; those agents finished long ago. The tree has since
+> grown to 30 files under `Engine/` and 26 under `Views/`, and none of
+> `ContentView.swift`, `Components.swift`, `Cards.swift` still exist. The real test
+> target is `Checks/` (an executable target, see §10's fallback), and
+> `Tests/MacDashboardTests/` was never created. Read the tree, not this block.
+>
+> One rule below **is** still live and is repeated here so it does not get lost with
+> the rest: `Models.swift` and `Package.swift` are frozen — if work genuinely requires
+> changing them, stop and report the conflict instead of editing.
 
 ```
 MacDashboard/
@@ -349,6 +409,16 @@ file schema (nvme_history etc.) survives an import. Import button: «Импор�
 
 ## 8. UI (bilingual EN/RU; tone = old dashboard)
 
+> **HISTORICAL — this is the v1.0 interface.** The whole UI was rebuilt on the `v2`
+> branch: the two-tab «Обзор | Отчёт» shell, the card inventory and the layout below no
+> longer match what ships. Treat this as a record of the original design brief.
+>
+> Three things in it are still accurate and load-bearing: the window geometry
+> (`MacDashboardApp.swift:20,25` — default 1150×780, min 900×620), the bilingual `L10n`
+> protocol with `StringsEN`/`StringsRU` witnesses, and the `ChartOrTableCard` rule that
+> chart and table must read the SAME observable state — that last one is the regression
+> the original dashboard had, and it is still the reason the component exists.
+
 Window ~1150×780 (min 900×620). Every user-facing label below is illustrated in
 Russian for concreteness (matching the legacy dashboard's tone), but each one is a
 `L10n` key with an entry in both `StringsRU.swift` and `StringsEN.swift` — the UI
@@ -416,6 +486,12 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
 
 ## 10. Testing
 
+> **HISTORICAL — the plan, not the outcome.** The `import Testing` route in the first
+> bullet was tried and failed under bare Command Line Tools; the fallback it names is
+> what actually exists, as `Checks/` (target `MacDashboardChecks`, sources symlinked
+> into `Sources/MacDashboard/` so the checks exercise the same files as the app). See
+> the note in `Package.swift:17-23` and `Checks/README.md`.
+
 - Unit tests (swift-testing `import Testing`; if unavailable with CLT, make a separate
   `MacDashboardChecks` executable target run via `swift run` that asserts and exits
   nonzero on failure — DO NOT depend on XCTest).
@@ -439,6 +515,10 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
   source) + manual note for user.
 
 ## 11. Phases
+
+> **HISTORICAL — all four phases completed in v1.0.** This was the construction
+> schedule for the parallel agents of §3. Current work is tracked in the project's
+> `PLAN.md`, not here.
 
 1. Scaffold (Package.swift, Models.swift, App entry, DashboardModel with stub/random
    data, minimal ContentView showing stub KPI) — must `swift build` clean.
