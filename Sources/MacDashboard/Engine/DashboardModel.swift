@@ -269,9 +269,12 @@ final class DashboardModel {
                 }
 
                 // sampleProcesses() runs `top` (~1s) — hop off the main actor for it.
+                // Read the setting HERE, on the main actor, and pass it across: the
+                // collector must not touch AppSettings.shared from a background queue.
+                let limit = AppSettings.shared.processListLimit
                 let procs = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .userInitiated).async {
-                        continuation.resume(returning: procBox.value.sampleProcesses())
+                        continuation.resume(returning: procBox.value.sampleProcesses(limit: limit))
                     }
                 }
                 guard !Task.isCancelled else { return }
@@ -504,9 +507,11 @@ final class DashboardModel {
             defer { self.processesRefreshing = false }
 
             let collectorBox = UncheckedSendableBox(LiveCollector())
+            // Same rule as the slow task: read the setting on the main actor, pass it in.
+            let limit = AppSettings.shared.processListLimit
             let procs = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
-                    continuation.resume(returning: collectorBox.value.sampleProcesses())
+                    continuation.resume(returning: collectorBox.value.sampleProcesses(limit: limit))
                 }
             }
             guard !Task.isCancelled else { return }

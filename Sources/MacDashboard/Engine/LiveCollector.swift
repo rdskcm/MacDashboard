@@ -3,6 +3,8 @@
 // disk/battery/load) plus a single short `top` invocation for both process tables.
 // SPEC §5.1. NOT thread-safe: keep one instance and call collect() from a single
 // background context (the model drives it off the main actor on a serial cadence).
+// It reads no shared app state of its own — everything tunable arrives as a
+// parameter, so the only state it owns is prevTicks (see collectFast).
 //
 // The CPU field needs two samples to produce a delta, so the FIRST collect() returns
 // cpu == nil (it only primes the tick baseline); every later call returns a real
@@ -36,10 +38,17 @@ final class LiveCollector {
     }
 
     // Slow sample: the single `top` subprocess plus the CPU- and memory-sorted
-    // process tables (prefix(AppSettings.shared.processListLimit) + reranked()).
+    // process tables (prefix(limit) + reranked()).
     // Split out so it can run on a slower cadence than the native gauges.
-    func sampleProcesses() -> (topCPU: [ProcEntry], topMem: [ProcEntry]) {
-        let limit = AppSettings.shared.processListLimit
+    //
+    // `limit` is a PARAMETER, not a read of AppSettings.shared. This method runs off
+    // the main actor, while the setting is written from Settings on the main actor
+    // (@Bindable, SettingsView) — reading it here raced with that write, and not only
+    // over the Int: @Observable's accessors register the observer on read, so a
+    // background read mutates shared bookkeeping. The caller now reads the setting on
+    // the main actor and passes the value in, which also stops the collector reaching
+    // into global UI state at all.
+    func sampleProcesses(limit: Int) -> (topCPU: [ProcEntry], topMem: [ProcEntry]) {
         let procs = readTopProcesses()
         let topCPU = Array(procs.sorted { ($0.cpu ?? 0) > ($1.cpu ?? 0) }.prefix(limit)).reranked()
         let topMem = Array(procs.sorted { ($0.memBytes ?? 0) > ($1.memBytes ?? 0) }.prefix(limit)).reranked()
@@ -48,9 +57,9 @@ final class LiveCollector {
 
     // Full snapshot: composed from the two halves above so existing callers (and the
     // Checks target) keep working unchanged.
-    func collect() -> LiveSnapshot {
+    func collect(limit: Int) -> LiveSnapshot {
         var s = collectFast()
-        let p = sampleProcesses()
+        let p = sampleProcesses(limit: limit)
         s.topCPU = p.topCPU
         s.topMem = p.topMem
         return s
@@ -182,7 +191,10 @@ final class LiveCollector {
 
             let psState = desc[kIOPSPowerSourceStateKey as String] as? String
             let onAC = psState == (kIOPSACPowerValue as String)
-            let source = psState.map { _ in onAC ? L.battSourceAC : L.battSourceBattery }
+            // Named sourceLabel, not `source`: the enclosing `for source in list` loop
+            // variable is the IOKit power-source object, and shadowing it here read as
+            // if this were the same thing.
+            let sourceLabel = psState.map { _ in onAC ? L.battSourceAC : L.battSourceBattery }
 
             let isCharging = desc[kIOPSIsChargingKey as String] as? Bool ?? false
             var state: String?
@@ -191,7 +203,7 @@ final class LiveCollector {
             else if onAC { state = L.battStateNotCharging }
             else { state = L.battStateDischarging }
 
-            return BatteryInfo(source: source, charge: charge, state: state,
+            return BatteryInfo(source: sourceLabel, charge: charge, state: state,
                                cycles: nil, condition: nil, maxCapacity: nil)
         }
         return nil

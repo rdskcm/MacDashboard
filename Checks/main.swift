@@ -708,7 +708,9 @@ do {
 // normal, fully-supported state (see StringsEN.reportNoBattery), not an error. Smoke
 // checks below use this to stay meaningful on battery-equipped machines while not
 // spuriously failing on desktop Macs or CI runners.
-let hasBattery = LiveCollector().collect().battery != nil
+// `collect(limit:)` takes the process-table length explicitly rather than reading
+// AppSettings.shared — checks must not depend on the user's saved preferences.
+let hasBattery = LiveCollector().collect(limit: 10).battery != nil
 
 // =====================================================================
 // MARK: - SMOKE (real machine)
@@ -716,9 +718,9 @@ let hasBattery = LiveCollector().collect().battery != nil
 
 do {
     let collector = LiveCollector()
-    _ = collector.collect()
+    _ = collector.collect(limit: 10)
     Thread.sleep(forTimeInterval: 1.3)
-    let snap2 = collector.collect()
+    let snap2 = collector.collect(limit: 10)
     check(snap2.cpu != nil, "smoke LiveCollector: 2nd sample cpu != nil")
     check((snap2.mem?.total ?? 0) > 4 * GIB, "smoke LiveCollector: mem.total > 4 GiB")
     check((snap2.disk?.size ?? 0) > 0, "smoke LiveCollector: disk.size > 0")
