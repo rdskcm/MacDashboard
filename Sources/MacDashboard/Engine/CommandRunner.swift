@@ -13,15 +13,62 @@ import Darwin
 #endif
 
 enum CommandRunner {
+    /// Environment pinned into every child process by default (see F4 discussion
+    /// on `runCapturing`). A dev run from an interactive shell and the shipped
+    /// `.app` under launchd otherwise see different `PATH`/locale, and locale is
+    /// unpinned entirely for non-English systems without this.
+    ///
+    /// NOTE: `system_profiler` takes its language from `AppleLanguages` in
+    /// CFPreferences, **not** from `LC_ALL`, so pinning this does not de-localize
+    /// its output. The real fix there is `-json` output and belongs to a later
+    /// block.
+    static let defaultEnvironment: [String: String] = [
+        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+        "LC_ALL": "C", "LANG": "C", "TZ": "UTC",
+        "HOME": NSHomeDirectory(),
+    ]
+
+    /// `defaultEnvironment` with `dirs` prepended to PATH — for tools (Homebrew)
+    /// that resolve helper binaries inside their own prefix.
+    static func environment(prependingPATH dirs: [String]) -> [String: String] {
+        var env = defaultEnvironment
+        let prefix = dirs.joined(separator: ":")
+        env["PATH"] = prefix + ":" + (defaultEnvironment["PATH"] ?? "")
+        return env
+    }
+
+    /// Cap on how many stdout bytes `runCapturing` keeps for a single command (see
+    /// F2 discussion there). 8 MiB.
+    static let outputCap = 8 * 1024 * 1024
+
     /// Runs the binary at `path` (resolved via `/usr/bin/env` when `path` has no "/",
     /// i.e. is a bare command name rather than an absolute path) with `args`, waiting
-    /// up to `timeout` seconds.
+    /// up to `timeout` seconds. Thin wrapper over `runCapturing` — see there for the
+    /// full concurrency/safety notes and the truncation-cap behavior; this entry
+    /// point just discards the `truncated` flag (its return type is deferred to
+    /// stay `String?`).
     ///
     /// - Returns: captured stdout as a UTF-8 string, even if the process exited
     ///   non-zero (legacy `run_cmd` semantics: only emptiness of stdout matters, not
     ///   the exit code — many of these tools write useful data with a non-zero exit,
     ///   e.g. `softwareupdate -l`). Returns `nil` when the process could not be
     ///   launched, timed out (and was killed), or produced empty stdout.
+    static func run(_ path: String, _ args: [String], timeout: TimeInterval,
+                    environment: [String: String] = defaultEnvironment,
+                    scope: CommandCancellationScope? = nil) -> String? {
+        runCapturing(path, args, timeout: timeout, environment: environment, scope: scope)?.text
+    }
+
+    /// Result of `runCapturing`: the captured stdout text plus whether it was
+    /// capped at `outputCap` before decoding.
+    struct CaptureResult {
+        let text: String
+        let truncated: Bool
+    }
+
+    /// Same contract as `run`, but also reports whether stdout was capped at
+    /// `outputCap`. `run` is the thin wrapper over this; the extra shape exists so
+    /// Checks can observe truncation without changing `run`'s deferred return type.
     ///
     /// Concurrency/safety notes:
     /// - stdin is `/dev/null` so nothing ever blocks on a read prompt (critical for
@@ -29,11 +76,20 @@ enum CommandRunner {
     /// - stdout and stderr are drained concurrently on background queues, and only
     ///   *after* the process has successfully launched. Starting the drain before
     ///   launch would leak the reader threads forever (the pipe's write end would
-    ///   never see a writer, so `readDataToEndOfFile()` never sees EOF). Starting it
-    ///   after waiting for exit instead of concurrently with it would deadlock the
-    ///   moment a command writes more than one pipe-buffer's worth (~64 KiB) to
-    ///   stdout *and* stderr, since the child would block on write() while we block
-    ///   on wait().
+    ///   never see a writer, so the read loop never sees EOF). Starting it after
+    ///   waiting for exit instead of concurrently with it would deadlock the moment
+    ///   a command writes more than one pipe-buffer's worth (~64 KiB) to stdout
+    ///   *and* stderr, since the child would block on write() while we block on
+    ///   wait().
+    /// - Both drains accumulate into a `DrainBox` guarded by an `NSLock` rather than
+    ///   a plain `var`, and the final read happens through that same lock after the
+    ///   bounded drain wait below. A successful `DispatchGroup.wait` establishes
+    ///   ordering with the drain closures, but the *timeout* path does not: the
+    ///   drain closure can still be blocked inside `availableData` while the
+    ///   calling thread reads the accumulated bytes, which is a data race on a
+    ///   plain `var` (the bug this class fixes; `runStreaming`'s equivalent race is
+    ///   avoided via `lineQueue.sync`). This also means a drain-wait timeout
+    ///   returns whatever partial output was captured instead of losing it.
     /// - Exit detection uses `terminationHandler` (Foundation's own async
     ///   exit-monitoring callback) rather than `waitUntilExit()`, and a `KillGate`
     ///   ensures the timeout path and the natural-exit path race for a single
@@ -43,8 +99,9 @@ enum CommandRunner {
     ///   callback used for normal completion) that the child is gone — the pid
     ///   reuse window is as tight as Foundation's own bookkeeping, which is the best
     ///   available without dropping to a raw kqueue EVFILT_PROC watch.
-    static func run(_ path: String, _ args: [String], timeout: TimeInterval,
-                    scope: CommandCancellationScope? = nil) -> String? {
+    static func runCapturing(_ path: String, _ args: [String], timeout: TimeInterval,
+                             environment: [String: String] = defaultEnvironment,
+                             scope: CommandCancellationScope? = nil) -> CaptureResult? {
         if let scope, scope.isCancelled { return nil }
         let process = Process()
         if path.contains("/") {
@@ -57,6 +114,7 @@ enum CommandRunner {
             process.arguments = [path] + args
         }
         process.standardInput = FileHandle.nullDevice
+        process.environment = environment
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -99,17 +157,34 @@ enum CommandRunner {
         // Drain BOTH pipes concurrently, starting immediately after a successful
         // launch (see doc comment above for why ordering matters here).
         let drainGroup = DispatchGroup()
-        var stdoutData = Data()
+        let stdoutBox = DrainBox()
         drainGroup.enter()
         DispatchQueue.global(qos: .utility).async {
-            stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let handle = stdoutPipe.fileHandleForReading
+            while true {
+                let chunk = handle.availableData
+                if chunk.isEmpty { break }
+                // Keep reading to EOF even once the cap is hit: if we stopped
+                // draining the fd here, the child would block on write() to a
+                // full pipe and never exit, so the timeout timer would SIGKILL
+                // it — turning merely-large output into `nil`
+                // (killGate.winner == .timeout), a worse bug than the unbounded
+                // buffering this cap exists to fix. So the loop always drains to
+                // EOF; only the *kept* bytes are capped.
+                stdoutBox.append(chunk, cap: outputCap)
+            }
             drainGroup.leave()
         }
         drainGroup.enter()
         DispatchQueue.global(qos: .utility).async {
             // Content unused (legacy run_cmd only ever returns stdout) but MUST be
             // drained or the child can deadlock writing to a full stderr pipe.
-            _ = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            // Same "always read to EOF" reasoning as stdout above; nothing is kept.
+            let handle = stderrPipe.fileHandleForReading
+            while true {
+                let chunk = handle.availableData
+                if chunk.isEmpty { break }
+            }
             drainGroup.leave()
         }
 
@@ -138,10 +213,11 @@ enum CommandRunner {
         if killGate.winner == .timeout {
             return nil
         }
+        let (stdoutData, truncated) = stdoutBox.snapshot()
         if stdoutData.isEmpty {
             return nil
         }
-        return String(data: stdoutData, encoding: .utf8)
+        return CaptureResult(text: String(decoding: stdoutData, as: UTF8.self), truncated: truncated)
     }
 
     /// Like `run`, but additionally delivers each complete output line (stdout AND
@@ -330,6 +406,41 @@ final class CommandCancellationScope: @unchecked Sendable {
         kills.removeAll()
         lock.unlock()
         for kill in pending { kill() }   // outside the lock — kill() takes KillGate's lock
+    }
+}
+
+/// Guards `runCapturing`'s stdout accumulation across the drain queue (which
+/// writes) and the calling thread (which reads back after the bounded drain
+/// wait) — see the "Concurrency/safety notes" on `runCapturing` for why a plain
+/// `var` is unsafe here. Also owns the F2 cap: bytes beyond `cap` are dropped
+/// (not kept) while the caller keeps reading the fd to EOF regardless.
+private final class DrainBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+    private var truncated = false
+
+    /// Appends `chunk`, keeping at most `cap` bytes total; anything beyond that
+    /// is discarded and `truncated` is set. The caller is still expected to keep
+    /// reading the underlying fd to EOF after this returns — see `runCapturing`.
+    func append(_ chunk: Data, cap: Int) {
+        lock.lock(); defer { lock.unlock() }
+        guard data.count < cap else {
+            truncated = true
+            return
+        }
+        let remaining = cap - data.count
+        if chunk.count > remaining {
+            data.append(chunk.prefix(remaining))
+            truncated = true
+        } else {
+            data.append(chunk)
+        }
+    }
+
+    /// Snapshots the accumulated bytes and the truncation flag under the lock.
+    func snapshot() -> (Data, truncated: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        return (data, truncated)
     }
 }
 

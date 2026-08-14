@@ -1791,6 +1791,49 @@ do {
 }
 
 // =====================================================================
+// MARK: - CommandRunner hardening (Block B7)
+// =====================================================================
+do {
+    // F3: a single invalid UTF-8 byte in stdout must not discard the whole
+    // capture — `run` uses the lossy decoder now, same as `runStreaming`.
+    let invalidUTF8 = CommandRunner.run("/bin/sh", ["-c", "printf 'a\\xffb\\n'"], timeout: 5)
+    check(invalidUTF8 != nil, "CommandRunner.run: invalid UTF-8 byte in stdout ⇒ non-nil")
+    check(invalidUTF8?.contains("a") == true && invalidUTF8?.contains("b") == true,
+          "CommandRunner.run: invalid UTF-8 byte in stdout ⇒ surrounding valid text preserved")
+
+    // F2: output beyond the 8 MiB cap is truncated, not lost or turned into a
+    // timeout (the child must still be drained to EOF and exit normally).
+    let over = CommandRunner.runCapturing("/bin/sh", ["-c", "head -c 9000000 /dev/zero | tr '\\0' 'x'"],
+                                          timeout: 10)
+    check(over != nil, "CommandRunner.runCapturing: output over the cap ⇒ non-nil")
+    check(over?.truncated == true, "CommandRunner.runCapturing: output over the cap ⇒ truncated == true")
+    check(over?.text.utf8.count == CommandRunner.outputCap,
+          "CommandRunner.runCapturing: output over the cap ⇒ byte count == outputCap")
+
+    // F2: output under the cap must not have `truncated` stuck on.
+    let under = CommandRunner.runCapturing("/bin/sh", ["-c", "echo hello"], timeout: 5)
+    check(under != nil, "CommandRunner.runCapturing: output under the cap ⇒ non-nil")
+    check(under?.truncated == false, "CommandRunner.runCapturing: output under the cap ⇒ truncated == false")
+
+    // F4: the pinned default environment reaches the child, and an explicit
+    // `environment:` override is actually applied (not ignored).
+    let envOutput = CommandRunner.run("/usr/bin/env", [], timeout: 5)
+    check(envOutput?.contains("LC_ALL=C") == true, "CommandRunner.run: default environment pins LC_ALL=C")
+    check(envOutput?.contains("PATH=/usr/bin:/bin:/usr/sbin:/sbin") == true,
+          "CommandRunner.run: default environment pins PATH")
+
+    var customEnv = CommandRunner.defaultEnvironment
+    customEnv["MACDASHBOARD_CHECKS_VAR"] = "b7-marker"
+    let customOutput = CommandRunner.run("/usr/bin/env", [], timeout: 5, environment: customEnv)
+    check(customOutput?.contains("MACDASHBOARD_CHECKS_VAR=b7-marker") == true,
+          "CommandRunner.run: explicit environment: override is applied to the child")
+
+    let prepended = CommandRunner.environment(prependingPATH: ["/custom/prefix/bin"])
+    check(prepended["PATH"] == "/custom/prefix/bin:" + (CommandRunner.defaultEnvironment["PATH"] ?? ""),
+          "CommandRunner.environment(prependingPATH:): prepends given dir and keeps the rest of PATH")
+}
+
+// =====================================================================
 // MARK: - Summary
 // =====================================================================
 

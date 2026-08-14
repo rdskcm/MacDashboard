@@ -624,12 +624,17 @@ final class ReportCollector {
         guard let brew = Self.findBrew() else {
             return (.some(nil), nil)
         }
+        // brew is a Homebrew-prefix script that shells out to its own helper
+        // binaries (ruby, git, curl, …) inside that prefix — unlike the rest of
+        // this file's call sites (absolute-path Apple binaries), it needs its own
+        // bin dir on PATH, not just `defaultEnvironment`'s bare system PATH.
+        let brewEnv = CommandRunner.environment(prependingPATH: [(brew as NSString).deletingLastPathComponent])
         var version: String?
-        if let v = CommandRunner.run(brew, ["--version"], timeout: 20, scope: cancelScope) {
+        if let v = CommandRunner.run(brew, ["--version"], timeout: 20, environment: brewEnv, scope: cancelScope) {
             version = v.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces)
         }
         var outdated: [String] = []
-        if let o = CommandRunner.run(brew, ["outdated"], timeout: 60, scope: cancelScope) {
+        if let o = CommandRunner.run(brew, ["outdated"], timeout: 60, environment: brewEnv, scope: cancelScope) {
             outdated = o.components(separatedBy: "\n")
                 .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
