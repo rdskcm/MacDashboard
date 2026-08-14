@@ -52,13 +52,19 @@ rewritten.
 
    | # | Action | Call site | Privileges | Confirmed before running? |
    |---|---|---|---|---|
-   | 1 | Empty the Trash | `Views/AdviceActionRunner.swift:39` (`NSAppleScript`, Finder) | user | yes — `Views/AdviceActionDispatch.swift:87` |
+   | 1 | Empty the Trash | `Views/AdviceActionRunner.swift` (`NSAppleScript`, Finder) | user + TCC | yes — `Views/AdviceActionDispatch.swift:87` |
    | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:623` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:93` |
    | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:696` (`/bin/rm -f`, bulk at `:773`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:604`/`:619` |
    | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:704` (`trashItem`, bulk at `:762`) | user | yes — same gate as 3 |
    | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | **no** |
    | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:583` | user | **no** |
    | 7 | Apply energy settings | `Views/EnergyCard.swift:311,320` (`pmset -b`/`-c`) | admin | **no** |
+
+   Row 1 needs a second, separate macOS grant beyond the confirmation dialog: TCC
+   Automation control of Finder, which the system asks for the first time the action
+   actually runs (observed 2026-08-14 during the end-to-end verification). Declining it
+   surfaces as a failure carrying Finder's own message. Row 1 also depends on Full Disk
+   Access to be *offered* at all — see the `V2-FDA-DEGRADE` block in `PLAN.md`.
 
    Rows 5–7 run immediately on the button press. That is the current state, recorded
    here deliberately rather than papered over; whether to gate them is an open product
