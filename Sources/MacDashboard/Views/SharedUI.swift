@@ -63,6 +63,14 @@ struct SeverityChip: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    // Colour-only animation state: a `Color` in `@State` is not a layout input, and the
+    // `withAnimation` transaction it fires in is separate from the one that commits a new
+    // `label`, so the chip's geometry is never inside an animated transaction. Do not
+    // replace this with `.animation(_:value:)` on the padded subtree — that reintroduces
+    // the layout-jump bug the moment `tone` and `label` change together (they always do).
+    @State private var animTone: Color? = nil
+    private var shownTone: Color { animTone ?? tone }
+
     private var colorTransition: Animation {
         .easeInOut(duration: reduceMotion ? DSMotion.reduceMotionFallback : 0.18)
     }
@@ -70,7 +78,7 @@ struct SeverityChip: View {
     var body: some View {
         HStack(spacing: 5) {
             Circle()
-                .fill(tone)
+                .fill(shownTone)
                 .frame(width: 6, height: 6)
             Text(label)
                 .font(.system(size: 11.5, weight: .semibold))
@@ -86,10 +94,12 @@ struct SeverityChip: View {
         // height — user decision 2026-08-10 (V2-FIX-HEADER-CHROME). Do not
         // "fix" this back to 6 in a future optical audit.
         .padding(.vertical, 8.5)
-        .background(Capsule().fill(tone.opacity(0.14)))
-        .overlay(Capsule().strokeBorder(tone.opacity(0.32), lineWidth: 1))
-        .animation(colorTransition, value: tone)
-        .animation(colorTransition, value: label)
+        .background(Capsule().fill(shownTone.opacity(0.14)))
+        .overlay(Capsule().strokeBorder(shownTone.opacity(0.32), lineWidth: 1))
+        .onAppear { animTone = tone }
+        .onChange(of: tone) { _, newTone in
+            withAnimation(colorTransition) { animTone = newTone }
+        }
     }
 }
 

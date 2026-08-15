@@ -138,7 +138,7 @@ struct MainDashboardView: View {
     }
 
     private var subtitleTiers: [String] {
-        guard let sys = model.report.system else { return [L.mainCollectingInfo] }
+        guard let sys = model.headerSystem else { return [L.mainCollectingInfo] }
         let modelName = sys.modelName
         let chip = sys.chip
         let ram = sys.memBytes.map { tight(fmtBytesParts($0)) }
@@ -296,14 +296,14 @@ struct HeaderChipsView: View {
                 if let load = model.load, !load.isEmpty {
                     Chip(text: L.headerLoadChip(load.map { fmtNum($0, decimals: 2) }.joined(separator: " / "), model.ncpu))
                 }
-                if let uptime = model.report.system?.uptime {
+                if let uptime = model.headerSystem?.uptime {
                     Chip(text: L.headerUptimeChip(uptime))
                 }
                 SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
                 refreshButton
             }
             HStack(spacing: 8) {
-                if let uptime = model.report.system?.uptime {
+                if let uptime = model.headerSystem?.uptime {
                     Chip(text: L.headerUptimeChip(uptime))
                 }
                 SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)

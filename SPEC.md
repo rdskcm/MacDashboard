@@ -34,6 +34,14 @@ rewritten.
    - Absent hardware/feature ⇒ section shows a calm info state or hides; NEVER crash,
      NEVER show an error tone for "not present" (battery on desktops, Time Machine not
      configured, no external disks, no smartctl, no Homebrew).
+   - **A partial report is never a verdict.** The converse of the rule above: "not
+     collected yet" must not be rendered as a calm answer either. `refreshReport()`
+     streams sections into a blank `FullReport`, so mid-collect most fields are nil —
+     and `Assessment` cannot express "unknown", so an empty `problems` array means both
+     "nothing wrong" and "nothing checked". Any summary verdict (the header status chip,
+     the attention summary) is therefore computed ONLY from a completed pass, and any
+     header field backed by static data (hardware, OS, uptime) keeps its last known
+     value while collecting rather than collapsing. V2-HEADER-CHURN, 2026-08-15.
 3. **Report on launch**: app start triggers full report generation in background.
    Report is written to ONE fixed path, atomically overwritten each run — reports must
    not accumulate.

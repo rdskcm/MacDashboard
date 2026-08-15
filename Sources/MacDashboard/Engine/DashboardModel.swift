@@ -112,6 +112,16 @@ final class DashboardModel {
 
     var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
     var report: FullReport            // sections fill in as collected
+
+    /// Last non-nil `report.system`, retained across refreshes. `refreshReport()` rebuilds
+    /// from a blank FullReport, so `report.system` is nil for most of every collect; the
+    /// header reads this instead, so the subtitle does not collapse and the header's
+    /// ViewThatFits does not swap branches mid-collect. Hardware/OS are static between
+    /// passes. nil only before the very first successful collect.
+    private(set) var lastKnownSystem: SystemInfo? = nil
+
+    /// What the HEADER shows. Cards keep reading `report.system` directly.
+    var headerSystem: SystemInfo? { report.system ?? lastKnownSystem }
     var assessment: Assessment
     var history: HistoryState
     var reportText: String?           // rendered text report (for Отчёт tab)
@@ -251,7 +261,11 @@ final class DashboardModel {
                         self.cpuHistory.removeFirst(self.cpuHistory.count - 60)
                     }
                 }
-                self.setAssessment(Assess.assess(report: self.report, live: self.live))
+                // Guarded: during a collect `self.report` is a partial (most sections nil),
+                // and assessing it would resurrect the header churn Step 2 removes above.
+                if !self.isCollectingReport {
+                    self.setAssessment(Assess.assess(report: self.report, live: self.live))
+                }
 
                 try? await Task.sleep(for: .seconds(AppSettings.shared.fastIntervalSeconds))
             }
@@ -389,7 +403,11 @@ final class DashboardModel {
                     self.smartUpdatedAt = Date()
                 }
                 self.report = partial
-                self.setAssessment(Assess.assess(report: partial, live: self.live))
+                if let sys = partial.system { self.lastKnownSystem = sys }
+                // Deliberately NOT recomputed here: `partial` has most sections nil during
+                // a collect, so assessing it makes "not collected yet" and "nothing is
+                // wrong" the same value and the header thrashes between them. The verdict
+                // updates once the pass completes, at the `final` assessment below.
                 self.smartToolsState = Self.recomputeSmartToolsState()
             }
             guard !Task.isCancelled else { return }
@@ -418,6 +436,7 @@ final class DashboardModel {
             self.reportUpdatedAt = Date()
 
             self.report = final
+            if let sys = final.system { self.lastKnownSystem = sys }
             self.setAssessment(Assess.assess(report: final, live: self.live))
             self.smartToolsState = Self.recomputeSmartToolsState()
         }
