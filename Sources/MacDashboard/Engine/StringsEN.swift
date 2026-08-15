@@ -56,9 +56,8 @@ struct StringsEN: AppStrings {
     var kpiSwapLabel: String { "Swap" }
     func kpiSwapUnit(_ total: String) -> String { "of \(total)" }
     func kpiSwapSub(_ free: String) -> String { "free \(free)" }
-    var kpiDiskLabel: String { "Disk" }
+    var kpiDiskLabel: String { "Disk · free" }
     func kpiDiskUnit(_ size: String) -> String { "of \(size)" }
-    var kpiDiskFreeLabel: String { "free" }
     func kpiDiskUsedPct(_ pct: Int) -> String { "used \(pct)%" }
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
         base + " · data \(dataUsed), system \(sysUsed)"

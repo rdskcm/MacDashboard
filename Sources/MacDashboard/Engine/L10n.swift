@@ -72,11 +72,11 @@ protocol AppStrings {
     var kpiSwapLabel: String { get }
     func kpiSwapUnit(_ total: String) -> String
     func kpiSwapSub(_ free: String) -> String
+    /// V2-DISK-TILE-LABEL: the Disk tile leads with FREE space, so its header label
+    /// names the quantity («Диск · свободно» / "Disk · free") — do not shorten to the
+    /// bare noun; the tile has no other slot that can say what the big number is.
     var kpiDiskLabel: String { get }
     func kpiDiskUnit(_ size: String) -> String
-    /// V2-TILES: standalone "свободно"/"free" word, prefixed onto the disk tile's
-    /// footer (which otherwise reuses `kpiDiskUsedPct`/`kpiDiskUsedDetail` verbatim).
-    var kpiDiskFreeLabel: String { get }
     func kpiDiskUsedPct(_ pct: Int) -> String
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String
     func kpiDiskTemp(_ t: Int) -> String

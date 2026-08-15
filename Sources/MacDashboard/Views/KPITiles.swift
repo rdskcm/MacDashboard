@@ -221,15 +221,13 @@ struct DiskTile: View {
         return ThermalSensors.smartTemperatureCelsius(attrs: disk.attrs).map { Int($0.rounded()) }
     }
 
+    /// V2-DISK-TILE-LABEL: used-side detail only. The «свободно»/"free" word that used
+    /// to lead this string now lives in the tile's header label (`L.kpiDiskLabel`),
+    /// next to the free-space value it actually describes.
     private func footer(for disk: DiskInfo) -> String {
         let base = L.kpiDiskUsedPct(Int((disk.pct * 100).rounded()))
-        let detail: String
-        if let dataUsed = disk.dataUsed, let sysUsed = disk.sysUsed {
-            detail = L.kpiDiskUsedDetail(base, fmtBytes(dataUsed), fmtBytes(sysUsed))
-        } else {
-            detail = base
-        }
-        return L.kpiDiskFreeLabel + " · " + detail
+        guard let dataUsed = disk.dataUsed, let sysUsed = disk.sysUsed else { return base }
+        return L.kpiDiskUsedDetail(base, fmtBytes(dataUsed), fmtBytes(sysUsed))
     }
 
     var body: some View {
