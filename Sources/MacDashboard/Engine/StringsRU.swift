@@ -43,7 +43,7 @@ struct StringsRU: AppStrings {
     var headerStatusNeedsAttention: String { "Требует внимания" }
 
     // MARK: KPI tiles
-    var kpiCpuLabel: String { "Процессор (CPU)" }
+    var kpiCpuLabel: String { "CPU" }
     func kpiLoad(_ v: String) -> String { "load \(v)" }
     var kpiLoadUnavailable: String { "load —" }
     func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String { "\(loadStr) · \(ncpu) ядер" }

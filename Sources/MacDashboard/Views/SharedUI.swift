@@ -260,10 +260,10 @@ enum KPIUnitStyle {
 /// 1. header (22pt): nowrap+ellipsis label taking the slack, at most one
 ///    `satellite` view (temperature capsule / battery "Детали" pill), then an
 ///    optional state chip;
-/// 2. value (30pt, one line, never wraps): tabular monospaced `value` +
+/// 2. value (30pt + 5pt gap, one line, never wraps): tabular monospaced `value` +
 ///    `unit` (both keep their intrinsic width) + the shrinkable/ellipsizable
 ///    `outOf` ("из N");
-/// 3. visual (46pt): whatever `visual` supplies — typically a `MeterBar`, or
+/// 3. visual (41pt): whatever `visual` supplies — typically a `MeterBar`, or
 ///    for CPU the sparkline occupying the same zone;
 /// 4. footer (31pt): `footer` text pinned to the band's bottom edge.
 ///
@@ -401,6 +401,11 @@ struct KPITileView<Satellite: View, Visual: View>: View {
             }
         }
         .frame(height: 30, alignment: .leading)
+        // The 27pt value sits 5pt lower than the prototype's band skeleton: with a
+        // header capsule present the satellite-to-digits gap measured only 6pt
+        // (11pt in the capsule-less tiles). Paid for by the visual band below, so
+        // the tile's total height is unchanged (user decision, V2-KPI-POLISH).
+        .padding(.top, 5)
     }
 
     /// Trims `text` to the longest prefix (+ "…") that measures at or under
@@ -425,7 +430,7 @@ struct KPITileView<Satellite: View, Visual: View>: View {
     private var visualZone: some View {
         visual()
             .frame(maxWidth: .infinity)
-            .frame(height: 46, alignment: .center)
+            .frame(height: 41, alignment: .center)
     }
 
     /// Pinned to the bottom of the band (not vertically centered) so a

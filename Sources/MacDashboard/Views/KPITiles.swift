@@ -143,7 +143,7 @@ struct CPUTile: View {
             let samples = model.cpuHistory.suffix(20).map(\.1)
             let currentLoad = cpu.map { $0.user + $0.sys } ?? (samples.last ?? 0)
             CPUSparkline(samples: samples, zoneColor: cpuZoneColorA(forLoadFraction: currentLoad / 100))
-                .frame(height: 46)
+                .frame(height: 41)
         }
     }
 }
@@ -282,16 +282,10 @@ struct BatteryTile: View {
     var body: some View {
         if let batt = battery {
             let footer: String? = {
-                var bits: [String] = []
-                if let cycles = batt.cycles { bits.append(L.kpiBatteryCycles(cycles)) }
-                if let cond = batt.condition { bits.append(L.kpiBatteryCondition(cond)) }
-                if let charge = batt.charge {
-                    var cur = L.kpiBatteryChargeNow(charge)
-                    if let state = batt.state { cur += ", \(state)" }
-                    if let source = batt.source { cur += " (\(source))" }
-                    bits.append(cur)
-                }
-                return bits.isEmpty ? nil : bits.joined(separator: " · ")
+                guard let charge = batt.charge else { return nil }
+                var cur = L.kpiBatteryChargeNow(charge)
+                if let state = batt.state { cur += ", \(state)" }
+                return cur
             }()
             KPITileView(
                 label: L.kpiBatteryLabel,

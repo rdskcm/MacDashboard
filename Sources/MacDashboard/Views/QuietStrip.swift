@@ -261,9 +261,15 @@ struct UpdatesCrashesCard: View {
             let crashes = model.report.crashes ?? []
             LoudSectionCard(title: L.quietUpdatesTitle, dotColor: DS.amber, failTone: DS.amberInk,
                              rows: updatesRows(updates: updates, crashes: crashes)) {
-                VStack(alignment: .leading, spacing: 10) {
-                    if !updates.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
+                // The detail lists mirror `LoudSectionCard.grid`'s column spec so
+                // each list sits under its own row — the crash filenames used to
+                // render full-width and read as belonging to «macOS updates».
+                // Both cells are emitted unconditionally (an empty cell is a
+                // zero-height view) so crashes always land in column 2.
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible(), spacing: 24)],
+                          alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !updates.isEmpty {
                             ForEach(Array(updates.prefix(5).enumerated()), id: \.offset) { _, u in
                                 Text(u).font(.system(size: 13)).foregroundStyle(DS.inkSoft)
                             }
@@ -278,8 +284,10 @@ struct UpdatesCrashesCard: View {
                             .accessibilityLabel(L.maintenanceOpenSoftwareUpdate)
                         }
                     }
-                    if !crashes.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !crashes.isEmpty {
                             ForEach(Array(crashes.prefix(5).enumerated()), id: \.offset) { _, c in
                                 Text(c).font(.system(size: 13)).foregroundStyle(DS.inkSoft)
                                     .lineLimit(1).truncationMode(.middle)
@@ -291,6 +299,7 @@ struct UpdatesCrashesCard: View {
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         case .quiet:
