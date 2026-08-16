@@ -330,7 +330,10 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     languageCard
-                    versionCard
+                    HStack {
+                        Spacer(minLength: 0)
+                        versionCard
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 18)
@@ -338,10 +341,13 @@ struct SettingsView: View {
             }
         case .monitoring:
             ScrollView {
-                monitoringCard
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 18)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 12) {
+                    monitoringIntervalCard
+                    monitoringProcessCard
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         #if AI_ENABLED
         case .ai:
@@ -409,7 +415,6 @@ struct SettingsView: View {
         }
         .frame(minHeight: 30)
         .padding(.horizontal, 16).padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .dsCardSurface()
     }
 
@@ -419,72 +424,71 @@ struct SettingsView: View {
     /// stable, outside any data-dependent switch/if, so its identity survives
     /// selection changes and the thumb slides instead of remounting
     /// pre-selected (the V2-CARD-FOLD trap). Only the note row below switches.
-    private var monitoringCard: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L.settingsIntervalLabel)
-                    .font(.system(size: 14))
-                    .lineSpacing(14 * 0.3)
-                    .foregroundStyle(DS.inkSoft)
+    private var monitoringIntervalCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.settingsIntervalLabel)
+                .font(.system(size: 14))
+                .lineSpacing(14 * 0.3)
+                .foregroundStyle(DS.inkSoft)
 
-                DSSlidingSegmented(
-                    options: AppSettings.allowedIntervals,
-                    selection: $settings.fastIntervalSeconds,
-                    size: .settingsInterval
-                ) { s in L.settingsIntervalOption(s) }
-                .accessibilityLabel(L.settingsIntervalLabel)
+            DSSlidingSegmented(
+                options: AppSettings.allowedIntervals,
+                selection: $settings.fastIntervalSeconds,
+                size: .settingsInterval
+            ) { s in L.settingsIntervalOption(s) }
+            .accessibilityLabel(L.settingsIntervalLabel)
+
+            HStack(alignment: .center, spacing: 8) {
+                Circle()
+                    .fill(intervalNoteTone)
+                    .frame(width: 6, height: 6)
+                Text(intervalNoteText)
+                    .font(.system(size: 11.5))
+                    .lineSpacing(11.5 * 0.4)
+                    .foregroundStyle(DS.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            VStack(alignment: .leading, spacing: 0) {
-                Rectangle().fill(DS.line).frame(height: 1)
-                HStack(alignment: .center, spacing: 8) {
-                    Circle()
-                        .fill(intervalNoteTone)
-                        .frame(width: 6, height: 6)
-                    Text(intervalNoteText)
-                        .font(.system(size: 11.5))
-                        .lineSpacing(11.5 * 0.4)
-                        .foregroundStyle(DS.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.top, 11)
-                .animation(
-                    reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
-                    value: settings.fastIntervalSeconds
-                )
-            }
-
-            VStack(alignment: .leading, spacing: 0) {
-                Rectangle().fill(DS.line).frame(height: 1)
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(L.settingsProcessLimitLabel)
-                        .font(.system(size: 14))
-                        .lineSpacing(14 * 0.3)
-                        .foregroundStyle(DS.inkSoft)
-
-                    DSSlidingSegmented(
-                        options: AppSettings.allowedProcessLimits,
-                        selection: $settings.processListLimit,
-                        size: .settingsInterval
-                    ) { n in L.settingsProcessLimitOption(n) }
-                    .accessibilityLabel(L.settingsProcessLimitLabel)
-
-                    HStack {
-                        Spacer(minLength: 0)
-                        RainbowCapsuleButton(
-                            title: L.settingsProcessLimitApply,
-                            busy: model.processesRefreshing,
-                            size: .card
-                        ) {
-                            model.refreshProcessesNow()
-                        }
-                        .accessibilityLabel(L.settingsProcessLimitApply)
-                    }
-                }
-                .padding(.top, 11)
-            }
+            .animation(
+                reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                value: settings.fastIntervalSeconds
+            )
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCardSurface()
+    }
+
+    private var monitoringProcessCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.settingsProcessLimitLabel)
+                .font(.system(size: 14))
+                .lineSpacing(14 * 0.3)
+                .foregroundStyle(DS.inkSoft)
+
+            HStack(alignment: .center, spacing: 12) {
+                DSSlidingSegmented(
+                    options: AppSettings.allowedProcessLimits,
+                    selection: $settings.processListLimit,
+                    size: .settingsInterval
+                ) { n in L.settingsProcessLimitOption(n) }
+                .accessibilityLabel(L.settingsProcessLimitLabel)
+
+                Spacer(minLength: 0)
+
+                RainbowCapsuleButton(
+                    title: L.settingsProcessLimitApply,
+                    busy: model.processesRefreshing,
+                    size: .card
+                ) {
+                    model.refreshProcessesNow()
+                }
+                .accessibilityLabel(L.settingsProcessLimitApply)
+            }
+        }
+        // Top padding is 10, not 14: the label's own line box carries ~3.5 pt of
+        // internal leading above its cap height, so an equal 14 reads as a
+        // larger gap than the flat 14 under the capsule row below.
+        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .dsCardSurface()
     }
