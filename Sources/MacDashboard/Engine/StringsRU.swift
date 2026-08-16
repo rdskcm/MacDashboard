@@ -177,6 +177,10 @@ struct StringsRU: AppStrings {
     var maintenanceCrashesTip: String { "Отчёты о падениях приложений за последнее время." }
     func maintenanceAndMore(_ n: Int) -> String { "и ещё \(n)" }
     var maintenanceBrewUpgradeButton: String { "Обновить пакеты" }
+    func maintenanceBrewConfirmTitle(_ n: Int) -> String {
+        "Обновить \(n) \(ruPlural(n, "пакет", "пакета", "пакетов"))?"
+    }
+    var maintenanceBrewConfirmButton: String { "Обновить" }
     var maintenanceBrewUpgrading: String { "Обновляем пакеты… (может занять несколько минут)" }
     func maintenanceBrewProgressDownloading(_ files: Int) -> String {
         "Скачиваем пакеты… (готово: \(files) \(ruPlural(files, "файл", "файла", "файлов")))"
@@ -294,6 +298,11 @@ struct StringsRU: AppStrings {
     var energyValueNever: String { "никогда" }
     var energyCardTitle: String { "Настройки энергии (pmset)" }
     func energyApply(_ n: Int) -> String { "Применить (\(n))" }
+    func energyApplyConfirmTitle(_ n: Int) -> String {
+        "Применить \(n) \(ruPlural(n, "изменение", "изменения", "изменений"))?"
+    }
+    var energyApplyConfirmButton: String { "Применить" }
+    var energyApplyConfirmAdmin: String { "Понадобится Touch ID или пароль администратора." }
     var energyCancel: String { "Отменить" }
     var energyResetToDefaults: String { "Сбросить к стандартным" }
     var energyResetHelp: String { "Вернуть редактируемые параметры к значениям macOS по умолчанию" }

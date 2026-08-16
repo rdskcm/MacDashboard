@@ -177,6 +177,8 @@ struct StringsEN: AppStrings {
     var maintenanceCrashesTip: String { "Crash reports macOS has recorded recently." }
     func maintenanceAndMore(_ n: Int) -> String { "and \(n) more" }
     var maintenanceBrewUpgradeButton: String { "Upgrade packages" }
+    func maintenanceBrewConfirmTitle(_ n: Int) -> String { "Upgrade \(n) \(n == 1 ? "package" : "packages")?" }
+    var maintenanceBrewConfirmButton: String { "Upgrade" }
     var maintenanceBrewUpgrading: String { "Upgrading packages… (may take a few minutes)" }
     func maintenanceBrewProgressDownloading(_ files: Int) -> String {
         "Downloading packages… (\(files) \(files == 1 ? "file" : "files") done)"
@@ -294,6 +296,9 @@ struct StringsEN: AppStrings {
     var energyValueNever: String { "never" }
     var energyCardTitle: String { "Energy settings (pmset)" }
     func energyApply(_ n: Int) -> String { "Apply (\(n))" }
+    func energyApplyConfirmTitle(_ n: Int) -> String { "Apply \(n) \(n == 1 ? "change" : "changes")?" }
+    var energyApplyConfirmButton: String { "Apply" }
+    var energyApplyConfirmAdmin: String { "Touch ID or an administrator password will be required." }
     var energyCancel: String { "Cancel" }
     var energyResetToDefaults: String { "Reset to defaults" }
     var energyResetHelp: String { "Reset the editable parameters to macOS defaults" }

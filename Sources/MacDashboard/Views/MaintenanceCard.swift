@@ -14,11 +14,13 @@ struct MaintenanceCard: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var brewButtonHovering = false
+    @State private var showBrewConfirm = false
 
     var body: some View {
         CardChrome(title: L.maintenanceTitle) {
             homebrewSection
         }
+        .brewUpgradeConfirm(isPresented: $showBrewConfirm, model: model)
     }
 
     // MARK: - Homebrew (Spec §5.8)
@@ -74,7 +76,8 @@ struct MaintenanceCard: View {
     /// Carries the `asBreathe` 5-rep breathing animation on appear (OS:559).
     private var brewUpgradeButton: some View {
         Button {
-            model.upgradeBrewNow()
+            guard model.report.brewOutdated?.isEmpty == false else { return }
+            showBrewConfirm = true
         } label: {
             Text(L.maintenanceBrewUpgradeButton)
                 .font(.system(size: 11, weight: .semibold))

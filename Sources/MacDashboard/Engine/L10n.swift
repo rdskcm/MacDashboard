@@ -195,6 +195,8 @@ protocol AppStrings {
     var maintenanceCrashesTip: String { get }
     func maintenanceAndMore(_ n: Int) -> String
     var maintenanceBrewUpgradeButton: String { get }
+    func maintenanceBrewConfirmTitle(_ n: Int) -> String
+    var maintenanceBrewConfirmButton: String { get }
     var maintenanceBrewUpgrading: String { get }
     func maintenanceBrewProgressDownloading(_ files: Int) -> String
     func maintenanceBrewProgressUpgrading(_ name: String, _ k: Int, _ n: Int, _ pct: Int) -> String
@@ -308,6 +310,9 @@ protocol AppStrings {
     var energyValueNever: String { get }
     var energyCardTitle: String { get }
     func energyApply(_ n: Int) -> String
+    func energyApplyConfirmTitle(_ n: Int) -> String
+    var energyApplyConfirmButton: String { get }
+    var energyApplyConfirmAdmin: String { get }
     var energyCancel: String { get }
     var energyResetToDefaults: String { get }
     var energyResetHelp: String { get }

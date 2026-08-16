@@ -36,6 +36,9 @@ final class AdviceActionDispatch {
     /// captured when the action is dispatched and cleared only when it completes.
     private var trashTargetID: String? = nil
     var showFirewallConfirm = false
+    /// Whether the brew-upgrade confirmation is up (SPEC §1.6 row 5). Same plain-Bool
+    /// shape as the firewall gate above — brew needs no target id the way trash does.
+    var showBrewConfirm = false
     /// Advice ids whose action already completed successfully this session
     /// (currently only `.emptyTrash`) — the plate keeps rendering (assessment
     /// still lists it until the next report refresh drops it) but shows a done
@@ -52,7 +55,9 @@ final class AdviceActionDispatch {
         case .settingsPane(let u): AdviceActionRunner.openPane(u)
         case .openApp(let p): AdviceActionRunner.openApp(p)
         case .revealPath(let p): AdviceActionRunner.reveal(p)
-        case .brewUpgrade: model.upgradeBrewNow()
+        case .brewUpgrade:
+            guard model.report.brewOutdated?.isEmpty == false else { return }
+            showBrewConfirm = true
         case .emptyTrash:
             trashTargetID = id
             showTrashConfirm = true
@@ -117,6 +122,10 @@ private struct AdviceActionDialogs: ViewModifier {
             } message: {
                 Text(L.adviceFirewallConfirmMessage)
             }
+            .brewUpgradeConfirm(isPresented: Binding(
+                get: { dispatch.showBrewConfirm },
+                set: { dispatch.showBrewConfirm = $0 }
+            ), model: dispatch.model)
     }
 }
 

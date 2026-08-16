@@ -60,13 +60,13 @@ rewritten.
 
    | # | Action | Call site | Privileges | Confirmed before running? |
    |---|---|---|---|---|
-   | 1 | Empty the Trash | `Views/AdviceActionRunner.swift` (`NSAppleScript`, Finder) | user + TCC | yes — `Views/AdviceActionDispatch.swift:87` |
-   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:623` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:93` |
+   | 1 | Empty the Trash | `Views/AdviceActionRunner.swift` (`NSAppleScript`, Finder) | user + TCC | yes — `Views/AdviceActionDispatch.swift:110` |
+   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:623` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:116` |
    | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:696` (`/bin/rm -f`, bulk at `:773`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:604`/`:619` |
    | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:704` (`trashItem`, bulk at `:762`) | user | yes — same gate as 3 |
-   | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | **no** |
-   | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:583` | user | **no** |
-   | 7 | Apply energy settings | `Views/EnergyCard.swift:311,320` (`pmset -b`/`-c`) | admin | **no** |
+   | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | yes — `Views/BrewUpgradeConfirm.swift:33`, opened from `Views/MaintenanceCard.swift:80` and `Views/AdviceActionDispatch.swift:60` |
+   | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:590` | user | **no** — deliberate, see below |
+   | 7 | Apply energy settings | `Views/EnergyCard.swift:363` (`pmset -b`/`-c`) | admin | yes — `Views/EnergyCard.swift:176` |
 
    Row 1 needs a second, separate macOS grant beyond the confirmation dialog: TCC
    Automation control of Finder, which the system asks for the first time the action
@@ -74,11 +74,15 @@ rewritten.
    surfaces as a failure carrying Finder's own message. Row 1 also depends on Full Disk
    Access to be *offered* at all — see the `V2-FDA-DEGRADE` block in `PLAN.md`.
 
-   Rows 5–7 run immediately on the button press. That is the current state, recorded
-   here deliberately rather than papered over; whether to gate them is an open product
-   decision, not an invariant this file may assert. Note that 3 is irreversible (a
-   permanent `rm`, not a move to the Trash — see the reasoning at
-   `DashboardModel.swift:668-677`) and that 7 escalates privileges without asking first.
+   Rows 5 and 7 were gated in block `V2-ACTION-GATES` (2026-08-16), and both dialogs are
+   deliberately informative rather than a bare "are you sure": 5 states how many packages it will
+   upgrade and names up to 10 of them, 7 lists the pending edits split by battery / AC power and
+   says that admin authentication follows. Row 6 is **deliberately not gated** — a product decision,
+   recorded here so it is not read as an oversight: it is a single unprivileged Homebrew package
+   install behind a button already labelled «Установить smartmontools», it destroys nothing, and it
+   has no set of changes worth enumerating in a dialog. Note that 3 is irreversible (a permanent
+   `rm`, not a move to the Trash — see the reasoning at `DashboardModel.swift:668-677`) and that 7
+   now escalates privileges only after its confirmation.
 
    Two further boundaries hold with no exceptions: the app writes file **content** only
    inside `~/Library/Application Support/MacDashboard/` (rows 1, 3, 4 delete or move

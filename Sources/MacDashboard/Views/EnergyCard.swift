@@ -77,6 +77,7 @@ struct EnergyCard: View {
 
     @State private var pending: [EnergyChange] = []
     @State private var applying = false
+    @State private var showApplyConfirm = false
     @State private var applyError: String? = nil
     @State private var infoKey: String? = nil
 
@@ -172,6 +173,15 @@ struct EnergyCard: View {
             }
             .cardBackground()
             .dsHoverLift()
+            .confirmationDialog(
+                L.energyApplyConfirmTitle(pending.count),
+                isPresented: $showApplyConfirm
+            ) {
+                Button(L.energyApplyConfirmButton) { applyPending() }
+                Button(L.adviceCancel, role: .cancel) {}
+            } message: {
+                Text(applyConfirmMessage)
+            }
         } else {
             CardChrome(title: L.energyCardTitle) {
                 SectionStateView(done: model.report.progress["energy"] ?? false)
@@ -223,7 +233,10 @@ struct EnergyCard: View {
 
     /// «Применить (N)» — Spec §2.4/§5.7: white on `accent` fill/border, 600 11, padding 6/12.
     private var applyButton: some View {
-        Button { applyPending() } label: {
+        Button {
+            guard !pending.isEmpty, !applying else { return }
+            showApplyConfirm = true
+        } label: {
             Text(L.energyApply(pending.count))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white)
@@ -298,6 +311,53 @@ struct EnergyCard: View {
     private func isValidPmsetKey(_ key: String) -> Bool {
         if key.range(of: "^[A-Za-z]+$", options: .regularExpression) != nil { return true }
         return energyKeyOrder.contains { $0.key == key }
+    }
+
+    /// Human-readable label for a pending key — the SAME display names the table shows
+    /// (`energyKeyOrder`), never a second naming scheme. A key outside `energyKeyOrder`
+    /// cannot reach `pending` today (only known keys get editable controls — see
+    /// `energyTable`'s `knownKeys`), so falling back to the raw pmset token is a
+    /// last-resort guarantee that the dialog is never blank, not a designed state.
+    private func pendingLabel(_ key: String) -> String {
+        energyKeyOrder.first { $0.key == key }?.label ?? key
+    }
+
+    /// Same three rules as `energyValue(_:_:)` (:55), applied to a not-yet-applied
+    /// value: binary keys read on/off, a sleep timer of 0 reads "never", anything else
+    /// is the number itself — the unit already sits in the label («Гашение экрана, мин»).
+    private func pendingValueText(_ change: EnergyChange) -> String {
+        if energyBinaryKeys.contains(change.key) {
+            return change.value == "1" ? L.energyValueOn : L.energyValueOff
+        }
+        if energySleepKeys.contains(change.key), change.value == "0" { return L.energyValueNever }
+        return change.value
+    }
+
+    /// One "• label: value" line per pending edit in `bucket`, ordered like the table
+    /// (`energyKeyOrder`) rather than by click order, so the same edit set always reads
+    /// the same way.
+    private func pendingLines(_ bucket: EnergyBucket) -> [String] {
+        let order = energyKeyOrder.map(\.key)
+        return pending
+            .filter { $0.bucket == bucket }
+            .sorted { (order.firstIndex(of: $0.key) ?? Int.max) < (order.firstIndex(of: $1.key) ?? Int.max) }
+            .map { "• \(pendingLabel($0.key)): \(pendingValueText($0))" }
+    }
+
+    /// Confirmation body: WHAT will change, split by power source, then the admin note.
+    /// A bucket with no pending edits contributes no header and no block.
+    private var applyConfirmMessage: String {
+        var blocks: [String] = []
+        let battery = pendingLines(.battery)
+        if !battery.isEmpty {
+            blocks.append(([L.energyColBattery + ":"] + battery).joined(separator: "\n"))
+        }
+        let ac = pendingLines(.ac)
+        if !ac.isEmpty {
+            blocks.append(([L.energyColAC + ":"] + ac).joined(separator: "\n"))
+        }
+        blocks.append(L.energyApplyConfirmAdmin)
+        return blocks.joined(separator: "\n\n")
     }
 
     private func applyPending() {
