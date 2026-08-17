@@ -13,8 +13,8 @@ import SwiftUI
 private struct TMRow: View {
     let label: String
     var value: String = ""
-    /// `DS.hot` for the "диск не подключён"/no-date state (OS:646); `DS.inkSoft`
-    /// otherwise.
+    /// `DS.inkSoft` unless a call site opts into an alert tone; see the last-backup
+    /// row, the only site that passes `DS.hot` (V2-TM-CALM).
     var valueColor: Color = DS.inkSoft
     /// V2-FIX-MONO-FONT: this row renders in the system face, not mono — mono
     /// is reserved for verbatim machine output and the few prototype-specified
@@ -104,9 +104,13 @@ struct TimeMachineCard: View {
                     TMRow(
                         label: L.timeMachineLastBackup,
                         value: dest.lastBackup ?? dest.lastBackupUnavailableReason ?? "—",
-                        // No resolvable backup date (disk unmounted, no permission, …)
-                        // reads in `hot` — the "диск не подключён" state (spec §5.10).
-                        valueColor: dest.lastBackup == nil ? DS.hot : DS.inkSoft
+                        // V2-TM-CALM: only a destination that IS connected and still
+                        // unreadable (no Full Disk Access) is a problem, so only that
+                        // reason gets `hot`. An unplugged disk, a destination with no
+                        // completed backups yet, and a not-yet-checked destination are
+                        // all normal states and stay calm.
+                        valueColor: dest.lastBackupUnavailableReason == L.reportCollectorDateUnavailableNoFDA
+                            ? DS.hot : DS.inkSoft
                     )
                     if let snaps = model.report.snapshots {
                         let last = snaps.max()
