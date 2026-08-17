@@ -179,6 +179,7 @@ struct StringsRU: AppStrings {
     var maintenanceUpdatesTip: String { "Ожидающие обновления macOS и App Store." }
     var maintenanceCrashesTip: String { "Отчёты о падениях приложений за последние 7 дней." }
     func maintenanceCrashRow(_ process: String, _ count: Int) -> String { count > 1 ? "\(process) \u{00D7}\(count)" : process }
+    func maintenanceCrashRevealA11y(_ process: String) -> String { "Показать отчёты о падениях «\(process)» в Finder" }
     func maintenanceAndMore(_ n: Int) -> String { "и ещё \(n)" }
     var maintenanceBrewUpgradeButton: String { "Обновить пакеты" }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String {

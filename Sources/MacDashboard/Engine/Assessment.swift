@@ -160,7 +160,12 @@ enum Assess {
             ReportCollector.crashRaisesAttention($0) && $0.count > 0
         }
         if !raisingCrashes.isEmpty {
-            let action = AdviceAction.revealPath(FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports")
+            // The reveal target is DATA now, not a guess: a report from the system directory
+            // used to open the (often empty) per-user one (V2-CRASH-REVEAL, item 1).
+            // `raisingCrashes` preserves crashGroups' order — notable groups lead, count desc —
+            // so this is the loudest raising group's directory. Per-group precision lives on the
+            // card's own rows; this single item can only carry one target.
+            let action = AdviceAction.revealPath(raisingCrashes[0].directory)
             let panicCount = raisingCrashes.filter { $0.isPanic }.reduce(0) { $0 + $1.count }
             let ownCount = raisingCrashes.filter { !$0.isPanic }.reduce(0) { $0 + $1.count }
             var sentences: [String] = []

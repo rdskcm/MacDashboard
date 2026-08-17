@@ -31,6 +31,11 @@ func check(_ cond: Bool, _ name: String) {
     if !cond { failures += 1 }
 }
 
+// V2-CRASH-REVEAL: the two real DiagnosticReports directories, by their production
+// priority order (per-user first). Used by every crash fixture below.
+let userCrashDir = FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports"
+let systemCrashDir = "/Library/Logs/DiagnosticReports"
+
 /// Bridges an `async` operation into this synchronous top-level executable WITHOUT
 /// deadlocking. A naive `DispatchSemaphore.wait()` on the main thread blocks forever
 /// here: `ReportCollector.collect` hops onto `@MainActor` (for its `onSection`
@@ -575,7 +580,7 @@ do {
 
 do {
     var report = FullReport()
-    report.crashes = [CrashGroup(process: AppInfo.name, count: 2)]
+    report.crashes = [CrashGroup(process: AppInfo.name, count: 2, directory: userCrashDir)]
     let a = Assess.assess(report: report, live: LiveSnapshot())
     check(a.problems.contains { $0.sev == .warn && $0.text == L.assessOwnCrashesRecent(AppInfo.name, 2) },
           "assess crashes: own-app group -> warn problem naming the app")
@@ -583,8 +588,8 @@ do {
 }
 do {
     var report = FullReport()
-    report.crashes = [CrashGroup(process: "diffscore", count: 6),
-                      CrashGroup(process: "activatehelper", count: 1)]
+    report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
+                      CrashGroup(process: "activatehelper", count: 1, directory: userCrashDir)]
     let a = Assess.assess(report: report, live: LiveSnapshot())
     check(!a.items.contains { $0.kind == .crashes }, "assess crashes: system processes only -> no AttentionItem")
     check(a.problems.isEmpty, "assess crashes: system processes only -> no problem")
@@ -592,8 +597,8 @@ do {
 }
 do {
     var report = FullReport()
-    report.crashes = [CrashGroup(process: "diffscore", count: 6),
-                      CrashGroup(process: AppInfo.name, count: 1)]
+    report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
+                      CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
     let a = Assess.assess(report: report, live: LiveSnapshot())
     check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: own + system -> exactly one item")
     check(a.problems.contains { $0.text == L.assessOwnCrashesRecent(AppInfo.name, 1) },
@@ -602,7 +607,7 @@ do {
 do {
     // The panic exception: an arbitrary non-MacDashboard process, still raises attention.
     var report = FullReport()
-    report.crashes = [CrashGroup(process: "Kernel", count: 1, isPanic: true)]
+    report.crashes = [CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: systemCrashDir)]
     let a = Assess.assess(report: report, live: LiveSnapshot())
     check(a.items.filter { $0.kind == .crashes }.count == 1,
           "assess crashes: kernel panic from a non-own process -> exactly one AttentionItem(.crashes)")
@@ -611,8 +616,8 @@ do {
 }
 do {
     var report = FullReport()
-    report.crashes = [CrashGroup(process: "diffscore", count: 6),
-                      CrashGroup(process: "Kernel", count: 2, isPanic: true)]
+    report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
+                      CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir)]
     let a = Assess.assess(report: report, live: LiveSnapshot())
     check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: panic + system -> exactly one item")
     check(a.problems.contains { $0.text == L.assessKernelPanicsRecent(2) },
@@ -622,9 +627,9 @@ do {
 }
 do {
     var report = FullReport()
-    report.crashes = [CrashGroup(process: "Kernel", count: 2, isPanic: true),
-                      CrashGroup(process: AppInfo.name, count: 1),
-                      CrashGroup(process: "diffscore", count: 6)]
+    report.crashes = [CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir),
+                      CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir),
+                      CrashGroup(process: "diffscore", count: 6, directory: userCrashDir)]
     let a = Assess.assess(report: report, live: LiveSnapshot())
     check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: panic + own + system -> still one item")
     let text = a.items.first { $0.kind == .crashes }?.fullText ?? ""
@@ -1623,7 +1628,7 @@ func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
     var report = FullReport()
     report.security = SecurityState(fileVault: false, gatekeeper: false, sip: false, firewall: false)
     report.updates = ["u1"]
-    report.crashes = [CrashGroup(process: AppInfo.name, count: 1)]
+    report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
     report.tmDest = .some(.none)
     report.smart = [
         SmartDisk(device: "internal", title: "Boot SSD", status: "SMART: ошибки носителя",
@@ -1777,7 +1782,7 @@ do {
         check(qs.updatesCount == 2 && qs.crashesCount == 0, "QuietState: 2 updates + 0 crashes -> counts (2, 0)")
     }
 
-    r2.updates = []; r2.crashes = [CrashGroup(process: "diffscore", count: 6)]
+    r2.updates = []; r2.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir)]
     do {
         let qs = QuietState.quiet(report: r2)
         check(qs.updates == .loud, "QuietState: system crashes -> .loud (informational card stays)")
@@ -2041,7 +2046,7 @@ do {
         ("MacDashboard-2026-08-14-101010.ips", now.addingTimeInterval(-5000)),
         ("ancient-2025-08-14-101010.ips", now.addingTimeInterval(-400 * 86400)),
     ]
-    let groups = RC.crashGroups(files: files, now: now)
+    let groups = RC.crashGroups(byDirectory: [(directory: userCrashDir, files: files)], now: now)
     check(groups.count == 3, "crashGroups: 6 files, 1 stale -> 3 groups")
     check(groups.map(\.process) == ["diffscore", "MacDashboard", "activatehelper"],
           "crashGroups: count desc, then name asc for ties")
@@ -2051,18 +2056,18 @@ do {
     check(groups.first { $0.process == "MacDashboard" }?.isPanic == false,
           "crashGroups: .ips-only group is not a panic group")
     check(!groups.contains { $0.process == "ancient" }, "crashGroups: file older than the window is dropped")
-    check(RC.crashGroups(files: [("Kernel-2026-08-11-163444.panic", now)], now: now)
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("Kernel-2026-08-11-163444.panic", now)])], now: now)
             .map { ($0.process, $0.count, $0.isPanic) }.first.map { $0 == ("Kernel", 1, true) } == true,
           "crashGroups: lone kernel panic -> one panic group")
-    check(RC.crashGroups(files: [], now: now).isEmpty, "crashGroups: no files -> []")
-    check(RC.crashGroups(files: [("old-2025-01-01-000000.ips", now.addingTimeInterval(-90 * 86400))], now: now).isEmpty,
+    check(RC.crashGroups(byDirectory: [], now: now).isEmpty, "crashGroups: no files -> []")
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("old-2025-01-01-000000.ips", now.addingTimeInterval(-90 * 86400))])], now: now).isEmpty,
           "crashGroups: only stale files -> []")
-    check(RC.crashGroups(files: [("Kernel-2019-01-01-000000.panic", now.addingTimeInterval(-90 * 86400))], now: now).isEmpty,
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("Kernel-2019-01-01-000000.panic", now.addingTimeInterval(-90 * 86400))])], now: now).isEmpty,
           "crashGroups: a panic older than the window is dropped too (age filter applies to panics)")
     let many: [(name: String, mtime: Date)] = (0..<20).map {
         (name: "p\($0)-2026-08-11-163444.ips", mtime: now.addingTimeInterval(-3600))
     }
-    check(RC.crashGroups(files: many, now: now).count == RC.crashMaxGroups,
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: many)], now: now).count == RC.crashMaxGroups,
           "crashGroups: caps at crashMaxGroups (15) groups")
 
     let originalLang = L10nStore.shared.language
@@ -2096,26 +2101,26 @@ do {
           "crashReportDirectories: the per-user directory comes first (dedup priority)")
 
     // --- dedup: the same report listed by both directories ---
-    let dup: [(name: String, mtime: Date)] = [
-        ("\(AppInfo.name)-2026-08-11-163444.ips", fresh),
-        ("\(AppInfo.name)-2026-08-11-163444.ips", fresh.addingTimeInterval(-60)),
-        ("diffscore-2026-08-11-163444.ips", fresh),
+    let dupByDir: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("\(AppInfo.name)-2026-08-11-163444.ips", fresh),
+                                          ("diffscore-2026-08-11-163444.ips", fresh)]),
+        (directory: systemCrashDir, files: [("\(AppInfo.name)-2026-08-11-163444.ips", fresh.addingTimeInterval(-60))]),
     ]
-    check(RC.crashDedup(files: dup).map(\.name)
+    check(RC.crashDedup(byDirectory: dupByDir).map(\.name)
             == ["\(AppInfo.name)-2026-08-11-163444.ips", "diffscore-2026-08-11-163444.ips"],
           "crashDedup: a name listed twice collapses to one entry, input order preserved")
-    check(RC.crashDedup(files: dup).first?.mtime == fresh,
+    check(RC.crashDedup(byDirectory: dupByDir).first?.mtime == fresh,
           "crashDedup: the FIRST occurrence wins (per-user copy before the system one)")
-    check(RC.crashDedup(files: []).isEmpty, "crashDedup: no files -> []")
-    check(RC.crashGroups(files: dup, now: now).first { $0.process == AppInfo.name }?.count == 1,
+    check(RC.crashDedup(byDirectory: []).isEmpty, "crashDedup: no files -> []")
+    check(RC.crashGroups(byDirectory: dupByDir, now: now).first { $0.process == AppInfo.name }?.count == 1,
           "crashGroups: a report present in both directories is counted once, not twice")
 
     // --- the shared predicate ---
-    check(RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true)),
+    check(RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: systemCrashDir)),
           "crashRaisesAttention: kernel panic from any process -> true")
-    check(RC.crashRaisesAttention(CrashGroup(process: AppInfo.name, count: 1)),
+    check(RC.crashRaisesAttention(CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)),
           "crashRaisesAttention: our own crash -> true")
-    check(!RC.crashRaisesAttention(CrashGroup(process: "diffscore", count: 9)),
+    check(!RC.crashRaisesAttention(CrashGroup(process: "diffscore", count: 9, directory: userCrashDir)),
           "crashRaisesAttention: a loud third-party process -> false")
 
     // --- A2: 20 louder foreign groups must not push out the panic and our own crash ---
@@ -2126,7 +2131,7 @@ do {
     many.append((name: "Kernel-2026-08-11-163444.panic", mtime: fresh))
     many.append((name: "Kernel-2026-08-12-163444.panic", mtime: fresh))
     many.append((name: "\(AppInfo.name)-2026-08-11-163444.ips", mtime: fresh))
-    let capped = RC.crashGroups(files: many, now: now)
+    let capped = RC.crashGroups(byDirectory: [(directory: userCrashDir, files: many)], now: now)
     check(capped.count == RC.crashMaxGroups, "crashGroups: still capped at crashMaxGroups (15) groups")
     check(capped.contains { $0.isPanic }, "crashGroups: the panic group survives the cap (finding A2)")
     check(capped.contains { $0.process == AppInfo.name },
@@ -2142,17 +2147,154 @@ do {
         ("bbb-2026-08-11-163444.ips", fresh),
         ("bbb-2026-08-12-163444.ips", fresh),
     ]
-    check(RC.crashGroups(files: ordinary, now: now).map(\.process) == ["bbb", "aaa"],
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: ordinary)], now: now).map(\.process) == ["bbb", "aaa"],
           "crashGroups: no notable group -> order unchanged (count desc, then name asc)")
 
     // --- degenerate: more notable groups than the cap ---
     let allPanics: [(name: String, mtime: Date)] = (0..<20).map {
         (name: "k\($0)-2026-08-11-163444.panic", mtime: fresh)
     }
-    check(RC.crashGroups(files: allPanics, now: now).count == RC.crashMaxGroups,
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: allPanics)], now: now).count == RC.crashMaxGroups,
           "crashGroups: more notable groups than the cap -> still 15, the cap is never exceeded")
-    check(RC.crashGroups(files: [("\(AppInfo.name)-2026-08-11-163444.panic", fresh)], now: now).count == 1,
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("\(AppInfo.name)-2026-08-11-163444.panic", fresh)])], now: now).count == 1,
           "crashGroups: a group that is both a panic AND our own app appears exactly once")
+}
+
+// =====================================================================
+// MARK: - Block V2-CRASH-REVEAL: source directory on the group, JetsamEvent is not a crash
+// =====================================================================
+do {
+    typealias RC = ReportCollector
+    let now = Date(timeIntervalSince1970: 1_760_000_000)
+    let fresh = now.addingTimeInterval(-3600)
+    let stale = now.addingTimeInterval(-30 * 86400)
+
+    // --- item 3: JetsamEvent is not a crash ---
+    check(RC.nonCrashReportPrefixes == ["jetsamevent-"],
+          "nonCrashReportPrefixes: exactly one explicit lowercase prefix, no speculative list")
+    check(RC.crashIsProcessCrash(from: "diffscore-2026-08-11-163444.ips"),
+          "crashIsProcessCrash: an ordinary .ips is a crash")
+    check(RC.crashIsProcessCrash(from: "Kernel-2026-08-11-163444.panic"),
+          "crashIsProcessCrash: a kernel panic is a crash")
+    check(!RC.crashIsProcessCrash(from: "JetsamEvent-2026-08-11-163444.ips"),
+          "crashIsProcessCrash: JetsamEvent- is excluded (memory-pressure kill, not a crash)")
+    check(!RC.crashIsProcessCrash(from: "jetsamevent-2026-08-11-163444.ips"),
+          "crashIsProcessCrash: the prefix match is case-insensitive")
+    check(RC.crashIsProcessCrash(from: "JetsamEventLogger-2026-08-11-163444.ips"),
+          "crashIsProcessCrash: the trailing dash keeps a real process named JetsamEventLogger a crash")
+    check(RC.crashIsProcessCrash(from: ""),
+          "crashIsProcessCrash: empty filename -> treated as a crash, no trap")
+
+    let mixed: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("JetsamEvent-2026-08-11-163444.ips", fresh),
+                                          ("diffscore-2026-08-11-163444.ips", fresh)]),
+    ]
+    check(RC.crashGroups(byDirectory: mixed, now: now).map(\.process) == ["diffscore"],
+          "crashGroups: JetsamEvent forms no group")
+    check(RC.crashGroups(byDirectory: mixed, now: now).reduce(0) { $0 + $1.count } == 1,
+          "crashGroups: JetsamEvent adds nothing to the crash total")
+    let onlyJetsam: [RC.CrashDirectoryListing] = [
+        (directory: systemCrashDir, files: [("JetsamEvent-2026-08-11-163444.ips", fresh)]),
+    ]
+    check(RC.crashGroups(byDirectory: onlyJetsam, now: now).isEmpty,
+          "crashGroups: a JetsamEvent-only machine reports zero crashes (the card stays quiet)")
+
+    // --- item 1: the directory travels with the group ---
+    check(RC.crashGroups(byDirectory: [(directory: systemCrashDir,
+                                        files: [("Kernel-2026-08-11-163444.panic", fresh)])], now: now)
+            .first?.directory == systemCrashDir,
+          "crashGroups: a system-directory panic carries the SYSTEM directory")
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir,
+                                        files: [("diffscore-2026-08-11-163444.ips", fresh)])], now: now)
+            .first?.directory == userCrashDir,
+          "crashGroups: a per-user report carries the PER-USER directory")
+
+    let bothDirs: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("diffscore-2026-08-11-163444.ips", fresh)]),
+        (directory: systemCrashDir, files: [("diffscore-2026-08-12-163444.ips", fresh)]),
+    ]
+    let bothGroup = RC.crashGroups(byDirectory: bothDirs, now: now).first
+    check(bothGroup?.count == 2,
+          "crashGroups: one process crashing in both directories -> one group of 2")
+    check(bothGroup?.directory == userCrashDir,
+          "crashGroups: a group spanning both directories reveals the FIRST one (per-user), which does contain a report")
+
+    let firstStale: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("diffscore-2025-01-01-000000.ips", stale)]),
+        (directory: systemCrashDir, files: [("diffscore-2026-08-12-163444.ips", fresh)]),
+    ]
+    check(RC.crashGroups(byDirectory: firstStale, now: now).first?.directory == systemCrashDir,
+          "crashGroups: the directory comes from the first SURVIVING report — a stale per-user report does not claim it")
+    check(RC.crashGroups(byDirectory: firstStale, now: now).first?.count == 1,
+          "crashGroups: the stale per-user report is still dropped from the count")
+
+    // --- dedup keeps the winning copy's directory ---
+    let sameName: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("diffscore-2026-08-11-163444.ips", fresh)]),
+        (directory: systemCrashDir, files: [("diffscore-2026-08-11-163444.ips", fresh.addingTimeInterval(-60))]),
+    ]
+    check(RC.crashDedup(byDirectory: sameName).count == 1,
+          "crashDedup: the same filename in both directories collapses to one entry")
+    check(RC.crashDedup(byDirectory: sameName).first?.directory == userCrashDir,
+          "crashDedup: the surviving entry carries the FIRST listing's directory")
+    check(RC.crashDedup(byDirectory: []).isEmpty, "crashDedup: no listings -> []")
+    check(RC.crashDedup(byDirectory: sameName.reversed()).first?.directory == systemCrashDir,
+          "crashDedup: listing order IS the priority order, nothing else decides")
+
+    // --- the directory does not leak into the attention predicate or into identity ---
+    check(RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: userCrashDir))
+          == RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: systemCrashDir)),
+          "crashRaisesAttention: the source directory does not change whether a group raises attention")
+    check(CrashGroup(process: "a", count: 1, directory: userCrashDir)
+          != CrashGroup(process: "a", count: 1, directory: systemCrashDir),
+          "CrashGroup: Equatable includes `directory` (synthesized, not hand-written)")
+
+    // --- item 1 at the assessment layer: the reveal target is the group's own directory ---
+    do {
+        var report = FullReport()
+        report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: systemCrashDir)]
+        let a = Assess.assess(report: report, live: LiveSnapshot())
+        check(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
+              "assess crashes: an own-app crash found in the SYSTEM directory reveals the system directory")
+    }
+    do {
+        var report = FullReport()
+        report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
+        let a = Assess.assess(report: report, live: LiveSnapshot())
+        check(a.items.first { $0.kind == .crashes }?.action == .revealPath(userCrashDir),
+              "assess crashes: an own-app crash found in the PER-USER directory reveals the per-user directory")
+    }
+    do {
+        // A non-raising group listed first must not steal the target.
+        var report = FullReport()
+        report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
+                          CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir)]
+        let a = Assess.assess(report: report, live: LiveSnapshot())
+        check(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
+              "assess crashes: the target comes from the first RAISING group, not the first group")
+        check(a.problems.first { $0.text == L.assessKernelPanicsRecent(2) }?.action == .revealPath(systemCrashDir),
+              "assess crashes: the Problem carries the same reveal target as the AttentionItem")
+    }
+    do {
+        // Two raising groups from two directories: the leading one wins, deterministically.
+        var report = FullReport()
+        report.crashes = [CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir),
+                          CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
+        let a = Assess.assess(report: report, live: LiveSnapshot())
+        check(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
+              "assess crashes: raising groups from two directories -> the leading group's directory")
+    }
+
+    // --- item 2: the row's accessibility string exists in every language ---
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+    for lang in AppLanguage.allCases {
+        L10nStore.shared.language = lang
+        check(L.maintenanceCrashRevealA11y("diffscore").contains("diffscore"),
+              "maintenanceCrashRevealA11y (\(lang)): names the process")
+        check(L.maintenanceCrashRevealA11y("diffscore").count > "diffscore".count + 5,
+              "maintenanceCrashRevealA11y (\(lang)): is a real sentence, not just the process name")
+    }
 }
 
 // =====================================================================

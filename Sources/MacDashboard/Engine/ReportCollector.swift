@@ -108,14 +108,44 @@ final class ReportCollector {
         group.isPanic || group.process == AppInfo.name
     }
 
+    /// Report kinds macOS writes into DiagnosticReports that are NOT process crashes.
+    /// `JetsamEvent-*.ips` is the memory-pressure kill log: the kernel reclaiming
+    /// memory, already visible on the memory card, and nothing the user acts on here
+    /// (V2-CRASH-REVEAL, item 3). Entries MUST be lowercase — `crashIsProcessCrash`
+    /// lowercases the filename before comparing. Keep this list small and evidence-
+    /// backed: add a prefix only when a real report of that kind has been seen.
+    static let nonCrashReportPrefixes = ["jetsamevent-"]
+
+    /// Pure (Checks-tested): is this report an actual process/kernel crash, or one of
+    /// the non-crash kinds above? Total by construction: an empty or unrecognized
+    /// filename is treated as a crash (fail-visible, never fail-silent).
+    static func crashIsProcessCrash(from filename: String) -> Bool {
+        let lower = filename.lowercased()
+        return !nonCrashReportPrefixes.contains { lower.hasPrefix($0) }
+    }
+
+    /// One directory's crash-report filenames tagged with that directory's absolute
+    /// path. ARRAY ORDER IS DEDUP PRIORITY: `crashReportDirectories` puts the per-user
+    /// directory first, so its copy of a report wins over the system one and its path
+    /// is what the group reveals (V2-CRASH-REVEAL).
+    typealias CrashDirectoryListing = (directory: String, files: [(name: String, mtime: Date)])
+
     /// Pure (Checks-tested): one entry per report FILE NAME, first occurrence wins.
     /// The collector concatenates two directories (see `crashReportDirectories`) and
     /// the same report could plausibly be listed by both; without this it would be
     /// counted twice and inflate a process's crash count. Input order IS the priority
-    /// order, so the per-user copy wins over the system one.
-    static func crashDedup(files: [(name: String, mtime: Date)]) -> [(name: String, mtime: Date)] {
+    /// order, so the per-user copy wins over the system one. The surviving entry also
+    /// carries the directory it was listed in, which is what `CrashGroup.directory`
+    /// ends up holding.
+    static func crashDedup(byDirectory: [CrashDirectoryListing]) -> [(name: String, mtime: Date, directory: String)] {
         var seen = Set<String>()
-        return files.filter { seen.insert($0.name).inserted }
+        var out: [(name: String, mtime: Date, directory: String)] = []
+        for listing in byDirectory {
+            for f in listing.files where seen.insert(f.name).inserted {
+                out.append((name: f.name, mtime: f.mtime, directory: listing.directory))
+            }
+        }
+        return out
     }
 
     /// Pure (Checks-tested): the whole crash pipeline except the directory read —
@@ -123,19 +153,30 @@ final class ReportCollector {
     /// collapse repeats per process, mark a group as a panic group if ANY of its
     /// reports is a `.panic`, order by count (desc) then name (asc, so ties are
     /// deterministic), cap the group count — keeping panic/own-app groups first so the
-    /// cap can never discard them (V2-CRASH-DETECT).
-    static func crashGroups(files: [(name: String, mtime: Date)], now: Date,
+    /// cap can never discard them (V2-CRASH-DETECT). Non-crash report kinds are dropped
+    /// before grouping (item 3), and a group's `directory` is the directory of its
+    /// FIRST surviving report — same "first occurrence wins" law as `crashDedup`, so a
+    /// process with reports in both directories reveals the per-user one, which does
+    /// contain at least one of them.
+    static func crashGroups(byDirectory: [CrashDirectoryListing], now: Date,
                             window: TimeInterval = crashAgeWindow,
                             maxGroups: Int = crashMaxGroups) -> [CrashGroup] {
-        var acc: [String: (count: Int, isPanic: Bool)] = [:]
-        for f in crashDedup(files: files) where isCrashRecent(mtime: f.mtime, now: now, window: window) {
+        var acc: [String: (count: Int, isPanic: Bool, directory: String)] = [:]
+        for f in crashDedup(byDirectory: byDirectory)
+            where crashIsProcessCrash(from: f.name)
+                  && isCrashRecent(mtime: f.mtime, now: now, window: window) {
             let name = crashProcessName(from: f.name)
-            let prev = acc[name] ?? (count: 0, isPanic: false)
-            acc[name] = (count: prev.count + 1,
-                         isPanic: prev.isPanic || crashIsPanic(from: f.name))
+            if var prev = acc[name] {
+                prev.count += 1
+                prev.isPanic = prev.isPanic || crashIsPanic(from: f.name)
+                acc[name] = prev                      // directory: first surviving report wins
+            } else {
+                acc[name] = (count: 1, isPanic: crashIsPanic(from: f.name), directory: f.directory)
+            }
         }
         let sorted = acc
-            .map { CrashGroup(process: $0.key, count: $0.value.count, isPanic: $0.value.isPanic) }
+            .map { CrashGroup(process: $0.key, count: $0.value.count,
+                              isPanic: $0.value.isPanic, directory: $0.value.directory) }
             .sorted {
                 if $0.count != $1.count { return $0.count > $1.count }
                 return $0.process < $1.process
@@ -417,8 +458,10 @@ final class ReportCollector {
     // MARK: - crashes (FileManager, no shell)
 
     private func collectCrashes() -> Outcome {
-        let files = Self.crashReportDirectories.flatMap { Self.crashFiles(in: $0) }
-        let groups = Self.crashGroups(files: files, now: Date())
+        let byDirectory = Self.crashReportDirectories.map {
+            (directory: $0.path, files: Self.crashFiles(in: $0))
+        }
+        let groups = Self.crashGroups(byDirectory: byDirectory, now: Date())
         return Outcome(section: .crashes) { $0.crashes = groups }
     }
 

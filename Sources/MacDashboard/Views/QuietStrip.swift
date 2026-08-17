@@ -289,15 +289,14 @@ struct UpdatesCrashesCard: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         if !crashes.isEmpty {
-                            ForEach(Array(crashes.prefix(5).enumerated()), id: \.offset) { _, g in
-                                Text(L.maintenanceCrashRow(g.process, g.count))
-                                    .font(.system(size: 13)).foregroundStyle(DS.inkSoft)
-                                    .lineLimit(1).truncationMode(.middle)
+                            ForEach(Array(crashes.prefix(5))) { g in
+                                CrashRevealRow(group: g)
                             }
                             if crashes.count > 5 {
                                 Text(L.maintenanceAndMore(crashes.count - 5))
                                     .font(.system(size: 11.5))
                                     .foregroundStyle(DS.muted)
+                                    .padding(.horizontal, 9)     // align with the rows' text inset
                             }
                         }
                     }
@@ -307,5 +306,79 @@ struct UpdatesCrashesCard: View {
         case .quiet:
             EmptyView()
         }
+    }
+}
+
+// MARK: - CrashRevealRow (V2-CRASH-REVEAL, item 2)
+
+/// One crash group as a clickable *filled list row* — the same hover surface class
+/// as `ProcessCards`' process row (resting `DS.row`, hover `DS.track`, 0.14 s), NOT
+/// normalised to the flat-text or tinted-plate class. Clicking reveals the directory
+/// THIS group's report actually came from (`CrashGroup.directory`), which is why the
+/// affordance is per row and not one shared button under the list: two rows can point
+/// at two different directories.
+private struct CrashRevealRow: View {
+    let group: CrashGroup
+
+    @State private var hovering = false
+    /// Balances the NSCursor stack on BOTH hover-exit and unmount, so this does not
+    /// become a fifth unbalanced push site (V2-CURSOR-BALANCE consolidates the
+    /// existing four later; this block must not add to them). SwiftUI's
+    /// `.pointerStyle(.link)` is macOS 15+, and Package.swift pins `.macOS(.v14)`,
+    /// so the AppKit form is the only one available here.
+    @State private var cursorPushed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button {
+            AdviceActionRunner.reveal(group.directory)
+        } label: {
+            Text(L.maintenanceCrashRow(group.process, group.count))
+                .font(.system(size: 13))
+                .foregroundStyle(DS.inkSoft)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .hoverTip(group.directory)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 9)
+                // Optical centring: SwiftUI centres the text's LINE BOX, whose
+                // descender space is empty for these strings, so a mathematically
+                // centred row reads 0.5 pt low. 1 pt of bottom padding inside the
+                // centred block lifts the glyphs. Measured on a 2x render: without
+                // it the glyphs sit 18 px below / 16 px above, with it 16 / 18 — the
+                // grid snaps, so any value in (0, 1] lifts by exactly one device
+                // pixel and 0.5 is the smallest honest one. The row's own height is
+                // still the fixed 27, so nothing about the layout moves.
+                .padding(.bottom, 0.5)
+                .frame(height: 27)
+                .background(
+                    // Animate the FILL at the shape: the row's size does not depend
+                    // on `hovering`, and nothing here lifts, so the hit test stays
+                    // pinned to the resting frame.
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(hovering ? DS.track : DS.row)
+                        .animation(.easeInOut(duration: reduceMotion ? DSMotion.reduceMotionFallback : 0.14),
+                                   value: hovering)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            hovering = isHovering
+            if isHovering {
+                NSCursor.pointingHand.push()
+                cursorPushed = true
+            } else if cursorPushed {
+                NSCursor.pop()
+                cursorPushed = false
+            }
+        }
+        .onDisappear {
+            if cursorPushed {
+                NSCursor.pop()
+                cursorPushed = false
+            }
+        }
+        .accessibilityLabel(L.maintenanceCrashRevealA11y(group.process))
     }
 }

@@ -117,11 +117,14 @@ struct EnergySettings: Equatable { var battery: [(String, String)]; var ac: [(St
 /// (V2-CRASH-SIGNAL). `process` is parsed off the report filename — the only
 /// data source available without reading report contents. `isPanic` is true when
 /// at least one of the collapsed reports is a `.panic` (kernel panic): those
-/// raise attention whatever process logged them.
+/// raise attention whatever process logged them. `directory` is the absolute path
+/// of the DiagnosticReports directory the group's first surviving report was
+/// listed in (V2-CRASH-REVEAL); it is what the reveal action opens.
 struct CrashGroup: Identifiable, Equatable {
     var process: String         // "diffscore"
     var count: Int              // reports from that process inside the window
     var isPanic: Bool = false   // at least one of them a kernel panic (.panic)
+    var directory: String       // "/Library/Logs/DiagnosticReports" — where its first report was found
     var id: String { process }
 }
 

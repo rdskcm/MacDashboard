@@ -199,6 +199,7 @@ protocol AppStrings {
     var maintenanceUpdatesTip: String { get }
     var maintenanceCrashesTip: String { get }
     func maintenanceCrashRow(_ process: String, _ count: Int) -> String
+    func maintenanceCrashRevealA11y(_ process: String) -> String
     func maintenanceAndMore(_ n: Int) -> String
     var maintenanceBrewUpgradeButton: String { get }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String
