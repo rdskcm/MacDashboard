@@ -177,7 +177,8 @@ struct StringsRU: AppStrings {
     var maintenanceCrashesSection: String { "Краши" }
     var maintenanceCrashesNone: String { "\u{2713}" }
     var maintenanceUpdatesTip: String { "Ожидающие обновления macOS и App Store." }
-    var maintenanceCrashesTip: String { "Отчёты о падениях приложений за последнее время." }
+    var maintenanceCrashesTip: String { "Отчёты о падениях приложений за последние 7 дней." }
+    func maintenanceCrashRow(_ process: String, _ count: Int) -> String { count > 1 ? "\(process) \u{00D7}\(count)" : process }
     func maintenanceAndMore(_ n: Int) -> String { "и ещё \(n)" }
     var maintenanceBrewUpgradeButton: String { "Обновить пакеты" }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String {
@@ -390,7 +391,8 @@ struct StringsRU: AppStrings {
     var assessFirewallOff: String { "Файрвол выключен — стоит включить." }
     func assessMacUpdatesAvailable(_ n: Int) -> String { "Доступны обновления macOS: \(n) шт." }
     func assessBrewOutdatedTip(_ n: Int) -> String { "Homebrew: устаревших пакетов — \(n) (brew upgrade)." }
-    func assessCrashesRecent(_ n: Int) -> String { "Свежие крэш-репорты: \(n) — посмотрите в Console.app." }
+    func assessOwnCrashesRecent(_ app: String, _ n: Int) -> String { "Сбои \(app) за последние 7 дней: \(n) шт. — отчёты в Console.app." }
+    func assessKernelPanicsRecent(_ n: Int) -> String { "Сбой системы (паника ядра) за последние 7 дней: \(n) шт. — отчёты в Console.app." }
     var assessTimeMachineNotSetUp: String { "Time Machine не настроен — бэкапов нет." }
     func assessSmartDiskErrors(_ title: String) -> String { "Диск «\(title)»: SMART сообщает об ошибках носителя — проверьте диск и бэкапы." }
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String { "Диск «\(title)»: износ \(pct)% — ресурс на исходе." }

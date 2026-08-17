@@ -198,6 +198,7 @@ protocol AppStrings {
     var maintenanceCrashesNone: String { get }
     var maintenanceUpdatesTip: String { get }
     var maintenanceCrashesTip: String { get }
+    func maintenanceCrashRow(_ process: String, _ count: Int) -> String
     func maintenanceAndMore(_ n: Int) -> String
     var maintenanceBrewUpgradeButton: String { get }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String
@@ -402,7 +403,8 @@ protocol AppStrings {
     var assessFirewallOff: String { get }
     func assessMacUpdatesAvailable(_ n: Int) -> String
     func assessBrewOutdatedTip(_ n: Int) -> String
-    func assessCrashesRecent(_ n: Int) -> String
+    func assessOwnCrashesRecent(_ app: String, _ n: Int) -> String
+    func assessKernelPanicsRecent(_ n: Int) -> String
     var assessTimeMachineNotSetUp: String { get }
     func assessSmartDiskErrors(_ title: String) -> String
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String

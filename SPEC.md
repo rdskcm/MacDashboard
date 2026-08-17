@@ -263,7 +263,7 @@ struct FullReport {
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?
-    var crashes: [String]?
+    var crashes: [CrashGroup]?          // grouped by process, ≤7 days old
     var brewVersion: String??           // .some(nil) = brew not installed
     var brewOutdated: [String]?
     var updates: [String]?              // pending macOS updates ([] = up to date)
@@ -364,7 +364,7 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
 - tmDest: `tmutil destinationinfo` (absent ⇒ .some(nil) — "не настроен", calm info);
   `tmutil latestbackup` best-effort for lastBackup (may need FDA ⇒ nil).
 - spotlight: `mdutil -s /`.
-- crashes: newest 15 of `~/Library/Logs/DiagnosticReports` (FileManager, no shell).
+- crashes: ~/Library/Logs/DiagnosticReports via FileManager (no shell); files with mtime older than 7 days dropped, remaining ones grouped by process name (parsed off the filename) into ≤15 CrashGroup(process, count, isPanic); isPanic = at least one .panic report in the group.
 - brew: resolve from /opt/homebrew/bin/brew, /usr/local/bin/brew, PATH; absent ⇒
   brewVersion = .some(nil). Else `brew --version` + `brew outdated` (60 s).
 - updates: `softwareupdate -l` (120 s timeout; on timeout ⇒ nil = "не проверено").
@@ -402,7 +402,7 @@ returns String? (nil on any failure). Absolute paths for binaries (/usr/bin/…,
 - security: each of FileVault/Gatekeeper/SIP/Firewall == false ⇒ serious "X выключен — стоит включить." (nil ⇒ silent).
 - updates: count > 0 ⇒ warn "Доступны обновления macOS: N шт."
 - brew outdated > 0 ⇒ tip.
-- crashes > 0 ⇒ warn "Свежие крэш-репорты: N — посмотрите в Console.app."
+- crashes: a group whose process == AppInfo.name, or ANY group with isPanic (kernel panic, whatever the process), ⇒ one warn item — "Сбои <app> за последние 7 дней: N шт. …" / "Сбой системы (паника ядра) за последние 7 дней: N шт. …"; other system/third-party groups never raise severity (V2-CRASH-SIGNAL).
 - tmDest == .some(nil) ⇒ warn "Time Machine не настроен — бэкапов нет."
 - smart: any disk with Critical Warning != 0x00 or Media Errors > 0 ⇒ crit;
   Percentage Used ≥ 80 ⇒ warn; SMART "NO ACCESS" on external ⇒ tip (переподключите кабель / установите smartmontools).

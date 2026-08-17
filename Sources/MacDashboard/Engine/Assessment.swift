@@ -142,12 +142,31 @@ enum Assess {
         }
 
         // --- crashes ---
-        if let crashes = report.crashes, !crashes.isEmpty {
+        // Exactly two things raise attention here (V2-CRASH-SIGNAL):
+        //   1. OUR OWN crash. The report filename carries CFBundleExecutable,
+        //      which build_app.sh keeps equal to CFBundleName == AppInfo.name,
+        //      so this compare is exact and needs no allowlist of "Apple daemons".
+        //   2. A KERNEL PANIC (`.panic` report → CrashGroup.isPanic), whatever
+        //      process logged it: the whole machine went down and rebooted, which
+        //      is always news the user should see (user correction 2026-08-17).
+        // A system/third-party process merely crashing (diffscore,
+        // activatehelper…) is something the user cannot act on, and a permanent
+        // «Требует внимания» item for it is exactly what trains the indicator to
+        // be ignored. Those groups stay visible in the card and the text report.
+        let raisingCrashes = (report.crashes ?? []).filter {
+            ($0.isPanic || $0.process == AppInfo.name) && $0.count > 0
+        }
+        if !raisingCrashes.isEmpty {
             let action = AdviceAction.revealPath(FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports")
-            let text = L.assessCrashesRecent(crashes.count)
+            let panicCount = raisingCrashes.filter { $0.isPanic }.reduce(0) { $0 + $1.count }
+            let ownCount = raisingCrashes.filter { !$0.isPanic }.reduce(0) { $0 + $1.count }
+            var sentences: [String] = []
+            if panicCount > 0 { sentences.append(L.assessKernelPanicsRecent(panicCount)) }
+            if ownCount > 0 { sentences.append(L.assessOwnCrashesRecent(AppInfo.name, ownCount)) }
+            let text = sentences.joined(separator: " ")
             pairs.append((Problem(sev: .warn, text: text, action: action),
                            AttentionItem(kind: .crashes, sev: .warn, label: L.attnLabelCrashes,
-                                         detail: L.attnDetailCrashes(crashes.count), fullText: text,
+                                         detail: L.attnDetailCrashes(panicCount + ownCount), fullText: text,
                                          verb: verb(action), action: action)))
         }
 

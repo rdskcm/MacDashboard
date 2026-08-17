@@ -575,15 +575,69 @@ do {
 
 do {
     var report = FullReport()
-    report.crashes = ["crash1.ips"]
+    report.crashes = [CrashGroup(process: AppInfo.name, count: 2)]
     let a = Assess.assess(report: report, live: LiveSnapshot())
-    check(a.problems.contains { $0.sev == .warn && $0.text.contains("крэш") }, "assess crashes [x]: warn")
+    check(a.problems.contains { $0.sev == .warn && $0.text == L.assessOwnCrashesRecent(AppInfo.name, 2) },
+          "assess crashes: own-app group -> warn problem naming the app")
+    check(a.items.contains { $0.kind == .crashes }, "assess crashes: own-app group -> AttentionItem(.crashes)")
+}
+do {
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "diffscore", count: 6),
+                      CrashGroup(process: "activatehelper", count: 1)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(!a.items.contains { $0.kind == .crashes }, "assess crashes: system processes only -> no AttentionItem")
+    check(a.problems.isEmpty, "assess crashes: system processes only -> no problem")
+    check(a.tips.isEmpty && a.capsules.isEmpty, "assess crashes: system processes only -> no tip/capsule either")
+}
+do {
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "diffscore", count: 6),
+                      CrashGroup(process: AppInfo.name, count: 1)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: own + system -> exactly one item")
+    check(a.problems.contains { $0.text == L.assessOwnCrashesRecent(AppInfo.name, 1) },
+          "assess crashes: own + system -> count is own-app only (1, not 7)")
+}
+do {
+    // The panic exception: an arbitrary non-MacDashboard process, still raises attention.
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "Kernel", count: 1, isPanic: true)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.items.filter { $0.kind == .crashes }.count == 1,
+          "assess crashes: kernel panic from a non-own process -> exactly one AttentionItem(.crashes)")
+    check(a.problems.contains { $0.sev == .warn && $0.text == L.assessKernelPanicsRecent(1) },
+          "assess crashes: kernel panic -> warn problem with the panic sentence")
+}
+do {
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "diffscore", count: 6),
+                      CrashGroup(process: "Kernel", count: 2, isPanic: true)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: panic + system -> exactly one item")
+    check(a.problems.contains { $0.text == L.assessKernelPanicsRecent(2) },
+          "assess crashes: panic + system -> count is the panic group only (2, not 8)")
+    check(a.items.first { $0.kind == .crashes }?.detail == L.attnDetailCrashes(2),
+          "assess crashes: panic + system -> detail counts panic reports only")
+}
+do {
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "Kernel", count: 2, isPanic: true),
+                      CrashGroup(process: AppInfo.name, count: 1),
+                      CrashGroup(process: "diffscore", count: 6)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: panic + own + system -> still one item")
+    let text = a.items.first { $0.kind == .crashes }?.fullText ?? ""
+    check(text.contains(L.assessKernelPanicsRecent(2)) && text.contains(L.assessOwnCrashesRecent(AppInfo.name, 1)),
+          "assess crashes: panic + own -> the single item carries both sentences")
+    check(a.items.first { $0.kind == .crashes }?.detail == L.attnDetailCrashes(3),
+          "assess crashes: panic + own -> detail counts panic + own reports (3, not 9)")
 }
 do {
     var report = FullReport()
     report.crashes = []
     let a = Assess.assess(report: report, live: LiveSnapshot())
-    check(!a.problems.contains { $0.text.contains("крэш") }, "assess crashes []: nothing")
+    check(!a.items.contains { $0.kind == .crashes }, "assess crashes []: nothing")
 }
 
 do {
@@ -1567,7 +1621,7 @@ func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
     var report = FullReport()
     report.security = SecurityState(fileVault: false, gatekeeper: false, sip: false, firewall: false)
     report.updates = ["u1"]
-    report.crashes = ["crash1.ips"]
+    report.crashes = [CrashGroup(process: AppInfo.name, count: 1)]
     report.tmDest = .some(.none)
     report.smart = [
         SmartDisk(device: "internal", title: "Boot SSD", status: "SMART: ошибки носителя",
@@ -1719,6 +1773,13 @@ do {
         let qs = QuietState.quiet(report: r2)
         check(qs.updates == .loud, "QuietState: 2 updates + 0 crashes -> .loud")
         check(qs.updatesCount == 2 && qs.crashesCount == 0, "QuietState: 2 updates + 0 crashes -> counts (2, 0)")
+    }
+
+    r2.updates = []; r2.crashes = [CrashGroup(process: "diffscore", count: 6)]
+    do {
+        let qs = QuietState.quiet(report: r2)
+        check(qs.updates == .loud, "QuietState: system crashes -> .loud (informational card stays)")
+        check(qs.crashesCount == 6, "QuietState: crashesCount counts reports, not groups")
     }
 }
 
@@ -1926,6 +1987,93 @@ do {
               "L10n no-FDA strings: non-empty in \(name)")
         check(s.storageFoldersNoFDA("Корзина").contains("Корзина"),
               "L10n storageFoldersNoFDA: interpolates the folder list in \(name)")
+    }
+}
+
+// =====================================================================
+// MARK: - Block V2-CRASH-SIGNAL: crash filename parsing, age window, grouping
+// =====================================================================
+do {
+    typealias RC = ReportCollector
+    check(RC.crashProcessName(from: "diffscore-2026-08-11-163444.ips") == "diffscore",
+          "crashProcessName: plain .ips -> process name")
+    check(RC.crashProcessName(from: "MacDashboard-2026-08-11-163444.ips") == "MacDashboard",
+          "crashProcessName: own app -> MacDashboard")
+    check(RC.crashProcessName(from: "Kernel-2026-08-11-163444.panic") == "Kernel",
+          "crashProcessName: .panic extension handled")
+    check(RC.crashProcessName(from: "Google Chrome Helper-2026-08-11-163444.crash") == "Google Chrome Helper",
+          "crashProcessName: spaces in the process name survive")
+    check(RC.crashProcessName(from: "com.apple.WebKit.WebContent-2026-08-11-163444.ips") == "com.apple.WebKit.WebContent",
+          "crashProcessName: dots in the process name survive")
+    check(RC.crashProcessName(from: "xpc-service-2026-08-11-163444.ips") == "xpc-service",
+          "crashProcessName: dashes in the process name survive")
+    check(RC.crashProcessName(from: "weird.ips") == "weird",
+          "crashProcessName: no date suffix -> stem")
+    check(RC.crashProcessName(from: "diffscore-2026-08-11.ips") == "diffscore-2026-08-11",
+          "crashProcessName: partial date suffix does not match -> whole stem")
+    check(RC.crashProcessName(from: "-2026-08-11-163444.ips") == "-2026-08-11-163444",
+          "crashProcessName: empty process part -> falls back to the stem, never empty")
+    check(RC.crashProcessName(from: "") == "", "crashProcessName: empty input -> empty, no trap")
+
+    check(RC.crashIsPanic(from: "Kernel-2026-08-11-163444.panic"), "crashIsPanic: .panic -> true")
+    check(!RC.crashIsPanic(from: "diffscore-2026-08-11-163444.ips"), "crashIsPanic: .ips -> false")
+    check(!RC.crashIsPanic(from: "diffscore-2026-08-11-163444.crash"), "crashIsPanic: .crash -> false")
+    check(!RC.crashIsPanic(from: "panic"), "crashIsPanic: no extension at all -> false, no trap")
+    check(!RC.crashIsPanic(from: ""), "crashIsPanic: empty input -> false, no trap")
+
+    let now = Date(timeIntervalSince1970: 1_760_000_000)
+    check(RC.crashAgeWindow == 7 * 24 * 60 * 60, "crashAgeWindow: 7 days")
+    check(RC.isCrashRecent(mtime: now.addingTimeInterval(-3600), now: now), "isCrashRecent: 1 h old -> true")
+    check(RC.isCrashRecent(mtime: now.addingTimeInterval(-6 * 86400), now: now), "isCrashRecent: 6 d old -> true")
+    check(!RC.isCrashRecent(mtime: now.addingTimeInterval(-7 * 86400), now: now),
+          "isCrashRecent: exactly 7 d old -> false (strict <)")
+    check(!RC.isCrashRecent(mtime: now.addingTimeInterval(-8 * 86400), now: now), "isCrashRecent: 8 d old -> false")
+    check(!RC.isCrashRecent(mtime: now.addingTimeInterval(60), now: now),
+          "isCrashRecent: future mtime (clock rollback) -> false")
+
+    let files: [(name: String, mtime: Date)] = [
+        ("diffscore-2026-08-11-163444.ips", now.addingTimeInterval(-3600)),
+        ("diffscore-2026-08-12-101010.ips", now.addingTimeInterval(-7200)),
+        ("diffscore-2026-08-13-101010.panic", now.addingTimeInterval(-10800)),
+        ("activatehelper-2026-08-14-101010.ips", now.addingTimeInterval(-4000)),
+        ("MacDashboard-2026-08-14-101010.ips", now.addingTimeInterval(-5000)),
+        ("ancient-2025-08-14-101010.ips", now.addingTimeInterval(-400 * 86400)),
+    ]
+    let groups = RC.crashGroups(files: files, now: now)
+    check(groups.count == 3, "crashGroups: 6 files, 1 stale -> 3 groups")
+    check(groups.map(\.process) == ["diffscore", "MacDashboard", "activatehelper"],
+          "crashGroups: count desc, then name asc for ties")
+    check(groups.map(\.count) == [3, 1, 1], "crashGroups: repeats collapse into a count (mixed extensions included)")
+    check(groups.first { $0.process == "diffscore" }?.isPanic == true,
+          "crashGroups: one .panic among the files marks the whole group as a panic group")
+    check(groups.first { $0.process == "MacDashboard" }?.isPanic == false,
+          "crashGroups: .ips-only group is not a panic group")
+    check(!groups.contains { $0.process == "ancient" }, "crashGroups: file older than the window is dropped")
+    check(RC.crashGroups(files: [("Kernel-2026-08-11-163444.panic", now)], now: now)
+            .map { ($0.process, $0.count, $0.isPanic) }.first.map { $0 == ("Kernel", 1, true) } == true,
+          "crashGroups: lone kernel panic -> one panic group")
+    check(RC.crashGroups(files: [], now: now).isEmpty, "crashGroups: no files -> []")
+    check(RC.crashGroups(files: [("old-2025-01-01-000000.ips", now.addingTimeInterval(-90 * 86400))], now: now).isEmpty,
+          "crashGroups: only stale files -> []")
+    check(RC.crashGroups(files: [("Kernel-2019-01-01-000000.panic", now.addingTimeInterval(-90 * 86400))], now: now).isEmpty,
+          "crashGroups: a panic older than the window is dropped too (age filter applies to panics)")
+    let many: [(name: String, mtime: Date)] = (0..<20).map {
+        (name: "p\($0)-2026-08-11-163444.ips", mtime: now.addingTimeInterval(-3600))
+    }
+    check(RC.crashGroups(files: many, now: now).count == RC.crashMaxGroups,
+          "crashGroups: caps at crashMaxGroups (15) groups")
+
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+    for lang in AppLanguage.allCases {
+        L10nStore.shared.language = lang
+        check(L.maintenanceCrashRow("diffscore", 6) == "diffscore \u{00D7}6",
+              "maintenanceCrashRow (\(lang)): repeats -> 'diffscore ×6'")
+        check(L.maintenanceCrashRow("solo", 1) == "solo",
+              "maintenanceCrashRow (\(lang)): single report -> bare process name")
+        check(!L.assessKernelPanicsRecent(1).isEmpty
+              && L.assessKernelPanicsRecent(1) != L.assessOwnCrashesRecent(AppInfo.name, 1),
+              "assessKernelPanicsRecent (\(lang)): present and distinct from the own-app sentence")
     }
 }
 

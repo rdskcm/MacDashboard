@@ -327,10 +327,10 @@ enum ReportWriter {
 
     // MARK: - КРАШИ
 
-    private static func renderCrashes(_ crashes: [String]?) -> [String] {
+    private static func renderCrashes(_ crashes: [CrashGroup]?) -> [String] {
         guard let c = crashes else { return [L.sharedUnavailable] }
         if c.isEmpty { return [L.reportNone] }
-        return Array(c.prefix(15))
+        return c.prefix(15).map { L.maintenanceCrashRow($0.process, $0.count) }
     }
 
     // MARK: - HOMEBREW

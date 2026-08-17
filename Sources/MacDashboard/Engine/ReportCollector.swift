@@ -44,6 +44,73 @@ final class ReportCollector {
         return age >= 0 && age < window
     }
 
+    /// Age window for crash reports (V2-CRASH-SIGNAL): anything older is not
+    /// collected at all, so a stale crash cannot keep a surface loud forever.
+    static let crashAgeWindow: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Upper bound on crash GROUPS kept (applied after grouping, so a runaway
+    /// process keeps its true count) — the old 15-file cap, moved.
+    static let crashMaxGroups = 15
+
+    /// Pure (Checks-tested): true iff `mtime` lies within `[now - window, now]`.
+    /// A future mtime (clock rolled back) counts as stale — same rule as
+    /// `isBrewCacheFresh`, so a bad clock can never pin a report in the list.
+    static func isCrashRecent(mtime: Date, now: Date,
+                              window: TimeInterval = crashAgeWindow) -> Bool {
+        let age = now.timeIntervalSince(mtime)
+        return age >= 0 && age < window
+    }
+
+    /// Pure (Checks-tested): process name out of a DiagnosticReports filename.
+    /// macOS names these `<process>-<YYYY-MM-DD>-<HHMMSS>.<ips|crash|panic>`;
+    /// the process part may itself contain dashes, dots and spaces, so only an
+    /// end-anchored date-time suffix is stripped. Total by construction: an
+    /// unrecognized shape yields the extension-stripped stem, and a stem that
+    /// is only a timestamp yields that stem rather than an empty row label.
+    static func crashProcessName(from filename: String) -> String {
+        let stem = (filename as NSString).deletingPathExtension
+        var name = stem
+        if let r = stem.range(of: #"-\d{4}-\d{2}-\d{2}-\d{6}$"#, options: .regularExpression) {
+            name = String(stem[stem.startIndex..<r.lowerBound])
+        }
+        name = name.trimmingCharacters(in: .whitespaces)
+        if !name.isEmpty { return name }
+        let fallback = stem.trimmingCharacters(in: .whitespaces)
+        return fallback.isEmpty ? filename : fallback
+    }
+
+    /// Pure (Checks-tested): is this report a kernel panic (`.panic`) rather than
+    /// an app-level `.ips`/`.crash`? A panic means the whole machine went down, so
+    /// it raises attention whatever process logged it — and the extension is only
+    /// visible here, at collection time, which is why the bit is carried into
+    /// `CrashGroup.isPanic` (V2-CRASH-SIGNAL).
+    static func crashIsPanic(from filename: String) -> Bool {
+        (filename as NSString).pathExtension.lowercased() == "panic"
+    }
+
+    /// Pure (Checks-tested): the whole crash pipeline except the directory read —
+    /// drop files outside the window, collapse repeats per process, mark a group as
+    /// a panic group if ANY of its reports is a `.panic`, order by count (desc) then
+    /// name (asc, so ties are deterministic), cap the group count.
+    static func crashGroups(files: [(name: String, mtime: Date)], now: Date,
+                            window: TimeInterval = crashAgeWindow,
+                            maxGroups: Int = crashMaxGroups) -> [CrashGroup] {
+        var acc: [String: (count: Int, isPanic: Bool)] = [:]
+        for f in files where isCrashRecent(mtime: f.mtime, now: now, window: window) {
+            let name = crashProcessName(from: f.name)
+            let prev = acc[name] ?? (count: 0, isPanic: false)
+            acc[name] = (count: prev.count + 1,
+                         isPanic: prev.isPanic || crashIsPanic(from: f.name))
+        }
+        let groups = acc
+            .map { CrashGroup(process: $0.key, count: $0.value.count, isPanic: $0.value.isPanic) }
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.process < $1.process
+            }
+        return Array(groups.prefix(maxGroups))
+    }
+
     func collect(skipSlow: Bool = false,
                  cachedBrew: (version: String??, outdated: [String]?)? = nil,
                  onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport {
@@ -319,12 +386,11 @@ final class ReportCollector {
         func mtime(_ u: URL) -> Date {
             (try? u.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         }
-        let names = items
+        let files = items
             .filter { $0.pathExtension == "ips" || $0.pathExtension == "crash" || $0.pathExtension == "panic" }
-            .sorted { mtime($0) > mtime($1) }
-            .prefix(15)
-            .map { $0.lastPathComponent }
-        return Outcome(section: .crashes) { $0.crashes = Array(names) }
+            .map { (name: $0.lastPathComponent, mtime: mtime($0)) }
+        let groups = Self.crashGroups(files: files, now: Date())
+        return Outcome(section: .crashes) { $0.crashes = groups }
     }
 
     // MARK: - autostart

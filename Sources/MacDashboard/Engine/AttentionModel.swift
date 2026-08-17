@@ -75,7 +75,7 @@ struct QuietState: Equatable {
         var crashesCount = 0
         if let upd = report.updates, let crash = report.crashes {
             updatesCount = upd.count
-            crashesCount = crash.count
+            crashesCount = crash.reduce(0) { $0 + $1.count }
             updates = (updatesCount == 0 && crashesCount == 0) ? .quiet : .loud
         } else {
             updates = .collecting

@@ -33,15 +33,16 @@ func securityRows(_ sec: SecurityState) -> [SystemSectionRow] {
     ]
 }
 
-func updatesRows(updates: [String], crashes: [String]) -> [SystemSectionRow] {
+func updatesRows(updates: [String], crashes: [CrashGroup]) -> [SystemSectionRow] {
     func row(_ id: String, _ name: String, count: Int, allClear: String) -> SystemSectionRow {
         count > 0
             ? SystemSectionRow(id: id, name: name, mark: L.quietCountItems(count), ok: false)
             : SystemSectionRow(id: id, name: name, mark: allClear, ok: true)
     }
+    let crashReports = crashes.reduce(0) { $0 + $1.count }
     return [
         row("updates", L.maintenanceUpdatesSection, count: updates.count, allClear: L.maintenanceUpdatesAllUpdated),
-        row("crashes", L.maintenanceCrashesSection, count: crashes.count, allClear: L.maintenanceCrashesNone),
+        row("crashes", L.maintenanceCrashesSection, count: crashReports, allClear: L.maintenanceCrashesNone),
     ]
 }
 
@@ -288,8 +289,9 @@ struct UpdatesCrashesCard: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         if !crashes.isEmpty {
-                            ForEach(Array(crashes.prefix(5).enumerated()), id: \.offset) { _, c in
-                                Text(c).font(.system(size: 13)).foregroundStyle(DS.inkSoft)
+                            ForEach(Array(crashes.prefix(5).enumerated()), id: \.offset) { _, g in
+                                Text(L.maintenanceCrashRow(g.process, g.count))
+                                    .font(.system(size: 13)).foregroundStyle(DS.inkSoft)
                                     .lineLimit(1).truncationMode(.middle)
                             }
                             if crashes.count > 5 {

@@ -112,6 +112,19 @@ struct EnergySettings: Equatable { var battery: [(String, String)]; var ac: [(St
     }
 }
 
+/// One row of the crash section: every crash report a single process produced
+/// inside the collection window, collapsed into one entry with a count
+/// (V2-CRASH-SIGNAL). `process` is parsed off the report filename — the only
+/// data source available without reading report contents. `isPanic` is true when
+/// at least one of the collapsed reports is a `.panic` (kernel panic): those
+/// raise attention whatever process logged them.
+struct CrashGroup: Identifiable, Equatable {
+    var process: String         // "diffscore"
+    var count: Int              // reports from that process inside the window
+    var isPanic: Bool = false   // at least one of them a kernel panic (.panic)
+    var id: String { process }
+}
+
 struct FullReport {
     var createdAt: Date?
     var system: SystemInfo?
@@ -128,7 +141,7 @@ struct FullReport {
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?
-    var crashes: [String]?
+    var crashes: [CrashGroup]?          // grouped, ≤7 days old (V2-CRASH-SIGNAL)
     var brewVersion: String??           // .some(nil) = brew not installed
     var brewOutdated: [String]?
     var updates: [String]?              // pending macOS updates ([] = up to date)
