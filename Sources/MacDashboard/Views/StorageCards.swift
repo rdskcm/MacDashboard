@@ -144,6 +144,22 @@ struct FoldersCard: View {
         return stripHome(path, home: h)
     }
 
+    /// Folders the collector could see but not read, for the selected tab.
+    private var unreadable: [String] {
+        folderTab == .home ? model.report.homeDirsUnreadable : model.report.serviceDirsUnreadable
+    }
+
+    /// The quiet inline line, or nil when nothing was hidden. At most three folders
+    /// are named; the rest collapse into «и ещё N» so the line stays one calm
+    /// sentence.
+    private var noFDAText: String? {
+        let paths = unreadable
+        guard !paths.isEmpty else { return nil }
+        var names = paths.prefix(3).map { label(for: $0) }
+        if paths.count > 3 { names.append(L.maintenanceAndMore(paths.count - 3)) }
+        return L.storageFoldersNoFDA(names.joined(separator: ", "))
+    }
+
     private var title: String {
         folderTab == .home ? L.storageHomeDirsTitle : L.storageServiceDirsTitle
     }
@@ -170,28 +186,60 @@ struct FoldersCard: View {
 
     @ViewBuilder
     private var content: some View {
-        switch folderTab {
-        case .home:
-            if model.report.homeDirs == nil {
-                SectionStateView(done: model.report.progress["homeDirs"] ?? false)
-            } else if homeDirs.isEmpty {
-                Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
-            } else {
-                DirBarList(dirs: chartDirs) { stripHome($0.path, home: home) }
-            }
-        case .service:
-            if model.report.serviceDirs == nil {
-                SectionStateView(done: model.report.progress["serviceDirs"] ?? false)
-            } else {
-                let dirs = model.report.serviceDirs ?? []
-                let sorted = dirs.filter { $0.bytes > 0 }.sorted { $0.bytes > $1.bytes }
-                if sorted.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+            switch folderTab {
+            case .home:
+                if model.report.homeDirs == nil {
+                    SectionStateView(done: model.report.progress["homeDirs"] ?? false)
+                } else if homeDirs.isEmpty {
                     Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
                 } else {
-                    DirBarList(dirs: sorted) { label(for: $0.path) }
+                    DirBarList(dirs: chartDirs) { stripHome($0.path, home: home) }
+                }
+            case .service:
+                if model.report.serviceDirs == nil {
+                    SectionStateView(done: model.report.progress["serviceDirs"] ?? false)
+                } else {
+                    let dirs = model.report.serviceDirs ?? []
+                    let sorted = dirs.filter { $0.bytes > 0 }.sorted { $0.bytes > $1.bytes }
+                    if sorted.isEmpty {
+                        Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
+                    } else {
+                        DirBarList(dirs: sorted) { label(for: $0.path) }
+                    }
                 }
             }
+            // Rendered in all sub-branches on purpose, including the nil/"unavailable"
+            // one: if every service `du` was refused, serviceDirs stays nil and the
+            // notice is the only thing that explains why.
+            if let noFDAText {
+                FoldersNoFDANotice(text: noFDAText)
+            }
         }
+    }
+}
+
+/// Quiet inline notice inside `FoldersCard`: some folders exist but could not be
+/// read, so their size is missing from the card. Deliberately calm — muted text,
+/// no dot, no `DS.hot`, no severity mapping: a permission the user has not granted
+/// is not a fault. `RainbowCapsuleButton(size: .card)` IS the C1 capsule (font 11 /
+/// 600, padding 6 × 12, `DS.glass3` fill, `DS.lineStrong` 1 pt border) and already
+/// handles Reduce Motion and the pointing-hand cursor internally.
+private struct FoldersNoFDANotice: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(text)
+                .font(.system(size: 11.5))
+                .foregroundStyle(DS.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            RainbowCapsuleButton(title: L.storageFoldersNoFDAButton, size: .card) {
+                AdviceActionRunner.openPane(AdvicePanes.fullDiskAccess)
+            }
+            .accessibilityLabel(L.storageFoldersNoFDAButtonA11y)
+        }
+        .padding(.top, 2)
     }
 }
 

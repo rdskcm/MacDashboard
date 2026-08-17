@@ -573,14 +573,24 @@ final class ReportCollector {
     private func collectHomeDirs() -> Outcome {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         guard let out = CommandRunner.run("/usr/bin/du", ["-xk", "-d", "1", home], timeout: 120, scope: cancelScope) else {
-            return Outcome(section: .homeDirs) { $0.homeDirs = nil }
+            return Outcome(section: .homeDirs) { $0.homeDirs = nil; $0.homeDirsUnreadable = [] }
         }
+        let all = Parsers.duKilobyteLines(out)
         // Drop the $HOME total line itself; keep children, largest first, top 20.
-        let dirs = Parsers.duKilobyteLines(out)
+        let dirs = all
             .filter { $0.path != home }
             .sorted { $0.bytes > $1.bytes }
             .prefix(20)
-        return Outcome(section: .homeDirs) { $0.homeDirs = Array(dirs) }
+        // The home rule: a child $HOME actually has but du never reported is either
+        // on another filesystem (du -x stops at mount points — readable, nothing to
+        // say) or a directory du was refused. Only the refused ones are reported.
+        // Computed against the FULL du list, not the top-20 slice.
+        let unreadable = DirectoryAccess
+            .missingHomeChildren(home: home,
+                                 duPaths: Set(all.map(\.path)),
+                                 childNames: DirectoryAccess.childNames(of: home))
+            .filter { DirectoryAccess.probe($0) == .denied }
+        return Outcome(section: .homeDirs) { $0.homeDirs = Array(dirs); $0.homeDirsUnreadable = unreadable }
     }
 
     // MARK: - service dirs (slow: du -s over a fixed set)
@@ -594,14 +604,21 @@ final class ReportCollector {
             "/Library/Caches", "/private/var/log", "/Applications",
         ]
         var dirs: [DirSize] = []
+        var unreadable: [String] = []
         for p in paths {
             guard FileManager.default.fileExists(atPath: p) else { continue }
             if let out = CommandRunner.run("/usr/bin/du", ["-xsk", p], timeout: 60, scope: cancelScope) {
                 dirs.append(contentsOf: Parsers.duKilobyteLines(out))
+            } else if DirectoryAccess.probe(p) == .denied {
+                // The service rule: du produced nothing at all for THIS path. That is
+                // a timeout or a cancellation as often as it is a refusal, so the path
+                // is probed before anything is claimed.
+                unreadable.append(p)
             }
         }
         let value: [DirSize]? = dirs.isEmpty ? nil : dirs.sorted { $0.bytes > $1.bytes }
-        return Outcome(section: .serviceDirs) { $0.serviceDirs = value }
+        let unreadableOut = unreadable
+        return Outcome(section: .serviceDirs) { $0.serviceDirs = value; $0.serviceDirsUnreadable = unreadableOut }
     }
 
     // MARK: - homebrew (slow)

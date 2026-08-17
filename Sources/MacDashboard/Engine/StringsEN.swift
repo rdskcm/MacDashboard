@@ -131,6 +131,9 @@ struct StringsEN: AppStrings {
     var storageServiceDirsCaption: String { "caches, containers, logs, apps" }
     var folderTabHome: String { "Home" }
     var folderTabSvc: String { "System" }
+    func storageFoldersNoFDA(_ folders: String) -> String { "Not shown here: \(folders) — the app doesn't have Full Disk Access." }
+    var storageFoldersNoFDAButton: String { "Open Settings" }
+    var storageFoldersNoFDAButtonA11y: String { "Open Full Disk Access settings" }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { "Disks (SMART)" }
@@ -392,6 +395,7 @@ struct StringsEN: AppStrings {
     func assessDownloadsShareSuffix(_ pct: String) -> String { " (\(pct)% of total disk)" }
     func assessTrashTip(_ sizeStr: String) -> String { "Trash: \(sizeStr) — safe to empty." }
     func assessCachesTip(_ sizeStr: String) -> String { "~/Library/Caches: \(sizeStr) — safe to clear." }
+    var assessNoFDATip: String { "Some folders are missing from the report: the app doesn't have Full Disk Access." }
     func assessSummaryCount(_ n: Int) -> String { "Findings: \(n)" }
 
     // MARK: Parsers / live status
@@ -584,6 +588,9 @@ struct StringsEN: AppStrings {
     var attnExplainDownloads: String { "Opens the folder in Finder. Nothing is deleted — you decide what to remove." }
     var attnExplainTrash: String { "Asks for confirmation, then empties the Trash via Finder. Files cannot be recovered afterwards." }
     var attnExplainCaches: String { "Opens ~/Library/Caches in Finder. Apps rebuild their caches on next launch." }
+    var attnCapFolders: String { "Folders" }
+    var attnCapFoldersNoAccess: String { "some are hidden" }
+    var attnExplainNoFDA: String { "Opens System Settings → Privacy & Security → Full Disk Access. Without it the app can't see the Trash and some Library folders, so their size is missing from the report." }
 
     func attnMore(_ n: Int) -> String { "More \(n)" }
     var attnCollapse: String { "Less" }

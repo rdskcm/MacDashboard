@@ -118,6 +118,13 @@ struct FullReport {
     var snapshots: [String]?            // TM local snapshot names
     var homeDirs: [DirSize]?            // top-20 of $HOME (depth 1)
     var serviceDirs: [DirSize]?         // caches etc.
+    // Absolute paths of directories the collector could see but not read (no Full
+    // Disk Access) — the same idea as TMDestination.lastBackupUnavailableReason:
+    // an honest reason parked next to the value it explains. `[]` = nothing was
+    // hidden. Orthogonal to homeDirs/serviceDirs == nil, which still means "not
+    // collected yet".
+    var homeDirsUnreadable: [String] = []
+    var serviceDirsUnreadable: [String] = []
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?

@@ -168,6 +168,23 @@ the corresponding sections will simply show "unavailable" instead of crashing):
 - access to the Downloads/Documents/Desktop folders — for the "what's taking up space" breakdown;
 - control over "System Events" — to read the Login Items (autostart) list.
 
+### Full Disk Access
+
+Without **Full Disk Access** macOS hides some folders from the app, and the
+"what's taking up space" breakdown silently loses them — the Trash in particular.
+The app no longer stays quiet about it: the affected Folders tab shows a calm line
+naming what it could not see, with a button that opens the right System Settings
+pane, and one matching recommendation appears in the summary.
+
+To grant it: **System Settings → Privacy & Security → Full Disk Access → +**, pick
+`MacDashboard.app` (or switch it on if it is already listed). macOS restarts the app
+afterwards.
+
+A separate, unrelated grant: the **Empty the Trash** action drives Finder through
+Automation, so the first time you use it macOS asks for permission to control
+"Finder". Declining leaves the Trash untouched and shows Finder's own message —
+nothing else in the app is affected.
+
 Missing hardware (no battery on a desktop Mac, no external disks, Time Machine
 not configured) is a normal, expected state: the relevant cards hide themselves
 or show a calm "not set up / none" instead of an error.

@@ -131,6 +131,9 @@ struct StringsRU: AppStrings {
     var storageServiceDirsCaption: String { "кэши, контейнеры, логи, программы" }
     var folderTabHome: String { "Домашняя" }
     var folderTabSvc: String { "Служебные" }
+    func storageFoldersNoFDA(_ folders: String) -> String { "Здесь не показаны: \(folders) — у приложения нет полного доступа к диску." }
+    var storageFoldersNoFDAButton: String { "Открыть настройки" }
+    var storageFoldersNoFDAButtonA11y: String { "Открыть настройки полного доступа к диску" }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { "Диски (SMART)" }
@@ -396,6 +399,7 @@ struct StringsRU: AppStrings {
     func assessDownloadsShareSuffix(_ pct: String) -> String { " (\(pct)% всего диска)" }
     func assessTrashTip(_ sizeStr: String) -> String { "Корзина: \(sizeStr) — можно очистить." }
     func assessCachesTip(_ sizeStr: String) -> String { "Кэши ~/Library/Caches: \(sizeStr) — чистить безопасно." }
+    var assessNoFDATip: String { "Часть папок не попала в отчёт: у приложения нет полного доступа к диску." }
     func assessSummaryCount(_ n: Int) -> String { "Замечаний: \(n)" }
 
     // MARK: Parsers / live status
@@ -588,6 +592,9 @@ struct StringsRU: AppStrings {
     var attnExplainDownloads: String { "Откроет папку в Finder. Ничего не удаляется — вы сами решаете, что убрать." }
     var attnExplainTrash: String { "Спросит подтверждение, затем очистит Корзину через Finder. Восстановить файлы после этого нельзя." }
     var attnExplainCaches: String { "Откроет ~/Library/Caches в Finder. Приложения пересоздадут кэш при следующем запуске." }
+    var attnCapFolders: String { "Папки" }
+    var attnCapFoldersNoAccess: String { "видны не все" }
+    var attnExplainNoFDA: String { "Откроет «Системные настройки» → «Конфиденциальность и безопасность» → «Полный доступ к диску». Без него приложение не видит Корзину и часть служебных папок, поэтому их размер не попадает в отчёт." }
 
     func attnMore(_ n: Int) -> String { "Ещё \(n)" }
     var attnCollapse: String { "Свернуть" }

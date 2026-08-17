@@ -225,6 +225,19 @@ enum Assess {
             }
         }
 
+        // --- folders the collector was refused (V2-FDA-DEGRADE) ---
+        // ONE tip + ONE capsule for the whole condition, whichever card(s) it
+        // affects — and never a Problem/AttentionItem: a permission the user has
+        // not granted is not a machine fault and does not belong in «Требует
+        // внимания». TipCapsule carries no Severity, so this is info by
+        // construction; no colour mapping is involved.
+        if !report.homeDirsUnreadable.isEmpty || !report.serviceDirsUnreadable.isEmpty {
+            let action = AdviceAction.settingsPane(AdvicePanes.fullDiskAccess)
+            tips.append(Tip(text: L.assessNoFDATip, action: action))
+            capsules.append(TipCapsule(object: L.attnCapFolders, value: L.attnCapFoldersNoAccess,
+                                        verb: verb(action), explanation: L.attnExplainNoFDA, action: action))
+        }
+
         // --- sort & summarize (crit > serious > warn, others last) ---
         pairs.sort { rank($0.0.sev) > rank($1.0.sev) }
         a.problems = pairs.map(\.0)

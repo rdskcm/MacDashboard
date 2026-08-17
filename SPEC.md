@@ -72,7 +72,8 @@ rewritten.
    Automation control of Finder, which the system asks for the first time the action
    actually runs (observed 2026-08-14 during the end-to-end verification). Declining it
    surfaces as a failure carrying Finder's own message. Row 1 also depends on Full Disk
-   Access to be *offered* at all — see the `V2-FDA-DEGRADE` block in `PLAN.md`.
+   Access to be *offered* at all: without it `du` never reports `~/.Trash`, so no Trash tip is produced.
+   Since block `V2-FDA-DEGRADE` (2026-08-17) that absence is stated instead of silent — see §5.2.
 
    Rows 5 and 7 were gated in block `V2-ACTION-GATES` (2026-08-16), and both dialogs are
    deliberately informative rather than a bare "are you sure": 5 states how many packages it will
@@ -257,6 +258,8 @@ struct FullReport {
     var snapshots: [String]?            // TM local snapshot names
     var homeDirs: [DirSize]?            // top-20 of $HOME (depth 1)
     var serviceDirs: [DirSize]?         // caches etc.
+    var homeDirsUnreadable: [String]    // paths seen but refused (no FDA); [] = nothing hidden
+    var serviceDirsUnreadable: [String] // same, for the fixed service-path list
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?
@@ -350,6 +353,11 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
 - serviceDirs: `du -xsk` over: ~/Library/Caches, ~/Library/Application Support,
   ~/Library/Containers, ~/Library/Group Containers, ~/Library/Developer, ~/.Trash,
   /Library/Caches, /private/var/log, /Applications (90 s total).
+- Both du sections additionally report what they could NOT read: every expected directory that exists
+  but refuses to open (`Engine/DirectoryAccess.swift` — `stat` + `opendir`, no TCC/global-status lookup
+  anywhere) lands in `homeDirsUnreadable` / `serviceDirsUnreadable` as an absolute path. `homeDirs` /
+  `serviceDirs == nil` still means "not collected yet". The UI states it as a quiet inline line in the
+  «Папки» card plus exactly one info-level recommendation capsule — never a «Требует внимания» item.
 - security: `fdesetup status`, `spctl --status`, `csrutil status`,
   `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate` (fallback
   `defaults read /Library/Preferences/com.apple.alf globalstate`; 1/2 ⇒ on).

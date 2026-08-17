@@ -149,6 +149,11 @@ protocol AppStrings {
     var folderTabHome: String { get }
     var folderTabSvc: String { get }
 
+    // MARK: Storage — folders that could not be read (V2-FDA-DEGRADE)
+    func storageFoldersNoFDA(_ folders: String) -> String
+    var storageFoldersNoFDAButton: String { get }
+    var storageFoldersNoFDAButtonA11y: String { get }
+
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { get }
     func storageSmartUpdatedCaption(_ time: String) -> String
@@ -406,6 +411,7 @@ protocol AppStrings {
     func assessDownloadsShareSuffix(_ pct: String) -> String
     func assessTrashTip(_ sizeStr: String) -> String
     func assessCachesTip(_ sizeStr: String) -> String
+    var assessNoFDATip: String { get }
     func assessSummaryCount(_ n: Int) -> String
 
     // MARK: Parsers / live status
@@ -602,6 +608,9 @@ protocol AppStrings {
     var attnExplainDownloads: String { get }
     var attnExplainTrash: String { get }
     var attnExplainCaches: String { get }
+    var attnCapFolders: String { get }
+    var attnCapFoldersNoAccess: String { get }
+    var attnExplainNoFDA: String { get }
 
     // Attention summary card overflow toggles (Block V2-SUMMARY).
     func attnMore(_ n: Int) -> String
