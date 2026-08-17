@@ -52,6 +52,17 @@ final class ReportCollector {
     /// process keeps its true count) — the old 15-file cap, moved.
     static let crashMaxGroups = 15
 
+    /// Both directories macOS writes crash reports to, in dedup priority order
+    /// (V2-CRASH-DETECT / finding A1). The per-user one needs Full Disk Access and
+    /// on many machines is empty; the system one is world-readable and is the ONLY
+    /// place kernel panics (`.panic`) ever land, so reading just the per-user one
+    /// meant a panic was never seen at all.
+    static var crashReportDirectories: [URL] {
+        [FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/DiagnosticReports", isDirectory: true),
+         URL(fileURLWithPath: "/Library/Logs/DiagnosticReports", isDirectory: true)]
+    }
+
     /// Pure (Checks-tested): true iff `mtime` lies within `[now - window, now]`.
     /// A future mtime (clock rolled back) counts as stale — same rule as
     /// `isBrewCacheFresh`, so a bad clock can never pin a report in the list.
@@ -88,27 +99,55 @@ final class ReportCollector {
         (filename as NSString).pathExtension.lowercased() == "panic"
     }
 
+    /// Pure (Checks-tested): must this group reach the user? Exactly the two cases
+    /// from V2-CRASH-SIGNAL — a kernel panic, whatever process logged it, or a crash
+    /// of MacDashboard itself. Single source of truth on purpose (V2-CRASH-DETECT):
+    /// `crashGroups` protects these groups from the group cap and `Assessment` raises
+    /// attention for them, and those two rules must never drift apart.
+    static func crashRaisesAttention(_ group: CrashGroup) -> Bool {
+        group.isPanic || group.process == AppInfo.name
+    }
+
+    /// Pure (Checks-tested): one entry per report FILE NAME, first occurrence wins.
+    /// The collector concatenates two directories (see `crashReportDirectories`) and
+    /// the same report could plausibly be listed by both; without this it would be
+    /// counted twice and inflate a process's crash count. Input order IS the priority
+    /// order, so the per-user copy wins over the system one.
+    static func crashDedup(files: [(name: String, mtime: Date)]) -> [(name: String, mtime: Date)] {
+        var seen = Set<String>()
+        return files.filter { seen.insert($0.name).inserted }
+    }
+
     /// Pure (Checks-tested): the whole crash pipeline except the directory read —
-    /// drop files outside the window, collapse repeats per process, mark a group as
-    /// a panic group if ANY of its reports is a `.panic`, order by count (desc) then
-    /// name (asc, so ties are deterministic), cap the group count.
+    /// drop reports listed by more than one directory, drop files outside the window,
+    /// collapse repeats per process, mark a group as a panic group if ANY of its
+    /// reports is a `.panic`, order by count (desc) then name (asc, so ties are
+    /// deterministic), cap the group count — keeping panic/own-app groups first so the
+    /// cap can never discard them (V2-CRASH-DETECT).
     static func crashGroups(files: [(name: String, mtime: Date)], now: Date,
                             window: TimeInterval = crashAgeWindow,
                             maxGroups: Int = crashMaxGroups) -> [CrashGroup] {
         var acc: [String: (count: Int, isPanic: Bool)] = [:]
-        for f in files where isCrashRecent(mtime: f.mtime, now: now, window: window) {
+        for f in crashDedup(files: files) where isCrashRecent(mtime: f.mtime, now: now, window: window) {
             let name = crashProcessName(from: f.name)
             let prev = acc[name] ?? (count: 0, isPanic: false)
             acc[name] = (count: prev.count + 1,
                          isPanic: prev.isPanic || crashIsPanic(from: f.name))
         }
-        let groups = acc
+        let sorted = acc
             .map { CrashGroup(process: $0.key, count: $0.value.count, isPanic: $0.value.isPanic) }
             .sorted {
                 if $0.count != $1.count { return $0.count > $1.count }
                 return $0.process < $1.process
             }
-        return Array(groups.prefix(maxGroups))
+        // The cap must never be able to drop the groups this feature exists for
+        // (V2-CRASH-DETECT / finding A2): panics and our own crashes are single by
+        // nature, so ordering by count alone put them last and truncated them first.
+        // They also lead the returned list, because the card renders only its first
+        // five rows — surviving the cap in 14th place is still invisible.
+        let notable = sorted.filter(crashRaisesAttention)
+        let rest = sorted.filter { !crashRaisesAttention($0) }
+        return Array((notable + rest).prefix(maxGroups))
     }
 
     func collect(skipSlow: Bool = false,
@@ -378,19 +417,28 @@ final class ReportCollector {
     // MARK: - crashes (FileManager, no shell)
 
     private func collectCrashes() -> Outcome {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/DiagnosticReports", isDirectory: true)
+        let files = Self.crashReportDirectories.flatMap { Self.crashFiles(in: $0) }
+        let groups = Self.crashGroups(files: files, now: Date())
+        return Outcome(section: .crashes) { $0.crashes = groups }
+    }
+
+    /// One directory's crash reports as (name, mtime). Impure and deliberately not
+    /// Checks-covered — the pure/impure seam of this section is exactly here.
+    /// Non-recursive on purpose: both directories carry a `Retired/` subdirectory of
+    /// reports macOS has already rotated out, which the 7-day window would drop
+    /// anyway. An absent or TCC-refused directory yields [] (`try?`), which is the
+    /// right degradation: the other directory still answers, and a refused per-user
+    /// directory cannot hide a kernel panic — those only ever land in the system one.
+    private static func crashFiles(in dir: URL) -> [(name: String, mtime: Date)] {
         let keys: [URLResourceKey] = [.contentModificationDateKey]
         let items = (try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])) ?? []
         func mtime(_ u: URL) -> Date {
             (try? u.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         }
-        let files = items
+        return items
             .filter { $0.pathExtension == "ips" || $0.pathExtension == "crash" || $0.pathExtension == "panic" }
             .map { (name: $0.lastPathComponent, mtime: mtime($0)) }
-        let groups = Self.crashGroups(files: files, now: Date())
-        return Outcome(section: .crashes) { $0.crashes = groups }
     }
 
     // MARK: - autostart

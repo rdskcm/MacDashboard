@@ -819,6 +819,8 @@ do {
     check(!hasBattery || result?.battery != nil,
           "smoke ReportCollector: battery != nil (or no battery on this machine)")
     check(result?.energy != nil, "smoke ReportCollector: energy != nil")
+    check(result?.crashes != nil,
+          "smoke ReportCollector: crashes != nil (the section answers even if a directory is unreadable)")
     // Block N7 smoke — on a real developer machine with smartctl + the NOPASSWD
     // sudo rule, the disk reporting itself as "internal" should carry parsed SMART
     // attrs. Hosted CI runners (GitHub Actions sets CI=true) have unpredictable disk
@@ -2075,6 +2077,82 @@ do {
               && L.assessKernelPanicsRecent(1) != L.assessOwnCrashesRecent(AppInfo.name, 1),
               "assessKernelPanicsRecent (\(lang)): present and distinct from the own-app sentence")
     }
+}
+
+// =====================================================================
+// MARK: - Block V2-CRASH-DETECT: both report directories, cap keeps what matters
+// =====================================================================
+do {
+    typealias RC = ReportCollector
+    let now = Date(timeIntervalSince1970: 1_760_000_000)
+    let fresh = now.addingTimeInterval(-3600)
+
+    // --- A1: the system directory is scanned at all ---
+    let dirs = RC.crashReportDirectories.map(\.path)
+    check(dirs.count == 2, "crashReportDirectories: exactly two directories")
+    check(dirs.contains("/Library/Logs/DiagnosticReports"),
+          "crashReportDirectories: the SYSTEM directory is scanned (kernel panics land only there)")
+    check(dirs.first == FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports",
+          "crashReportDirectories: the per-user directory comes first (dedup priority)")
+
+    // --- dedup: the same report listed by both directories ---
+    let dup: [(name: String, mtime: Date)] = [
+        ("\(AppInfo.name)-2026-08-11-163444.ips", fresh),
+        ("\(AppInfo.name)-2026-08-11-163444.ips", fresh.addingTimeInterval(-60)),
+        ("diffscore-2026-08-11-163444.ips", fresh),
+    ]
+    check(RC.crashDedup(files: dup).map(\.name)
+            == ["\(AppInfo.name)-2026-08-11-163444.ips", "diffscore-2026-08-11-163444.ips"],
+          "crashDedup: a name listed twice collapses to one entry, input order preserved")
+    check(RC.crashDedup(files: dup).first?.mtime == fresh,
+          "crashDedup: the FIRST occurrence wins (per-user copy before the system one)")
+    check(RC.crashDedup(files: []).isEmpty, "crashDedup: no files -> []")
+    check(RC.crashGroups(files: dup, now: now).first { $0.process == AppInfo.name }?.count == 1,
+          "crashGroups: a report present in both directories is counted once, not twice")
+
+    // --- the shared predicate ---
+    check(RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true)),
+          "crashRaisesAttention: kernel panic from any process -> true")
+    check(RC.crashRaisesAttention(CrashGroup(process: AppInfo.name, count: 1)),
+          "crashRaisesAttention: our own crash -> true")
+    check(!RC.crashRaisesAttention(CrashGroup(process: "diffscore", count: 9)),
+          "crashRaisesAttention: a loud third-party process -> false")
+
+    // --- A2: 20 louder foreign groups must not push out the panic and our own crash ---
+    var many: [(name: String, mtime: Date)] = []
+    for i in 0..<20 {
+        for d in 11...13 { many.append((name: "p\(i)-2026-08-\(d)-163444.ips", mtime: fresh)) }
+    }
+    many.append((name: "Kernel-2026-08-11-163444.panic", mtime: fresh))
+    many.append((name: "Kernel-2026-08-12-163444.panic", mtime: fresh))
+    many.append((name: "\(AppInfo.name)-2026-08-11-163444.ips", mtime: fresh))
+    let capped = RC.crashGroups(files: many, now: now)
+    check(capped.count == RC.crashMaxGroups, "crashGroups: still capped at crashMaxGroups (15) groups")
+    check(capped.contains { $0.isPanic }, "crashGroups: the panic group survives the cap (finding A2)")
+    check(capped.contains { $0.process == AppInfo.name },
+          "crashGroups: the own-app group survives the cap (finding A2)")
+    check(capped.prefix(2).map(\.process) == ["Kernel", AppInfo.name],
+          "crashGroups: notable groups lead the list, ordered count desc (panic 2, own 1)")
+    check(capped.dropFirst(2).count == 13 && capped.dropFirst(2).allSatisfy { $0.count == 3 },
+          "crashGroups: the remaining 13 slots go to the loudest ordinary groups")
+
+    // --- ordering is untouched when nothing is notable ---
+    let ordinary: [(name: String, mtime: Date)] = [
+        ("aaa-2026-08-11-163444.ips", fresh),
+        ("bbb-2026-08-11-163444.ips", fresh),
+        ("bbb-2026-08-12-163444.ips", fresh),
+    ]
+    check(RC.crashGroups(files: ordinary, now: now).map(\.process) == ["bbb", "aaa"],
+          "crashGroups: no notable group -> order unchanged (count desc, then name asc)")
+
+    // --- degenerate: more notable groups than the cap ---
+    let allPanics: [(name: String, mtime: Date)] = (0..<20).map {
+        (name: "k\($0)-2026-08-11-163444.panic", mtime: fresh)
+    }
+    check(RC.crashGroups(files: allPanics, now: now).count == RC.crashMaxGroups,
+          "crashGroups: more notable groups than the cap -> still 15, the cap is never exceeded")
+    check(RC.crashGroups(files: [("\(AppInfo.name)-2026-08-11-163444.panic", fresh)], now: now).count == 1,
+          "crashGroups: a group that is both a panic AND our own app appears exactly once")
 }
 
 // =====================================================================

@@ -153,8 +153,11 @@ enum Assess {
         // activatehelper…) is something the user cannot act on, and a permanent
         // «Требует внимания» item for it is exactly what trains the indicator to
         // be ignored. Those groups stay visible in the card and the text report.
+        // The predicate lives in ReportCollector.crashRaisesAttention: the group cap
+        // in crashGroups protects exactly these groups, and the two must not drift
+        // apart (V2-CRASH-DETECT).
         let raisingCrashes = (report.crashes ?? []).filter {
-            ($0.isPanic || $0.process == AppInfo.name) && $0.count > 0
+            ReportCollector.crashRaisesAttention($0) && $0.count > 0
         }
         if !raisingCrashes.isEmpty {
             let action = AdviceAction.revealPath(FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports")
