@@ -16,10 +16,16 @@ jobs:
       - name: Use the macOS 26 (Tahoe) SDK
         run: |
           set -euo pipefail
-          xc="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          xc="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
           [ -n "$xc" ] || { echo "::error::no Xcode 26 on this runner"; exit 1; }
           sudo xcode-select -s "$xc/Contents/Developer"
           swift --version
+          sdk="$(xcrun --show-sdk-version)"
+          echo "macOS SDK: $sdk"
+          case "$sdk" in
+            26.*) echo "SDK 26 OK — app will get the Tahoe appearance" ;;
+            *) echo "::error::selected SDK is $sdk, expected 26.x"; exit 1 ;;
+          esac
 
       - name: swift build (default, AI off)
         run: swift build

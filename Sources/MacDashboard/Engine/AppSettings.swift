@@ -14,6 +14,13 @@ final class AppSettings {
     /// Rows shown in the process list. 12 = the pre-V2-SETTINGS-PROCLIMIT hardcoded value.
     static let allowedProcessLimits = [5, 10, 15]
 
+    /// Pure resolution rule used by `init()` to clamp a raw UserDefaults value into
+    /// range. Exposed so Checks can exercise the real logic instead of reimplementing
+    /// it (the singleton's `private init()` can't be re-triggered mid-process).
+    static func resolveProcessLimit(raw: Int) -> Int {
+        allowedProcessLimits.contains(raw) ? raw : 10
+    }
+
     // Compiled out of the default (public) build — see Package.swift/build_app.sh (AI_ENABLED).
     #if AI_ENABLED
     static let aiProviderKey = "aiProvider"
@@ -57,7 +64,7 @@ final class AppSettings {
         fastIntervalSeconds = Self.allowedIntervals.contains(raw) ? raw : 2
 
         let rawLimit = UserDefaults.standard.integer(forKey: Self.processLimitKey) // 0 if unset
-        processListLimit = Self.allowedProcessLimits.contains(rawLimit) ? rawLimit : 10
+        processListLimit = Self.resolveProcessLimit(raw: rawLimit)
 
         #if AI_ENABLED
         let providerRaw = UserDefaults.standard.string(forKey: Self.aiProviderKey)

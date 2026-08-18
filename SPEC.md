@@ -61,9 +61,9 @@ rewritten.
    | # | Action | Call site | Privileges | Confirmed before running? |
    |---|---|---|---|---|
    | 1 | Empty the Trash | `Views/AdviceActionRunner.swift` (`NSAppleScript`, Finder) | user + TCC | yes — `Views/AdviceActionDispatch.swift:110` |
-   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:623` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:116` |
-   | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:696` (`/bin/rm -f`, bulk at `:773`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:604`/`:619` |
-   | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:704` (`trashItem`, bulk at `:762`) | user | yes — same gate as 3 |
+   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:674` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:116` |
+   | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:768` (`/bin/rm -f`, bulk at `:874`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:604`/`:619` |
+   | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:775` (`trashItem`, bulk at `:862`) | user | yes — same gate as 3 |
    | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | yes — `Views/BrewUpgradeConfirm.swift:33`, opened from `Views/MaintenanceCard.swift:80` and `Views/AdviceActionDispatch.swift:60` |
    | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:590` | user | **no** — deliberate, see below |
    | 7 | Apply energy settings | `Views/EnergyCard.swift:363` (`pmset -b`/`-c`) | admin | yes — `Views/EnergyCard.swift:176` |
@@ -321,7 +321,10 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 
 ## 5. Collectors
 
-### 5.1 LiveCollector (every 3 s; runs off-main, publishes to model on main)
+### 5.1 LiveCollector (every N s, user-configurable; runs off-main, publishes to model on main)
+- interval: `AppSettings.fastIntervalSeconds` (`Sources/MacDashboard/Engine/AppSettings.swift:10-12,26-29`),
+  allowed values `[1, 2, 3, 5, 10]` seconds, default 2, user-settable in Settings, read fresh by
+  the loop every tick (no restart needed on change).
 - CPU %: `host_processor_info`/`host_statistics64(HOST_CPU_LOAD_INFO)` — diff ticks
   between samples (user+sys+idle). NO subprocess.
 - mem: `host_statistics64(HOST_VM_INFO64)` × `vm_kernel_page_size`; total `sysctl hw.memsize`.
@@ -331,12 +334,12 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 - battery: IOKit `IOPSCopyPowerSourcesInfo` (+ cycles/condition only in full report).
   Desktop Mac ⇒ nil, tile hidden.
 - load: `getloadavg`.
-- top processes: `top -l 2 -s 1 -o cpu -n 12 -stats pid,cpu,mem,command` subprocess,
-  parse LAST sample only (first is since-boot garbage). From it also build topMem?
-  NO — separate cheap `top -l 1 -o mem -n 12 -stats pid,mem,cpu,command` like legacy.
-  Both via CommandRunner with 12 s timeout. Use `pid,` in stats to get full names?
-  top truncates COMMAND anyway; acceptable (legacy did the same). Keep order parsing
-  tolerant: split by whitespace, columns per requested stats order.
+- top processes: single `top -l 2 -s 1 -stats pid,cpu,mem,command` subprocess (NO `-n` cap —
+  top prints ALL processes, so sorting by memory in Swift finds the true memory hogs, which an
+  `-n` cap would hide), parse LAST sample only (first is since-boot garbage). topMem is derived
+  from the SAME parsed output, re-sorted by memory in Swift — no second `top` call. Via
+  CommandRunner with 12 s timeout. Keep order parsing tolerant: split by whitespace, columns per
+  requested stats order.
 - Cadence guard: if a tick's collection takes > interval, skip next tick (single-flight).
 
 ### 5.2 ReportCollector (on launch + «Обновить» button; async, per-section)

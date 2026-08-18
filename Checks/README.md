@@ -7,7 +7,8 @@ a plain executable: `main.swift` runs a tiny assert-and-print harness and calls
 `exit(1)` if anything fails, so `swift run MacDashboardChecks` is a normal CI-style
 pass/fail check.
 
-Every other file in this directory (`Models.swift`, `Parsers.swift`, `Assessment.swift`,
+Every other file in this directory (`Models.swift`, `AppInfo.swift`, `AttentionModel.swift`,
+`Parsers.swift`, `Assessment.swift`,
 `CommandRunner.swift`, `LiveCollector.swift`, `ReportCollector.swift`,
 `ReportWriter.swift`, `HistoryStore.swift`, `L10n.swift`, `BrewProgress.swift`,
 `ThermalSensors.swift`, `AppSettings.swift`, `StringsRU.swift`, `StringsEN.swift`,
