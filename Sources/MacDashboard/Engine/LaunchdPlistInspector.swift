@@ -15,6 +15,28 @@ struct LaunchdPlistInfo: Equatable {
     var description: String?
 }
 
+/// Outcome of one plist delete attempt. Hoisted out of `DashboardModel` (where
+/// it used to be declared twice, locally inside two `Task` bodies) so the
+/// "which paths must come back" rule below is pure and Checks-covered.
+enum PlistDeleteOutcome: Equatable {
+    case success
+    case cancelled
+    case failed(String)
+}
+
+/// The Автозагрузка card collapses an orphan row the instant the user confirms,
+/// before the Trash/`rm` has run (deliberate — see `OrphanRow.onConfirm`). This
+/// is the counter-signal: paths whose delete did NOT happen, so the card can put
+/// exactly those rows back. ACCUMULATING: `DashboardModel` unions new paths in
+/// and the card drains them via `acknowledgePlistRestore(_:)`, so two deletes
+/// finishing inside one SwiftUI update cycle cannot lose each other's paths.
+/// `stamp` is bumped on every publish so two identical path sets in a row are
+/// still two distinct values for the card's `.onChange`.
+struct PlistDeleteRestoreSignal: Equatable {
+    var paths: Set<String> = []
+    var stamp: Int = 0
+}
+
 enum LaunchdPlistInspector {
 
     // MARK: - A. Parsing
@@ -158,5 +180,43 @@ enum LaunchdPlistInspector {
             let userDir = (NSHomeDirectory() as NSString).appendingPathComponent("Library/LaunchAgents") + "/"
             return standardized.hasPrefix(userDir)
         }
+    }
+
+    // MARK: - G. Optimistic-delete restore (V2-DESTRUCTIVE-UX)
+
+    /// Paths whose delete did not happen, given one batch's results: everything
+    /// that is not `.success`. A mixed batch — user-level plists trashed fine,
+    /// the single system-level `rm` cancelled at the password prompt — must
+    /// restore exactly the system-level paths and leave the rest deleted.
+    static func pathsNotDeleted(results: [(path: String, outcome: PlistDeleteOutcome)]) -> Set<String> {
+        Set(results.compactMap { $0.outcome == .success ? nil : $0.path })
+    }
+
+    /// Re-inserts `restoring` into the card's display list at the position each
+    /// path holds in `canonical` (the model's real orphan list). Preserves the
+    /// existing order of `display` exactly — rows still playing a collapse are
+    /// not reordered — by inserting each restored row directly after the nearest
+    /// preceding canonical path that is already present (front of the list if
+    /// there is none). Paths already displayed are left alone (no duplicates);
+    /// paths absent from `canonical` are NOT resurrected (the plist really is
+    /// gone, e.g. a report refresh already dropped it).
+    static func restoredOrphanList(display: [LaunchdPlistInfo],
+                                   restoring: Set<String>,
+                                   canonical: [LaunchdPlistInfo]) -> [LaunchdPlistInfo] {
+        guard !restoring.isEmpty else { return display }
+        var result = display
+        let displayed = Set(display.map(\.path))
+        for (index, info) in canonical.enumerated()
+        where restoring.contains(info.path) && !displayed.contains(info.path) {
+            var insertAt = 0
+            for predecessor in canonical[..<index].reversed() {
+                if let idx = result.firstIndex(where: { $0.path == predecessor.path }) {
+                    insertAt = idx + 1
+                    break
+                }
+            }
+            result.insert(info, at: insertAt)
+        }
+        return result
     }
 }

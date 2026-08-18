@@ -93,6 +93,14 @@ final class DashboardModel {
     /// the next run. Shown as an inline error on the Автозагрузка card.
     var plistDeleteError: String? = nil
 
+    /// Paths whose most recent delete attempt did NOT remove the file — the user
+    /// dismissed the Touch ID/admin prompt, the file op failed, validation
+    /// rejected the path, or the outcome is simply unknown. The Автозагрузка card
+    /// collapses a row optimistically the instant the user confirms (see
+    /// `OrphanRow.onConfirm`); this is the ONLY signal that puts it back.
+    /// Accumulates until the card acknowledges — see `PlistDeleteRestoreSignal`.
+    private(set) var plistDeleteRestore = PlistDeleteRestoreSignal()
+
     /// Assembled on demand for the imperative report/assess/history code paths ONLY.
     /// MUST stay `private` — a VIEW reading this would re-register a dependency on every
     /// field and defeat the per-field observation split. (Views read the individual
@@ -689,6 +697,26 @@ final class DashboardModel {
         setAssessment(Assess.assess(report: report, live: live))
     }
 
+    /// Publishes `paths` as "these were not deleted, put the rows back". Unions
+    /// into whatever the card has not drained yet and always bumps `stamp`, so an
+    /// identical failure set twice in a row is still two distinct signals.
+    private func signalPlistsNotDeleted(_ paths: Set<String>) {
+        guard !paths.isEmpty else { return }
+        plistDeleteRestore = PlistDeleteRestoreSignal(
+            paths: plistDeleteRestore.paths.union(paths),
+            stamp: plistDeleteRestore.stamp &+ 1)
+    }
+
+    /// Called by the Автозагрузка card once it has restored `paths` (or decided
+    /// they are genuinely gone). Draining here rather than clearing on publish is
+    /// what makes two deletes landing in one update cycle safe.
+    func acknowledgePlistRestore(_ paths: Set<String>) {
+        guard !paths.isEmpty, !plistDeleteRestore.paths.isEmpty else { return }
+        plistDeleteRestore = PlistDeleteRestoreSignal(
+            paths: plistDeleteRestore.paths.subtracting(paths),
+            stamp: plistDeleteRestore.stamp &+ 1)
+    }
+
     /// Deletes an orphaned launchd .plist detected by the Автозагрузка card's
     /// "check for outdated" flow. `isSystemLevel` selects the deletion path:
     /// user-level (~/Library/LaunchAgents) goes to Trash via FileManager (reversible);
@@ -700,9 +728,12 @@ final class DashboardModel {
     /// `report.autostart` locally on success (see `removeAutostartPlistsLocally`)
     /// so it drops out of the list without a full report recollect.
     func deleteOrphanPlist(path: String, isSystemLevel: Bool) {
+        // A delete for this path is already in flight and owns the outcome —
+        // signalling here would restore a row whose delete may still succeed.
         guard !deletingPlistPaths.contains(path) else { return }
         guard LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel) else {
             plistDeleteError = "invalid plist path"
+            signalPlistsNotDeleted([path])
             return
         }
         deletingPlistPaths.insert(path)
@@ -712,9 +743,7 @@ final class DashboardModel {
             guard let self else { return }
             defer { self.deletingPlistPaths.remove(path) }
 
-            enum DeleteOutcome { case success, cancelled, failed(String) }
-
-            let outcome: DeleteOutcome = await withCheckedContinuation { continuation in
+            let outcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
                     if isSystemLevel {
                         let quoted = "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
@@ -733,15 +762,24 @@ final class DashboardModel {
                     }
                 }
             }
-            guard !Task.isCancelled else { return }
+            // An unknown outcome must never read as "deleted": put the row back. If the
+            // file op did land, the next report refresh drops it again — showing a row
+            // that no longer exists is recoverable, hiding one that does is not.
+            guard !Task.isCancelled else {
+                self.signalPlistsNotDeleted([path])
+                return
+            }
 
             switch outcome {
             case .success:
                 self.removeAutostartPlistsLocally([path])
             case .cancelled:
-                break   // user dismissed Touch ID/admin prompt — no error banner
+                // User dismissed Touch ID/admin prompt — no error banner, but the row
+                // must come back (finding A3).
+                self.signalPlistsNotDeleted([path])
             case .failed(let msg):
                 self.plistDeleteError = msg
+                self.signalPlistsNotDeleted([path])
             }
         }
     }
@@ -761,6 +799,11 @@ final class DashboardModel {
             let isSystemLevel = path.hasPrefix("/Library/")
             return LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel)
         }
+        // Paths the card already collapsed that this call will never touch:
+        // validation rejected them. Paths excluded because a delete is already in
+        // flight are NOT signalled — that call owns their outcome.
+        let inFlight = paths.filter { deletingPlistPaths.contains($0) }
+        signalPlistsNotDeleted(Set(paths).subtracting(batch).subtracting(inFlight))
         guard !batch.isEmpty else { return }
 
         for path in batch { deletingPlistPaths.insert(path) }
@@ -775,12 +818,18 @@ final class DashboardModel {
                 for path in batch { self.deletingPlistPaths.remove(path) }
             }
 
-            enum DeleteOutcome { case success, cancelled, failed(String) }
+            var results: [(path: String, outcome: PlistDeleteOutcome)] = []
 
-            var results: [(path: String, outcome: DeleteOutcome)] = []
+            // Everything in the batch whose delete is not a recorded success yet —
+            // an unknown outcome must not read as "deleted" (same reasoning as the
+            // single-path variant).
+            func notRecordedAsDeleted() -> Set<String> {
+                let succeeded = Set(results.compactMap { $0.outcome == .success ? $0.path : nil })
+                return Set(batch).subtracting(succeeded)
+            }
 
             for path in userPaths {
-                let outcome: DeleteOutcome = await withCheckedContinuation { continuation in
+                let outcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .utility).async {
                         do {
                             try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
@@ -790,7 +839,7 @@ final class DashboardModel {
                         }
                     }
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else { self.signalPlistsNotDeleted(notRecordedAsDeleted()); return }
                 results.append((path, outcome))
             }
 
@@ -799,7 +848,7 @@ final class DashboardModel {
                     "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
                 }.joined(separator: " ")
 
-                let systemOutcome: DeleteOutcome = await withCheckedContinuation { continuation in
+                let systemOutcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .utility).async {
                         switch PrivilegedRunner.run(command) {
                         case .success: continuation.resume(returning: .success)
@@ -808,7 +857,7 @@ final class DashboardModel {
                         }
                     }
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else { self.signalPlistsNotDeleted(notRecordedAsDeleted()); return }
                 for path in systemPaths { results.append((path, systemOutcome)) }
             }
 
@@ -829,6 +878,7 @@ final class DashboardModel {
             if !succeededPaths.isEmpty {
                 self.removeAutostartPlistsLocally(succeededPaths)
             }
+            self.signalPlistsNotDeleted(LaunchdPlistInspector.pathsNotDeleted(results: results))
         }
     }
 

@@ -44,6 +44,16 @@ struct AutostartCard: View {
     /// Paths currently playing their collapse-out animation (present in
     /// `displayOrphans` but already gone from the model's real orphan list).
     @State private var collapsingPaths: Set<String> = []
+    /// Paths the card has just RE-INSERTED after a delete that did not happen
+    /// (cancelled prompt, failed op, unknown outcome). Read only by `OrphanRow`'s
+    /// `init`, which seeds `openAmount` at 0 for these so the row animates open
+    /// instead of popping in at full height; cleared from `onRestored`.
+    @State private var restoringPaths: Set<String> = []
+    /// Paths handed to the last `deleteOrphanPlists` call, kept until none of them
+    /// is in flight any more. The bulk row's busy state must survive the rows
+    /// themselves collapsing out of `displayOrphans` (finding A4) — deriving it
+    /// from `displayOrphans` is exactly what made the indicator go dark mid-batch.
+    @State private var bulkDeletingPaths: Set<String> = []
 
     /// Reconciles `displayOrphans`/`collapsingPaths` with the model's current
     /// orphan list: paths that disappeared from `orphans` are kept in
@@ -68,9 +78,42 @@ struct AutostartCard: View {
         displayOrphans.append(contentsOf: orphans.filter { !displayedPaths.contains($0.path) })
     }
 
+    /// The model's real orphan list. Single source for both `body` and
+    /// `restoreOrphans` — the restore path must never compute insert positions
+    /// against a stale copy captured in a closure.
+    private var modelOrphans: [LaunchdPlistInfo] {
+        guard let auto = model.report.autostart else { return [] }
+        return (auto.userAgents + auto.systemAgents + auto.systemDaemons).filter(\.isOrphan)
+    }
+
+    /// Whether the last bulk delete is still running. Derived from the model, not
+    /// from `displayOrphans` (finding A4).
+    private var bulkBusy: Bool {
+        bulkDeletingPaths.contains { model.deletingPlistPaths.contains($0) }
+    }
+
+    /// Undoes the optimistic collapse for paths the model reports as NOT deleted
+    /// (`DashboardModel.plistDeleteRestore`). Rows still mounted just lose their
+    /// `collapsing` flag — `OrphanRow` animates `openAmount` back to 1 through the
+    /// same single `withAnimation` that closed it. Rows whose collapse already
+    /// committed are re-inserted at their canonical position and marked
+    /// `restoring` so they mount closed and animate open. Always acknowledges the
+    /// whole input set, including paths that are genuinely gone, so the model's
+    /// pending set cannot grow without bound.
+    private func restoreOrphans(_ paths: Set<String>) {
+        guard !paths.isEmpty else { return }
+        collapsingPaths.subtract(paths)
+        let before = Set(displayOrphans.map(\.path))
+        let restored = LaunchdPlistInspector.restoredOrphanList(
+            display: displayOrphans, restoring: paths, canonical: modelOrphans)
+        restoringPaths.formUnion(restored.map(\.path).filter { !before.contains($0) })
+        displayOrphans = restored
+        model.acknowledgePlistRestore(paths)
+    }
+
     var body: some View {
         if let auto = model.report.autostart {
-            let orphans = (auto.userAgents + auto.systemAgents + auto.systemDaemons).filter(\.isOrphan)
+            let orphans = modelOrphans
 
             CardChrome(title: L.autostartTitle, trailing: { orphanHeader(orphans: orphans) }) {
                 VStack(alignment: .leading, spacing: 12) {
@@ -288,6 +331,7 @@ struct AutostartCard: View {
                                 busy: model.deletingPlistPaths.contains(info.path),
                                 isPending: pendingDeletePath == info.path,
                                 collapsing: collapsingPaths.contains(info.path),
+                                restoring: restoringPaths.contains(info.path),
                                 tooltip: orphanTooltip(info),
                                 onAsk: {
                                     pendingDeletePath = info.path
@@ -302,21 +346,25 @@ struct AutostartCard: View {
                                     // then abrupt" since nothing moved until the file op
                                     // finished. `syncDisplayOrphans` still marks this path
                                     // collapsing on its own if this optimistic insert is
-                                    // ever missed, so a rare delete failure just leaves a
-                                    // gone row that quietly reappears on the next report
-                                    // refresh (surfaced via `plistDeleteError` either way).
+                                    // ever missed. A delete that does not happen (cancelled
+                                    // prompt, failed op, unknown outcome) comes back through
+                                    // `model.plistDeleteRestore` → `restoreOrphans` — see
+                                    // finding A3.
                                     collapsingPaths.insert(info.path)
                                     model.deleteOrphanPlist(path: info.path, isSystemLevel: isSystemLevel(info.path))
                                     pendingDeletePath = nil
                                 },
                                 onCollapsed: {
-                                    // Commits the removal on the animation
-                                    // finishing, not on a wall clock — see
-                                    // `OrphanRow`'s own `withAnimation(...,
-                                    // completion:)` call for where this fires.
+                                    // Commits the removal on the animation finishing, not on a wall clock —
+                                    // see `OrphanRow`'s own `withAnimation(..., completion:)`. The guard is
+                                    // the restore path (V2-DESTRUCTIVE-UX): if this path was un-collapsed
+                                    // meanwhile, a late completion from the interrupted collapse must not
+                                    // drop the row after all.
+                                    guard collapsingPaths.contains(info.path) else { return }
                                     collapsingPaths.remove(info.path)
                                     displayOrphans.removeAll { $0.path == info.path }
-                                }
+                                },
+                                onRestored: { restoringPaths.remove(info.path) }
                             )
                         }
                     }
@@ -327,17 +375,19 @@ struct AutostartCard: View {
                 // of an `if`-gated appear/disappear.
                 BulkDeleteRow(
                     orphans: displayOrphans,
-                    busy: !displayOrphans.isEmpty && displayOrphans.allSatisfy { model.deletingPlistPaths.contains($0.path) },
+                    busy: bulkBusy,
                     pendingBulkDelete: $pendingBulkDelete,
                     onAsk: {
                         pendingDeletePath = nil
                         pendingBulkDelete = true
                     },
                     onConfirm: {
-                        // Same optimistic-collapse reasoning as the single-row
-                        // `onConfirm` above, applied to the whole batch.
-                        for orphan in displayOrphans { collapsingPaths.insert(orphan.path) }
-                        model.deleteOrphanPlists(paths: displayOrphans.map(\.path))
+                        // Same optimistic-collapse reasoning as the single-row `onConfirm`
+                        // above, applied to the whole batch — and the same restore path.
+                        let batch = displayOrphans.map(\.path)
+                        bulkDeletingPaths = Set(batch)
+                        for path in batch { collapsingPaths.insert(path) }
+                        model.deleteOrphanPlists(paths: batch)
                         pendingBulkDelete = false
                     },
                     onCancel: { pendingBulkDelete = false }
@@ -351,6 +401,16 @@ struct AutostartCard: View {
             }
             .onChange(of: orphans, initial: true) { _, newOrphans in
                 syncDisplayOrphans(newOrphans)
+            }
+            .onChange(of: model.plistDeleteRestore, initial: true) { _, signal in
+                // `initial: true` drains anything that piled up while this section
+                // was unmounted (the user closed the orphan list mid-delete).
+                restoreOrphans(signal.paths)
+            }
+            .onChange(of: model.deletingPlistPaths) { _, inFlight in
+                if !bulkDeletingPaths.contains(where: { inFlight.contains($0) }) {
+                    bulkDeletingPaths = []
+                }
             }
         }
     }
@@ -537,6 +597,11 @@ private struct OrphanRow: View {
     let busy: Bool
     let isPending: Bool
     let collapsing: Bool
+    /// True only for a row the card has just re-inserted after a delete that did
+    /// not happen. Seeds `openAmount` at 0 (see `init`) so the row animates open
+    /// through the same single `withAnimation` that closes it, instead of popping
+    /// in at full height the way a plain `ForEach` insert would.
+    let restoring: Bool
     let tooltip: String
     let onAsk: () -> Void
     let onCancel: () -> Void
@@ -546,10 +611,50 @@ private struct OrphanRow: View {
     /// (see its call site), replacing a `DispatchQueue.main.asyncAfter`
     /// racing a hardcoded duration against the real animation.
     let onCollapsed: () -> Void
+    /// Fires once this row's own OPEN animation has finished — the card drops the
+    /// path from `restoringPaths` here.
+    let onRestored: () -> Void
+
+    init(
+        info: LaunchdPlistInfo,
+        isSystemLevel: Bool,
+        busy: Bool,
+        isPending: Bool,
+        collapsing: Bool,
+        restoring: Bool,
+        tooltip: String,
+        onAsk: @escaping () -> Void,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping () -> Void,
+        onCollapsed: @escaping () -> Void,
+        onRestored: @escaping () -> Void
+    ) {
+        self.info = info
+        self.isSystemLevel = isSystemLevel
+        self.busy = busy
+        self.isPending = isPending
+        self.collapsing = collapsing
+        self.restoring = restoring
+        self.tooltip = tooltip
+        self.onAsk = onAsk
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+        self.onCollapsed = onCollapsed
+        self.onRestored = onRestored
+        // Seeds from the CURRENT restore state: a re-inserted row must start
+        // closed and animate open; every other row mounts fully open, exactly as
+        // before.
+        _openAmount = State(initialValue: restoring ? 0 : 1)
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var openAmount: Double = 1
+    @State private var openAmount: Double
     @State private var measuredHeight: CGFloat?
+
+    /// 0 = collapsed, 1 = open. The single Animatable value for both directions,
+    /// so open and close are provably the same interpolation played forward and
+    /// backward (see `AutoSectionRow.openAmount`'s writeup).
+    private var openTarget: Double { collapsing ? 0 : 1 }
 
     var body: some View {
         rowContent
@@ -568,15 +673,18 @@ private struct OrphanRow: View {
             // can still poke a sliver above its neighbor without this outer
             // re-clip.
             .clipShape(BleedRect(leading: 20, trailing: 20))
-            .onChange(of: collapsing, initial: true) { _, isCollapsing in
-                guard isCollapsing else { return }
+            .onChange(of: openTarget, initial: true) { _, target in
+                // No-op on an ordinary mount (seeded openAmount already equals the
+                // target); a real transition on a mount with `restoring == true`,
+                // which is what animates a restored row open.
+                guard openAmount != target else { return }
                 let curve: Animation = reduceMotion
                     ? .easeInOut(duration: DSMotion.reduceMotionFallback)
                     : DSMotion.expand
                 withAnimation(curve) {
-                    openAmount = 0
+                    openAmount = target
                 } completion: {
-                    onCollapsed()
+                    if target == 0 { onCollapsed() } else { onRestored() }
                 }
             }
     }
@@ -683,14 +791,17 @@ private struct BulkDeleteRow: View {
         // Seeds `openAmount` from the CURRENT count so a launch with ≥ 2
         // orphans already showing doesn't animate in from 0 — same
         // rationale as `AutoSectionRow`'s init.
-        _openAmount = State(initialValue: orphans.count >= 2 ? 1 : 0)
+        _openAmount = State(initialValue: (orphans.count >= 2 || busy) ? 1 : 0)
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var openAmount: Double
     @State private var measuredHeight: CGFloat?
 
-    private var visible: Bool { orphans.count >= 2 }
+    /// Also visible while busy: the batch's rows leave `displayOrphans` as they
+    /// commit their collapse, so a count-only rule takes the busy indicator off
+    /// screen while the delete is still running (finding A4).
+    private var visible: Bool { orphans.count >= 2 || busy }
 
     var body: some View {
         rowContent

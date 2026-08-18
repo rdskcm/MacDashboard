@@ -389,18 +389,23 @@ private struct TipCapsuleView: View {
     }
 
     /// Verb (default) / spinner (busy) / checkmark (done) — same idiom as
-    /// `ItemPlate.trailingSlot`. `busyDetail` (long brew progress strings)
-    /// is intentionally NOT surfaced here: the capsule is `.fixedSize()`
-    /// nowrap inside a `FlowLayout`, so only the spinner fits.
-    @ViewBuilder
+    /// `ItemPlate.trailingSlot`, including `dsSwapInPlace`: the verb stays the
+    /// layout's size determinant so the capsule keeps its width for the whole
+    /// action and its FlowLayout neighbours do not reflow (V2-DESTRUCTIVE-UX —
+    /// the trash busy state now lasts as long as Finder takes). `busyDetail`
+    /// (long brew progress strings) is intentionally NOT surfaced here: the
+    /// capsule is `.fixedSize()` nowrap inside a `FlowLayout`, so only the
+    /// spinner fits.
     private var trailingSlot: some View {
-        if busy {
-            ProgressView().controlSize(.mini)
-        } else if done {
-            Text("\u{2713}").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.greenInk)
-        } else {
-            Text(capsule.verb).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.accentInk)
-        }
+        Text(capsule.verb).font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(DS.accentInk)
+            .dsSwapInPlace(busy || done) {
+                if busy {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Text("\u{2713}").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.greenInk)
+                }
+            }
     }
 }
 

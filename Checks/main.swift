@@ -2298,6 +2298,66 @@ do {
 }
 
 // =====================================================================
+// MARK: - V2-DESTRUCTIVE-UX (optimistic-delete restore + AppleScript outcome)
+// =====================================================================
+
+do {
+    func orphan(_ path: String) -> LaunchdPlistInfo {
+        LaunchdPlistInfo(path: path, label: nil, executablePath: nil, isOrphan: true, description: nil)
+    }
+    let a = orphan("/Users/x/Library/LaunchAgents/a.plist")
+    let b = orphan("/Library/LaunchAgents/b.plist")
+    let c = orphan("/Library/LaunchDaemons/c.plist")
+    let canonical = [a, b, c]
+
+    // --- pathsNotDeleted: the mixed-batch rule (finding A4) ---
+    check(LaunchdPlistInspector.pathsNotDeleted(results: [(a.path, .success), (b.path, .success)]).isEmpty,
+          "pathsNotDeleted: an all-success batch restores nothing")
+    check(LaunchdPlistInspector.pathsNotDeleted(
+            results: [(a.path, .success), (b.path, .cancelled), (c.path, .cancelled)]) == [b.path, c.path],
+          "pathsNotDeleted: mixed batch restores only the cancelled system-level paths")
+    check(LaunchdPlistInspector.pathsNotDeleted(
+            results: [(a.path, .failed("boom")), (b.path, .cancelled)]) == [a.path, b.path],
+          "pathsNotDeleted: failed and cancelled both restore")
+    check(LaunchdPlistInspector.pathsNotDeleted(results: []).isEmpty,
+          "pathsNotDeleted: empty results restore nothing")
+
+    // --- restoredOrphanList: where a row comes back (finding A3) ---
+    check(LaunchdPlistInspector.restoredOrphanList(display: [a, c], restoring: [], canonical: canonical) == [a, c],
+          "restoredOrphanList: an empty restore set is the identity")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [a, c], restoring: [b.path], canonical: canonical) == [a, b, c],
+          "restoredOrphanList: a middle row comes back in the middle")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [b, c], restoring: [a.path], canonical: canonical) == [a, b, c],
+          "restoredOrphanList: the first row comes back at the front")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [a, b], restoring: [c.path], canonical: canonical) == [a, b, c],
+          "restoredOrphanList: the last row comes back at the end")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [], restoring: [a.path, b.path, c.path], canonical: canonical) == canonical,
+          "restoredOrphanList: a whole bulk batch comes back in canonical order")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [a, c], restoring: [c.path], canonical: canonical) == [a, c],
+          "restoredOrphanList: an already-displayed path is not duplicated")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [b, c], restoring: [a.path], canonical: [b, c]) == [b, c],
+          "restoredOrphanList: a path the model no longer lists is NOT resurrected")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [], restoring: [a.path, b.path, c.path], canonical: [b, c]) == [b, c],
+          "restoredOrphanList: mixed batch — the successfully deleted path stays gone")
+
+    // --- the signal itself ---
+    check(PlistDeleteRestoreSignal(paths: [a.path], stamp: 1) != PlistDeleteRestoreSignal(paths: [a.path], stamp: 2),
+          "PlistDeleteRestoreSignal: Equatable includes `stamp`, so the same failure twice is two signals")
+
+    // --- AppleScriptResult: the -128 rule (finding A5) ---
+    check(AppleScriptResult.classify(error: nil) == .ok,
+          "AppleScriptResult: no error dictionary is a clean run")
+    check(AppleScriptResult.classify(error: [NSAppleScript.errorNumber: -128]) == .cancelled,
+          "AppleScriptResult: -128 is a cancel, not a failure")
+    check(AppleScriptResult.classify(
+            error: [NSAppleScript.errorNumber: -1728, NSAppleScript.errorMessage: "Finder got an error"])
+            == .failed(message: "Finder got an error"),
+          "AppleScriptResult: any other error carries Finder's own message")
+    check(AppleScriptResult.classify(error: [:]) == .failed(message: nil),
+          "AppleScriptResult: an empty error dictionary is a failure, never a success")
+}
+
+// =====================================================================
 // MARK: - Summary
 // =====================================================================
 

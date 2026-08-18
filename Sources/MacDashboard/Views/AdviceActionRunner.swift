@@ -4,6 +4,59 @@
 // enableFirewall) never reach here.
 import AppKit
 
+/// Serial owner of the `NSAppleScript` used by `AdviceActionRunner.emptyTrash`:
+/// ONE thread with a parked run loop, started lazily on first empty-trash and
+/// kept for the process lifetime.
+///
+/// Why not the main actor (the shape this replaces): `executeAndReturnError`
+/// blocks until Finder is done — which includes Finder's own "permanently
+/// erase?" confirmation, the first-run automation permission prompt, and the
+/// whole time a multi-gigabyte Trash takes. The window stopped redrawing and our
+/// own confirmation dialog sat on screen undismissed.
+/// Why not a global queue: `NSAppleScript` is not thread-safe, wants a run loop,
+/// and an instance must stay on the thread that created it — a queue hands out a
+/// different thread per call.
+/// Blocks queue on this thread's run loop, so two empty-trash runs can never
+/// overlap and no lock is needed.
+private final class AppleScriptThread {
+    static let shared = AppleScriptThread()
+
+    private var runLoop: CFRunLoop?
+
+    private init() {
+        let ready = DispatchSemaphore(value: 0)
+        let thread = Thread { [self] in
+            runLoop = CFRunLoopGetCurrent()
+            ready.signal()
+            // A run loop with no input source returns immediately, so the port is
+            // what parks this thread instead of spinning it.
+            RunLoop.current.add(NSMachPort(), forMode: .default)
+            while true {
+                // `run(mode:before:)` returns false only if the mode has no input
+                // source at all. The port above guarantees one; the sleep is a
+                // backstop so a degenerate case can never become a busy loop
+                // (idle CPU is a standing constraint in this app).
+                if !RunLoop.current.run(mode: .default, before: .distantFuture) {
+                    Thread.sleep(forTimeInterval: 0.1)
+                }
+            }
+        }
+        thread.name = "com.macdashboard.applescript"
+        thread.stackSize = 512 * 1024
+        thread.start()
+        // Bounded by a thread start (no I/O): the run loop must exist before the
+        // first block can be posted to it.
+        ready.wait()
+    }
+
+    /// Runs `body` on the owning thread, asynchronously.
+    func async(_ body: @escaping () -> Void) {
+        guard let runLoop else { return }
+        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue, body)
+        CFRunLoopWakeUp(runLoop)
+    }
+}
+
 enum AdviceActionRunner {
     static func openPane(_ url: String) {
         guard let target = URL(string: url) else { return }
@@ -47,34 +100,36 @@ enum AdviceActionRunner {
         case failed(detail: String?)
     }
 
-    /// Empties the Trash via Finder (our own confirmation dialog precedes this).
-    ///
-    /// Runs on the main actor. `NSAppleScript` is not documented as thread-safe and
-    /// expects a run loop, and this call is fast and already gated by a dialog. If a
-    /// large Trash ever makes it hang measurably, the correct escalation is
-    /// `NSUserAppleScriptTask` or an instance confined to one dedicated run-loop
-    /// thread — NOT moving it back to an arbitrary global queue.
+    /// Empties the Trash via Finder (our own confirmation dialog precedes this and
+    /// is dismissed before the call — see `AdviceActionDispatch.confirmEmptyTrash`).
+    /// Runs on `AppleScriptThread` (see its doc comment for why not main / not a
+    /// queue); `completion` is delivered on the main actor exactly once.
     @MainActor
     static func emptyTrash(completion: @escaping @MainActor (TrashOutcome) -> Void) {
-        // A nil script must NOT read as success: with the old optional-chained call
-        // `error` stayed nil, so the UI showed the done state while the Trash was
-        // never touched.
-        guard let script = NSAppleScript(source: "tell application \"Finder\" to empty trash") else {
-            completion(.failed(detail: nil))
-            return
+        AppleScriptThread.shared.async {
+            // Created AND executed on the owning thread — an NSAppleScript
+            // instance must not travel between threads.
+            guard let script = NSAppleScript(source: "tell application \"Finder\" to empty trash") else {
+                // A nil script must NOT read as success: with the old
+                // optional-chained call `error` stayed nil, so the UI showed the
+                // done state while the Trash was never touched.
+                deliver(.failed(detail: nil), to: completion)
+                return
+            }
+            var error: NSDictionary?
+            script.executeAndReturnError(&error)
+            switch AppleScriptResult.classify(error: error as? [AnyHashable: Any]) {
+            case .ok: deliver(.emptied, to: completion)
+            case .cancelled: deliver(.cancelled, to: completion)
+            case .failed(let message): deliver(.failed(detail: message), to: completion)
+            }
         }
-        var error: NSDictionary?
-        script.executeAndReturnError(&error)
-        guard let error else {
-            completion(.emptied)
-            return
-        }
-        // -128 is the standard "user cancelled" AppleEvent code; it is not an error
-        // state and must not surface as one.
-        if (error[NSAppleScript.errorNumber] as? Int) == -128 {
-            completion(.cancelled)
-            return
-        }
-        completion(.failed(detail: error[NSAppleScript.errorMessage] as? String))
+    }
+
+    /// The only way `emptyTrash` ever calls its completion: one hop back to the
+    /// main actor.
+    private static func deliver(_ outcome: TrashOutcome,
+                                to completion: @escaping @MainActor (TrashOutcome) -> Void) {
+        Task { @MainActor in completion(outcome) }
     }
 }

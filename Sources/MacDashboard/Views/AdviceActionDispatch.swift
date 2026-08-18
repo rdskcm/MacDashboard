@@ -45,6 +45,11 @@ final class AdviceActionDispatch {
     /// state instead of its verb.
     var completedAdviceIDs: Set<String> = []
     var trashError: String? = nil
+    /// True while `AdviceActionRunner.emptyTrash` is in flight — i.e. for the whole
+    /// time Finder works, including its own "permanently erase?" confirmation and
+    /// the first-run automation prompt. Read through `busy(for:)`, which is what
+    /// swaps the plate/capsule verb for a spinner (`dsSwapInPlace`).
+    private(set) var trashEmptying = false
 
     var trashConfirmBinding: Binding<Bool> {
         Binding(get: { self.showTrashConfirm }, set: { self.showTrashConfirm = $0 })
@@ -66,9 +71,15 @@ final class AdviceActionDispatch {
     }
 
     func confirmEmptyTrash() {
+        guard !trashEmptying else { return }
         let id = trashTargetID
+        // Take our own dialog down BEFORE the call: it must never sit on screen
+        // while Finder puts up its own confirmation (finding A5).
+        showTrashConfirm = false
+        trashEmptying = true
         AdviceActionRunner.emptyTrash { [weak self] outcome in
             guard let self else { return }
+            self.trashEmptying = false
             self.trashTargetID = nil
             switch outcome {
             case .emptied:
@@ -89,6 +100,7 @@ final class AdviceActionDispatch {
         switch action {
         case .brewUpgrade: return model.brewUpgrading
         case .enableFirewall: return model.firewallApplying
+        case .emptyTrash: return trashEmptying
         default: return false
         }
     }

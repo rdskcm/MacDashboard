@@ -13,7 +13,7 @@ Every other file in this directory (`Models.swift`, `Parsers.swift`, `Assessment
 `ThermalSensors.swift`, `AppSettings.swift`, `StringsRU.swift`, `StringsEN.swift`,
 `LaunchdPlistInspector.swift`, `Formatting.swift`, `BatteryInspector.swift`,
 `Advice.swift`, `HistorySeries.swift`, `AIRedaction.swift`, `AIPayload.swift`,
-`AIRequest.swift`, `DirectoryAccess.swift`) is a **symlink** back into
+`AIRequest.swift`, `DirectoryAccess.swift`, `AppleScriptResult.swift`) is a **symlink** back into
 `../Sources/MacDashboard/...`. SwiftPM compiles whatever source files it finds under a
 target's `path`, following symlinks, so this target builds and tests the exact same pure
 engine source files the app itself ships — no copy-paste drift, no separate module to
