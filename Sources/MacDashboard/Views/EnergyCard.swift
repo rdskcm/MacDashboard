@@ -436,6 +436,17 @@ struct EnergyCard: View {
                             .font(.system(size: 11.5))
                             .lineSpacing(11.5 * 0.45)
                             .foregroundStyle(DS.muted)
+                            // A `Grid` sizes a row from its cells' IDEAL height, and a plain
+                            // `Text`'s ideal height is one line — so this full-width cell used
+                            // to be proposed a single line of height and truncated with "…"
+                            // (V2-FIX-ENERGYINFO-WRAP). `fixedSize(vertical:)` makes it report
+                            // the height it actually needs at the proposed width; the
+                            // `maxWidth: .infinity` frame under it accepts the full cell width
+                            // so the rounded plate spans the table instead of hugging the
+                            // longest line. Order (frame, then fixedSize) mirrors
+                            // `SharedUI.footerZone`. Do not "simplify" either one away.
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.vertical, 8)
                             .padding(.horizontal, 10)
                             .background(RoundedRectangle(cornerRadius: 8).fill(DS.row))
