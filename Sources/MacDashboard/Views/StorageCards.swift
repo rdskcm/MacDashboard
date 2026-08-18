@@ -118,6 +118,7 @@ private enum FolderTab: Hashable { case home, service }
 struct FoldersCard: View {
     let model: DashboardModel
     @State private var folderTab: FolderTab = .home
+    @State private var homeShowAll = false
     private var home: String { NSHomeDirectory() }
 
     private var homeDirs: [DirSize] { model.report.homeDirs ?? [] }
@@ -125,8 +126,9 @@ struct FoldersCard: View {
         let h = home
         return homeDirs.filter { stripHome($0.path, home: h) != "~" && $0.bytes > 0 }
             .sorted { $0.bytes > $1.bytes }
-            .prefix(10)
-            .map { $0 }
+    }
+    private var visibleHomeDirs: [DirSize] {
+        homeShowAll ? chartDirs : Array(chartDirs.prefix(10))
     }
 
     private func label(for path: String) -> String {
@@ -186,7 +188,14 @@ struct FoldersCard: View {
                 } else if homeDirs.isEmpty {
                     Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
                 } else {
-                    DirBarList(dirs: chartDirs) { stripHome($0.path, home: home) }
+                    DirBarList(dirs: visibleHomeDirs) { stripHome($0.path, home: home) }
+                    if chartDirs.count > 10 {
+                        MoreLessToggle(
+                            expanded: homeShowAll,
+                            collapsedLabel: L.sharedMoreN(chartDirs.count - 10),
+                            expandedLabel: L.sharedCollapse
+                        ) { homeShowAll.toggle() }
+                    }
                 }
             case .service:
                 if model.report.serviceDirs == nil {

@@ -114,6 +114,8 @@ struct StringsRU: AppStrings {
     var sharedToggleShowTable: String { "Показать таблицу" }
     var sharedInfoHide: String { "Скрыть пояснение" }
     var sharedInfoShow: String { "Показать пояснение" }
+    func sharedMoreN(_ n: Int) -> String { "Ещё \(n)" }
+    var sharedCollapse: String { "Свернуть" }
 
     // MARK: Storage — shared folder labels
     var storageColFolder: String { "Папка" }

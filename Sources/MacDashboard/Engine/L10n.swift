@@ -131,6 +131,8 @@ protocol AppStrings {
     var sharedToggleShowTable: String { get }
     var sharedInfoHide: String { get }
     var sharedInfoShow: String { get }
+    func sharedMoreN(_ n: Int) -> String
+    var sharedCollapse: String { get }
 
     // MARK: Storage — shared folder labels
     var storageColFolder: String { get }

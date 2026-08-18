@@ -1298,3 +1298,27 @@ extension View {
         modifier(PointingHandOnHover(isEnabled: isEnabled, hovering: hovering))
     }
 }
+
+// MARK: - Shared "Ещё N" toggle
+
+// MARK: - "Ещё N" / "Свернуть" toggle (item grid overflow)
+
+struct MoreLessToggle: View {
+    let expanded: Bool
+    let collapsedLabel: String
+    let expandedLabel: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    private var label: String { expanded ? expandedLabel : collapsedLabel }
+
+    var body: some View {
+        Button(action: action) {
+            Text(label).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.accentInk)
+        }
+        .buttonStyle(.plain)
+        .pointingHandOnHover(isEnabled: true, hovering: $hovering)
+        .accessibilityLabel(label)
+    }
+}

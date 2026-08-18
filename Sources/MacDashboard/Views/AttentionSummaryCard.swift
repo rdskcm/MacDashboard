@@ -438,28 +438,6 @@ private struct OverflowCapsuleButton: View {
     }
 }
 
-// MARK: - "Ещё N" / "Свернуть" toggle (item grid overflow)
-
-private struct MoreLessToggle: View {
-    let expanded: Bool
-    let collapsedLabel: String
-    let expandedLabel: String
-    let action: () -> Void
-
-    @State private var hovering = false
-
-    private var label: String { expanded ? expandedLabel : collapsedLabel }
-
-    var body: some View {
-        Button(action: action) {
-            Text(label).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.accentInk)
-        }
-        .buttonStyle(.plain)
-        .pointingHandOnHover(isEnabled: true, hovering: $hovering)
-        .accessibilityLabel(label)
-    }
-}
-
 /// `.accessibilityLabel` + `.isButton` trait, applied only when the underlying
 /// plate is actually interactive (spec: "on interactive plates").
 private struct InteractiveAccessibility: ViewModifier {
