@@ -206,6 +206,8 @@ struct StringsRU: AppStrings {
     var timeMachineTypeLocal: String { "локальный диск" }
     var timeMachineQuota: String { "Квота" }
     var timeMachineLastBackup: String { "Последний бэкап" }
+    var timeMachineConnection: String { "Подключение" }
+    var timeMachineConnectionNone: String { "сейчас нет подключения" }
     var timeMachineSnapshots: String { "Локальные снапшоты" }
     var timeMachineSnapshotsNone: String { "нет" }
     func timeMachineSnapshotsCount(_ n: Int) -> String { "\(n) шт." }

@@ -220,6 +220,10 @@ protocol AppStrings {
     var timeMachineTypeLocal: String { get }
     var timeMachineQuota: String { get }
     var timeMachineLastBackup: String { get }
+    /// V2-TM-CONNSTATE: label + value of the row shown only while the destination has no
+    /// mount point (disk unplugged, or network share not mounted).
+    var timeMachineConnection: String { get }
+    var timeMachineConnectionNone: String { get }
     var timeMachineSnapshots: String { get }
     var timeMachineSnapshotsNone: String { get }
     func timeMachineSnapshotsCount(_ n: Int) -> String

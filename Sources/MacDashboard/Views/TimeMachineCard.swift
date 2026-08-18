@@ -79,6 +79,16 @@ struct TimeMachineCard: View {
         model.smartUpdatedAt.map { L.storageSmartUpdatedCaption($0.formatted(date: .omitted, time: .shortened)) }
     }
 
+    /// The last-backup row's "why there is no date" text, minus `.diskNotConnected`:
+    /// that reason now has its own row (V2-TM-CONNSTATE), and printing it twice two rows
+    /// apart reads like two separate findings. Every other reason is unchanged.
+    /// V2-HONEST-READINGS: still compared as an enum case, never as a string.
+    private func lastBackupReasonText(_ dest: TMDestination) -> String? {
+        guard let reason = dest.lastBackupUnavailableReason,
+              reason != .diskNotConnected else { return nil }
+        return reason.localizedText
+    }
+
     var body: some View {
         CardChrome(title: "Time Machine", caption: updatedCaption) {
             switch model.report.tmDest {
@@ -103,7 +113,7 @@ struct TimeMachineCard: View {
                     }
                     TMRow(
                         label: L.timeMachineLastBackup,
-                        value: dest.lastBackup ?? dest.lastBackupUnavailableReason?.localizedText ?? "—",
+                        value: dest.lastBackup ?? lastBackupReasonText(dest) ?? "—",
                         // V2-TM-CALM: only a destination that IS connected and still
                         // unreadable (no Full Disk Access) is a problem, so only that
                         // reason gets `hot`. An unplugged disk, a destination with no
@@ -113,6 +123,17 @@ struct TimeMachineCard: View {
                         valueColor: dest.lastBackupUnavailableReason == .dateUnavailableNoFDA
                             ? DS.hot : DS.inkSoft
                     )
+                    // V2-TM-CONNSTATE: `tmutil destinationinfo` drops its "Mount Point"
+                    // line the moment the destination volume goes away (verified live by
+                    // unplugging the disk; Name/Kind/ID/Quota keep coming from TM's own
+                    // prefs), so a nil mountPoint is the live "not connected right now"
+                    // signal. Shown IN ADDITION to the date above — the date is the last
+                    // known one, which stays useful — and in the card's calm ink
+                    // (TMRow's default), because an unplugged backup disk is a normal
+                    // state, not an error (V2-TM-CALM).
+                    if dest.mountPoint == nil {
+                        TMRow(label: L.timeMachineConnection, value: L.timeMachineConnectionNone)
+                    }
                     if let snaps = model.report.snapshots {
                         let last = snaps.max()
                         TMRow(label: L.timeMachineSnapshots,

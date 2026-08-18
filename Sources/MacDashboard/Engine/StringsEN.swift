@@ -204,6 +204,8 @@ struct StringsEN: AppStrings {
     var timeMachineTypeLocal: String { "local disk" }
     var timeMachineQuota: String { "Quota" }
     var timeMachineLastBackup: String { "Last backup" }
+    var timeMachineConnection: String { "Connection" }
+    var timeMachineConnectionNone: String { "not connected right now" }
     var timeMachineSnapshots: String { "Local snapshots" }
     var timeMachineSnapshotsNone: String { "none" }
     func timeMachineSnapshotsCount(_ n: Int) -> String { "\(n)" }

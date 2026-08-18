@@ -390,6 +390,10 @@ final class ReportCollector {
     /// unmounted-disk notice once the user already trusts the app with FDA — and
     /// is moot in the common no-FDA deployment, where the plist is gated identically
     /// to everything else and step 4's mount check is what actually decides the message.
+    /// V2-TM-CONNSTATE: the card no longer depends on step 4 to say so — the Time Machine
+    /// card renders a separate "no connection right now" row straight off `mountPoint == nil`,
+    /// so a stale-but-real date from step 3 is now shown correctly labelled as the LAST KNOWN
+    /// one rather than as the current state.
     private func applyLastBackup(to dest: inout TMDestination) {
         if let last = CommandRunner.run("/usr/bin/tmutil", ["latestbackup"], timeout: 15, scope: cancelScope) {
             let s = last.trimmingCharacters(in: .whitespacesAndNewlines)
