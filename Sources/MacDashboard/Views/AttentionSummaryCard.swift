@@ -460,46 +460,6 @@ private struct MoreLessToggle: View {
     }
 }
 
-// MARK: - Shared hover-cursor helper
-
-/// Balances `NSCursor.pointingHand.push()`/`.pop()` across hover enter/exit —
-/// same push/pop-balance idiom used elsewhere in the app (the legacy
-/// Рекомендации card's `AdviceRow`, StorageCards' `DirBarRow`), extracted once
-/// here since this card needs it in four places (item plates, capsules, the
-/// "+N" capsule, the more/less toggle). `pushed` is tracked explicitly rather
-/// than inferred from `hovering` so an interactive→non-interactive transition
-/// mid-hover (e.g. tapping brew/firewall while the mouse stays put) still
-/// balances the push instead of leaking it until the mouse happens to move.
-private struct PointingHandOnHover: ViewModifier {
-    let isEnabled: Bool
-    @Binding var hovering: Bool
-    @State private var pushed = false
-
-    func body(content: Content) -> some View {
-        content
-            .onHover { isHovering in
-                guard isEnabled else { return }
-                hovering = isHovering
-                if isHovering {
-                    if !pushed { NSCursor.pointingHand.push(); pushed = true }
-                } else if pushed {
-                    NSCursor.pop(); pushed = false
-                }
-            }
-            .onChange(of: isEnabled) { _, nowEnabled in
-                guard !nowEnabled else { return }
-                hovering = false
-                if pushed { NSCursor.pop(); pushed = false }
-            }
-    }
-}
-
-private extension View {
-    func pointingHandOnHover(isEnabled: Bool, hovering: Binding<Bool>) -> some View {
-        modifier(PointingHandOnHover(isEnabled: isEnabled, hovering: hovering))
-    }
-}
-
 /// `.accessibilityLabel` + `.isButton` trait, applied only when the underlying
 /// plate is actually interactive (spec: "on interactive plates").
 private struct InteractiveAccessibility: ViewModifier {

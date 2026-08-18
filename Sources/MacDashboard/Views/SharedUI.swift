@@ -551,7 +551,6 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View, HeaderAccessory:
     @State private var showInfo = false
     @State private var hovering = false
     @State private var infoHovering = false
-    @State private var cursorPushed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewBuilder var chart: () -> ChartContent
     @ViewBuilder var table: () -> TableContent
@@ -589,16 +588,7 @@ struct ChartOrTableCard<ChartContent: View, TableContent: View, HeaderAccessory:
                         .rainbowBorder(isActive: hovering, recipe: .overview)
                 }
                 .buttonStyle(.plain)
-                .onHover { isHovering in
-                    hovering = isHovering
-                    if isHovering {
-                        NSCursor.pointingHand.push()
-                        cursorPushed = true
-                    } else if cursorPushed {
-                        NSCursor.pop()
-                        cursorPushed = false
-                    }
-                }
+                .pointingHandOnHover(hovering: $hovering)
                 .accessibilityLabel(showTable ? L.sharedToggleShowChart : L.sharedToggleShowTable)
             }
         }) {
@@ -847,17 +837,17 @@ struct SimpleTable: View {
                 .background(RoundedRectangle(cornerRadius: 5).fill(hoveredRow == r ? DS.row : Color.clear))
                 .contentShape(Rectangle())
                 .onHover { hovering in
-                    // Hover fill is a pure visual state on every row; the
-                    // pointing-hand cursor stays gated on an actual `rowAction`
-                    // so only genuinely clickable rows imply clickability.
+                    // Hover fill is a pure visual state on EVERY row, so it stays
+                    // here ungated; the pointing-hand cursor is gated on an actual
+                    // `rowAction` and lives in `.pointingHandOnHover` below, which
+                    // also pops it per row when the table is rebuilt mid-hover.
                     if hovering {
                         hoveredRow = r
-                        if rowAction != nil { NSCursor.pointingHand.push() }
                     } else {
                         if hoveredRow == r { hoveredRow = nil }
-                        if rowAction != nil { NSCursor.pop() }
                     }
                 }
+                .pointingHandOnHover(isEnabled: rowAction != nil)
                 .onTapGesture {
                     rowAction?(r)
                 }
@@ -1251,5 +1241,60 @@ func brewProgressText(_ p: BrewProgress) -> String {
         let n = p.total
         let pct = min(100, Int((Double(p.completed) / Double(p.total) * 100).rounded()))
         return L.maintenanceBrewProgressUpgrading(name, k, n, pct)
+    }
+}
+
+// MARK: - Shared pointing-hand hover cursor
+
+/// Balances `NSCursor.pointingHand.push()`/`.pop()` for a hover affordance.
+///
+/// `pushed` is tracked explicitly rather than inferred from `hovering`, and it is
+/// popped on THREE exits, not one:
+///   * hover-exit — the ordinary case;
+///   * `isEnabled` going false mid-hover (a button disabled under a stationary
+///     cursor, a plate turning non-interactive after its action ran);
+///   * `.onDisappear` — SwiftUI does not fire `onHover`'s exit callback for a view
+///     removed from the hierarchy while the cursor is still over it (force-quit
+///     removes a process row, a disk is unplugged, a card is rebuilt on refresh),
+///     so without this the push leaks and the pointing-hand cursor sticks app-wide.
+///
+/// `hovering` is optional: sites that keep their own hover visual pass a binding,
+/// sites that only need the cursor pass nothing. While `isEnabled` is false the
+/// binding is left alone entirely, so a non-interactive element shows no hover
+/// visual either — that gating is load-bearing for AttentionSummaryCard's plates.
+///
+/// `.pointerStyle(.link)` would replace all of this but is macOS 15+, and
+/// Package.swift pins `.macOS(.v14)`.
+struct PointingHandOnHover: ViewModifier {
+    var isEnabled: Bool = true
+    var hovering: Binding<Bool>? = nil
+    @State private var pushed = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { isHovering in
+                guard isEnabled else { return }
+                hovering?.wrappedValue = isHovering
+                if isHovering {
+                    if !pushed { NSCursor.pointingHand.push(); pushed = true }
+                } else if pushed {
+                    NSCursor.pop(); pushed = false
+                }
+            }
+            .onChange(of: isEnabled) { _, nowEnabled in
+                guard !nowEnabled else { return }
+                hovering?.wrappedValue = false
+                if pushed { NSCursor.pop(); pushed = false }
+            }
+            .onDisappear {
+                if pushed { NSCursor.pop(); pushed = false }
+            }
+    }
+}
+
+extension View {
+    /// Pointing-hand cursor on hover, balanced on hover-exit, on disable and on unmount.
+    func pointingHandOnHover(isEnabled: Bool = true, hovering: Binding<Bool>? = nil) -> some View {
+        modifier(PointingHandOnHover(isEnabled: isEnabled, hovering: hovering))
     }
 }

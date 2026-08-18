@@ -395,16 +395,7 @@ private struct ProcessRowView: View {
         .animation(.easeInOut(duration: 0.14), value: hovering)
         .clipShape(RoundedRectangle(cornerRadius: 9))
         .contentShape(Rectangle())
-        .onHover { isHovering in
-            guard isExpandable else { return }
-            if isHovering {
-                hovering = true
-                NSCursor.pointingHand.push()
-            } else {
-                hovering = false
-                NSCursor.pop()
-            }
-        }
+        .pointingHandOnHover(isEnabled: isExpandable, hovering: $hovering)
         .onTapGesture { onTap() }
     }
 }
@@ -696,46 +687,6 @@ private struct ProcessDetailView: View {
 
 // MARK: - Expanded-row action buttons
 
-/// Balances `NSCursor.pointingHand.push()`/`.pop()` across hover enter/exit —
-/// mirrors `AttentionSummaryCard.swift`'s `PointingHandOnHover` (same
-/// explicit-`pushed`-tracking idiom, kept as a separate `private` copy here
-/// since that one is file-private to its own file). The four buttons below
-/// sit in `ProcessDetailView`'s action row, which gets swapped out from under
-/// the cursor when "Снять принудительно" flips `showForceQuitConfirm` (and
-/// back again on "Отмена"/"Снять"): SwiftUI does not reliably fire
-/// `onHover`'s exit callback for a view that's removed from the hierarchy
-/// mid-hover, only for an actual mouse-leave while the view is still
-/// present, so a plain `push()`/`pop()` pair would leak the push. Tracking
-/// `pushed` explicitly (not inferred from `hovering`) and popping it on
-/// `.onDisappear` too, not just on hover-exit, keeps that removal balanced.
-private struct ProcessButtonPointingHandHover: ViewModifier {
-    @Binding var hovering: Bool
-    var isEnabled: Bool = true
-    @State private var pushed = false
-
-    func body(content: Content) -> some View {
-        content
-            .onHover { isHovering in
-                guard isEnabled else { return }
-                hovering = isHovering
-                if isHovering {
-                    if !pushed { NSCursor.pointingHand.push(); pushed = true }
-                } else if pushed {
-                    NSCursor.pop(); pushed = false
-                }
-            }
-            .onDisappear {
-                if pushed { NSCursor.pop(); pushed = false }
-            }
-    }
-}
-
-private extension View {
-    func processButtonPointingHandHover(_ hovering: Binding<Bool>, isEnabled: Bool = true) -> some View {
-        modifier(ProcessButtonPointingHandHover(hovering: hovering, isEnabled: isEnabled))
-    }
-}
-
 /// Small capsule chrome for the expanded row's non-destructive actions ("Показать
 /// в Finder", "Завершить"). Mirrors the app's existing small-capsule idiom for
 /// card-header-adjacent actions — `ChartOrTableCard`'s chart/table toggle
@@ -763,7 +714,7 @@ private struct ProcessCapsuleButton: View {
         .buttonStyle(.plain)
         .disabled(disabled)
         .opacity(disabled ? 0.45 : 1)
-        .processButtonPointingHandHover($hovering, isEnabled: !disabled)
+        .pointingHandOnHover(isEnabled: !disabled, hovering: $hovering)
         .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover, value: hovering)
     }
 }
@@ -789,7 +740,7 @@ private struct ProcessOutlineHotButton: View {
                 .overlay(Capsule().strokeBorder(DS.hot.opacity(0.45), lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .processButtonPointingHandHover($hovering)
+        .pointingHandOnHover(hovering: $hovering)
         .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover, value: hovering)
     }
 }
@@ -817,7 +768,7 @@ private struct ProcessOutlineNeutralButton: View {
                 .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .processButtonPointingHandHover($hovering)
+        .pointingHandOnHover(hovering: $hovering)
         .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover, value: hovering)
     }
 }
@@ -840,6 +791,6 @@ private struct ProcessFilledHotButton: View {
                 .background(Capsule().fill(DS.hot))
         }
         .buttonStyle(.plain)
-        .processButtonPointingHandHover($hovering)
+        .pointingHandOnHover(hovering: $hovering)
     }
 }

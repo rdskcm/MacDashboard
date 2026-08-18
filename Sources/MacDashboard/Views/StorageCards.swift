@@ -87,15 +87,7 @@ private struct DirBarRow: View {
         .animation(.easeInOut(duration: 0.14), value: hovering)
         .clipShape(RoundedRectangle(cornerRadius: 9))
         .contentShape(Rectangle())
-        .onHover { isHovering in
-            if isHovering {
-                hovering = true
-                NSCursor.pointingHand.push()
-            } else {
-                hovering = false
-                NSCursor.pop()
-            }
-        }
+        .pointingHandOnHover(hovering: $hovering)
         .onTapGesture { onTap() }
     }
 }
@@ -273,7 +265,6 @@ private struct SmartDiskCapsule: View {
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var cursorPushed = false
 
     private var tint: Color { isInternal ? DS.accent : DS.amber }
     private var kindLabel: String { isInternal ? L.storageSmartKindInternal : L.storageSmartKindExternal }
@@ -333,15 +324,7 @@ private struct SmartDiskCapsule: View {
         .opacity(dimOpacity)
         .contentShape(Capsule())
         .onTapGesture(perform: onTap)
-        .onHover { isHovering in
-            if isHovering {
-                NSCursor.pointingHand.push()
-                cursorPushed = true
-            } else if cursorPushed {
-                NSCursor.pop()
-                cursorPushed = false
-            }
-        }
+        .pointingHandOnHover()
         .accessibilityLabel("\(disk.title), \(kindLabel)")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
