@@ -394,7 +394,7 @@ final class ReportCollector {
         if let last = CommandRunner.run("/usr/bin/tmutil", ["latestbackup"], timeout: 15, scope: cancelScope) {
             let s = last.trimmingCharacters(in: .whitespacesAndNewlines)
             if s.lowercased().contains("no backup") {
-                dest.lastBackupUnavailableReason = L.reportCollectorNoBackupsYet
+                dest.lastBackupUnavailableReason = .noBackupsYet
                 return
             }
             if !s.isEmpty, let date = Parsers.tmLatestBackupDate(fromPath: s) {
@@ -425,11 +425,11 @@ final class ReportCollector {
             return
         }
         if dest.mountPoint == nil {
-            dest.lastBackupUnavailableReason = L.reportCollectorDiskNotConnected
+            dest.lastBackupUnavailableReason = .diskNotConnected
         } else if diskutilFoundZeroBackups {
-            dest.lastBackupUnavailableReason = L.reportCollectorNoCompletedBackups
+            dest.lastBackupUnavailableReason = .noCompletedBackups
         } else {
-            dest.lastBackupUnavailableReason = L.reportCollectorDateUnavailableNoFDA
+            dest.lastBackupUnavailableReason = .dateUnavailableNoFDA
         }
     }
 

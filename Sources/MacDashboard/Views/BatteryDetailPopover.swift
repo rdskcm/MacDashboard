@@ -33,6 +33,18 @@ enum BP {
     static let flowOut = Color(light: Color(hex: 0xB3000F), dark: Color(hex: 0xFF453A))
 }
 
+/// Colour for the two "Now" flow tiles (Power, Current), from the SIGN of the reading
+/// they actually show — never from `d.isCharging`, which painted idle-on-AC (`0 mA` /
+/// `0.00 W`) and the `—` placeholder in the alarm red `BP.flowOut` (V2-HONEST-READINGS).
+/// Charging is green, discharging is amber (normal operation, not an alarm), an idle
+/// zero gets the default text tone, and "no reading" gets the muted tone.
+private func batteryFlowColor(_ value: Double?) -> Color {
+    guard let value else { return BP.muted }
+    if value > 0 { return BP.flowIn }
+    if value < 0 { return BP.orange }
+    return BP.ink
+}
+
 struct BatteryDetailView: View {
     let condition: String?          // from system_profiler report, e.g. "Normal" — may be nil
     @State private var detail: BatteryDetail?
@@ -202,7 +214,6 @@ struct BatteryDetailView: View {
 
     private func nowSection(_ d: BatteryDetail) -> some View {
         let amperage = d.amperageMA
-        let flowColor: Color = d.isCharging ? BP.flowIn : BP.flowOut
 
         return VStack(alignment: .leading, spacing: 8) {
             sectionHeader(L.batterySectionNow)
@@ -210,12 +221,12 @@ struct BatteryDetailView: View {
                 StatTile(
                     label: L.batteryLabelPower,
                     value: d.powerW.map { L.batteryWatts(fmtNum($0, decimals: 2)) } ?? "—",
-                    valueColor: flowColor
+                    valueColor: batteryFlowColor(d.powerW)
                 )
                 StatTile(
                     label: L.batteryLabelCurrent,
                     value: amperage.map { L.batteryMA($0) } ?? "—",
-                    valueColor: flowColor
+                    valueColor: batteryFlowColor(amperage.map(Double.init))
                 )
                 StatTile(
                     label: L.batteryLabelVoltage,

@@ -77,12 +77,41 @@ struct SecurityState: Equatable {
     // nil = unknown/no permission; true = enabled
     var fileVault: Bool?; var gatekeeper: Bool?; var sip: Bool?; var firewall: Bool?
 }
+
+/// Why the last-backup date could not be obtained. A case, never a localized
+/// sentence: the Time Machine card used to detect "no Full Disk Access" by comparing
+/// the stored string against the current language's translation, so right after a
+/// language switch the comparison stopped matching and the row lost its alarm colour
+/// until the next report refresh (V2-HONEST-READINGS).
+enum TMBackupUnavailableReason: Equatable {
+    /// `tmutil latestbackup` answered "no backup…".
+    case noBackupsYet
+    /// The destination has no mount point — the disk is not connected.
+    case diskNotConnected
+    /// `diskutil` ran fine and listed zero completed snapshots.
+    case noCompletedBackups
+    /// Mounted, but the date is unreadable — the only case that is a real problem.
+    case dateUnavailableNoFDA
+
+    /// Rendered in the language current at READ time, so a language switch updates the
+    /// card immediately instead of waiting for the next collect.
+    var localizedText: String {
+        switch self {
+        case .noBackupsYet:         return L.reportCollectorNoBackupsYet
+        case .diskNotConnected:     return L.reportCollectorDiskNotConnected
+        case .noCompletedBackups:   return L.reportCollectorNoCompletedBackups
+        case .dateUnavailableNoFDA: return L.reportCollectorDateUnavailableNoFDA
+        }
+    }
+}
+
 struct TMDestination: Equatable {
     var name: String?; var kind: String?; var mountPoint: String?; var quotaBytes: Int64?; var lastBackup: String?
     // nil when lastBackup is set (or destination not yet checked); otherwise an
     // honest reason no date could be obtained (e.g. disk unmounted, or backup
     // date unreadable without Full Disk Access) — shown instead of a bare "—".
-    var lastBackupUnavailableReason: String? = nil
+    // Stored as a case, not a sentence — see TMBackupUnavailableReason.
+    var lastBackupUnavailableReason: TMBackupUnavailableReason? = nil
 }
 struct AutostartInfo: Equatable {
     var loginItems: [String]?   // nil = no permission

@@ -363,6 +363,36 @@ do {
 }
 
 // =====================================================================
+// MARK: - TMBackupUnavailableReason
+// =====================================================================
+
+do {
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+
+    let cases: [TMBackupUnavailableReason] = [.noBackupsYet, .diskNotConnected,
+                                              .noCompletedBackups, .dateUnavailableNoFDA]
+    for lang in AppLanguage.allCases {
+        L10nStore.shared.language = lang
+        let texts = cases.map(\.localizedText)
+        check(texts.allSatisfy { !$0.isEmpty }, "TMBackupUnavailableReason \(lang): every case has text")
+        check(Set(texts).count == cases.count, "TMBackupUnavailableReason \(lang): texts are distinct")
+    }
+
+    // The regression this replaces: the reason used to be a stored localized string, so a
+    // language switch broke the card's `== no-FDA` comparison. The case is language-free.
+    var dest = TMDestination()
+    L10nStore.shared.language = .ru
+    dest.lastBackupUnavailableReason = .dateUnavailableNoFDA
+    let ruText = dest.lastBackupUnavailableReason?.localizedText
+    L10nStore.shared.language = .en
+    check(dest.lastBackupUnavailableReason == .dateUnavailableNoFDA,
+          "TMBackupUnavailableReason: case survives a language switch")
+    check(dest.lastBackupUnavailableReason?.localizedText != ruText,
+          "TMBackupUnavailableReason: localizedText follows the CURRENT language")
+}
+
+// =====================================================================
 // MARK: - Parsers.diskutilSmart
 // =====================================================================
 

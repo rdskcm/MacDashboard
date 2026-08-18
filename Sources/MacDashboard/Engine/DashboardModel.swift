@@ -130,6 +130,17 @@ final class DashboardModel {
 
     /// What the HEADER shows. Cards keep reading `report.system` directly.
     var headerSystem: SystemInfo? { report.system ?? lastKnownSystem }
+
+    /// The report as it stood when the current collect started — i.e. the last fully
+    /// collected one plus any out-of-band section writes (SMART task, firewall action).
+    /// `refreshReport()` rebuilds from a blank FullReport, so `report` itself is a partial
+    /// for most of a pass and must never be assessed (V2-HEADER-CHURN); the fast tick
+    /// assesses THIS instead while a pass is in flight, so the report-derived checks stay
+    /// frozen while the live-derived ones (disk, swap) keep updating (V2-HONEST-READINGS).
+    /// Blank before the very first collect — which is correct: `Assess.assess` is total and
+    /// stays silent on absent sections.
+    private var lastCommittedReport = FullReport()
+
     var assessment: Assessment
     var history: HistoryState
     var reportText: String?           // rendered text report (for Отчёт tab)
@@ -269,11 +280,15 @@ final class DashboardModel {
                         self.cpuHistory.removeFirst(self.cpuHistory.count - 60)
                     }
                 }
-                // Guarded: during a collect `self.report` is a partial (most sections nil),
-                // and assessing it would resurrect the header churn Step 2 removes above.
-                if !self.isCollectingReport {
-                    self.setAssessment(Assess.assess(report: self.report, live: self.live))
-                }
+                // `self.report` is a partial during a collect and a partial must never be
+                // assessed — it would resurrect the header churn (V2-HEADER-CHURN). But the
+                // live disk/swap readings are ready every tick, so instead of freezing the
+                // whole verdict for the 10–30 s of a pass, assess the LAST COMMITTED report
+                // together with the FRESH live snapshot: report-derived checks stay exactly
+                // as they were when the pass started, live-derived ones keep moving
+                // (V2-HONEST-READINGS, A11).
+                let assessedReport = self.isCollectingReport ? self.lastCommittedReport : self.report
+                self.setAssessment(Assess.assess(report: assessedReport, live: self.live))
 
                 try? await Task.sleep(for: .seconds(AppSettings.shared.fastIntervalSeconds))
             }
@@ -386,6 +401,9 @@ final class DashboardModel {
     func refreshReport() {
         guard !isCollectingReport else { reportRefreshPending = true; return }
         reportTask?.cancel()
+        // Snapshot BEFORE the collect wipes `report` section by section: this is what the
+        // fast tick assesses for the duration of the pass (V2-HONEST-READINGS).
+        lastCommittedReport = report
         isCollectingReport = true
 
         reportTask = Task { [weak self] in

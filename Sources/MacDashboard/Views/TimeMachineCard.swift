@@ -103,13 +103,14 @@ struct TimeMachineCard: View {
                     }
                     TMRow(
                         label: L.timeMachineLastBackup,
-                        value: dest.lastBackup ?? dest.lastBackupUnavailableReason ?? "—",
+                        value: dest.lastBackup ?? dest.lastBackupUnavailableReason?.localizedText ?? "—",
                         // V2-TM-CALM: only a destination that IS connected and still
                         // unreadable (no Full Disk Access) is a problem, so only that
                         // reason gets `hot`. An unplugged disk, a destination with no
                         // completed backups yet, and a not-yet-checked destination are
                         // all normal states and stay calm.
-                        valueColor: dest.lastBackupUnavailableReason == L.reportCollectorDateUnavailableNoFDA
+                        // V2-HONEST-READINGS: compared as an enum case, so a language switch cannot break it.
+                        valueColor: dest.lastBackupUnavailableReason == .dateUnavailableNoFDA
                             ? DS.hot : DS.inkSoft
                     )
                     if let snaps = model.report.snapshots {

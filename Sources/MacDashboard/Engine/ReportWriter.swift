@@ -313,7 +313,7 @@ enum ReportWriter {
             if let v = dest.mountPoint { lines.append("Mount Point   : \(v)") }
             if let v = dest.quotaBytes { lines.append("Quota         : \(fmtBytes(v))") }
             if let v = dest.lastBackup { lines.append(L.reportTMLastBackup(v)) }
-            else if let v = dest.lastBackupUnavailableReason { lines.append(L.reportTMLastBackup(v)) }
+            else if let v = dest.lastBackupUnavailableReason { lines.append(L.reportTMLastBackup(v.localizedText)) }
             return lines.isEmpty ? [L.reportTMNotConfigured] : lines
         }
     }
