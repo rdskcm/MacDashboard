@@ -1416,6 +1416,25 @@ do {
     check(elapsed < 4, "CommandRunner.runStreaming: timeout wall time < 4s (got \(elapsed))")
 }
 
+do {
+    // V2-POLISH B1: runStreaming must pin the environment it is given, the way
+    // run/runCapturing do — this is what puts Homebrew's own prefix on PATH for
+    // `brew upgrade`, not just for the short `--version`/`outdated` calls.
+    let env = CommandRunner.environment(prependingPATH: ["/opt/homebrew/bin"])
+    let result = CommandRunner.runStreaming(
+        "/bin/sh", ["-c", "printf '%s\\n' \"$PATH\""], timeout: 10, environment: env
+    ) { _, _ in }
+    let path = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    check(path.hasPrefix("/opt/homebrew/bin:"),
+          "CommandRunner.runStreaming: honours the environment it is passed (PATH prefix), got \(path)")
+
+    let defaulted = CommandRunner.runStreaming(
+        "/bin/sh", ["-c", "printf '%s\\n' \"$LC_ALL\""], timeout: 10
+    ) { _, _ in }
+    check(defaulted?.trimmingCharacters(in: .whitespacesAndNewlines) == "C",
+          "CommandRunner.runStreaming: defaults to defaultEnvironment (LC_ALL=C)")
+}
+
 // =====================================================================
 // MARK: - BrewProgressParser
 // =====================================================================
@@ -2024,6 +2043,15 @@ do {
               "L10n no-FDA strings: non-empty in \(name)")
         check(s.storageFoldersNoFDA("Корзина").contains("Корзина"),
               "L10n storageFoldersNoFDA: interpolates the folder list in \(name)")
+    }
+}
+do {
+    for (name, s) in [("EN", StringsEN() as AppStrings), ("RU", StringsRU() as AppStrings)] {
+        check(!s.autostartDeleteInvalidPath.isEmpty,
+              "L10n autostartDeleteInvalidPath: non-empty in \(name)")
+        let bulk = s.autostartDeleteBulkFailure(2, 5, "boom")
+        check(bulk.contains("2") && bulk.contains("5") && bulk.contains("boom"),
+              "L10n autostartDeleteBulkFailure: interpolates counts and detail in \(name)")
     }
 }
 

@@ -505,14 +505,17 @@ private struct AutoSectionRow<Content: View>: View {
     /// sitting inside the animated/clipped subtree (the bug this project hit
     /// twice before, V2-CARD-MEM).
     ///
-    /// Starts `nil` rather than `0`: sections that begin already-expanded
-    /// (e.g. Login Items, see `loginItemsExpanded` above) must not be
-    /// frame-clamped to zero for the one frame before the first
-    /// `.onGeometryChange` callback fires. `nil` here means "no measurement
-    /// yet" and is read by `.frame(height:)` below as "impose no height
-    /// constraint," which lays the content out at its natural size — correct
-    /// for the already-expanded case and harmless for the collapsed case
-    /// (nothing is visible either way before first layout).
+    /// Starts `nil` rather than `0`: sections that begin already-expanded (e.g.
+    /// Login Items, see `loginItemsExpanded` above) must not be frame-clamped to
+    /// zero for the one frame before the first `.onGeometryChange` callback
+    /// fires. The `?? (openAmount == 0 ? 0 : nil)` fallback below reads that
+    /// `nil` as "impose no height constraint" ONLY while `openAmount != 0`,
+    /// which is exactly the already-expanded case; a section that starts
+    /// collapsed gets a hard 0 instead of its natural height, which is what
+    /// stops it flashing full-height for one frame on first appearance
+    /// (V2-POLISH B4, the protection `OrphanRow`/`BulkDeleteRow` already had).
+    /// The fallback substitutes a CONSTANT, never a measured value, so it does
+    /// not feed this subtree's own size back into its layout.
     @State private var measuredHeight: CGFloat?
 
     /// A concrete zero count (e.g. an empty agents/daemons list) never
@@ -553,7 +556,7 @@ private struct AutoSectionRow<Content: View>: View {
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
                     measuredHeight = newHeight
                 }
-                .frame(height: measuredHeight.map { $0 * openAmount }, alignment: .top)
+                .frame(height: measuredHeight.map { $0 * openAmount } ?? (openAmount == 0 ? 0 : nil), alignment: .top)
                 .clipped()
                 .opacity(openAmount)
                 .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))

@@ -96,6 +96,15 @@ final class AdviceActionDispatch {
         }
     }
 
+    /// Cancel counterpart to `confirmEmptyTrash()`: drops the captured target so no
+    /// state outlives a dismissed dialog (V2-POLISH B8). Guarded on `trashEmptying`
+    /// because an empty-trash already in flight owns `trashTargetID` — clearing it
+    /// from a later dialog's Cancel would cost that operation its done state.
+    func cancelEmptyTrash() {
+        guard !trashEmptying else { return }
+        trashTargetID = nil
+    }
+
     func busy(for action: AdviceAction?) -> Bool {
         switch action {
         case .brewUpgrade: return model.brewUpgrading
@@ -123,7 +132,7 @@ private struct AdviceActionDialogs: ViewModifier {
                 Button(L.adviceTrashConfirmButton, role: .destructive) {
                     dispatch.confirmEmptyTrash()
                 }
-                Button(L.adviceCancel, role: .cancel) {}
+                Button(L.adviceCancel, role: .cancel) { dispatch.cancelEmptyTrash() }
             }
             .confirmationDialog(L.adviceFirewallConfirmTitle, isPresented: Binding(
                 get: { dispatch.showFirewallConfirm },

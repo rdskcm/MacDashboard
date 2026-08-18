@@ -598,6 +598,17 @@ private struct ProcessDetailView: View {
                 openAmount = new ? 1 : 0
             } completion: {
                 disclosureSettled = true
+                // The panel is permanently mounted (see `.task(id:)` below), so its
+                // @State outlives a collapse — without this, reopening a row showed the
+                // force-quit confirmation still armed and the previous attempt's error
+                // still up (V2-POLISH B2). Reset in the CLOSE transaction's completion,
+                // not at its start: at that point `openAmount` is already 0, so swapping
+                // the confirm row back to the action row is invisible and cannot disturb
+                // the collapse's own height interpolation.
+                if !new {
+                    showForceQuitConfirm = false
+                    signalError = nil
+                }
                 // The fetch completion below buffers instead of writing
                 // straight to `detail`/`loading` while this transaction is
                 // open — flush it now that the disclosure has actually

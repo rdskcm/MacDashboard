@@ -750,7 +750,7 @@ final class DashboardModel {
         // signalling here would restore a row whose delete may still succeed.
         guard !deletingPlistPaths.contains(path) else { return }
         guard LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel) else {
-            plistDeleteError = "invalid plist path"
+            plistDeleteError = L.autostartDeleteInvalidPath
             signalPlistsNotDeleted([path])
             return
         }
@@ -821,8 +821,17 @@ final class DashboardModel {
         // validation rejected them. Paths excluded because a delete is already in
         // flight are NOT signalled — that call owns their outcome.
         let inFlight = paths.filter { deletingPlistPaths.contains($0) }
-        signalPlistsNotDeleted(Set(paths).subtracting(batch).subtracting(inFlight))
-        guard !batch.isEmpty else { return }
+        let rejected = Set(paths).subtracting(batch).subtracting(inFlight)
+        signalPlistsNotDeleted(rejected)
+        guard !batch.isEmpty else {
+            // Never a silent no-op: if nothing survived validation the button looked
+            // broken — rows flicked back and no message appeared (V2-POLISH B7). Paths
+            // skipped only because a delete is already in flight are NOT an error;
+            // that call owns their outcome, so a batch that is empty for that reason
+            // alone stays quiet and leaves any existing error text as it was.
+            if !rejected.isEmpty { plistDeleteError = L.autostartDeleteInvalidPath }
+            return
+        }
 
         for path in batch { deletingPlistPaths.insert(path) }
         plistDeleteError = nil
@@ -885,7 +894,7 @@ final class DashboardModel {
             }
             if let firstFailure = failures.first {
                 self.plistDeleteError = failures.count > 1
-                    ? "\(failures.count) of \(results.count) failed: \(firstFailure)"
+                    ? L.autostartDeleteBulkFailure(failures.count, results.count, firstFailure)
                     : firstFailure
             }
 

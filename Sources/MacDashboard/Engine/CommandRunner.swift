@@ -225,7 +225,15 @@ enum CommandRunner {
     /// queue — callers must hop threads themselves. Returns accumulated stdout on
     /// normal exit (nil on launch failure, timeout, or empty stdout — same
     /// semantics as `run`).
+    ///
+    /// `environment` has the same meaning and default as in `run`/`runCapturing`:
+    /// pinned rather than inherited, so a dev run and the shipped `.app` under
+    /// launchd see the same PATH/locale. Callers running a tool that resolves
+    /// helper binaries inside its own prefix (Homebrew) pass
+    /// `environment(prependingPATH:)` here exactly as they already do for the
+    /// short-lived calls (V2-POLISH B1).
     static func runStreaming(_ path: String, _ args: [String], timeout: TimeInterval,
+                              environment: [String: String] = defaultEnvironment,
                               onLine: @escaping (_ line: String, _ isStderr: Bool) -> Void) -> String? {
         let process = Process()
         if path.contains("/") {
@@ -238,6 +246,7 @@ enum CommandRunner {
             process.arguments = [path] + args
         }
         process.standardInput = FileHandle.nullDevice
+        process.environment = environment
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()

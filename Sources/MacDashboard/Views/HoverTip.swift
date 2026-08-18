@@ -345,10 +345,9 @@ private final class TipPanelController: NSObject {
     }
 
     /// Left-aligned to `anchor`'s leading edge, `attnTipGap` above (or below)
-    /// it per `placement`. Unlike `position(_:near:in:)` this never auto-flips
-    /// on overflow: the spec only requires the above case (recommendation
-    /// capsules never sit close enough to the window's top edge to need one),
-    /// so a flip heuristic here would be unverified, unspecified behavior.
+    /// it per `placement`. It does not flip, but it does clamp both axes to the
+    /// screen's visible frame (V2-POLISH B3) — a tip too tall for the space above
+    /// its anchor slides down over the card rather than being clipped by the menu bar.
     private func positionAttention(_ panel: NSPanel, near anchor: NSView, in window: NSWindow, placement: TipPlacement) {
         let anchorFrameInWindow = anchor.convert(anchor.bounds, to: nil)
         let anchorScreenRect = window.convertToScreen(anchorFrameInWindow)
@@ -363,13 +362,24 @@ private final class TipPanelController: NSObject {
         var x = anchorScreenRect.minX - attnTipBubbleMargin
         x = max(visible.minX, min(x, visible.maxX - bubbleSize.width))
 
-        let y: CGFloat
+        var y: CGFloat
         switch placement {
         case .above:
             y = anchorScreenRect.maxY + attnTipGap - attnTipBubbleMargin
         case .below:
             y = anchorScreenRect.minY - attnTipGap + attnTipBubbleMargin - bubbleSize.height
         }
+        // Vertical clamp, the counterpart of the horizontal one above (V2-POLISH B3):
+        // this positioner never flips, and attention cards sit at the very top of the
+        // window, so a long `.above` tip used to run under the menu bar and get its top
+        // clipped. `visibleFrame` already excludes the menu bar and the Dock. The
+        // ±attnTipBubbleMargin terms are there because `panel.frame` carries that much
+        // transparent shadow room on every side, so it is the VISIBLE bubble that ends
+        // up inside `visible` — same margin bookkeeping as `position(_:near:in:)`'s flip
+        // test. Clamped low-then-high on purpose: for a bubble taller than the visible
+        // frame the top, where the text starts, is what must stay on screen.
+        y = min(visible.maxY + attnTipBubbleMargin - bubbleSize.height,
+                max(visible.minY - attnTipBubbleMargin, y))
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 

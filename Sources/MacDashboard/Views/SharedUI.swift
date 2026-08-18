@@ -740,6 +740,11 @@ struct SimpleTable: View {
     /// `Text` unchanged if no space is found.
     var unitSplitColumns: Set<Int> = []
 
+    /// Leading inset the column-0 HEADER needs to line up with swatched value cells:
+    /// `swatchView`'s 10 pt swatch plus the value row's 8 pt `HStack` spacing.
+    /// Column 0 only, and only when `swatches` is set (V2-POLISH B5).
+    private static let swatchColumnInset: CGFloat = 18
+
     @State private var hoveredRow: Int? = nil
     @State private var sortColumn: Int? = nil
     @State private var sortAscending: Bool = true
@@ -781,6 +786,7 @@ struct SimpleTable: View {
                             }
                         }
                     }
+                    .padding(.leading, i == 0 && swatches != nil ? Self.swatchColumnInset : 0)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         guard sortable else { return }

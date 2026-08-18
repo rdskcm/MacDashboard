@@ -273,6 +273,15 @@ struct SettingsView: View {
         // titlebar (top card clipped) and leaves an uncovered strip along the bottom,
         // transparent because `VisualEffectBackground` sets the window background clear.
         .frame(width: 680, height: 420)
+        // The window's own title. macOS supplies one for a `Settings` scene, but in the
+        // SYSTEM language: an English macOS with the app set to Russian showed an
+        // English titlebar over a fully Russian window (V2-POLISH B6). Only the TEXT
+        // becomes ours — the system titlebar itself stays (user decision,
+        // V2-SETTINGS-CHROME; do not reach for `.hiddenTitleBar` or the NSWindow
+        // route). Set here rather than at the `Settings { }` call site in
+        // MacDashboardApp so the `@Bindable store = L10nStore.shared` above re-runs
+        // this body — and with it the title — the instant the in-app language changes.
+        .navigationTitle(L.settingsWindowTitle)
     }
 
     /// Spec §7.1 (SW:14-35): 196 pt fixed, never scrolls; column gap 2, padding

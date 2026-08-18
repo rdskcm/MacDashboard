@@ -229,6 +229,10 @@ struct StringsEN: AppStrings {
     func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String { "Some are system-level — a password is required. Delete all \(n)?" }
     var autostartDeletingAll: String { "Deleting…" }
     var autostartOkTooltip: String { "OK" }
+    var autostartDeleteInvalidPath: String { "the path is not a valid autostart plist" }
+    func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String {
+        "\(failed) of \(total): \(detail)"
+    }
 
     // MARK: Memory card
     var memoryLegendActive: String { "Active" }

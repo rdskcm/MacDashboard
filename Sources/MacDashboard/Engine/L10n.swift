@@ -245,6 +245,13 @@ protocol AppStrings {
     func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String
     var autostartDeletingAll: String { get }
     var autostartOkTooltip: String { get }
+    /// Detail for `autostartDeleteError` when a delete request contains no path the
+    /// validator accepts — both the single-path guard and the bulk "nothing survived
+    /// validation" case, which used to no-op silently (V2-POLISH B7).
+    var autostartDeleteInvalidPath: String { get }
+    /// Detail for `autostartDeleteError` when a bulk delete had more than one failure:
+    /// how many of how many, plus the first failure's own (already localized) message.
+    func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String
 
     // MARK: Memory card
     var memoryLegendActive: String { get }

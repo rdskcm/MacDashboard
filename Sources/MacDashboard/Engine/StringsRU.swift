@@ -231,6 +231,10 @@ struct StringsRU: AppStrings {
     func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String { "Среди них есть системные — потребуется пароль. Удалить все (\(n))?" }
     var autostartDeletingAll: String { "Удаляю…" }
     var autostartOkTooltip: String { "В порядке" }
+    var autostartDeleteInvalidPath: String { "путь не похож на плист автозагрузки" }
+    func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String {
+        "\(failed) из \(total): \(detail)"
+    }
 
     // MARK: Memory card
     var memoryLegendActive: String { "Активная" }
