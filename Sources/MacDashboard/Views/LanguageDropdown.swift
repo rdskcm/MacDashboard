@@ -152,6 +152,7 @@ private final class LanguageMenuController: NSObject {
     private weak var anchorView: NSView?
     private var localMonitor: Any?
     private var globalMonitor: Any?
+    private var keyMonitor: Any?
 
     func setAnchor(_ view: NSView) {
         anchorView = view
@@ -197,8 +198,13 @@ private final class LanguageMenuController: NSObject {
     func hide() {
         removeDismissMonitors()
         guard let panel else { return }
-        if let parent = panel.parent { parent.removeChildWindow(panel) }
+        let parent = panel.parent
+        let wasKey = panel.isKeyWindow
+        if let parent { parent.removeChildWindow(panel) }
         panel.orderOut(nil)
+        // Escape/light-dismiss must hand keyboard focus back to Settings, not leave
+        // it on a panel that is no longer on screen.
+        if wasKey { parent?.makeKey() }
     }
 
     func teardown() {
@@ -249,6 +255,17 @@ private final class LanguageMenuController: NSObject {
             guard self != nil else { return }
             DispatchQueue.main.async { onDismiss() }
         }
+        // Escape is the keyboard-only / VoiceOver way out of this menu: the panel is
+        // key (`InteractivePanel.canBecomeKey`), so without this the only dismissal
+        // path is a mouse-down. LOCAL monitor only — a global .keyDown monitor would
+        // demand Input Monitoring/Accessibility approval. Returning nil swallows the
+        // key so it cannot also reach the Settings window behind the menu.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard self != nil else { return event }
+            guard event.keyCode == 53 else { return event }   // 53 = Escape
+            DispatchQueue.main.async { onDismiss() }
+            return nil
+        }
     }
 
     private func shouldDismiss(for event: NSEvent) -> Bool {
@@ -264,8 +281,10 @@ private final class LanguageMenuController: NSObject {
     private func removeDismissMonitors() {
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         localMonitor = nil
         globalMonitor = nil
+        keyMonitor = nil
     }
 }
 

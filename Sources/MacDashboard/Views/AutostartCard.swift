@@ -78,9 +78,9 @@ struct AutostartCard: View {
         displayOrphans.append(contentsOf: orphans.filter { !displayedPaths.contains($0.path) })
     }
 
-    /// The model's real orphan list. Single source for both `body` and
-    /// `restoreOrphans` — the restore path must never compute insert positions
-    /// against a stale copy captured in a closure.
+    /// The model's real orphan list. Single source for `body`, `restoreOrphans`
+    /// and the bulk-delete `onConfirm` — none of them may compute against a
+    /// stale copy captured in a closure.
     private var modelOrphans: [LaunchdPlistInfo] {
         guard let auto = model.report.autostart else { return [] }
         return (auto.userAgents + auto.systemAgents + auto.systemDaemons).filter(\.isOrphan)
@@ -384,7 +384,10 @@ struct AutostartCard: View {
                     onConfirm: {
                         // Same optimistic-collapse reasoning as the single-row `onConfirm`
                         // above, applied to the whole batch — and the same restore path.
-                        let batch = displayOrphans.map(\.path)
+                        // Source of truth is the MODEL's orphan list, not `displayOrphans`: the display
+                        // list still carries rows mid-collapse from an earlier delete in this session,
+                        // and re-submitting an already-trashed path surfaces a spurious error banner.
+                        let batch = modelOrphans.map(\.path)
                         bulkDeletingPaths = Set(batch)
                         for path in batch { collapsingPaths.insert(path) }
                         model.deleteOrphanPlists(paths: batch)

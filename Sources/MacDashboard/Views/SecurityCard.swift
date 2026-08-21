@@ -17,7 +17,7 @@ struct SecurityCard: View {
         case .loud:
             LoudSectionCard(title: L.securityTitle,
                              dotColor: state.securityOffCount > 0 ? DS.hot : DS.amber,
-                             failTone: DS.hot,
+                             failTone: state.securityOffCount > 0 ? DS.hot : DS.amberInk,
                              rows: securityRows(model.report.security ?? SecurityState())) {
                 EmptyView()
             }

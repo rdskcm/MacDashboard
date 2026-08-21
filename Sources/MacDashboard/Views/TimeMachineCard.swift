@@ -7,8 +7,7 @@ import SwiftUI
 
 /// One label→value row (spec §5.10): 150 pt fixed label column (`DS.muted`,
 /// 11.5 pt) · value right, mono font family so numeric values (quota) read
-/// as tabular columns — `LabeledRow` (SharedUI.swift) is out of scope for
-/// this v2 restyle, so this is a private, card-local row (same convention
+/// as tabular columns — a private, card-local row (same convention
 /// `DirBarRow`/`DirBarList` already use in StorageCards.swift).
 private struct TMRow: View {
     let label: String

@@ -351,9 +351,9 @@ struct DSSlidingSegmented<T: Hashable>: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stretch: CGFloat = 1.0
-    /// Transform-origin for the stretch scale, direction-aware: anchored at
-    /// the side the thumb moved FROM, so it visually stretches toward the new
-    /// position. Updated in `select(_:)`, the sole mutator of `selection`.
+    /// Transform-origin for the stretch scale, direction-aware: anchored at the
+    /// side the thumb is moving TO, so the stretch smears back toward the side it
+    /// came from. Updated in `select(_:)`, the sole mutator of `selection`.
     @State private var stretchAnchor: UnitPoint = .trailing
     /// Outer container inset (spec §2.3): track, thumb, and labels all sit
     /// inset 3 pt from the control's own bounds.

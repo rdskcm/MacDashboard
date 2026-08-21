@@ -506,11 +506,11 @@ struct CardChrome<Content: View, Trailing: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(title).font(.headline).lineLimit(1).truncationMode(.tail)
+                Text(title).font(.headline).foregroundStyle(DS.ink).lineLimit(1).truncationMode(.tail)
                 if let caption {
                     Text(caption)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.muted)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -625,30 +625,6 @@ extension ChartOrTableCard where HeaderAccessory == EmptyView {
     }
 }
 
-// MARK: - Status rows (severity dot + text)
-
-struct SeverityDot: View {
-    let sev: Severity
-    var body: some View {
-        Circle()
-            .fill(sev.color)
-            .frame(width: 8, height: 8)
-    }
-}
-
-struct StatusRow: View {
-    let sev: Severity
-    let text: String
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            SeverityDot(sev: sev).padding(.top, 5)
-            Text(text)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
 /// L.sharedUnavailable / spinner placeholder for report sections not yet collected.
 struct SectionStateView: View {
     let done: Bool
@@ -656,33 +632,14 @@ struct SectionStateView: View {
         if done {
             Text(L.sharedUnavailable)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DS.muted)
         } else {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text(L.sharedCollectingData)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.muted)
             }
-        }
-    }
-}
-
-// MARK: - Label/value row (Time Machine, Homebrew, …)
-
-struct LabeledRow: View {
-    let label: String
-    let value: String
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 150, alignment: .leading)
-            Text(value)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
         }
     }
 }
@@ -707,18 +664,6 @@ struct SimpleTable: View {
     /// and no `.help()` is applied (avoids a stray empty hover bubble on cells
     /// that don't need one).
     var cellTooltip: ((Int, Int) -> String?)? = nil
-    /// Optional per-row action (row index into `rows`). Nil by default, so
-    /// existing call sites render exactly as before; when set the whole row
-    /// becomes clickable with a pointing-hand cursor + subtle hover highlight.
-    var rowAction: ((Int) -> Void)? = nil
-    /// Column indices that support click-to-sort. Empty by default, so
-    /// existing call sites render exactly as before (no header interaction,
-    /// no sort indicator).
-    var sortableColumns: Set<Int> = []
-    /// Raw numeric sort keys aligned with `rows`/columns, required for any
-    /// column listed in `sortableColumns` so sorting compares values rather
-    /// than formatted display strings (e.g. "1.2 GB" vs "890 MB").
-    var sortValues: [[Double]]? = nil
     /// Optional per-row leading swatch, one entry per `rows` index. Nil by
     /// default (no swatch affordance at all), so existing call sites render
     /// exactly as before. When set, must have the same count as `rows`; the
@@ -746,62 +691,20 @@ struct SimpleTable: View {
     private static let swatchColumnInset: CGFloat = 18
 
     @State private var hoveredRow: Int? = nil
-    @State private var sortColumn: Int? = nil
-    @State private var sortAscending: Bool = true
-
-    /// Row indices into `rows`/`sortValues`, in current display order. When
-    /// no sort is active (default) this is simply 0..<rows.count, so
-    /// non-opted-in call sites see unchanged row order.
-    private var displayOrder: [Int] {
-        guard let col = sortColumn, let values = sortValues, sortableColumns.contains(col) else {
-            return Array(rows.indices)
-        }
-        return rows.indices.sorted { a, b in
-            let va = values[a][col]
-            let vb = values[b][col]
-            return sortAscending ? va < vb : va > vb
-        }
-    }
 
     var body: some View {
-        let order = displayOrder
         Grid(alignment: .leading, horizontalSpacing: columnSpacing, verticalSpacing: 6) {
             GridRow {
                 ForEach(Array(headers.enumerated()), id: \.offset) { i, h in
-                    let sortable = sortableColumns.contains(i) && sortValues != nil
-                    HStack(spacing: 2) {
-                        Text(h)
-                            .font(.system(size: 11))
-                            .foregroundStyle(DS.muted)
-                        if sortable {
-                            if sortColumn == i {
-                                Image(systemName: sortAscending ? "chevron.up" : "chevron.down")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .opacity(0.4)
-                            }
-                        }
-                    }
-                    .padding(.leading, i == 0 && swatches != nil ? Self.swatchColumnInset : 0)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        guard sortable else { return }
-                        if sortColumn == i {
-                            sortAscending.toggle()
-                        } else {
-                            sortColumn = i
-                            sortAscending = true
-                        }
-                    }
-                    .gridColumnAlignment(numericColumns.contains(i) ? .trailing : .leading)
+                    Text(h)
+                        .font(.system(size: 11))
+                        .foregroundStyle(DS.muted)
+                        .padding(.leading, i == 0 && swatches != nil ? Self.swatchColumnInset : 0)
+                        .gridColumnAlignment(numericColumns.contains(i) ? .trailing : .leading)
                 }
             }
             Rectangle().fill(DS.line).frame(height: 1)
-            ForEach(order, id: \.self) { r in
+            ForEach(rows.indices, id: \.self) { r in
                 let row = rows[r]
                 GridRow {
                     ForEach(Array(row.enumerated()), id: \.offset) { c, cell in
@@ -809,7 +712,7 @@ struct SimpleTable: View {
                         let cellFont: Font = isNumeric
                             ? .system(size: 12.5, weight: .regular, design: .monospaced)
                             : .system(size: 13, weight: .medium)
-                        let cellColor: Color = isNumeric ? .primary : DS.inkSoft
+                        let cellColor: Color = isNumeric ? DS.ink : DS.inkSoft
                         let text = Group {
                             if unitSplitColumns.contains(c), let range = cell.range(of: " ", options: .backwards) {
                                 HStack(alignment: .firstTextBaseline, spacing: 0) {
@@ -843,19 +746,13 @@ struct SimpleTable: View {
                 .background(RoundedRectangle(cornerRadius: 5).fill(hoveredRow == r ? DS.row : Color.clear))
                 .contentShape(Rectangle())
                 .onHover { hovering in
-                    // Hover fill is a pure visual state on EVERY row, so it stays
-                    // here ungated; the pointing-hand cursor is gated on an actual
-                    // `rowAction` and lives in `.pointingHandOnHover` below, which
-                    // also pops it per row when the table is rebuilt mid-hover.
+                    // Hover fill is a pure visual state on every row; the table itself is
+                    // read-only, so nothing here is clickable.
                     if hovering {
                         hoveredRow = r
                     } else {
                         if hoveredRow == r { hoveredRow = nil }
                     }
-                }
-                .pointingHandOnHover(isEnabled: rowAction != nil)
-                .onTapGesture {
-                    rowAction?(r)
                 }
             }
         }
@@ -1201,7 +1098,6 @@ struct RainbowCapsuleButton: View {
     let action: () -> Void
 
     @State private var hovering = false
-    @State private var cursorPushed = false
 
     var body: some View {
         Button(action: action) {
@@ -1218,16 +1114,7 @@ struct RainbowCapsuleButton: View {
         .buttonStyle(.plain)
         .disabled(busy)
         .accessibilityLabel(title)
-        .onHover { isHovering in
-            self.hovering = isHovering
-            if isHovering && !busy {
-                NSCursor.pointingHand.push()
-                cursorPushed = true
-            } else if !isHovering && cursorPushed {
-                NSCursor.pop()
-                cursorPushed = false
-            }
-        }
+        .pointingHandOnHover(isEnabled: !busy, hovering: $hovering)
     }
 }
 
@@ -1315,8 +1202,6 @@ struct MoreLessToggle: View {
     let expandedLabel: String
     let action: () -> Void
 
-    @State private var hovering = false
-
     private var label: String { expanded ? expandedLabel : collapsedLabel }
 
     var body: some View {
@@ -1324,7 +1209,7 @@ struct MoreLessToggle: View {
             Text(label).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.accentInk)
         }
         .buttonStyle(.plain)
-        .pointingHandOnHover(isEnabled: true, hovering: $hovering)
+        .pointingHandOnHover()
         .accessibilityLabel(label)
     }
 }

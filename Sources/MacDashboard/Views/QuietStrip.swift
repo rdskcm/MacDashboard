@@ -321,12 +321,6 @@ private struct CrashRevealRow: View {
     let group: CrashGroup
 
     @State private var hovering = false
-    /// Balances the NSCursor stack on BOTH hover-exit and unmount, so this does not
-    /// become a fifth unbalanced push site (V2-CURSOR-BALANCE consolidates the
-    /// existing four later; this block must not add to them). SwiftUI's
-    /// `.pointerStyle(.link)` is macOS 15+, and Package.swift pins `.macOS(.v14)`,
-    /// so the AppKit form is the only one available here.
-    @State private var cursorPushed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -363,22 +357,7 @@ private struct CrashRevealRow: View {
                 .contentShape(RoundedRectangle(cornerRadius: 9))
         }
         .buttonStyle(.plain)
-        .onHover { isHovering in
-            hovering = isHovering
-            if isHovering {
-                NSCursor.pointingHand.push()
-                cursorPushed = true
-            } else if cursorPushed {
-                NSCursor.pop()
-                cursorPushed = false
-            }
-        }
-        .onDisappear {
-            if cursorPushed {
-                NSCursor.pop()
-                cursorPushed = false
-            }
-        }
+        .pointingHandOnHover(hovering: $hovering)
         .accessibilityLabel(L.maintenanceCrashRevealA11y(group.process))
     }
 }
