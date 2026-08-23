@@ -44,12 +44,8 @@ struct StringsEN: AppStrings {
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { "CPU" }
-    func kpiLoad(_ v: String) -> String { "load \(v)" }
     var kpiLoadUnavailable: String { "load —" }
-    func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String { "\(loadStr) · \(ncpu) cores" }
     func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String { "load \(l1) · \(l2) · \(l3)" }
-    func kpiCpuSocTemp(_ t: Int) -> String { "SOC \(t) °C" }
-    var kpiCpuChartTimeLabel: String { "Time" }
     var kpiMemLabel: String { "Memory" }
     func kpiMemUnit(_ total: String) -> String { "of \(total)" }
     func kpiMemSub(_ compressor: String, _ purgeable: String) -> String { "compressed \(compressor) · purgeable \(purgeable)" }
@@ -62,10 +58,8 @@ struct StringsEN: AppStrings {
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
         base + " · data \(dataUsed), system \(sysUsed)"
     }
-    func kpiDiskTemp(_ t: Int) -> String { "temp \(t) °C" }
     var kpiBatteryLabel: String { "Battery" }
     func kpiBatteryCycles(_ n: Int) -> String { "\(n) " + (n == 1 ? "cycle" : "cycles") }
-    func kpiBatteryCondition(_ cond: String) -> String { "condition \(cond)" }
     func kpiBatteryChargeNow(_ charge: Int) -> String { "now \(charge)%" }
     var kpiBatteryDetailsButton: String { "Details" }
 
@@ -89,15 +83,12 @@ struct StringsEN: AppStrings {
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Recommendations" }
-    var recommendationsCaption: String { "based on the report" }
     var recommendationsAllGood: String { "All good" }
-    var recommendationsTipPrefix: String { "Tip: " }
 
     // MARK: Advice actions
     var adviceTrashConfirmTitle: String { "Empty the Trash?" }
     var adviceTrashConfirmButton: String { "Empty Trash" }
     var adviceTrashError: String { "Could not empty the Trash" }
-    var adviceDone: String { "done" }
     var adviceFirewallConfirmTitle: String { "Turn on the firewall?" }
     var adviceFirewallConfirmMessage: String { "Touch ID or an administrator password will be required." }
     var adviceFirewallConfirmButton: String { "Turn On" }
@@ -118,8 +109,6 @@ struct StringsEN: AppStrings {
     var sharedCollapse: String { "Collapse" }
 
     // MARK: Storage — shared folder labels
-    var storageColFolder: String { "Folder" }
-    var storageColSize: String { "Size" }
     var storageColShare: String { "Share" }
     var storageTrashLabel: String { "Trash" }
     var storageAppsLabel: String { "Applications" }
@@ -164,7 +153,6 @@ struct StringsEN: AppStrings {
     var processForceQuit: String { "Force quit" }
     var processForceQuitConfirm: String { "Force quit" }
     var processForceQuitInlineQuestion: String { "Force quit?" }
-    func processForceQuitTitle(_ name: String) -> String { "Force quit “\(name)”?" }
     func processRevealA11y(_ name: String) -> String { "Show “\(name)” in Finder" }
     func processTerminateA11y(_ name: String) -> String { "Quit process “\(name)”" }
     func processKillA11y(_ name: String) -> String { "Force quit process “\(name)”" }
@@ -606,10 +594,7 @@ struct StringsEN: AppStrings {
     func attnMore(_ n: Int) -> String { "More \(n)" }
     var attnCollapse: String { "Less" }
 
-    var quietSecurityTitle: String { "Security" }
     var quietUpdatesTitle: String { "Updates & crashes" }
-    var quietSecurityStatus: String { "all on" }
-    var quietUpdatesStatus: String { "no updates or crashes" }
     var quietNeedsAttention: String { "needs attention" }
     var quietStatusAllEnabled: String { "all enabled" }
     var quietStatusAllClear: String { "all clear" }

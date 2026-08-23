@@ -185,8 +185,8 @@ struct FoldersCard: View {
             case .home:
                 if model.report.homeDirs == nil {
                     SectionStateView(done: model.report.progress["homeDirs"] ?? false)
-                } else if homeDirs.isEmpty {
-                    Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
+                } else if chartDirs.isEmpty {
+                    Text(L.sharedUnavailable).font(.system(size: 11.5)).foregroundStyle(DS.muted)
                 } else {
                     DirBarList(dirs: visibleHomeDirs) { stripHome($0.path, home: home) }
                     if chartDirs.count > 10 {
@@ -204,7 +204,7 @@ struct FoldersCard: View {
                     let dirs = model.report.serviceDirs ?? []
                     let sorted = dirs.filter { $0.bytes > 0 }.sorted { $0.bytes > $1.bytes }
                     if sorted.isEmpty {
-                        Text(L.sharedUnavailable).font(.callout).foregroundStyle(.secondary)
+                        Text(L.sharedUnavailable).font(.system(size: 11.5)).foregroundStyle(DS.muted)
                     } else {
                         DirBarList(dirs: sorted) { label(for: $0.path) }
                     }

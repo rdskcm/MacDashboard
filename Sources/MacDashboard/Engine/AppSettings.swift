@@ -11,7 +11,9 @@ final class AppSettings {
     /// Allowed fast-loop polling intervals, seconds. 2 = historical default.
     static let allowedIntervals = [1, 2, 3, 5, 10]
     static let processLimitKey = "processListLimit"
-    /// Rows shown in the process list. 12 = the pre-V2-SETTINGS-PROCLIMIT hardcoded value.
+    /// Rows shown in the process list. The pre-V2-SETTINGS-PROCLIMIT hardcoded value was
+    /// 12, which is no longer offered; 10 is the new default, and existing installs
+    /// silently move 12 → 10 on first launch (see `resolveProcessLimit` below).
     static let allowedProcessLimits = [5, 10, 15]
 
     /// Pure resolution rule used by `init()` to clamp a raw UserDefaults value into

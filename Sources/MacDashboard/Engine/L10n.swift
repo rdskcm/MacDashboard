@@ -58,14 +58,10 @@ protocol AppStrings {
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { get }
-    func kpiLoad(_ v: String) -> String
     var kpiLoadUnavailable: String { get }
-    func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String
     /// V2-TILES footer: all three load averages, e.g. "нагрузка 1,73 · 2,05 · 2,20".
     /// The core count is NOT repeated here — it already lives in the header's load chip.
     func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String
-    func kpiCpuSocTemp(_ t: Int) -> String
-    var kpiCpuChartTimeLabel: String { get }
     var kpiMemLabel: String { get }
     func kpiMemUnit(_ total: String) -> String
     func kpiMemSub(_ compressor: String, _ purgeable: String) -> String
@@ -79,10 +75,8 @@ protocol AppStrings {
     func kpiDiskUnit(_ size: String) -> String
     func kpiDiskUsedPct(_ pct: Int) -> String
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String
-    func kpiDiskTemp(_ t: Int) -> String
     var kpiBatteryLabel: String { get }
     func kpiBatteryCycles(_ n: Int) -> String
-    func kpiBatteryCondition(_ cond: String) -> String
     func kpiBatteryChargeNow(_ charge: Int) -> String
     var kpiBatteryDetailsButton: String { get }
 
@@ -106,15 +100,12 @@ protocol AppStrings {
 
     // MARK: Recommendations card
     var recommendationsTitle: String { get }
-    var recommendationsCaption: String { get }
     var recommendationsAllGood: String { get }
-    var recommendationsTipPrefix: String { get }
 
     // MARK: Advice actions
     var adviceTrashConfirmTitle: String { get }
     var adviceTrashConfirmButton: String { get }
     var adviceTrashError: String { get }
-    var adviceDone: String { get }
     var adviceFirewallConfirmTitle: String { get }
     var adviceFirewallConfirmMessage: String { get }
     var adviceFirewallConfirmButton: String { get }
@@ -135,8 +126,6 @@ protocol AppStrings {
     var sharedCollapse: String { get }
 
     // MARK: Storage — shared folder labels
-    var storageColFolder: String { get }
-    var storageColSize: String { get }
     var storageColShare: String { get }
     var storageTrashLabel: String { get }
     var storageAppsLabel: String { get }
@@ -184,7 +173,6 @@ protocol AppStrings {
     var processForceQuit: String { get }
     var processForceQuitConfirm: String { get }
     var processForceQuitInlineQuestion: String { get }
-    func processForceQuitTitle(_ name: String) -> String
     func processRevealA11y(_ name: String) -> String
     func processTerminateA11y(_ name: String) -> String
     func processKillA11y(_ name: String) -> String
@@ -632,11 +620,8 @@ protocol AppStrings {
     func attnMore(_ n: Int) -> String
     var attnCollapse: String { get }
 
-    // Quiet-strip strings (consumed by a later block — unused for now).
-    var quietSecurityTitle: String { get }
+    // Quiet-strip strings.
     var quietUpdatesTitle: String { get }
-    var quietSecurityStatus: String { get }
-    var quietUpdatesStatus: String { get }
     var quietNeedsAttention: String { get }
     var quietStatusAllEnabled: String { get }
     var quietStatusAllClear: String { get }

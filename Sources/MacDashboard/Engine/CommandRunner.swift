@@ -232,6 +232,11 @@ enum CommandRunner {
     /// helper binaries inside its own prefix (Homebrew) pass
     /// `environment(prependingPATH:)` here exactly as they already do for the
     /// short-lived calls (V2-POLISH B1).
+    ///
+    /// Unlike `runCapturing`, accumulated stdout here is NOT bounded by
+    /// `outputCap`. This entry point has one caller (`brew upgrade`, 900 s
+    /// timeout), and its output is small in practice, but a very chatty or
+    /// runaway subprocess could grow this buffer unbounded.
     static func runStreaming(_ path: String, _ args: [String], timeout: TimeInterval,
                               environment: [String: String] = defaultEnvironment,
                               onLine: @escaping (_ line: String, _ isStderr: Bool) -> Void) -> String? {

@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [2.0] (Krieg) - 2026-08-18
+## [2.0] (Krieg) - 2026-08-23
 
 Complete visual and structural rebuild of the interface on a new
 design-token system: card-based layout, KPI tiles, an attention summary

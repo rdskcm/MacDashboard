@@ -101,7 +101,6 @@ enum DS {
 
     // No -ink variant (not used as light-mode text per spec)
     static let hot = Color(light: Color(hex: 0xD70015), dark: Color(hex: 0xFF453A))
-    static let violet = Color(light: Color(hex: 0x4A3AA7), dark: Color(hex: 0x9085E9))
 
     /// Capsule/trigger glass fill — the only "glass" token that ships (cards use
     /// native materials, see `dsCardSurface()` in DesignSystem.swift).

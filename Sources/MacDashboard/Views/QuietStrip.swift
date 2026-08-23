@@ -280,7 +280,7 @@ struct UpdatesCrashesCard: View {
                                     .foregroundStyle(DS.muted)
                             }
                             RainbowCapsuleButton(title: L.maintenanceOpenSoftwareUpdate, size: .card) {
-                                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!)
+                                AdviceActionRunner.openPane(AdvicePanes.softwareUpdate)
                             }
                             .accessibilityLabel(L.maintenanceOpenSoftwareUpdate)
                         }

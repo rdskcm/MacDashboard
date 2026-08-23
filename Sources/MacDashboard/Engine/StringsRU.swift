@@ -44,12 +44,8 @@ struct StringsRU: AppStrings {
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { "CPU" }
-    func kpiLoad(_ v: String) -> String { "load \(v)" }
     var kpiLoadUnavailable: String { "load —" }
-    func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String { "\(loadStr) · \(ncpu) ядер" }
     func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String { "нагрузка \(l1) · \(l2) · \(l3)" }
-    func kpiCpuSocTemp(_ t: Int) -> String { "SOC \(t) °C" }
-    var kpiCpuChartTimeLabel: String { "Время" }
     var kpiMemLabel: String { "Память" }
     func kpiMemUnit(_ total: String) -> String { "из \(total)" }
     func kpiMemSub(_ compressor: String, _ purgeable: String) -> String { "сжатая \(compressor) · выгружаемая \(purgeable)" }
@@ -62,10 +58,8 @@ struct StringsRU: AppStrings {
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
         base + " · данные \(dataUsed), система \(sysUsed)"
     }
-    func kpiDiskTemp(_ t: Int) -> String { "темп. \(t) °C" }
     var kpiBatteryLabel: String { "Батарея" }
     func kpiBatteryCycles(_ n: Int) -> String { "\(n) " + ruPlural(n, "цикл", "цикла", "циклов") }
-    func kpiBatteryCondition(_ cond: String) -> String { "состояние \(cond)" }
     func kpiBatteryChargeNow(_ charge: Int) -> String { "сейчас \(charge)%" }
     var kpiBatteryDetailsButton: String { "Детали" }
 
@@ -89,15 +83,12 @@ struct StringsRU: AppStrings {
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Рекомендации" }
-    var recommendationsCaption: String { "по отчёту" }
     var recommendationsAllGood: String { "Всё в порядке" }
-    var recommendationsTipPrefix: String { "Совет: " }
 
     // MARK: Advice actions
     var adviceTrashConfirmTitle: String { "Очистить Корзину?" }
     var adviceTrashConfirmButton: String { "Очистить" }
     var adviceTrashError: String { "Не удалось очистить Корзину" }
-    var adviceDone: String { "готово" }
     var adviceFirewallConfirmTitle: String { "Включить файрвол?" }
     var adviceFirewallConfirmMessage: String { "Понадобится Touch ID или пароль администратора." }
     var adviceFirewallConfirmButton: String { "Включить" }
@@ -118,8 +109,6 @@ struct StringsRU: AppStrings {
     var sharedCollapse: String { "Свернуть" }
 
     // MARK: Storage — shared folder labels
-    var storageColFolder: String { "Папка" }
-    var storageColSize: String { "Размер" }
     var storageColShare: String { "Доля" }
     var storageTrashLabel: String { "Корзина" }
     var storageAppsLabel: String { "Программы" }
@@ -164,7 +153,6 @@ struct StringsRU: AppStrings {
     var processForceQuit: String { "Снять принудительно" }
     var processForceQuitConfirm: String { "Снять" }
     var processForceQuitInlineQuestion: String { "Снять принудительно?" }
-    func processForceQuitTitle(_ name: String) -> String { "Принудительно снять процесс „\(name)“?" }
     func processRevealA11y(_ name: String) -> String { "Показать „\(name)“ в Finder" }
     func processTerminateA11y(_ name: String) -> String { "Завершить процесс „\(name)“" }
     func processKillA11y(_ name: String) -> String { "Принудительно снять процесс „\(name)“" }
@@ -610,10 +598,7 @@ struct StringsRU: AppStrings {
     func attnMore(_ n: Int) -> String { "Ещё \(n)" }
     var attnCollapse: String { "Свернуть" }
 
-    var quietSecurityTitle: String { "Безопасность" }
     var quietUpdatesTitle: String { "Обновления и краши" }
-    var quietSecurityStatus: String { "всё включено" }
-    var quietUpdatesStatus: String { "нет обновлений и сбоев" }
     var quietNeedsAttention: String { "требует внимания" }
     var quietStatusAllEnabled: String { "всё включено" }
     var quietStatusAllClear: String { "всё в норме" }

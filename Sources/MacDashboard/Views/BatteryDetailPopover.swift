@@ -182,7 +182,6 @@ struct BatteryDetailView: View {
                     BoltShape()
                         .fill(BP.bolt)
                         .frame(width: 12, height: 16)
-                        .shadow(color: Color(red: 1, green: 212.0 / 255, blue: 38.0 / 255).opacity(0.6), radius: 6)
                         .modifier(PulsingBoltModifier())
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
@@ -637,13 +636,13 @@ private struct PulsingBoltModifier: ViewModifier {
         if reduceMotion {
             // Static glow, no pulsing animation
             content
-                .shadow(color: Color(red: 1, green: 212.0 / 255, blue: 38.0 / 255).opacity(0.6), radius: 6)
+                .shadow(color: BP.bolt.opacity(0.6), radius: 6)
         } else {
             // Pulsing glow: opacity 0.6↔1.0, scale 0.95↔1.05, soft shadow
             content
                 .opacity(isAnimating ? 1.0 : 0.6)
                 .scaleEffect(isAnimating ? 1.05 : 0.95)
-                .shadow(color: Color(red: 1, green: 212.0 / 255, blue: 38.0 / 255).opacity(0.6), radius: 6)
+                .shadow(color: BP.bolt.opacity(0.6), radius: 6)
                 .onAppear {
                     withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
                         isAnimating = true
