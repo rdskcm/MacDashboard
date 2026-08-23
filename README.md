@@ -8,13 +8,13 @@ switchable anytime in Settings.
 
 ## Screenshots
 
-| Overview | Details |
+| Overview (light) | Overview (dark) |
 | --- | --- |
-| ![Overview: CPU, memory, swap, disk and battery tiles, recommendations](docs/screenshots/overview.png) | ![Details: security, startup items, disk SMART data, Time Machine](docs/screenshots/details.png) |
+| ![Overview: CPU, memory, swap, disk and battery tiles, recommendations](docs/screenshots/overview-light.png) | ![Overview in dark appearance: CPU, memory, swap, disk and battery tiles, recommendations](docs/screenshots/overview-dark.png) |
 
-| Energy settings | Battery popover |
+| Settings | Battery popover |
 | --- | --- |
-| ![Energy settings (pmset) editable table](docs/screenshots/energy-settings.png) | ![Battery popover: power, voltage, temperature, capacity and health](docs/screenshots/battery-popover.png) |
+| ![Settings: sidebar navigation with General and Monitoring pages](docs/screenshots/settings.png) | ![Battery popover: power, voltage, temperature, capacity and health](docs/screenshots/battery-popover.png) |
 
 ## About this project
 

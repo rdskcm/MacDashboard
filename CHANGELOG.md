@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0] (Krieg) - 2026-08-18
+
+Complete visual and structural rebuild of the interface on a new
+design-token system: card-based layout, KPI tiles, an attention summary
+with recommendation capsules, and a quiet/loud information hierarchy that
+surfaces what needs attention and recedes what doesn't.
+
+New since 1.0:
+
+- Redesigned Settings window (sidebar navigation, General/Monitoring pages,
+  configurable process-list length).
+- Redesigned battery popover with power, voltage, temperature, capacity and
+  health.
+- Crash log detection with a 7-day window, collapsed rows and
+  own-app/panic severity.
+- Confirmation gates before Homebrew upgrades and energy-setting changes.
+- Time Machine status distinguishes "unmounted" from "not connected right
+  now" and reports the real reason when Full Disk Access is missing.
+- Bulk delete for orphaned startup-item plists.
+- Live disk/swap verdicts and other readings reported honestly during
+  collection rather than only after it finishes.
+
+Numerous layout, animation and accessibility fixes accumulated across the
+rebuild (segmented controls, disclosure/collapse behaviour, hover states,
+Reduce Motion support, live-resize stability).
+
+Licensed under the MIT License. See LICENSE.
+
 ## [1.0] (Cadia) - 2026-07-20
 
 First public release.

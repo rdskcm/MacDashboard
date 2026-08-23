@@ -19,8 +19,8 @@ done
 
 APP_NAME="MacDashboard"
 DIST="dist/$APP_NAME.app"
-VERSION="1.0"
-CODENAME="Cadia"
+VERSION="2.0"
+CODENAME="Krieg"
 
 echo "== swift build (universal via per-arch --triple + lipo) =="
 # `swift build --arch arm64 --arch x86_64` requires xcbuild, which is only

@@ -8,13 +8,13 @@
 
 ## Скриншоты
 
-| Обзор | Детали |
+| Обзор (светлая тема) | Обзор (тёмная тема) |
 | --- | --- |
-| ![Обзор: CPU, память, swap, диск, батарея, рекомендации](docs/screenshots/overview.png) | ![Детали: безопасность, автозапуск, SMART, Time Machine](docs/screenshots/details.png) |
+| ![Обзор: CPU, память, swap, диск, батарея, рекомендации](docs/screenshots/overview-light.png) | ![Обзор в тёмной теме: CPU, память, swap, диск, батарея, рекомендации](docs/screenshots/overview-dark.png) |
 
-| Энергосбережение | Батарея |
+| Настройки | Батарея |
 | --- | --- |
-| ![Настройки энергосбережения (pmset)](docs/screenshots/energy-settings.png) | ![Всплывающее окно батареи: мощность, напряжение, температура, ёмкость](docs/screenshots/battery-popover.png) |
+| ![Настройки: боковая панель с разделами «Общие» и «Мониторинг»](docs/screenshots/settings.png) | ![Всплывающее окно батареи: мощность, напряжение, температура, ёмкость, здоровье](docs/screenshots/battery-popover.png) |
 
 ## Об этом проекте
 
