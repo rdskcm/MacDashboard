@@ -179,7 +179,7 @@ struct MainDashboardView: View {
                 AttentionSummaryCard(model: model)
 
                 Text(L.overviewKickerMetrics).dsKicker()
-                kpiRow
+                KPIRowView(model: model)
 
                 Text(L.overviewKickerMemory).dsKicker()
                 MemoryCard(model: model)
@@ -253,22 +253,36 @@ struct MainDashboardView: View {
     /// Two truly equal columns. `.frame(maxWidth:.infinity)` inside an HStack only
     /// splits leftovers AFTER each child's minimum is honoured, so a dense card
     /// (ProcessListCard) starves its neighbour; `GridItem(.flexible())` divides the
-    /// row width equally regardless of content — same reasoning as `kpiRow`.
+    /// row width equally regardless of content — same reasoning as `KPIRowView`.
     private static let twoColumns = [
         GridItem(.flexible(), spacing: 12, alignment: .top),
         GridItem(.flexible(), spacing: 12, alignment: .top),
     ]
 
-    // Fixed 3-5 tile single row, non-lazy (V2-FIX-BARFLY): a `LazyVGrid` here
-    // bought nothing — it's never actually lazy at this size — and caused the
-    // tiles to remount on ordinary scrolling, replaying MeterBar's first-layout
-    // pass and making the Memory/Swap bar visibly "fly in". `.frame(maxWidth:
-    // .infinity)` per tile inside the `HStack` splits the row equally rather
-    // than sizing to content, same reasoning `MemoryFolderRow`'s two-column
-    // swap used (see `twoColumns` above) — equal width still depends on every
-    // tile's content being shrinkable: KPITileView's nowrap+ellipsis label and
-    // ellipsizable "из N" slot.
-    private var kpiRow: some View {
+}
+
+// Extracted from MainDashboardView for the same reason as `HeaderChipsView` below
+// (V2-RELAYOUT-FIX): `SwapTile.isVisible(model)` / `BatteryTile.isVisible(model)` read
+// `model.swap` / `model.battery`, which the ~2 s fast tick rewrites. Evaluated inside
+// `MainDashboardView.body` those two reads made the ENTIRE overview tree — every card,
+// the toolbar, the whole scroll content — an observer of the live tick, so one changed
+// swap byte re-ran the whole body and forced a full-tree SwiftUI layout pass
+// (~30 % of Main Thread time per tick). Kept here they invalidate only this row.
+// Do NOT move these calls back up into MainDashboardView.
+//
+// Fixed 3-5 tile single row, non-lazy (V2-FIX-BARFLY): a `LazyVGrid` here bought
+// nothing — it's never actually lazy at this size — and caused the tiles to remount on
+// ordinary scrolling, replaying MeterBar's first-layout pass and making the Memory/Swap
+// bar visibly "fly in". `.frame(maxWidth: .infinity)` per tile inside the `HStack`
+// splits the row equally rather than sizing to content, same reasoning
+// `MemoryFolderRow`'s two-column swap used (see `twoColumns`) — equal width still
+// depends on every tile's content being shrinkable: KPITileView's nowrap+ellipsis label
+// and ellipsizable "из N" slot.
+@MainActor
+struct KPIRowView: View {
+    let model: DashboardModel
+
+    var body: some View {
         let showSwap = SwapTile.isVisible(model)
         let showBattery = BatteryTile.isVisible(model)
         return HStack(alignment: .top, spacing: 12) {
