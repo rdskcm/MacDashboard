@@ -61,139 +61,6 @@ func runAsyncBlocking<T>(_ operation: @escaping () async -> T) -> T {
 let GIB: Int64 = 1 << 30
 let MIB: Int64 = 1 << 20
 
-// =====================================================================
-// MARK: - Parsers: top (process tables)
-// =====================================================================
-
-let topCpuMemFixture = """
-Processes: 412 total, 3 running, 409 sleeping, 1901 threads
-2026/07/12 12:00:00
-Load Avg: 2.10, 2.05, 1.98
-CPU usage: 12.5% user, 5.3% sys, 82.2% idle
-SharedLibs: 512M resident, 92M data, 20M linkedit.
-MemRegions: 90000 total, 3500M resident, 200M private, 800M shared.
-PhysMem: 15G used (3200M wired), 500M unused.
-VM: 3200G vsize, 1500M framework vsize, 0(0) swapins, 0(0) swapouts.
-Networks: packets: 100000/50M in, 90000/40M out.
-Disks: 500000/10G read, 400000/8G written.
-
-PID    COMMAND      %CPU  MEM
-100    Finder       1.0   100M
-
-Processes: 412 total, 3 running, 409 sleeping, 1901 threads
-2026/07/12 12:00:03
-Load Avg: 2.10, 2.05, 1.98
-CPU usage: 12.5% user, 5.3% sys, 82.2% idle
-SharedLibs: 512M resident, 92M data, 20M linkedit.
-MemRegions: 90000 total, 3500M resident, 200M private, 800M shared.
-PhysMem: 15G used (3200M wired), 500M unused.
-VM: 3200G vsize, 1500M framework vsize, 0(0) swapins, 0(0) swapouts.
-Networks: packets: 100000/50M in, 90000/40M out.
-Disks: 500000/10G read, 400000/8G written.
-
-CPU     MEM      COMMAND
-25.3    521M     Google Chrome Helper
-10.1    1747M    WindowServer
-0.5     3808K+   mdworker
-"""
-
-do {
-    let rows = Parsers.topProcesses(topCpuMemFixture, order: (.cpu, .mem))
-    check(rows.count == 3, "topProcesses(cpu,mem): only LAST sample's 3 rows returned (got \(rows.count))")
-    check(rows.first(where: { $0.name.hasPrefix("Finder") }) == nil,
-          "topProcesses(cpu,mem): first-sample row (Finder) is excluded")
-    if rows.count == 3 {
-        check(rows[0].name == "Google Chrome Helper…", "topProcesses: 20-char command name gets ellipsis (got \(rows[0].name))")
-        check(rows[0].cpu == 25.3, "topProcesses: row0 cpu == 25.3 (got \(String(describing: rows[0].cpu)))")
-        check(rows[0].memBytes == 521 * MIB, "topProcesses: row0 mem == 521M bytes")
-        check(rows[1].name == "WindowServer", "topProcesses: row1 name == WindowServer (12 chars, no ellipsis)")
-        check(rows[1].memBytes == 1747 * MIB, "topProcesses: row1 mem == 1747M bytes")
-        check(rows[2].memBytes == Parsers.parseSize("3808K+"), "topProcesses: row2 mem parses 3808K+ suffix")
-        check(rows[2].name == "mdworker", "topProcesses: row2 name == mdworker (no ellipsis)")
-    }
-}
-
-let topMemCpuFixture = """
-Processes: 100 total, 2 running
-Load Avg: 1.0, 1.0, 1.0
-
-MEM      CPU    COMMAND
-256M     3.5    Safari
-128M     1.2    Mail
-"""
-
-do {
-    let rows = Parsers.topProcesses(topMemCpuFixture, order: (.mem, .cpu))
-    check(rows.count == 2, "topProcesses(mem,cpu order): 2 rows (got \(rows.count))")
-    if rows.count == 2 {
-        check(rows[0].name == "Safari" && rows[0].memBytes == 256 * MIB && rows[0].cpu == 3.5,
-              "topProcesses(mem,cpu order): row0 Safari 256M 3.5%")
-        check(rows[1].name == "Mail" && rows[1].memBytes == 128 * MIB && rows[1].cpu == 1.2,
-              "topProcesses(mem,cpu order): row1 Mail 128M 1.2%")
-    }
-}
-
-check(Parsers.topProcesses("", order: (.cpu, .mem)).isEmpty, "topProcesses: empty string ⇒ []")
-check(Parsers.topProcesses("this is garbage\nnot top output at all", order: (.cpu, .mem)).isEmpty,
-      "topProcesses: garbage string ⇒ []")
-
-// `top -l 2 -stats pid,cpu,mem,command` (leadingPID) — realistic two-sample output,
-// second sample authoritative (same first-sample-excluded trick as topCpuMemFixture
-// above). One row in the authoritative sample has a non-numeric PID (garbage) and
-// must be skipped rather than crashing/misaligning the rest.
-let topPidCpuMemFixture = """
-Processes: 420 total, 2 running, 418 sleeping, 1910 threads
-2026/07/16 12:00:00
-Load Avg: 1.50, 1.40, 1.30
-CPU usage: 8.0% user, 3.0% sys, 89.0% idle
-SharedLibs: 512M resident, 92M data, 20M linkedit.
-MemRegions: 90000 total, 3500M resident, 200M private, 800M shared.
-PhysMem: 15G used (3200M wired), 500M unused.
-VM: 3200G vsize, 1500M framework vsize, 0(0) swapins, 0(0) swapouts.
-Networks: packets: 100000/50M in, 90000/40M out.
-Disks: 500000/10G read, 400000/8G written.
-
-PID    %CPU MEM   COMMAND
-1      0.0  10M   launchd
-
-Processes: 420 total, 2 running, 418 sleeping, 1910 threads
-2026/07/16 12:00:03
-Load Avg: 1.50, 1.40, 1.30
-CPU usage: 8.0% user, 3.0% sys, 89.0% idle
-SharedLibs: 512M resident, 92M data, 20M linkedit.
-MemRegions: 90000 total, 3500M resident, 200M private, 800M shared.
-PhysMem: 15G used (3200M wired), 500M unused.
-VM: 3200G vsize, 1500M framework vsize, 0(0) swapins, 0(0) swapouts.
-Networks: packets: 100000/50M in, 90000/40M out.
-Disks: 500000/10G read, 400000/8G written.
-
-PID    %CPU MEM   COMMAND
-27120  25.3 521M  Google Chrome Helper
-garbage 1.0 10M   BogusRow
-27119  10.1 1747M WindowServer
-"""
-
-do {
-    let rows = Parsers.topProcesses(topPidCpuMemFixture, order: (.cpu, .mem), leadingPID: true)
-    check(rows.count == 2, "topProcesses(leadingPID): non-numeric-pid row skipped, 2 rows left (got \(rows.count))")
-    check(rows.first(where: { $0.name == "launchd" }) == nil,
-          "topProcesses(leadingPID): first-sample row (launchd) is excluded")
-    if rows.count == 2 {
-        check(rows[0].pid == 27120, "topProcesses(leadingPID): row0 pid == 27120 (got \(String(describing: rows[0].pid)))")
-        check(rows[0].name == "Google Chrome Helper…", "topProcesses(leadingPID): row0 name gets ellipsis (got \(rows[0].name))")
-        check(rows[0].cpu == 25.3, "topProcesses(leadingPID): row0 cpu == 25.3")
-        check(rows[0].memBytes == 521 * MIB, "topProcesses(leadingPID): row0 mem == 521M bytes")
-        check(rows[1].pid == 27119, "topProcesses(leadingPID): row1 pid == 27119 (got \(String(describing: rows[1].pid)))")
-        check(rows[1].name == "WindowServer", "topProcesses(leadingPID): row1 name == WindowServer")
-        check(rows[1].memBytes == 1747 * MIB, "topProcesses(leadingPID): row1 mem == 1747M bytes")
-    }
-    // leadingPID: false is unaffected by the new parameter — old fixture, re-checked
-    // via the default argument (no `leadingPID:` passed) rather than an explicit one.
-    let oldFixtureRows = Parsers.topProcesses(topCpuMemFixture, order: (.cpu, .mem))
-    check(oldFixtureRows.count == 3 && oldFixtureRows.allSatisfy { $0.pid == nil },
-          "topProcesses: leadingPID defaults false, old fixture unaffected, pid stays nil")
-}
-
 // ProcEntry.id: "p<pid>" when pid present, old rank-based form when pid is nil.
 check(ProcEntry(rank: 3, name: "X", pid: 27120).id == "p27120", "ProcEntry.id: \"p<pid>\" when pid present")
 check(ProcEntry(rank: 3, name: "X").id == "3-X", "ProcEntry.id: old rank-based form when pid is nil")
@@ -815,19 +682,20 @@ do {
     check((snap2.disk?.size ?? 0) > 0, "smoke LiveCollector: disk.size > 0")
     check(snap2.load != nil, "smoke LiveCollector: load != nil")
     check(snap2.ncpu >= 1, "smoke LiveCollector: ncpu >= 1 (got \(snap2.ncpu))")
-    // Exercises the REAL `top -l 2 -s 1 -stats pid,cpu,mem,command` output on this
-    // machine end-to-end through the new leadingPID parse path (a synthetic fixture
-    // only proves the parser handles an assumed format, not that the real `top`
-    // header/columns actually match it).
-    check(!snap2.topCPU.isEmpty, "smoke LiveCollector: topCPU non-empty (real top+leadingPID parse)")
-    check(snap2.topCPU.first?.pid != nil, "smoke LiveCollector: live pid parsed through leadingPID path")
+    // Exercises the REAL `/bin/ps -axww -o pid=,rss=,time=,comm=` output on this
+    // machine end-to-end through the ProcessSampler ps-snapshot path (a synthetic
+    // fixture only proves the parser handles an assumed format, not that the real
+    // `ps` columns actually match it).
+    check(!snap2.topCPU.isEmpty, "smoke LiveCollector: topCPU non-empty (real ps snapshot parse)")
+    check(snap2.topCPU.first?.pid != nil, "smoke LiveCollector: live pid parsed through ps snapshot path")
     check(!snap2.topMem.isEmpty, "smoke LiveCollector: topMem non-empty")
-    // readTopProcesses() may legitimately return fewer rows than the limit, so <=
-    // not ==.
+    // sample() may legitimately return fewer rows than the limit, so <= not ==.
     check(snap2.topCPU.count <= 10,
           "smoke LiveCollector: topCPU.count <= processListLimit")
     check(snap2.topMem.count <= 10,
           "smoke LiveCollector: topMem.count <= processListLimit")
+    check(snap2.topCPU.allSatisfy { $0.cpu != nil },
+          "smoke LiveCollector: every topCPU row has a cpu value (sampler primed itself)")
 }
 
 do {
@@ -1568,6 +1436,12 @@ runLaunchdPlistInspectorChecks()
 // =====================================================================
 
 runThermalSensorsChecks()
+
+// =====================================================================
+// MARK: - ps process sampler (Block V2-PROC-NATIVE, in ProcessSamplerChecks.swift)
+// =====================================================================
+
+runProcessSamplerChecks()
 
 // =====================================================================
 // MARK: - HistorySeries (Block H, in HistorySeriesChecks.swift)

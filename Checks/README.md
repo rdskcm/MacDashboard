@@ -9,7 +9,7 @@ pass/fail check.
 
 Every other file in this directory (`Models.swift`, `AppInfo.swift`, `AttentionModel.swift`,
 `Parsers.swift`, `Assessment.swift`,
-`CommandRunner.swift`, `LiveCollector.swift`, `ReportCollector.swift`,
+`CommandRunner.swift`, `LiveCollector.swift`, `ProcessSampler.swift`, `ReportCollector.swift`,
 `ReportWriter.swift`, `HistoryStore.swift`, `L10n.swift`, `BrewProgress.swift`,
 `ThermalSensors.swift`, `AppSettings.swift`, `StringsRU.swift`, `StringsEN.swift`,
 `LaunchdPlistInspector.swift`, `Formatting.swift`, `BatteryInspector.swift`,
@@ -26,7 +26,7 @@ misbehave (duplicate-file errors, etc.), replace the symlinks with a `sync_check
 script that copies the files in before each build instead of restructuring `Sources/`.
 
 `SmartToolsAvailabilityChecks.swift`, `ThermalSensorsChecks.swift`,
-`HistorySeriesChecks.swift`, `LaunchdPlistInspectorChecks.swift`,
+`ProcessSamplerChecks.swift`, `HistorySeriesChecks.swift`, `LaunchdPlistInspectorChecks.swift`,
 `AIRedactionChecks.swift`, and `AIPayloadRequestChecks.swift` are real
 (non-symlinked) files, like `main.swift`.
 Swift executable targets only permit ONE file with top-level (script-mode) statements —

@@ -294,7 +294,7 @@ final class DashboardModel {
             }
         }
 
-        // Slow task (~6s): the `top` process tables only. No setAssessment here — the
+        // Slow task (~6s): the `/bin/ps` process tables only. No setAssessment here — the
         // assessment depends only on disk/swap, which the fast task owns.
         slowTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -305,8 +305,9 @@ final class DashboardModel {
                     continue
                 }
 
-                // sampleProcesses() runs `top` (~1s) — hop off the main actor for it.
-                // Read the setting HERE, on the main actor, and pass it across: the
+                // sampleProcesses() shells out to `/bin/ps` once (and, on the FIRST tick
+                // only, sleeps 0.6 s to prime its CPU baseline) — hop off the main actor
+                // for it. Read the setting HERE, on the main actor, and pass it across: the
                 // collector must not touch AppSettings.shared from a background queue.
                 let limit = AppSettings.shared.processListLimit
                 let procs = await withCheckedContinuation { continuation in
@@ -542,7 +543,12 @@ final class DashboardModel {
     /// limit change is visible immediately instead of waiting for the next ~6s slow
     /// tick. One-shot, independent of the periodic slowTask sampler — a fresh
     /// LiveCollector instance is created per call, never shared with a concurrent
-    /// sampler pass (see the fastBox/procBox/smartBox comment in start()).
+    /// sampler pass (see the fastBox/procBox/smartBox comment in start()). Because
+    /// this path builds a fresh LiveCollector (and therefore a fresh ProcessSampler)
+    /// per press, its CPU% is measured over the sampler's 0.6 s priming window
+    /// rather than the periodic ~6 s one; that is deliberate (a manual re-sample
+    /// must not make the user wait 6 s) and is the only place where the window is
+    /// not the display cadence.
     func refreshProcessesNow() {
         guard !processesRefreshing else { return }
         processesRefreshing = true

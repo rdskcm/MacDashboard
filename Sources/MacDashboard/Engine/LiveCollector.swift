@@ -1,7 +1,7 @@
 // Engine/LiveCollector.swift
 // Live metrics via native Mach/sysctl/IOKit calls (no subprocess for CPU/mem/swap/
-// disk/battery/load) plus a single short `top` invocation for both process tables.
-// SPEC §5.1. NOT thread-safe: keep one instance and call collect() from a single
+// disk/battery/load) plus a single non-sleeping `/bin/ps` snapshot for both process
+// tables. SPEC §5.1. NOT thread-safe: keep one instance and call collect() from a single
 // background context (the model drives it off the main actor on a serial cadence).
 // It reads no shared app state of its own — everything tunable arrives as a
 // parameter, so the only state it owns is prevTicks (see collectFast).
@@ -20,6 +20,7 @@ import IOKit.ps
 final class LiveCollector {
 
     private var prevTicks: (user: UInt64, sys: UInt64, idle: UInt64, nice: UInt64)?
+    private let procSampler = ProcessSampler()
 
     // Fast, all-native sample (no subprocess): load/cpu/mem/swap/disk/battery. This
     // method OWNS the prevTicks CPU-delta state (only readCPU touches it), so the
@@ -37,9 +38,11 @@ final class LiveCollector {
         return snap
     }
 
-    // Slow sample: the single `top` subprocess plus the CPU- and memory-sorted
-    // process tables (prefix(limit) + reranked()).
-    // Split out so it can run on a slower cadence than the native gauges.
+    // Slow sample: one non-sleeping `/bin/ps` snapshot plus the CPU- and memory-sorted
+    // process tables (prefix(limit) + reranked()). CPU% is a delta over the interval
+    // since this instance's previous sample; the first sample primes itself over
+    // 0.6 s (see ProcessSampler). Split out so it can run on a slower cadence than
+    // the native gauges.
     //
     // `limit` is a PARAMETER, not a read of AppSettings.shared. This method runs off
     // the main actor, while the setting is written from Settings on the main actor
@@ -49,7 +52,7 @@ final class LiveCollector {
     // the main actor and passes the value in, which also stops the collector reaching
     // into global UI state at all.
     func sampleProcesses(limit: Int) -> (topCPU: [ProcEntry], topMem: [ProcEntry]) {
-        let procs = readTopProcesses()
+        let procs = procSampler.sample()
         let topCPU = Array(procs.sorted { ($0.cpu ?? 0) > ($1.cpu ?? 0) }.prefix(limit)).reranked()
         let topMem = Array(procs.sorted { ($0.memBytes ?? 0) > ($1.memBytes ?? 0) }.prefix(limit)).reranked()
         return (topCPU, topMem)
@@ -209,19 +212,6 @@ final class LiveCollector {
         return nil
     }
 
-    // MARK: - top process tables (single subprocess, parsed by Parsers)
-
-    private func readTopProcesses() -> [ProcEntry] {
-        // -l 2 with a 1s interval: the FIRST sample carries since-boot CPU deltas
-        // (garbage); Parsers.topProcesses keeps only the LAST sample, which has a
-        // real 1s delta. No -n cap -> top prints ALL processes (logging mode), so
-        // sorting by memory in Swift finds the true memory hogs (a -n cap would hide
-        // them). One subprocess now feeds both the CPU- and memory-sorted tables.
-        guard let out = CommandRunner.run("/usr/bin/top",
-            ["-l", "2", "-s", "1", "-stats", "pid,cpu,mem,command"],
-            timeout: 12) else { return [] }
-        return Parsers.topProcesses(out, order: (.cpu, .mem), leadingPID: true)
-    }
 }
 
 private extension Array where Element == ProcEntry {

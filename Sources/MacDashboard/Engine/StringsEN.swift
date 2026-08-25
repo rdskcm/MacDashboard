@@ -143,7 +143,7 @@ struct StringsEN: AppStrings {
     var processSegCPU: String { "CPU" }
     var processSegMem: String { "Memory" }
     var processesMetricA11y: String { "Process metric" }
-    var processListCaption: String { "live snapshot from top" }
+    var processListCaption: String { "live snapshot" }
     var processLoadingDetails: String { "Loading details…" }
     var processDetailThreads: String { "Threads" }
     var processDetailMemory: String { "Memory" }

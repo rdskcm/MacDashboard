@@ -12,73 +12,79 @@ import Foundation
 
 enum Parsers {
 
-    // MARK: - top (process tables)
+    // MARK: - ps (process table)
 
-    /// Column kind for a `top -stats` order, e.g. `-stats cpu,mem,command` is
-    /// `(.cpu, .mem)`.
-    enum TopColumn { case cpu, mem }
+    /// One row of `/bin/ps -axww -o pid=,rss=,time=,comm=`.
+    struct PSRow: Equatable {
+        var pid: Int32
+        var name: String        // already display-formatted (procDisplayName)
+        var cpuSeconds: Double  // CUMULATIVE cpu time since the process started
+        var memBytes: Int64
+    }
 
-    /// Parses `top -l N -stats <cpu,mem|mem,cpu>,command` output into process rows.
-    ///
-    /// `top -l 2` prints TWO full samples back to back (each starting with its own
-    /// "Processes: ..." header); the first sample's per-process deltas are garbage
-    /// (computed since boot), so this parses ONLY the text after the LAST such
-    /// header — the same trick mac_live_server.py's `sample_cpu_and_top` uses. For
-    /// `-l 1` output there is exactly one header, so this degrades to "parse
-    /// everything after the (only) header", which is correct there too.
-    ///
-    /// `leadingPID`: when true, expects a leading `PID` column before the two stat
-    /// columns (e.g. `-stats pid,cpu,mem,command`) and populates `ProcEntry.pid`;
-    /// rows whose first field isn't a parseable `Int32` are skipped. When false,
-    /// this is exactly the original (no-PID) behavior.
-    static func topProcesses(_ text: String, order: (TopColumn, TopColumn), leadingPID: Bool = false) -> [ProcEntry] {
-        let lines = text.components(separatedBy: "\n")
-        let headerStarts = lines.indices.filter { lines[$0].hasPrefix("Processes:") }
-        let tail = headerStarts.isEmpty ? lines : Array(lines[headerStarts.last!...])
-
-        var rows: [ProcEntry] = []
-        var started = false
-        var rank = 0
-        for line in tail {
-            if line.contains("COMMAND") {
-                started = true
-                continue
-            }
-            guard started else { continue }
+    /// Parses `/bin/ps -axww -o pid=,rss=,time=,comm=` output (no header line — the
+    /// `=` after each keyword suppresses it) into process rows. Pure, total: skips
+    /// whatever it cannot parse rather than shifting columns or crashing.
+    static func psProcesses(_ text: String) -> [PSRow] {
+        var rows: [PSRow] = []
+        for line in text.components(separatedBy: "\n") {
             guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
-
-            let statOffset = leadingPID ? 1 : 0
-            let commandIndex = leadingPID ? 3 : 2
-            let fields = splitWhitespaceLimited(line, maxSplit: commandIndex)
-            guard fields.count >= commandIndex + 1 else { continue }
-
-            var pid: Int32?
-            if leadingPID {
-                guard let parsedPid = Int32(fields[0]) else { continue }
-                pid = parsedPid
-            }
-
-            var cpu: Double?
-            var mem: Int64?
-            let columns = (order.0, order.1)
-            for (index, kind) in [columns.0, columns.1].enumerated() {
-                let raw = fields[index + statOffset]
-                switch kind {
-                case .mem:
-                    mem = parseSize(raw)
-                case .cpu:
-                    let stripped = raw.trimmingCharacters(in: CharacterSet(charactersIn: "+-"))
-                    cpu = Double(stripped)
-                }
-            }
-            rows.append(ProcEntry(rank: rank, name: procDisplayName(fields[commandIndex]),
-                                   cpu: cpu, memBytes: mem, pid: pid))
-            rank += 1
+            let fields = splitWhitespaceLimited(line, maxSplit: 3)
+            guard fields.count == 4 else { continue }
+            guard let pid = Int32(fields[0]), let rssKB = Int64(fields[1]),
+                  let secs = psCPUSeconds(fields[2]) else { continue }
+            let name = procDisplayName(psCommandName(fields[3]))
+            guard !name.isEmpty else { continue }
+            rows.append(PSRow(pid: pid, name: name, cpuSeconds: secs, memBytes: rssKB * 1024))
         }
         return rows
     }
 
-    /// top truncates COMMAND at 16 characters; legacy `_proc_name` marks that with
+    /// Parses macOS `ps`'s cumulative-time text (`%3ld:%02ld.%02ld` = `MMM:SS.hh`,
+    /// with an optional `DD-` day prefix for very long-lived processes) to seconds.
+    /// Minutes are NOT rolled into hours by `ps` — `145:22.35` is 2.4 hours printed
+    /// as 145 minutes, not `2:25:22.35`.
+    static func psCPUSeconds(_ token: String) -> Double? {
+        guard !token.isEmpty else { return nil }
+        var days = 0
+        var rest = Substring(token)
+        if let dashIdx = token.firstIndex(of: "-") {
+            guard let d = Int(token[token.startIndex..<dashIdx]) else { return nil }
+            days = d
+            rest = token[token.index(after: dashIdx)...]
+        }
+        let parts = rest.components(separatedBy: ":")
+        guard parts.count <= 3, !parts.isEmpty else { return nil }
+        guard let seconds = Double(parts.last!) else { return nil }
+        var hours = 0
+        var minutes = 0
+        if parts.count == 3 {
+            guard let h = Int(parts[0]), let m = Int(parts[1]) else { return nil }
+            hours = h
+            minutes = m
+        } else if parts.count == 2 {
+            guard let m = Int(parts[0]) else { return nil }
+            minutes = m
+        }
+        return Double(days) * 86400 + Double(hours) * 3600 + Double(minutes) * 60 + seconds
+    }
+
+    /// Trims whitespace, strips one leading `(`/trailing `)` pair (how `ps` renders
+    /// a process whose path it cannot read, e.g. `(bash)`), then keeps everything
+    /// after the last `/` if a path is present. Does NOT cut at a space — an
+    /// executable name may legitimately contain spaces.
+    private static func psCommandName(_ raw: String) -> String {
+        var trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("(") && trimmed.hasSuffix(")") && trimmed.count >= 2 {
+            trimmed = String(trimmed.dropFirst().dropLast())
+        }
+        if let slashIdx = trimmed.lastIndex(of: "/") {
+            trimmed = String(trimmed[trimmed.index(after: slashIdx)...])
+        }
+        return trimmed
+    }
+
+    /// top/ps truncates COMMAND at 16 characters; legacy `_proc_name` marks that with
     /// a trailing ellipsis so truncated names are visually distinguishable.
     private static func procDisplayName(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
