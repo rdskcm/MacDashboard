@@ -277,22 +277,20 @@ private struct ProcessRowView: View {
     let onTap: () -> Void
 
     @State private var hovering = false
-    @State private var gaugeTrackWidth: CGFloat = 0
     // The gauge plate + bar live in a `.background` (see `body`), never as a
-    // sibling inside the row's own layout — a `.background` sizes to its
-    // parent and can't feed anything back into it, which is what breaks the
-    // one-way measurement ratchet (row width -> bar width -> ZStack width ->
-    // row width, never shrinking) that used to inflate the whole card on
-    // live-drag window resize. Width still must not be read from a
-    // `GeometryReader` sitting inside that background `ZStack`'s animated
-    // content: on a fresh mount / `ForEach` reorder its first-layout pass is
-    // 0-width, and the settling from 0 -> real width gets swept into the
-    // fraction animation, reading as a thin mis-placed sliver (V2-FIX-BARFLY).
-    // That's why width instead arrives via `.onGeometryChange` into
-    // `gaugeTrackWidth` above, decoupled from the animated subtree — the same
-    // isolation MeterBar/MemoryCard/BatteryDetailPopover use. V2-FIX-RATCHET
-    // (4451191) dropped this isolation by accident while fixing the ratchet
-    // itself; do not "simplify" it away a third time.
+    // sibling inside the row's own layout — a `.background` sizes to its parent
+    // and can't feed anything back into it, which is what breaks the one-way
+    // measurement ratchet (row width -> bar width -> ZStack width -> row width,
+    // never shrinking) that used to inflate the whole card on live-drag window
+    // resize (V2-FIX-RATCHET). The fill's width must also never come from a
+    // `GeometryReader` inside this subtree: on a fresh mount / `ForEach` reorder
+    // its first pass is 0-width and the 0 -> real settle shows as a thin
+    // mis-placed sliver (V2-FIX-BARFLY).
+    // V2-RELAYOUT-COREANIM: the fill is now a `BarFillLayer` (CALayer driven by
+    // CoreAnimation, BarFillLayer.swift) with no SwiftUI animation on it at all —
+    // ~10 of these rows animating through SwiftUI cost up to ~47% of one core.
+    // Do not reintroduce `.frame(width:)`, a GeometryReader, or an
+    // `.animation(_:value:)` on the gauge.
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -377,14 +375,14 @@ private struct ProcessRowView: View {
         .background(alignment: .leading) {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 9).fill(DS.row)
-                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-                        gaugeTrackWidth = newWidth
-                    }
                 if maxValue > 0 {
-                    RoundedRectangle(cornerRadius: 9)
-                        .fill(gaugeColor.opacity(gaugeOpacity))
-                        .frame(width: max(0, gaugeTrackWidth * CGFloat(min(primaryValue / maxValue, 1))))
-                        .animation(reduceMotion ? nil : processRowMotion, value: primaryValue)
+                    BarFillLayer(spans: [BarSpan(key: "gauge",
+                                                 fraction: CGFloat(min(primaryValue / maxValue, 1)),
+                                                 alpha: gaugeOpacity,
+                                                 color: gaugeColor)],
+                                 layout: .single(minWidth: 0, cornerRadius: 9),
+                                 animated: !reduceMotion)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }

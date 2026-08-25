@@ -119,23 +119,21 @@ struct MeterBar: View {
     /// no-animation behavior.
     var animated: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var trackWidth: CGFloat = 0
 
     var body: some View {
         let f = CGFloat(min(max(fraction, 0), 1))
         ZStack(alignment: .leading) {
             dsRecessedTrack(in: Capsule())
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { newWidth in
-                    trackWidth = newWidth
-                }
-            Capsule().fill(color)
-                // Width comes from @State, never from a GeometryReader inside this
-                // animated subtree (V2-FIX-BARFLY): the 0 -> real-width settling of
-                // a fresh mount must NOT be swept into the fraction animation, or
-                // the bar "flies in" every time LazyVGrid remounts the tile on
-                // scroll. Same isolation as MemoryCard / BatteryDetailPopover.
-                .frame(width: trackWidth > 0 ? max(2, trackWidth * f) : 0)
-                .animation((animated && !reduceMotion) ? .timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8) : nil, value: f)
+            // V2-RELAYOUT-COREANIM: the fill is a CALayer animated by CoreAnimation
+            // (BarFillLayer.swift), not a SwiftUI-animated view. Do NOT attach
+            // `.animation(_:value:)` here and do NOT put a GeometryReader back in
+            // this subtree — either one re-creates the per-display-frame SwiftUI
+            // ViewGraph cost this block removed (and the second also re-opens the
+            // V2-FIX-BARFLY 0 -> real-width fly-in).
+            BarFillLayer(spans: [BarSpan(key: "fill", fraction: f, color: color)],
+                         layout: .single(minWidth: 2, cornerRadius: nil),
+                         animated: animated && !reduceMotion)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 6)
     }

@@ -18,11 +18,6 @@ private var memoryNotes: [String: String] {
     ]
 }
 
-/// Same curve/duration as `MeterBar`'s `animated` mode (SharedUI.swift) and
-/// `ProcessCards.swift`'s `processRowMotion` — the app-wide bar/gauge-width
-/// timing. Defined locally since neither of those constants is shared/public.
-private let memorySegmentMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8)
-
 private struct MemSegment {
     let key: String
     let label: String
@@ -57,6 +52,35 @@ private func memorySegments(_ mem: MemSnapshot) -> [MemSegment] {
     ].filter { $0.bytes > 0 }
 }
 
+/// The memory bar's geometry: 2 pt gaps, a 3 pt minimum per segment, 2 pt corners —
+/// exactly what the old `HStack` of `RoundedRectangle`s produced implicitly (a
+/// clamped sub-3-pt segment pushes its successors right and the row may overflow).
+private let memoryBarLayout = BarFillLayout.segments(gap: 2, minWidth: 3, cornerRadius: 2)
+
+private func memoryBarSpans(_ segments: [MemSegment], total: Int64, hoveredKey: String?) -> [BarSpan] {
+    segments.map { seg in
+        BarSpan(key: seg.key,
+                fraction: CGFloat(Double(seg.bytes) / Double(total)),
+                color: seg.color,
+                dim: (hoveredKey == nil || hoveredKey == seg.key) ? 1 : 0.45)
+    }
+}
+
+/// Hit region for one memory-bar segment. The bar itself is drawn by
+/// `BarFillLayer` (one CALayer per segment, CoreAnimation-animated); this shape
+/// exists only so each segment's `.onHover` responds to its own drawn rect
+/// instead of to the whole bar. Both values are points, from `barSpanRects`.
+private struct MemorySegmentShape: Shape {
+    var x: CGFloat
+    var width: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let w = max(0, width)
+        guard w > 0, rect.height > 0 else { return Path() }
+        return Path(CGRect(x: rect.minX + x, y: rect.minY, width: w, height: rect.height))
+    }
+}
+
 struct MemoryCard: View {
     let model: DashboardModel
 
@@ -89,25 +113,31 @@ private struct MemoryStackChart: View {
             let total = max(mem.total, 1)
             VStack(alignment: .leading, spacing: 12) {
                 GeometryReader { geo in
-                    let gaps = 2 * CGFloat(max(0, segments.count - 1))
-                    let avail = max(0, geo.size.width - gaps)
-                    HStack(spacing: 2) {
-                        ForEach(segments, id: \.key) { seg in
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(seg.color)
-                                .frame(width: max(3, avail * CGFloat(Double(seg.bytes) / Double(total))))
-                                .opacity(hoveredKey == nil || hoveredKey == seg.key ? 1 : 0.45)
-                                .onHover { inside in
-                                    if inside { hoveredKey = seg.key }
-                                    else if hoveredKey == seg.key { hoveredKey = nil }
-                                }
-                        }
-                    }
+                    let spans = memoryBarSpans(segments, total: total, hoveredKey: hoveredKey)
+                    let rects = barSpanRects(spans, layout: memoryBarLayout, width: geo.size.width)
                     // V2-FIX-MEM: the prototype (design_handoff_macdashboard/
                     // Overview Screen.dc.html:262-267) only CSS-transitions the
                     // first three segments; this app deliberately animates all
                     // six as one bar so the shared boundaries never desync.
-                    .animation(reduceMotion ? nil : memorySegmentMotion, value: segments.map(\.bytes))
+                    // V2-RELAYOUT-COREANIM: all six are CALayers inside ONE
+                    // NSView, animated by CoreAnimation on the same 0.8 s curve —
+                    // no `.animation(_:value:)` anywhere in this subtree. The
+                    // hover dim rides the layers' `opacity` on CA's own 0.12 s
+                    // ease-out; the transparent overlay below only hit-tests.
+                    BarFillLayer(spans: spans, layout: memoryBarLayout, animated: !reduceMotion)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .overlay(alignment: .topLeading) {
+                            ZStack(alignment: .topLeading) {
+                                ForEach(Array(segments.enumerated()), id: \.element.key) { idx, seg in
+                                    Color.clear
+                                        .contentShape(MemorySegmentShape(x: rects[idx].x, width: rects[idx].width))
+                                        .onHover { inside in
+                                            if inside { hoveredKey = seg.key }
+                                            else if hoveredKey == seg.key { hoveredKey = nil }
+                                        }
+                                }
+                            }
+                        }
                 }
                 .frame(height: 24)
 
