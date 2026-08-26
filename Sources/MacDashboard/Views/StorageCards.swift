@@ -32,13 +32,18 @@ private struct DirBarRow: View {
     let onTap: () -> Void
 
     @State private var hovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     // The gauge plate + bar live in a `.background` (see `body`), never as a
     // sibling inside the row's own layout — see ProcessRowView's rationale in
     // Views/ProcessCards.swift (settled precedent, not relitigated here): a
     // `.background` can't feed its size back into the row, which is what
     // breaks the one-way measurement ratchet that used to inflate the whole
     // card on live-drag window resize. A `GeometryReader` must still never
-    // sit as a sibling in that background `ZStack`'s content.
+    // sit as a sibling in that background `ZStack`'s content — the fill uses
+    // `BarFillLayer` (BarFillLayer.swift), the same CALayer-backed primitive
+    // ProcessRowView's gauge uses, so it reads its own resolved size instead
+    // of nesting a `GeometryReader` here (that nesting produced a corner-
+    // radius/size mismatch that bulged past the row bounds at small fractions).
 
     var body: some View {
         HStack(spacing: 6) {
@@ -72,11 +77,13 @@ private struct DirBarRow: View {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 9).fill(DS.row)
                 if maxBytes > 0 {
-                    GeometryReader { geo in
-                        RoundedRectangle(cornerRadius: 9)
-                            .fill(DS.amber.opacity(0.18))
-                            .frame(width: max(0, geo.size.width * CGFloat(min(Double(bytes) / Double(maxBytes), 1))))
-                    }
+                    BarFillLayer(spans: [BarSpan(key: "gauge",
+                                                 fraction: CGFloat(min(Double(bytes) / Double(maxBytes), 1)),
+                                                 alpha: 0.18,
+                                                 color: DS.amber)],
+                                 layout: .single(minWidth: 0, cornerRadius: 9),
+                                 animated: !reduceMotion)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
