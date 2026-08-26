@@ -18,8 +18,9 @@ enum Metric: Hashable { case cpu, mem }
 /// Shared curve for the row gauge width transition AND row-reorder movement —
 /// deliberately the SAME `Animation` value for both, so a row and its own
 /// gauge move as one object when a live tick both re-sorts and re-values the
-/// list (prototype's `cubic-bezier(0.22, 0.61, 0.36, 1)`, 0.8 s).
-private let processRowMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.8)
+/// list (prototype's `cubic-bezier(0.22, 0.61, 0.36, 1)`, shortened to 0.45 s
+/// — V2-RELAYOUT-RESIDUAL, CPU cost is ~linear in duration).
+private let processRowMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.45)
 
 /// 5-stop CPU heat ramp for the CPU-sorted list's row gauge (Spec: value-based
 /// ramp, NOT the flat single-color fill the mem-sorted list uses). Evaluated at

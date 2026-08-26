@@ -121,11 +121,11 @@ struct BarFillLayer: NSViewRepresentable {
 // MARK: - The CALayer host
 
 final class BarFillLayerView: NSView {
-    /// The app-wide bar curve, `cubic-bezier(0.22, 0.61, 0.36, 1)` / 0.8 s — the
-    /// exact same control points SwiftUI's `.timingCurve(0.22, 0.61, 0.36, 1,
-    /// duration: 0.8)` used at all three sites.
+    /// The app-wide bar curve, `cubic-bezier(0.22, 0.61, 0.36, 1)`, shortened to
+    /// 0.45 s (V2-RELAYOUT-RESIDUAL, CPU cost is ~linear in duration) — kept in
+    /// sync with `processRowMotion` in `ProcessCards.swift`.
     private static let barCurve = CAMediaTimingFunction(controlPoints: 0.22, 0.61, 0.36, 1)
-    private static let barDuration: CFTimeInterval = 0.8
+    private static let barDuration: CFTimeInterval = 0.45
     /// The memory card's hover dim, matching `.easeOut(duration: 0.12)`.
     private static let dimCurve = CAMediaTimingFunction(controlPoints: 0, 0, 0.58, 1)
     private static let dimDuration: CFTimeInterval = 0.12

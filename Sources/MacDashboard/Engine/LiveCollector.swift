@@ -53,8 +53,8 @@ final class LiveCollector {
     // into global UI state at all.
     func sampleProcesses(limit: Int) -> (topCPU: [ProcEntry], topMem: [ProcEntry]) {
         let procs = procSampler.sample()
-        let topCPU = Array(procs.sorted { ($0.cpu ?? 0) > ($1.cpu ?? 0) }.prefix(limit)).reranked()
-        let topMem = Array(procs.sorted { ($0.memBytes ?? 0) > ($1.memBytes ?? 0) }.prefix(limit)).reranked()
+        let topCPU = Array(procs.rankedByCPU().prefix(limit)).reranked()
+        let topMem = Array(procs.rankedByMem().prefix(limit)).reranked()
         return (topCPU, topMem)
     }
 
@@ -225,11 +225,59 @@ private extension Array where Element == ProcEntry {
     }
 }
 
+/// V2-RELAYOUT-RESIDUAL: the single deterministic tie-break behind both rankings —
+/// pid ascending, `nil` pid last, name as the final discriminator so even two
+/// pid-less rows can never swap. Its only job is to make the order a pure function
+/// of the snapshot's CONTENT, never of `/bin/ps`'s emission order or of introsort's
+/// internal state.
+private func procTieBreak(_ a: ProcEntry, _ b: ProcEntry) -> Bool {
+    switch (a.pid, b.pid) {
+    case let (x?, y?): return x != y ? x < y : a.name < b.name
+    case (_?, nil):    return true
+    case (nil, _?):    return false
+    case (nil, nil):   return a.name < b.name
+    }
+}
+
 // Separate, non-private extension (V2-FIX-ROWID Step 2): `reranked()` above lives in
 // a `private extension` (file-scope fileprivate), which `Checks/main.swift` — a
 // different file — cannot see. This helper needs Checks coverage, so it gets its
 // own non-private extension instead of joining that one.
 extension Array where Element == ProcEntry {
+    /// Ranks by the CPU% the row actually DISPLAYS — tenths of a percent, matching
+    /// `fmtNum(_:decimals: 1)` in ProcessRowView — not by the raw Double, then breaks
+    /// ties deterministically.
+    ///
+    /// V2-RELAYOUT-RESIDUAL: `sorted { ($0.cpu ?? 0) > ($1.cpu ?? 0) }` was neither
+    /// stable nor display-aligned, so the near-identical sub-1% tail of the list (and
+    /// with it the `prefix(limit)` membership) re-permuted on sampling noise every 6 s
+    /// tick. Every permutation changed `ProcessListCard.rowOrder`, which opened the
+    /// 0.8 s reorder transaction (`ProcessCards.swift:241`) — the single most expensive
+    /// thing this app does — to animate a change the user cannot see in the numbers.
+    /// Rows still reorder for any difference the display shows; they no longer reorder
+    /// for differences it doesn't.
+    func rankedByCPU() -> [ProcEntry] {
+        sorted { a, b in
+            let ka = ((a.cpu ?? 0) * 10).rounded()
+            let kb = ((b.cpu ?? 0) * 10).rounded()
+            if ka != kb { return ka > kb }
+            return procTieBreak(a, b)
+        }
+    }
+
+    /// Ranks by `memBytes` exactly as before — only the tie-break is new (see
+    /// `rankedByCPU`). Footprints are not quantised to display precision here: the
+    /// memory list is not the default view and its ranks are stable at a 6 s cadence,
+    /// so bucketing would be scope this block didn't measure a need for.
+    func rankedByMem() -> [ProcEntry] {
+        sorted { a, b in
+            let ma = a.memBytes ?? 0
+            let mb = b.memBytes ?? 0
+            if ma != mb { return ma > mb }
+            return procTieBreak(a, b)
+        }
+    }
+
     /// Reorders a freshly-sorted snapshot to match a previously captured pid
     /// sequence, so the list holds still while a detail panel is open.
     ///

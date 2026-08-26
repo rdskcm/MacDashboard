@@ -103,6 +103,43 @@ do {
 }
 
 // =====================================================================
+// MARK: - Array<ProcEntry>.rankedByCPU()/rankedByMem() (V2-RELAYOUT-RESIDUAL)
+// =====================================================================
+
+do {
+    // Both render as "0,2%": a difference below display precision must NOT reorder,
+    // and the result must not depend on the input order (Array.sorted is unstable).
+    let hi = ProcEntry(rank: 0, name: "hi", cpu: 0.24, pid: 900)
+    let lo = ProcEntry(rank: 0, name: "lo", cpu: 0.16, pid: 400)
+    check([hi, lo].rankedByCPU().map(\.pid) == [400, 900],
+          "rankedByCPU: sub-display-precision difference does not reorder (pid decides)")
+    check([lo, hi].rankedByCPU().map(\.pid) == [400, 900],
+          "rankedByCPU: same result from the opposite input order")
+
+    // A difference the display DOES show still ranks by value.
+    let big = ProcEntry(rank: 0, name: "big", cpu: 0.9, pid: 999)
+    check([lo, big].rankedByCPU().map(\.pid) == [999, 400],
+          "rankedByCPU: a visible CPU difference still ranks by value")
+
+    // nil cpu ranks as 0 and lands last, as it did before.
+    let none = ProcEntry(rank: 0, name: "none", cpu: nil, pid: 100)
+    check([none, lo].rankedByCPU().map(\.pid) == [400, 100],
+          "rankedByCPU: nil cpu ranks as 0")
+
+    // Mem list: equal footprints break by pid, not by input order.
+    let m1 = ProcEntry(rank: 0, name: "m1", cpu: 0, memBytes: 5 * MIB, pid: 700)
+    let m2 = ProcEntry(rank: 0, name: "m2", cpu: 0, memBytes: 5 * MIB, pid: 300)
+    check([m1, m2].rankedByMem().map(\.pid) == [300, 700],
+          "rankedByMem: equal memBytes break by pid")
+    check([m2, m1].rankedByMem().map(\.pid) == [300, 700],
+          "rankedByMem: same result from the opposite input order")
+    // A real difference still wins over the tie-break.
+    let m3 = ProcEntry(rank: 0, name: "m3", cpu: 0, memBytes: 9 * MIB, pid: 800)
+    check([m2, m3].rankedByMem().map(\.pid) == [800, 300],
+          "rankedByMem: a larger footprint outranks a lower pid")
+}
+
+// =====================================================================
 // MARK: - Parsers.parseSize
 // =====================================================================
 
