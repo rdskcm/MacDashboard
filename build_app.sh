@@ -121,13 +121,19 @@ else
   /usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$DIST/Contents/Info.plist" 2>/dev/null || true
 fi
 
-echo "== codesign (ad-hoc) =="
-codesign --force --deep --sign - "$DIST"
+echo "== codesign (ad-hoc, hardened runtime) =="
+# --options runtime: without the hardened runtime DYLD_INSERT_LIBRARIES is honoured
+# and library validation is off, so any local process running as this user could
+# inject into an app the README asks users to grant Full Disk Access and inherit its
+# TCC grants. --entitlements: the hardened runtime blocks in-process Apple events
+# (AdviceActionRunner.emptyTrash) unless com.apple.security.automation.apple-events
+# is present.
+codesign --force --deep --options runtime --entitlements MacDashboard.entitlements --sign - "$DIST"
 
 echo "== result =="
 lipo -archs "$DIST/Contents/MacOS/MacDashboard" 2>/dev/null || true
 du -sh "$DIST"
-codesign -dv "$DIST" 2>&1 | head -3
+codesign -dvv "$DIST" 2>&1 | grep -E '^(Identifier|CodeDirectory|Signature)' | head -3
 
 if [ "$INSTALL" = "1" ]; then
   echo "== install to ~/Applications =="

@@ -20,7 +20,10 @@ enum PrivilegedRunner {
     /// `command` is a raw shell string, not argv — callers MUST quote every
     /// embedded value themselves (see DashboardModel's `'...'` + `'\''` pattern).
     static func run(_ command: String) -> Outcome {
-        let sudoResult = runProcess("/usr/bin/sudo", ["sh", "-c", command], timeout: 120)
+        // Absolute /bin/sh, never the bare name `sh`: sudo resolves a bare command
+        // name through the CALLER's PATH (macOS sudoers sets no secure_path), and a
+        // shell-launched build inherits group-writable prefixes like /opt/homebrew/bin.
+        let sudoResult = runProcess("/usr/bin/sudo", ["/bin/sh", "-c", command], timeout: 120)
         if sudoResult.exitCode == 0 { return .success }
 
         let escaped = command
@@ -49,6 +52,10 @@ enum PrivilegedRunner {
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
         process.standardInput = FileHandle.nullDevice
+        // Pinned, like every CommandRunner child: the inherited environment would put
+        // an attacker-writable PATH (and vars such as BASH_ENV) in front of a process
+        // that is about to become root.
+        process.environment = CommandRunner.defaultEnvironment
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()

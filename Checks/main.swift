@@ -1463,6 +1463,12 @@ do {
 runSmartToolsAvailabilityChecks()
 
 // =====================================================================
+// MARK: - sudo path safety (V2-SECURITY-FIX M2, in SudoPathSafetyChecks.swift)
+// =====================================================================
+
+runSudoPathSafetyChecks()
+
+// =====================================================================
 // MARK: - LaunchdPlistInspector (Block N6, in LaunchdPlistInspectorChecks.swift)
 // =====================================================================
 

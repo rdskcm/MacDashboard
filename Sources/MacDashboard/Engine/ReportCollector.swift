@@ -547,10 +547,15 @@ final class ReportCollector {
             // wear, etc.). MUST be -A (attributes-only): -a returns a benign nonzero
             // exit on this controller (Error Information Log fetch fails) — and exit
             // codes are ignored anyway (CommandRunner returns stdout regardless).
-            // sudo -n first (whitelisted NOPASSWD rule), then plain — both fail
+            // sudo -n first (whitelisted NOPASSWD rule) — but ONLY when the resolved
+            // smartctl and its whole directory chain are root-owned and not
+            // group-writable; otherwise straight to the unprivileged run. Both fail
             // fast, never prompt (same chain as the external path below).
             if let sc = smartctl {
-                let raw = CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
+                let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
+                    ? CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
+                    : nil
+                let raw = sudoRaw
                     ?? CommandRunner.run(sc, ["-A", "disk0"], timeout: 15, scope: cancelScope)
                 if let raw {
                     let attrs = Parsers.smartctlAttrs(raw)
@@ -586,8 +591,12 @@ final class ReportCollector {
                 }
                 var attrs: [(String, String)] = []
                 if let sc = smartctl {
-                    // sudo -n first (NOPASSWD rule), then plain — both fail fast, never prompt.
-                    let raw = CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
+                    // sudo -n first (NOPASSWD rule) and only from a root-owned,
+                    // non-group-writable path, then plain — both fail fast, never prompt.
+                    let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
+                        ? CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
+                        : nil
+                    let raw = sudoRaw
                         ?? CommandRunner.run(sc, ["-A", dev], timeout: 15, scope: cancelScope)
                     if let raw { attrs = Parsers.smartctlAttrs(raw) }
                 }
@@ -666,6 +675,37 @@ final class ReportCollector {
             if FileManager.default.isExecutableFile(atPath: p) { return p }
         }
         return nil
+    }
+
+    /// Whether `path` is safe to hand to `sudo`: the binary itself (symlinks resolved)
+    /// and every ancestor directory up to `/` must be root-owned and free of group and
+    /// world write bits. On a standard Homebrew install `/opt/homebrew/{bin,sbin}` are
+    /// `drwxrwxr-x <user>:admin`, so anyone in the admin group can replace the file
+    /// there — and wherever a NOPASSWD sudoers rule for smartctl exists, that is
+    /// passwordless root. A writable *directory* is enough (unlink + recreate), which
+    /// is why this walks the whole chain instead of stat'ing only the file.
+    static func isSafeToRunViaSudo(_ path: String) -> Bool {
+        // realpath(3), not URL.resolvingSymlinksInPath(): the latter deliberately
+        // leaves macOS's special-cased top-level symlinks (/tmp, /var, /etc ->
+        // their /private/... targets) unresolved, which would let a path reached
+        // through one of them be judged on the symlink node's own (safe-looking)
+        // permissions instead of the real, group/world-writable target.
+        guard let real = realpath(path, nil) else { return false }
+        defer { free(real) }
+        let resolved = String(cString: real)
+        guard resolved.hasPrefix("/") else { return false }
+        var component = resolved
+        while true {
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: component),
+                  let uid = attrs[.ownerAccountID] as? NSNumber,
+                  let mode = attrs[.posixPermissions] as? NSNumber
+            else { return false }                       // missing/unstattable => not safe
+            if uid.uint32Value != 0 { return false }    // not root-owned
+            if mode.uint16Value & 0o022 != 0 { return false }   // group- or world-writable
+            if component == "/" { return true }
+            let parent = (component as NSString).deletingLastPathComponent
+            component = parent.isEmpty ? "/" : parent
+        }
     }
 
     // MARK: - SMART tools availability (Block N8: install-smartmontools UI)
