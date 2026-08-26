@@ -273,7 +273,7 @@ private struct HistoryTrendChart: View {
                 .font(.system(size: 11))
                 .foregroundStyle(DS.muted)
             Spacer()
-            Text("\(points.first?.id ?? "") → \(points.last?.id ?? "")")
+            Text("\(points.first.map { fmtDisplayDay($0.date) } ?? "") → \(points.last.map { fmtDisplayDay($0.date) } ?? "")")
                 .font(.system(size: 11))
                 .monospacedDigit()
                 .foregroundStyle(DS.muted)

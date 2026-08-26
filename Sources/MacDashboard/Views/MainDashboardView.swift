@@ -12,6 +12,26 @@
 import SwiftUI
 import Charts
 
+/// Vertical band the window's traffic-light buttons occupy, measured from the window's
+/// top edge. `.windowStyle(.hiddenTitleBar)` (MacDashboardApp.swift:26) keeps AppKit's
+/// standard titlebar and lets it draw those buttons over our content — they are not
+/// SwiftUI views, so nothing in `toolbar`'s layout knows they are there. `toolbar`'s
+/// `.padding(.leading, 78)` is the app's acknowledgement of them on the horizontal axis
+/// for every child EXCEPT `titleBlock` (see `headerTitlePullLeft` below); this constant is
+/// the vertical counterpart, and it is why the title block is padded down instead of being
+/// left to centre itself against the window edge. Calibrated once from a screenshot — the
+/// acceptance test is equal INK gaps above and below the title block (see the block's
+/// verification), not this literal.
+private let headerTrafficLightBand: CGFloat = 21
+
+/// Once the title sits below the traffic lights rather than beside them (see
+/// `headerTrafficLightBand` above), it no longer needs the full `.padding(.leading, 78)`
+/// gutter that the tab control and the rest of the row still need — user decision
+/// 2026-08-26 (V2-UI-POLISH). Applied as an `.offset`, not a smaller padding, so ONLY the
+/// title's paint position moves; the tab control's x stays anchored to the row's shared
+/// leading padding exactly as before, undisturbed by the title's own position.
+private let headerTitlePullLeft: CGFloat = 58
+
 @MainActor
 struct MainDashboardView: View {
     var model: DashboardModel
@@ -51,6 +71,15 @@ struct MainDashboardView: View {
     private var toolbar: some View {
         HStack(alignment: .center, spacing: 16) {
             titleBlock
+                // Pushes the title/subtitle clear of the traffic lights, so the toolbar's
+                // own `.padding(.top, 14)` below reads as the gap between the buttons and
+                // the title — matching the 14 pt between the subtitle and the header's
+                // bottom hairline. Padding, not `.offset`: the header has to actually grow,
+                // or the subtitle would ride into that hairline. `titleBlock` is the
+                // tallest child, so the tab control and the chips stay exactly centred in
+                // the taller header rather than being dragged down with the title.
+                .padding(.top, headerTrafficLightBand)
+                .offset(x: -headerTitlePullLeft)
                 .layoutPriority(1)
             // Anchored immediately after the title at a fixed gap (spacing: 16 above) —
             // this control's x position must never depend on window width. All slack

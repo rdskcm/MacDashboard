@@ -38,7 +38,7 @@ struct Chip: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .font(.system(size: 11, weight: .medium))
             .foregroundStyle(DS.muted)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)

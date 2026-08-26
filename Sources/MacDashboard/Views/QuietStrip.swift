@@ -85,7 +85,7 @@ struct QuietStrip: View {
         if sections.isEmpty {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 ForEach(sections) { section in
                     QuietStripRow(section: section, isOpen: open.contains(section.id), reduceMotion: reduceMotion) {
                         if open.contains(section.id) { open.remove(section.id) } else { open.insert(section.id) }
@@ -130,7 +130,12 @@ private struct QuietStripRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        // 0, not 2: the disclosure grid below is permanently mounted and
+        // collapses to height 0, and a VStack still spaces a zero-height child — that
+        // reserved gap left the closed row's fill 2 pt off-centre inside `QuietStrip`'s
+        // 6 pt plate padding. The open-state gap now lives in the grid's own top inset
+        // below.
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 9) {
                 DSDisclosureBars(expanded: isOpen)
                 Text(section.title)
@@ -173,7 +178,7 @@ private struct QuietStripRow: View {
                     .hoverTip(sectionRowTip(row.id))
                 }
             }
-            .padding(EdgeInsets(top: 4, leading: 33, bottom: 10, trailing: 12))
+            .padding(EdgeInsets(top: 6, leading: 33, bottom: 10, trailing: 12))
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
                 measuredHeight = newHeight
             }

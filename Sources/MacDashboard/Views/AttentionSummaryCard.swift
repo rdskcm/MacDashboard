@@ -388,24 +388,27 @@ private struct TipCapsuleView: View {
         ))
     }
 
-    /// Verb (default) / spinner (busy) / checkmark (done) — same idiom as
-    /// `ItemPlate.trailingSlot`, including `dsSwapInPlace`: the verb stays the
-    /// layout's size determinant so the capsule keeps its width for the whole
-    /// action and its FlowLayout neighbours do not reflow (V2-DESTRUCTIVE-UX —
-    /// the trash busy state now lasts as long as Finder takes). `busyDetail`
-    /// (long brew progress strings) is intentionally NOT surfaced here: the
-    /// capsule is `.fixedSize()` nowrap inside a `FlowLayout`, so only the
-    /// spinner fits.
+    /// Verb (default) / spinner (busy) / checkmark (done). `busy` keeps the verb as the
+    /// layout's size determinant via `dsSwapInPlace`, so the capsule cannot change width
+    /// while an action runs and its `FlowLayout` neighbours never reflow mid-action
+    /// (V2-FIX-OPTICAL / V2-DESTRUCTIVE-UX — the trash busy state lasts as long as Finder
+    /// takes). `done` is different: it is a durable state that survives until the next
+    /// report refresh (AdviceActionDispatch.swift:44-46), and holding the hidden verb's
+    /// width there left the ✓ floating in dead space (V2-UI-POLISH) — so in the done
+    /// state the ✓ is a real layout participant and the capsule shrinks to its content.
+    /// `busyDetail` (long brew progress strings) is intentionally NOT surfaced here: the
+    /// capsule is nowrap inside a `FlowLayout`, so only the spinner fits.
+    @ViewBuilder
     private var trailingSlot: some View {
-        Text(capsule.verb).font(.system(size: 12.5, weight: .semibold))
-            .foregroundStyle(DS.accentInk)
-            .dsSwapInPlace(busy || done) {
-                if busy {
+        if done {
+            Text("\u{2713}").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.greenInk)
+        } else {
+            Text(capsule.verb).font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(DS.accentInk)
+                .dsSwapInPlace(busy) {
                     ProgressView().controlSize(.mini)
-                } else {
-                    Text("\u{2713}").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS.greenInk)
                 }
-            }
+        }
     }
 }
 

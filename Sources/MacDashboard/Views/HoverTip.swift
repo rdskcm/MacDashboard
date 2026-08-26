@@ -30,79 +30,15 @@ private struct AnchorFinder: NSViewRepresentable {
     }
 }
 
-/// `.shadow()` draws outside the view's reported size and doesn't participate in
-/// layout, but the panel is sized to `fittingSize` and the compositor hard-clips
-/// anything outside the window frame. Without transparent margin around the bubble,
-/// the soft shadow would be cut off at the (invisible) panel edge — reintroducing a
-/// hard-edge look. This margin gives the shadow room; `position(_:near:in:)` below
-/// subtracts it back out so the *visible* rounded-rect still sits `gap` points from
-/// the anchor.
-private let tipBubbleMargin: CGFloat = 10
-
-/// Maximum width of the bubble's *content* (the padded text box, before the
-/// transparent shadow margin), matching the previous `.frame(maxWidth: 280)`.
-private let tipContentMaxWidth: CGFloat = 320
-
-private let tipHorizontalPadding: CGFloat = 8
-private let tipVerticalPadding: CGFloat = 7
-
-/// `NSHostingView.fittingSize` asks the view for its size at an *unspecified*
-/// (ideal) proposed width. A `.frame(maxWidth:)` responds to an unspecified
-/// incoming width by reporting `min(child's unconstrained single-line width, maxWidth)`
-/// for its own size, but that unconstrained-width query is what it also hands to the
-/// child — so the child `Text` never actually re-flows at 280pt, and the reported
-/// height is always the single-line height, regardless of how many lines the text
-/// wraps to once really laid out in a 280pt-wide window. That's the sizing bug: the
-/// panel (and its rounded-rect background) ends up sized for one line while the text
-/// itself wraps to several and spills past the edges.
-///
-/// The fix: make the bubble's width *fixed*, not a max. A `.frame(width:)` reports
-/// (and hands its child) that exact width regardless of the proposal it receives —
-/// including the unspecified-width query `fittingSize` uses — so `Text` is forced to
-/// really wrap at that width during the very same measurement pass that computes the
-/// height. `contentWidth` below is that fixed width, precomputed once per `show()` as
-/// `min(natural single-line width, tipContentMaxWidth)` so short texts still hug their
-/// content instead of always rendering a full 280pt-wide bubble.
-private struct TipBubble: View {
-    let text: String
-    let contentWidth: CGFloat
-
-    var body: some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(.primary)
-            .padding(.horizontal, tipHorizontalPadding).padding(.vertical, tipVerticalPadding)
-            .frame(width: contentWidth)
-            .fixedSize(horizontal: false, vertical: true)
-            .background(RoundedRectangle(cornerRadius: 7).fill(Color(light: Color(hex: 0xECECEC), dark: Color(hex: 0x2D2D2D))))
-            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.primary.opacity(0.15)))
-            .shadow(color: .black.opacity(0.22), radius: 5, y: 2)
-            .allowsHitTesting(false)
-            .padding(tipBubbleMargin) // transparent — see comment on tipBubbleMargin
-    }
-}
-
-/// The natural (unwrapped, single-line) width of `text` at the bubble's font/padding,
-/// clamped to `tipContentMaxWidth`. Feeding this in as `TipBubble.contentWidth` is what
-/// makes short texts hug their content instead of always spanning the full max width —
-/// see the comment on `TipBubble` for why a *measured fixed* width is required at all.
-private func tipContentWidth(for text: String) -> CGFloat {
-    let probe = NSHostingView(rootView:
-        Text(text)
-            .font(.caption)
-            .padding(.horizontal, tipHorizontalPadding).padding(.vertical, tipVerticalPadding)
-            .fixedSize()
-    )
-    return min(probe.fittingSize.width, tipContentMaxWidth)
-}
-
 // MARK: - Attention-style variant (Block V2-SUMMARY, additive)
 //
-// `.hoverTip(_:)` / `TipBubble` / `show(text:anchor:)` / `position(_:near:in:)`
-// above are the shared path and stay byte-identical — nothing above this
-// comment is touched. `.attentionTip(_:)` below is a new sibling entry point
-// (recommendation-capsule explanations) with its own bubble styling, its own
-// measuring function and its own positioning math; it happens to reuse
+// `.hoverTip(_:)` / `show(text:anchor:)` / `position(_:near:in:)` above are the
+// shared path — its positioning (centred under the anchor, flipping above when
+// it would fall off screen) is untouched, but its bubble content now renders
+// `AttentionTipBubble` too (V2-UI-POLISH), the same look `.attentionTip(_:)`
+// below uses. `.attentionTip(_:)` is a sibling entry point (recommendation-
+// capsule explanations) with its own positioning math (left-aligned to the
+// anchor, above by default, clamps instead of flipping); it happens to reuse
 // `TipPanelController`'s single lazily-created `panel` for lifecycle economy,
 // but a given controller instance only ever serves one style (style is a
 // `let` on the owning `HoverTipModifier`), so the two paths never collide.
@@ -113,20 +49,26 @@ private func tipContentWidth(for text: String) -> CGFloat {
 /// above verbatim; `.above` is new, consumed only by `.attentionTip(_:)`.
 enum TipPlacement { case below, above }
 
-/// `.standard` (default) renders `TipBubble` via the untouched `show()` path.
-/// `.attention` renders `AttentionTipBubble` via the new `showAttention()`
-/// path below — different fill/border/shadow/corner-radius/padding, a
-/// fade+rise entrance, and left-aligned-to-anchor positioning instead of
-/// centered.
+/// `.standard` (default) means centred below the anchor, flips when it would
+/// go off screen. `.attention` means left-aligned to the anchor, above by
+/// default, clamps instead of flipping. Both now render the same
+/// `AttentionTipBubble` look via the shared `showAttention()`/`show()` paths
+/// below — different positioning, same fill/border/shadow/corner-radius/padding
+/// and fade+rise entrance.
 enum TipStyle { case standard, attention }
 
 private let attnTipHorizontalPadding: CGFloat = 11
 private let attnTipVerticalPadding: CGFloat = 9
 private let attnTipContentMaxWidth: CGFloat = 340
 private let attnTipCornerRadius: CGFloat = 9
-/// Wider than `tipBubbleMargin`: this bubble's shadow (radius 12, y 8) reaches
-/// further than the standard bubble's (radius 5, y 2) and would clip against
-/// the (invisible) panel edge without more transparent room around it.
+/// The single bubble margin, sized for this bubble's shadow (radius 12, y 8):
+/// `.shadow()` draws outside the view's reported size and doesn't participate
+/// in layout, but the panel is sized to `fittingSize` and the compositor
+/// hard-clips anything outside the window frame. Without transparent margin
+/// around the bubble, the soft shadow would be cut off at the (invisible)
+/// panel edge — reintroducing a hard-edge look. This margin gives the shadow
+/// room; `position(_:near:in:)` subtracts it back out so the *visible*
+/// rounded-rect still sits `gap` points from the anchor.
 private let attnTipBubbleMargin: CGFloat = 26
 private let attnTipGap: CGFloat = 9
 /// Rise distance for the fade+rise entrance (spec: "3 pt rise"). Deliberately
@@ -143,7 +85,25 @@ private let attnTipEnterDuration: Double = 0.14
 /// (`lineSpacing` approximates CSS `line-height: 1.4` as `fontSize * 0.4` extra
 /// leading — SwiftUI has no direct line-height multiplier), `DS.inkSoft`,
 /// `DS.ground2` fill, `DS.lineStrong` border, a fade+rise entrance that drops
-/// the rise (fade only) under Reduce Motion. Non-interactive, like `TipBubble`.
+/// the rise (fade only) under Reduce Motion. Non-interactive.
+///
+/// `NSHostingView.fittingSize` asks the view for its size at an *unspecified*
+/// (ideal) proposed width. A `.frame(maxWidth:)` responds to an unspecified
+/// incoming width by reporting `min(child's unconstrained single-line width, maxWidth)`
+/// for its own size, but that unconstrained-width query is what it also hands to the
+/// child — so the child `Text` never actually re-flows at the max width, and the
+/// reported height is always the single-line height, regardless of how many lines
+/// the text wraps to once really laid out at that width. That's the sizing bug: the
+/// panel (and its rounded-rect background) ends up sized for one line while the text
+/// itself wraps to several and spills past the edges.
+///
+/// The fix: make the bubble's width *fixed*, not a max. A `.frame(width:)` reports
+/// (and hands its child) that exact width regardless of the proposal it receives —
+/// including the unspecified-width query `fittingSize` uses — so `Text` is forced to
+/// really wrap at that width during the very same measurement pass that computes the
+/// height. `contentWidth` below is that fixed width, precomputed once per `show()` as
+/// `min(natural single-line width, attnTipContentMaxWidth)` so short texts still hug
+/// their content instead of always rendering a full max-width bubble.
 private struct AttentionTipBubble: View {
     let text: String
     let contentWidth: CGFloat
@@ -177,8 +137,11 @@ private struct AttentionTipBubble: View {
     }
 }
 
-/// Mirrors `tipContentWidth(for:)` but measured at the attention bubble's own
-/// font/padding (12 pt text, 11/9 padding vs. the standard bubble's caption/8/7).
+/// The natural (unwrapped, single-line) width of `text` at the bubble's font/padding,
+/// clamped to `attnTipContentMaxWidth`. Feeding this in as `AttentionTipBubble.contentWidth`
+/// is what makes short texts hug their content instead of always spanning the full max
+/// width — see the doc comment on `AttentionTipBubble` for why a *measured fixed* width
+/// is required at all.
 private func attnTipContentWidth(for text: String) -> CGFloat {
     let probe = NSHostingView(rootView:
         Text(text)
@@ -214,8 +177,9 @@ private final class TipPanelController: NSObject {
         guard !text.isEmpty, let window = anchor.window else { return }
         anchorView = anchor
 
-        let contentWidth = tipContentWidth(for: text)
-        let hosting = NSHostingView(rootView: TipBubble(text: text, contentWidth: contentWidth))
+        let contentWidth = attnTipContentWidth(for: text)
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let hosting = NSHostingView(rootView: AttentionTipBubble(text: text, contentWidth: contentWidth, reduceMotion: reduceMotion))
         let fitting = hosting.fittingSize
         hosting.frame = NSRect(origin: .zero, size: fitting)
 
@@ -286,14 +250,15 @@ private final class TipPanelController: NSObject {
 
         // AppKit screen coordinates have a bottom-left origin, so "above the anchor"
         // means a larger Y. Flip below if that would push the bubble off the top edge.
-        // `panel.frame` includes `tipBubbleMargin` of transparent shadow room on every
-        // side (see TipBubble), so the *visible* rounded-rect sits `tipBubbleMargin`
-        // inside the panel edge — offset the gap by that margin so the visible bubble,
-        // not the invisible panel frame, ends up `gap` points from the anchor.
+        // `panel.frame` includes `attnTipBubbleMargin` of transparent shadow room on
+        // every side (see AttentionTipBubble), so the *visible* rounded-rect sits
+        // `attnTipBubbleMargin` inside the panel edge — offset the gap by that margin
+        // so the visible bubble, not the invisible panel frame, ends up `gap` points
+        // from the anchor.
         let gap: CGFloat = 8
-        var y = anchorScreenRect.maxY + gap - tipBubbleMargin
-        if y + bubbleSize.height > visible.maxY + tipBubbleMargin {
-            y = anchorScreenRect.minY - gap + tipBubbleMargin - bubbleSize.height // flip below
+        var y = anchorScreenRect.maxY + gap - attnTipBubbleMargin
+        if y + bubbleSize.height > visible.maxY + attnTipBubbleMargin {
+            y = anchorScreenRect.minY - gap + attnTipBubbleMargin - bubbleSize.height // flip below
         }
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
@@ -459,8 +424,9 @@ struct HoverTipModifier: ViewModifier {
             }
     }
 
-    /// The only place `style` is consulted: dispatches to the untouched
-    /// standard path or the new attention path (Block V2-SUMMARY, additive).
+    /// The only place `style` is consulted: dispatches to the standard
+    /// (centred below, flips near a screen edge) path or the attention
+    /// (left-aligned above, clamps) path — both render `AttentionTipBubble`.
     private func show(text: String, anchor: NSView) {
         switch style {
         case .standard: controller.show(text: text, anchor: anchor)

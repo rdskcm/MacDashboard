@@ -85,3 +85,21 @@ func tight(_ parts: (value: String, unit: String?)) -> String {
 func tight(_ parts: (value: String, unit: String)) -> String {
     "\(parts.value)\u{2009}\(parts.unit)"
 }
+
+/// Display-only day formatter for already-parsed dates: the history file's
+/// "yyyy-MM-dd" ids are parsed with fixed `en_US_POSIX` formatters
+/// (`HistoryCard.dateFormatter`, `HistorySeries.dayFormatter`, `HistoryStore.dayFormatter`)
+/// because day-boundary math must not depend on the user's locale — those stay. This one
+/// is the opposite job: render a `Date` for a human in the CURRENT system locale. Never
+/// parse with it. `.short` keeps the chart footer compact and digit-aligned.
+private let displayDayFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = .current
+    f.timeZone = .current
+    f.dateStyle = .short
+    f.timeStyle = .none
+    return f
+}()
+
+/// System-locale short date for display (never for parsing) — see `displayDayFormatter`.
+func fmtDisplayDay(_ date: Date) -> String { displayDayFormatter.string(from: date) }

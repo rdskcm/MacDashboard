@@ -556,6 +556,12 @@ private struct AutoSectionRow<Content: View>: View {
 
             content()
                 .padding(.leading, 18)
+                // 6 pt clear of the header's own hover rectangle (:549), so the fill
+                // never touches the first pill. Matches `PillFlow`'s own
+                // `FlowLayout(spacing: 6)` (SharedUI.swift:801), so the header→pill
+                // rhythm equals the pill→pill rhythm. Placed INSIDE the measured
+                // subtree (before `.onGeometryChange`) so it collapses with it.
+                .padding(.top, 6)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
                     measuredHeight = newHeight
                 }
