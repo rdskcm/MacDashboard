@@ -20,7 +20,8 @@ enum Parsers {
         var name: String        // full basename (psCommandName), never truncation-marked
         var cpuSeconds: Double  // CUMULATIVE cpu time since the process started
         var memBytes: Int64     // RSS as `ps` printed it — NOT the footprint the UI shows;
-                                // ProcessSampler substitutes `proc_pid_rusage` where it can
+                                // ProcessSampler substitutes `top`'s MEM column (all pids)
+                                // and keeps this only for a row `top` didn't report
     }
 
     /// Parses `/bin/ps -axww -o pid=,rss=,time=,comm=` output (no header line — the
@@ -39,6 +40,27 @@ enum Parsers {
             rows.append(PSRow(pid: pid, name: name, cpuSeconds: secs, memBytes: rssKB * 1024))
         }
         return rows
+    }
+
+    /// pid -> memory footprint in bytes, from `/usr/bin/top -l 1 -stats pid,command,mem`.
+    ///
+    /// Pure and total, structured like `duKilobyteLines`: a line counts only if its FIRST
+    /// whitespace field is an integer pid, which drops top's whole banner (`Processes:`,
+    /// `Load Avg:`, `PhysMem:`, the timestamp) and its `PID COMMAND MEM` header without
+    /// pattern-matching any of them. MEM is the LAST field because COMMAND may contain
+    /// spaces, and it is parsed by `parseSize`, which already handles top's K/M/G suffixes
+    /// and its trailing `+`/`-` delta markers. A row whose MEM does not parse is simply
+    /// absent from the result — its process keeps `ps` RSS rather than a bogus 0.
+    static func topMemoryFootprints(_ text: String) -> [Int32: Int64] {
+        var out: [Int32: Int64] = [:]
+        for line in text.components(separatedBy: "\n") {
+            let fields = splitWhitespaceLimited(line, maxSplit: 1)
+            guard fields.count == 2, let pid = Int32(fields[0]) else { continue }
+            guard let memToken = fields[1].split(whereSeparator: { $0 == " " || $0 == "\t" }).last,
+                  let bytes = parseSize(String(memToken)), bytes > 0 else { continue }
+            out[pid] = bytes
+        }
+        return out
     }
 
     /// Parses macOS `ps`'s cumulative-time text (`%3ld:%02ld.%02ld` = `MMM:SS.hh`,

@@ -93,14 +93,17 @@ func tight(_ parts: (value: String, unit: String)) -> String {
 /// opposite job: render a `Date` for a human using the Mac's system Region setting
 /// (day/month/year order, separators) — independent of the app's own UI language toggle,
 /// so an app set to English on a Mac whose Region is e.g. Germany still shows German-style
-/// dates. `.autoupdatingCurrent` (not `.current`) because it is a special `Locale` value
-/// that itself tracks live Region changes even when captured once in this `let`, so a
-/// mid-session Region change is reflected on the next render without relaunching the app.
+/// dates. Both `locale` and `timeZone` are `.autoupdatingCurrent` (not `.current`) so this
+/// once-captured `let` reads today's Region/time-zone rather than the one in effect when the
+/// formatter was built. NOT verified in this project: whether a CACHED `DateFormatter`
+/// re-derives its `.short` PATTERN after a mid-session Region change, or only picks it up on
+/// the next formatter creation — Foundation documents neither, so treat live pattern updates
+/// as unproven. Worst case is a stale day/month ORDER until relaunch, never a wrong date.
 /// Never parse with this formatter. `.short` keeps the chart footer compact and digit-aligned.
 private let displayDayFormatter: DateFormatter = {
     let f = DateFormatter()
     f.locale = .autoupdatingCurrent
-    f.timeZone = .current
+    f.timeZone = .autoupdatingCurrent
     f.dateStyle = .short
     f.timeStyle = .none
     return f

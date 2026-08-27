@@ -12,7 +12,7 @@ Every other file in this directory (`Models.swift`, `AppInfo.swift`, `AttentionM
 `CommandRunner.swift`, `LiveCollector.swift`, `ProcessSampler.swift`, `ReportCollector.swift`,
 `ReportWriter.swift`, `HistoryStore.swift`, `L10n.swift`, `BrewProgress.swift`,
 `ThermalSensors.swift`, `AppSettings.swift`, `StringsRU.swift`, `StringsEN.swift`,
-`LaunchdPlistInspector.swift`, `Formatting.swift`, `BatteryInspector.swift`,
+`LaunchdPlistInspector.swift`, `Formatting.swift`, `BarHitTest.swift`, `BatteryInspector.swift`,
 `Advice.swift`, `HistorySeries.swift`, `AIRedaction.swift`, `AIPayload.swift`,
 `AIRequest.swift`, `DirectoryAccess.swift`, `AppleScriptResult.swift`) is a **symlink** back into
 `../Sources/MacDashboard/...`. SwiftPM compiles whatever source files it finds under a

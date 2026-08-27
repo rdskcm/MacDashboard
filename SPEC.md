@@ -390,8 +390,12 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
      The `sudo -n` attempt is gated by `ReportCollector.isSafeToRunViaSudo`: the resolved
      binary must be a root-owned regular file with no group/world write bit that a non-root
      actor cannot replace — either every ancestor directory up to `/` is likewise root-owned
-     and non-group/world-writable, or the file carries the `schg` immutable flag. A stock
-     Homebrew binary is `<user>:admin` and does NOT qualify, by design: the privileged path
+     and non-group/world-writable, or the file carries the `schg` immutable flag.
+     The two proofs are not equivalent: the ancestor walk closes the whole path, while `schg`
+     protects only the file — with a group-writable ancestor left in the chain an attacker can
+     rename that directory and put their own binary at the same path, so the hardening step
+     below fixes ownership AND permissions AND sets `schg`, not just the flag.
+     A stock Homebrew binary is `<user>:admin` and does NOT qualify, by design: the privileged path
      opens only after the user hardens it once, with
      `sudo chown root:wheel <path> && sudo chmod go-w <path> && sudo chflags schg <path>`
      (and `sudo chflags noschg <path>` before any later `brew upgrade smartmontools`).

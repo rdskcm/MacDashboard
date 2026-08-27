@@ -75,6 +75,37 @@ func runProcessSamplerChecks() {
     check(Parsers.psProcesses("").isEmpty, "psProcesses: empty string ⇒ []")
     check(Parsers.psProcesses("garbage\nnot ps output").isEmpty, "psProcesses: garbage lines ⇒ []")
 
+    // MARK: - Parsers.topMemoryFootprints (re-review 2 [M1])
+
+    let topFixture = """
+    Processes: 669 total, 3 running, 666 sleeping, 3410 threads
+    2026/08/27 12:00:00
+    Load Avg: 1.50, 1.60, 1.70
+    CPU usage: 4.11% user, 6.16% sys, 89.71% idle
+    PhysMem: 15G used (2G wired), 500M unused.
+    Disks: 123456/4G read, 65432/2G written.
+
+    PID    COMMAND          MEM
+    602    WindowServer     520M
+    1      launchd          12M-
+    4321   Google Chrome He 1024M+
+    777    tiny             3808K
+    888    huge             2G
+    999    broken           -
+    bad    nope             5M
+    """
+
+    let fp = Parsers.topMemoryFootprints(topFixture)
+    check(fp[602] == 520 * 1024 * 1024, "topMemoryFootprints: \"520M\" ⇒ 520 MiB")
+    check(fp[1] == 12 * 1024 * 1024, "topMemoryFootprints: trailing \"-\" delta marker ignored")
+    check(fp[4321] == 1024 * 1024 * 1024,
+          "topMemoryFootprints: COMMAND containing spaces + trailing \"+\" still parses")
+    check(fp[777] == 3808 * 1024, "topMemoryFootprints: K suffix")
+    check(fp[888] == 2 * 1024 * 1024 * 1024, "topMemoryFootprints: G suffix")
+    check(fp[999] == nil, "topMemoryFootprints: unparsable MEM ⇒ pid absent (row keeps ps RSS)")
+    check(fp.count == 5,
+          "topMemoryFootprints: banner, column header and a non-numeric pid are all skipped (got \(fp.count))")
+
     // MARK: - ProcessSampler.cpuPercent
 
     check(ProcessSampler.cpuPercent(previousSeconds: nil, currentSeconds: 6, elapsed: 6) == nil,
@@ -120,13 +151,24 @@ func runProcessSamplerChecks() {
     check(second.contains { $0.name.hasPrefix("WindowServer") },
           "ProcessSampler smoke: WindowServer present (R6 coverage guard)")
 
-    // [M2] physical-footprint reading. Own pid is always readable; a pid far above
-    // macOS's max (99998) never is.
-    let ownFootprint = ProcessSampler.physFootprintBytes(pid: getpid())
-    check((ownFootprint ?? 0) > 1_000_000,
-          "physFootprintBytes: own pid ⇒ plausible footprint > 1 MB (got \(String(describing: ownFootprint)))")
-    check(ProcessSampler.physFootprintBytes(pid: 999_999) == nil,
-          "physFootprintBytes: impossible pid ⇒ nil (no trap, no bogus value)")
+    // [M1] one top snapshot must cover EVERY process, not just our own uid: the
+    // proc_pid_rusage path this replaced refused 285 of 384 pids (WindowServer among them),
+    // leaving two different metrics in one column and in one ranking.
+    let footprints = ProcessSampler.memoryFootprints()
+    check(footprints.count > 50,
+          "memoryFootprints: one top snapshot yields the whole process table (got \(footprints.count))")
+    check((footprints[myPid] ?? 0) > 1_000_000,
+          "memoryFootprints: own pid ⇒ plausible footprint > 1 MB (got \(String(describing: footprints[myPid])))")
+    check(footprints[999_999] == nil,
+          "memoryFootprints: impossible pid ⇒ absent (no bogus value)")
+    check(footprints.values.allSatisfy { $0 > 0 },
+          "memoryFootprints: every reported footprint is positive")
+    if let wsPid = second.first(where: { $0.name.hasPrefix("WindowServer") })?.pid {
+        check((footprints[wsPid] ?? 0) > 1_000_000,
+              "memoryFootprints: WindowServer (foreign uid) has a footprint — the cross-uid gap [M1] is closed (got \(String(describing: footprints[wsPid])))")
+    } else {
+        check(false, "memoryFootprints: WindowServer pid available from the ps snapshot")
+    }
     check(second.first(where: { $0.pid == myPid })?.memBytes ?? 0 > 1_000_000,
           "ProcessSampler smoke: own row carries a memBytes value after the footprint substitution")
 

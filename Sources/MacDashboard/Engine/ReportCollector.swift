@@ -690,6 +690,14 @@ final class ReportCollector {
     ///    the system-immutable flag (`schg`), which blocks unlink and rename of the file
     ///    itself even inside a group-writable directory.
     ///
+    ///    The two proofs are NOT of equal strength (re-review 2 [N8]). The ancestor walk closes
+    ///    the whole path; `schg` closes only the FILE. Leave a group-writable ancestor in the
+    ///    chain and whoever can write that directory can rename or replace the DIRECTORY —
+    ///    `/opt/homebrew/bin` moved aside and recreated with their own `smartctl` inside — after
+    ///    which the immutable file is simply no longer at the resolved path. `schg` removes the
+    ///    trivial unlink-and-replace on a hardened file; only hardening the directory chain
+    ///    closes the group-writable-ancestor attack.
+    ///
     /// Why the file and not only the chain: `findSmartctl()` can only ever return a path
     /// under `/opt/homebrew/{bin,sbin}` or `/usr/local/{bin,sbin}`, and on a standard
     /// Homebrew install those are `<user>:admin drwxrwxr-x` — so an ancestor-only walk was
@@ -700,9 +708,27 @@ final class ReportCollector {
     /// actually be hardened: `sudo chown root:wheel <path> && sudo chmod go-w <path> &&
     /// sudo chflags schg <path>`, a one-time install step (documented in SPEC.md §5).
     ///
-    /// Residual race (re-review [N8]): this is TOCTOU by construction — these checks and
-    /// the `sudo` exec are separate syscalls, so an attacker who can win the window between
-    /// them still wins. It raises the bar; it does not close the hole.
+    /// Two residual gaps. (a) TOCTOU by construction (re-review [N8]): these checks and the
+    /// `sudo` exec are separate syscalls, so an attacker who can win the window between them
+    /// still wins. (b) The `schg`-only proof leaves the group-writable-ancestor rename described
+    /// in point 2 open. Both raise the bar; neither closes the hole.
+
+    /// The decision rule of `isSafeToRunViaSudo`, over facts already gathered — pure, so the
+    /// two branches an unprivileged test cannot reach through the filesystem (no stock macOS
+    /// file carries `schg`; a check process cannot create a root-owned file inside a
+    /// group-writable directory) are still covered by MacDashboardChecks (re-review 2 [N7]).
+    /// `mode` is the POSIX permission word; `ownerUID` the file's owner.
+    static func sudoSafetyVerdict(isRegularFile: Bool,
+                                  ownerUID: UInt32,
+                                  mode: UInt16,
+                                  isImmutable: Bool,
+                                  ancestorsRootOwned: Bool) -> Bool {
+        guard isRegularFile else { return false }           // missing/unstattable/not a file
+        guard ownerUID == 0 else { return false }           // not root-owned
+        guard mode & 0o022 == 0 else { return false }       // group- or world-writable
+        return isImmutable || ancestorsRootOwned            // see point 2 — not equal strength
+    }
+
     static func isSafeToRunViaSudo(_ path: String) -> Bool {
         // Reject a relative path before realpath(3) resolves it against the CWD.
         guard path.hasPrefix("/") else { return false }
@@ -716,12 +742,16 @@ final class ReportCollector {
         let resolved = String(cString: real)
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: resolved),
               let uid = attrs[.ownerAccountID] as? NSNumber,
-              let mode = attrs[.posixPermissions] as? NSNumber,
-              (attrs[.type] as? FileAttributeType) == .typeRegular
-        else { return false }                               // missing/unstattable/not a file
-        guard uid.uint32Value == 0 else { return false }            // not root-owned
-        guard mode.uint16Value & 0o022 == 0 else { return false }   // group- or world-writable
-        return isSystemImmutable(resolved) || ancestorsAreRootOwned(of: resolved)
+              let mode = attrs[.posixPermissions] as? NSNumber
+        else { return false }                               // missing/unstattable
+        // Both proofs are evaluated eagerly rather than short-circuited: this runs at most
+        // twice per report and costs a handful of lstat(2)s, and keeping the RULE in one
+        // pure, testable place is worth more than those.
+        return sudoSafetyVerdict(isRegularFile: (attrs[.type] as? FileAttributeType) == .typeRegular,
+                                 ownerUID: uid.uint32Value,
+                                 mode: mode.uint16Value,
+                                 isImmutable: isSystemImmutable(resolved),
+                                 ancestorsRootOwned: ancestorsAreRootOwned(of: resolved))
     }
 
     /// `SF_IMMUTABLE` (`chflags schg`): settable only by root, and it makes unlink/rename

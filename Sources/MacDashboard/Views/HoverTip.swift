@@ -250,7 +250,8 @@ private final class TipPanelController: NSObject {
         // carries `attnTipBubbleMargin` of transparent shadow room per side, so a bare
         // panel clamp left the bubble visually inset by that margin instead of the 10 pt
         // it used to be (V2-RELEASE re-review [N5]). Same correction the vertical math
-        // below and `positionAttention`'s clamp already apply.
+        // below and BOTH of `positionAttention`'s clamps apply — its horizontal one only
+        // since re-review 2 [M3], which caught it still using the old panel-frame form.
         x = max(visible.minX - attnTipBubbleMargin,
                 min(x, visible.maxX + attnTipBubbleMargin - bubbleSize.width))
 
@@ -331,7 +332,13 @@ private final class TipPanelController: NSObject {
         // the horizontal centering in `position(_:near:in:)`, just left- not
         // center-aligned).
         var x = anchorScreenRect.minX - attnTipBubbleMargin
-        x = max(visible.minX, min(x, visible.maxX - bubbleSize.width))
+        // Clamp the VISIBLE bubble, not the panel frame: `panel.frame` carries
+        // `attnTipBubbleMargin` of transparent shadow room per side, so a bare panel
+        // clamp left the bubble visually inset by that margin (V2-RELEASE re-review
+        // [N5] fixed this in `position(_:near:in:)`; re-review 2 [M3] found this
+        // second positioner still had the old form). Same expression as :254-255.
+        x = max(visible.minX - attnTipBubbleMargin,
+                min(x, visible.maxX + attnTipBubbleMargin - bubbleSize.width))
 
         var y: CGFloat
         switch placement {

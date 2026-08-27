@@ -23,15 +23,17 @@ New since 1.0:
 - Bulk delete for orphaned startup-item plists.
 - Live disk/swap verdicts and other readings reported honestly during
   collection rather than only after it finishes.
-- Process lists are sampled natively from `ps` instead of shelling out to `top`:
-  lower overhead, real pids, and a memory column that reports the same physical
-  footprint Activity Monitor's "Memory" column shows.
+- Process lists are sampled natively from `ps`: lower overhead than the old full `top`
+  parse, real pids, and untruncated process names. The memory column reports the same
+  physical footprint Activity Monitor's "Memory" column shows — for every process on the
+  machine, not just your own — from a single `top` snapshot per refresh.
 - Hardened runtime on the app bundle, so no local process can inject code into an
   app that holds Full Disk Access.
 - SMART data for external drives can use the privileged smartctl path again, gated
   on the binary being one a non-root user cannot replace (see SPEC §5).
-- The chart footer's dates now follow the app's language setting instead of the
-  system locale.
+- The chart footer's dates follow the Mac's Region setting — day/month/year order
+  and separators — independent of the app's own language toggle, so an app set to
+  English on a Mac with a German Region still shows German-style dates.
 
 Numerous layout, animation and accessibility fixes accumulated across the
 rebuild (segmented controls, disclosure/collapse behaviour, hover states,

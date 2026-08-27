@@ -72,12 +72,10 @@ private func memoryBarSpans(_ segments: [MemSegment], total: Int64, hoveredKey: 
 /// + `.contentShape` siblings this replaced, which all shared one full-bar
 /// frame and let `.onHover`'s view/z-order resolution silently pick the
 /// topmost sibling — always "free" — instead of honoring `.contentShape`).
+/// The index math itself lives in `Engine/BarHitTest.swift` so the Checks target can cover it.
 private func memorySegmentKey(at x: CGFloat, segments: [MemSegment], rects: [(x: CGFloat, width: CGFloat)]) -> String? {
-    for (idx, seg) in segments.enumerated() where idx < rects.count {
-        let r = rects[idx]
-        if x >= r.x, x <= r.x + r.width { return seg.key }
-    }
-    return nil
+    guard let idx = barSegmentIndex(at: x, rects: rects), idx < segments.count else { return nil }
+    return segments[idx].key
 }
 
 struct MemoryCard: View {
@@ -104,12 +102,18 @@ struct MemoryCard: View {
 private struct MemoryStackChart: View {
     let model: DashboardModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hoveredKey: String?
+    // Two independent hover sources, one @State each, and a derived `hoveredKey`: the bar's
+    // `.ended` used to clear the shared state unconditionally, so a bar-exit arriving after a
+    // legend-enter wiped the legend's own highlight (re-review 2 [N5]). Each source now clears
+    // only what it owns, which also covers the case both name the SAME segment. Legend wins.
+    @State private var barHoverKey: String?
+    @State private var legendHoverKey: String?
 
     var body: some View {
         if let mem = model.mem {
             let segments = memorySegments(mem)
             let total = max(mem.total, 1)
+            let hoveredKey = legendHoverKey ?? barHoverKey
             VStack(alignment: .leading, spacing: 12) {
                 GeometryReader { geo in
                     let spans = memoryBarSpans(segments, total: total, hoveredKey: hoveredKey)
@@ -136,9 +140,9 @@ private struct MemoryStackChart: View {
                                 .onContinuousHover(coordinateSpace: .local) { phase in
                                     switch phase {
                                     case .active(let location):
-                                        hoveredKey = memorySegmentKey(at: location.x, segments: segments, rects: rects)
+                                        barHoverKey = memorySegmentKey(at: location.x, segments: segments, rects: rects)
                                     case .ended:
-                                        hoveredKey = nil
+                                        barHoverKey = nil
                                     }
                                 }
                         }
@@ -155,8 +159,8 @@ private struct MemoryStackChart: View {
                         LegendItem(color: seg.legendColor, label: seg.label, value: parts.value, unit: parts.unit, emphasis: emphasis)
                             .hoverTip(memoryNotes[seg.label] ?? "")
                             .onHover { inside in
-                                if inside { hoveredKey = seg.key }
-                                else if hoveredKey == seg.key { hoveredKey = nil }
+                                if inside { legendHoverKey = seg.key }
+                                else if legendHoverKey == seg.key { legendHoverKey = nil }
                             }
                     }
                 }
