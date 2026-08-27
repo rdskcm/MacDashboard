@@ -15,7 +15,7 @@ struct ProcEntry: Identifiable, Equatable {
     // same name) when pid is unavailable.
     var id: String { pid.map { "p\($0)" } ?? "\(rank)-\(name)" }
     var rank: Int = 0
-    var name: String            // human app/process name (top truncates at 16 chars — keep raw)
+    var name: String            // human app/process name, as `/bin/ps -o comm=` reports it
     var cpu: Double?            // percent
     var memBytes: Int64?
     var pid: Int32? = nil       // new; default keeps existing initializers compiling

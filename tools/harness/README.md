@@ -6,8 +6,9 @@ Used to verify UI states that are hard to reach live (busy/error/progress states
 
 ## Usage
 
-1. Write a scenario file (anywhere, e.g. the session scratchpad — scenarios are
-   throwaway; only the kit lives in the repo):
+1. Write a scenario file (anywhere, e.g. the session scratchpad — most scenarios are
+   throwaway; a few worth re-running are kept in the repo next to the kit, e.g.
+   `scenario_ds_specimen.swift` and `scenario_smart_install.swift`):
 
 ```swift
 // scenario.swift

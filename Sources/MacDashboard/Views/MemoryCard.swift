@@ -66,19 +66,18 @@ private func memoryBarSpans(_ segments: [MemSegment], total: Int64, hoveredKey: 
     }
 }
 
-/// Hit region for one memory-bar segment. The bar itself is drawn by
-/// `BarFillLayer` (one CALayer per segment, CoreAnimation-animated); this shape
-/// exists only so each segment's `.onHover` responds to its own drawn rect
-/// instead of to the whole bar. Both values are points, from `barSpanRects`.
-private struct MemorySegmentShape: Shape {
-    var x: CGFloat
-    var width: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        let w = max(0, width)
-        guard w > 0, rect.height > 0 else { return Path() }
-        return Path(CGRect(x: rect.minX + x, y: rect.minY, width: w, height: rect.height))
+/// Which segment (if any) the given local x-coordinate falls inside, using the
+/// SAME `barSpanRects` the bar's CALayers are drawn from — so hit-testing can
+/// never drift from what's on screen (unlike the old per-segment `Color.clear`
+/// + `.contentShape` siblings this replaced, which all shared one full-bar
+/// frame and let `.onHover`'s view/z-order resolution silently pick the
+/// topmost sibling — always "free" — instead of honoring `.contentShape`).
+private func memorySegmentKey(at x: CGFloat, segments: [MemSegment], rects: [(x: CGFloat, width: CGFloat)]) -> String? {
+    for (idx, seg) in segments.enumerated() where idx < rects.count {
+        let r = rects[idx]
+        if x >= r.x, x <= r.x + r.width { return seg.key }
     }
+    return nil
 }
 
 struct MemoryCard: View {
@@ -120,23 +119,28 @@ private struct MemoryStackChart: View {
                     // first three segments; this app deliberately animates all
                     // six as one bar so the shared boundaries never desync.
                     // V2-RELAYOUT-COREANIM: all six are CALayers inside ONE
-                    // NSView, animated by CoreAnimation on the same 0.8 s curve —
+                    // NSView, animated by CoreAnimation on the same 0.45 s curve —
                     // no `.animation(_:value:)` anywhere in this subtree. The
                     // hover dim rides the layers' `opacity` on CA's own 0.12 s
                     // ease-out; the transparent overlay below only hit-tests.
                     BarFillLayer(spans: spans, layout: memoryBarLayout, animated: !reduceMotion)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .overlay(alignment: .topLeading) {
-                            ZStack(alignment: .topLeading) {
-                                ForEach(Array(segments.enumerated()), id: \.element.key) { idx, seg in
-                                    Color.clear
-                                        .contentShape(MemorySegmentShape(x: rects[idx].x, width: rects[idx].width))
-                                        .onHover { inside in
-                                            if inside { hoveredKey = seg.key }
-                                            else if hoveredKey == seg.key { hoveredKey = nil }
-                                        }
+                            // One bar-wide hit region (not N overlapping per-segment
+                            // ones — see `memorySegmentKey` doc) that resolves its own
+                            // hovered segment from the cursor's local x, against the
+                            // resting (non-offset) `rects` for this frame — matches the
+                            // `hover-offset-hit-test` constraint.
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onContinuousHover(coordinateSpace: .local) { phase in
+                                    switch phase {
+                                    case .active(let location):
+                                        hoveredKey = memorySegmentKey(at: location.x, segments: segments, rects: rects)
+                                    case .ended:
+                                        hoveredKey = nil
+                                    }
                                 }
-                            }
                         }
                 }
                 .frame(height: 24)

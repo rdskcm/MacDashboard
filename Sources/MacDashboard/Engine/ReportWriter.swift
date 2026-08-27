@@ -1,9 +1,11 @@
 // Engine/ReportWriter.swift
 // Report agent owns this file (SPEC §3, §7).
 //
-// Renders the Russian text report (mirroring legacy mac_checkup.sh / mac_report.txt
-// layout) from structured data, and writes it atomically to disk. Pure rendering only
-// — NO command execution / subprocess calls happen in this file.
+// Renders the text report (mirroring the legacy mac_checkup.sh / mac_report.txt layout)
+// from structured data, and writes it atomically to disk. The report is BILINGUAL: every
+// string goes through `L` / `L.reportSection*` (StringsEN/StringsRU via
+// `L10nStore.shared.language`), so it renders in whichever language the app is set to.
+// Pure rendering only — NO command execution / subprocess calls happen in this file.
 
 import Foundation
 
@@ -11,7 +13,7 @@ enum ReportWriter {
 
     // MARK: - Public API (verbatim per SPEC §7 / integration contract)
 
-    /// Renders the full Russian text report from structured data.
+    /// Renders the full text report from structured data, in the app's current language.
     static func render(report: FullReport, live: LiveSnapshot, history: HistoryState) -> String {
         // `history` is accepted for interface parity (integration phase depends on this
         // exact signature) but is intentionally NOT rendered into the text report: the

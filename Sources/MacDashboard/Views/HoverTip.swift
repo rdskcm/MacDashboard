@@ -246,7 +246,13 @@ private final class TipPanelController: NSObject {
         let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
         var x = anchorScreenRect.midX - bubbleSize.width / 2
-        x = max(visible.minX, min(x, visible.maxX - bubbleSize.width))
+        // Clamp the VISIBLE bubble to the screen, not the panel frame: `panel.frame`
+        // carries `attnTipBubbleMargin` of transparent shadow room per side, so a bare
+        // panel clamp left the bubble visually inset by that margin instead of the 10 pt
+        // it used to be (V2-RELEASE re-review [N5]). Same correction the vertical math
+        // below and `positionAttention`'s clamp already apply.
+        x = max(visible.minX - attnTipBubbleMargin,
+                min(x, visible.maxX + attnTipBubbleMargin - bubbleSize.width))
 
         // AppKit screen coordinates have a bottom-left origin, so "above the anchor"
         // means a larger Y. Flip below if that would push the bubble off the top edge.

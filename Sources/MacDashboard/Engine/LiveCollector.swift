@@ -252,7 +252,7 @@ extension Array where Element == ProcEntry {
     /// stable nor display-aligned, so the near-identical sub-1% tail of the list (and
     /// with it the `prefix(limit)` membership) re-permuted on sampling noise every 6 s
     /// tick. Every permutation changed `ProcessListCard.rowOrder`, which opened the
-    /// 0.8 s reorder transaction (`ProcessCards.swift:241`) — the single most expensive
+    /// 0.45 s reorder transaction (`ProcessCards.swift:241`) — the single most expensive
     /// thing this app does — to animate a change the user cannot see in the numbers.
     /// Rows still reorder for any difference the display shows; they no longer reorder
     /// for differences it doesn't.

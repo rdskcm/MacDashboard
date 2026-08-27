@@ -39,6 +39,10 @@ struct Chip: View {
     var body: some View {
         Text(text)
             .font(.system(size: 11, weight: .medium))
+            // Load-average digits rewrite every fast tick; without monospaced digits the
+            // chip's `.fixedSize` width changes with the digit shapes and jitters the
+            // whole header row (V2-RELEASE re-review [N2]).
+            .monospacedDigit()
             .foregroundStyle(DS.muted)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
@@ -113,7 +117,7 @@ struct MeterBar: View {
     var color: Color
     /// FIX-1 audit (V2-TILES follow-up): no call site carried a width-change
     /// animation before this pass. Spec requires it ONLY on the Memory/Swap
-    /// tiles' live bars — .8 s `cubic-bezier(0.22,0.61,0.36,1)` — while Disk
+    /// tiles' live bars — 0.45 s `cubic-bezier(0.22,0.61,0.36,1)` — while Disk
     /// and Battery must keep snapping instantly. Defaults to `false` so any
     /// call site that doesn't opt in keeps the (correct, already-audited)
     /// no-animation behavior.

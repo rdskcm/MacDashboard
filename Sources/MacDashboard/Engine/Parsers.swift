@@ -17,9 +17,10 @@ enum Parsers {
     /// One row of `/bin/ps -axww -o pid=,rss=,time=,comm=`.
     struct PSRow: Equatable {
         var pid: Int32
-        var name: String        // already display-formatted (procDisplayName)
+        var name: String        // full basename (psCommandName), never truncation-marked
         var cpuSeconds: Double  // CUMULATIVE cpu time since the process started
-        var memBytes: Int64
+        var memBytes: Int64     // RSS as `ps` printed it — NOT the footprint the UI shows;
+                                // ProcessSampler substitutes `proc_pid_rusage` where it can
     }
 
     /// Parses `/bin/ps -axww -o pid=,rss=,time=,comm=` output (no header line — the
@@ -33,7 +34,7 @@ enum Parsers {
             guard fields.count == 4 else { continue }
             guard let pid = Int32(fields[0]), let rssKB = Int64(fields[1]),
                   let secs = psCPUSeconds(fields[2]) else { continue }
-            let name = procDisplayName(psCommandName(fields[3]))
+            let name = psCommandName(fields[3])
             guard !name.isEmpty else { continue }
             rows.append(PSRow(pid: pid, name: name, cpuSeconds: secs, memBytes: rssKB * 1024))
         }
@@ -73,6 +74,12 @@ enum Parsers {
     /// a process whose path it cannot read, e.g. `(bash)`), then keeps everything
     /// after the last `/` if a path is present. Does NOT cut at a space — an
     /// executable name may legitimately contain spaces.
+    ///
+    /// The result is the FULL basename, never marked as truncated: `ps -axww -o comm=`
+    /// prints the whole path, unlike the `top -stats command` this sampler replaced,
+    /// which hard-truncated COMMAND at 16 characters and needed a trailing "…" to say
+    /// so. Visual overflow is the row's job — `.lineLimit(1).truncationMode(.tail)`,
+    /// `ProcessCards.swift:344-348` (V2-RELEASE re-review [M1]).
     private static func psCommandName(_ raw: String) -> String {
         var trimmed = raw.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("(") && trimmed.hasSuffix(")") && trimmed.count >= 2 {
@@ -82,13 +89,6 @@ enum Parsers {
             trimmed = String(trimmed[trimmed.index(after: slashIdx)...])
         }
         return trimmed
-    }
-
-    /// top/ps truncates COMMAND at 16 characters; legacy `_proc_name` marks that with
-    /// a trailing ellipsis so truncated names are visually distinguishable.
-    private static func procDisplayName(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespaces)
-        return trimmed.count >= 16 ? trimmed + "…" : trimmed
     }
 
     // MARK: - sizes ("62G", "228Gi", "4.0K", "0B", "545M+", "3808K-")
@@ -284,11 +284,12 @@ enum Parsers {
         return gb * (1 << 30)
     }
 
-    /// `uptime` output → human Russian duration ("2 дн 3 мин" / "10 дн 22 ч 32 мин"),
-    /// porting the *idea* of legacy `_ru_uptime` (mac_dashboard.py lines 163-178)
-    /// verbatim in its abbreviation choice (дн/ч/мин/с — grammatically
-    /// number-agnostic, unlike a spelled-out "дня/дней" which legacy deliberately
-    /// avoids).
+    /// `uptime` output → human duration in the app's current language ("2 дн 3 мин" /
+    /// "10 дн 22 ч 32 мин" under RU, "2 d 3 min" / "10 d 22 h 32 min" under EN). Units come
+    /// from `L.uptimeUnitDay/Hour/Minute/Second` + `L.uptimeHourMinuteCombo`, not from
+    /// literals. The RU abbreviations port legacy `_ru_uptime` (mac_dashboard.py lines
+    /// 163-178) verbatim in their choice — дн/ч/мин/с are grammatically number-agnostic,
+    /// unlike a spelled-out "дня/дней" which legacy deliberately avoids.
     static func uptimeHuman(_ text: String) -> String? {
         for line in text.components(separatedBy: "\n") {
             guard line.contains(" up "), line.contains("load average") else { continue }

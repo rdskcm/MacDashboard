@@ -15,4 +15,8 @@ func runSudoPathSafetyChecks() {
           "isSafeToRunViaSudo: nonexistent path ⇒ false")
     check(!ReportCollector.isSafeToRunViaSudo("usr/bin/sudo"),
           "isSafeToRunViaSudo: relative path ⇒ false")
+    check(!ReportCollector.isSafeToRunViaSudo("/usr"),
+          "isSafeToRunViaSudo: /usr (root-owned, non-writable — but a DIRECTORY) ⇒ false")
+    check(!ReportCollector.isSafeToRunViaSudo("bin/sh"),
+          "isSafeToRunViaSudo: relative path ⇒ false (rejected before realpath resolves it against CWD)")
 }

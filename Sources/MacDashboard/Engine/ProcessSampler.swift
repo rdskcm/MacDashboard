@@ -6,6 +6,7 @@
 // contract `LiveCollector` itself follows. `sample()` blocks (subprocess + a one-time
 // priming sleep) and must never be called on the main actor.
 import Foundation
+import Darwin
 
 final class ProcessSampler {
     /// pid -> cumulative CPU seconds at the previous snapshot.
@@ -32,6 +33,32 @@ final class ProcessSampler {
         return (currentSeconds - previous) / elapsed * 100
     }
 
+    /// Physical footprint in bytes for `pid` — the metric Activity Monitor's "Memory"
+    /// column and `top -stats mem` report. `ps -o rss` (what `Parsers.PSRow.memBytes`
+    /// carries) is a different quantity: it counts shared framework pages in every
+    /// process that maps them and ignores compressed memory, which on this machine put
+    /// WindowServer at 178 M against top's 760 M and produced a different top-5
+    /// entirely (V2-RELEASE re-review [M2]).
+    ///
+    /// Returns nil whenever the kernel refuses the read for this pid — this binary is
+    /// unentitled, so some foreign-owned processes are simply not readable. The caller
+    /// keeps that row's RSS instead; a refused pid must never drop a row or fail a sample.
+    /// `RUSAGE_INFO_V4` rather than `RUSAGE_INFO_CURRENT`: `ri_phys_footprint` has been
+    /// in the struct since v2, and pinning the version keeps the layout independent of
+    /// whichever SDK compiles this.
+    static func physFootprintBytes(pid: Int32) -> Int64? {
+        var usage = rusage_info_v4()
+        let rc = withUnsafeMutablePointer(to: &usage) { ptr in
+            ptr.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { raw in
+                proc_pid_rusage(pid, RUSAGE_INFO_V4, raw)
+            }
+        }
+        guard rc == 0 else { return nil }
+        let footprint = usage.ri_phys_footprint
+        guard footprint > 0, footprint <= UInt64(Int64.max) else { return nil }
+        return Int64(footprint)
+    }
+
     /// Blocking; call off the main actor. First call on an instance primes itself
     /// (two `ps` runs, `primingWindow` seconds apart) so it never returns an
     /// all-nil-CPU list, including on the one-shot manual refresh path which builds
@@ -40,7 +67,8 @@ final class ProcessSampler {
         if previousAt == nil {
             let base = snapshot()
             guard !base.isEmpty else { return [] }
-            previousCPUSeconds = Dictionary(uniqueKeysWithValues: base.map { ($0.pid, $0.cpuSeconds) })
+            previousCPUSeconds = Dictionary(base.map { ($0.pid, $0.cpuSeconds) },
+                                            uniquingKeysWith: { max($0, $1) })
             previousAt = ProcessInfo.processInfo.systemUptime
             Thread.sleep(forTimeInterval: Self.primingWindow)
         }
@@ -55,12 +83,17 @@ final class ProcessSampler {
             ProcEntry(rank: index, name: r.name,
                       cpu: Self.cpuPercent(previousSeconds: previousCPUSeconds[r.pid],
                                             currentSeconds: r.cpuSeconds, elapsed: elapsed),
-                      memBytes: r.memBytes, pid: r.pid)
+                      // [M2]: footprint where the kernel allows it, this row's RSS otherwise.
+                      memBytes: Self.physFootprintBytes(pid: r.pid) ?? r.memBytes,
+                      pid: r.pid)
         }
 
         // Freshly built, not mutated in place — exited pids evaporate here instead
-        // of leaking forever.
-        previousCPUSeconds = Dictionary(uniqueKeysWithValues: rows.map { ($0.pid, $0.cpuSeconds) })
+        // of leaking forever. `uniquingKeysWith` rather than `uniqueKeysWithValues`:
+        // a duplicate pid in one snapshot must degrade, not trap the app
+        // (V2-RELEASE re-review [N1]).
+        previousCPUSeconds = Dictionary(rows.map { ($0.pid, $0.cpuSeconds) },
+                                        uniquingKeysWith: { max($0, $1) })
         previousAt = now
 
         return entries

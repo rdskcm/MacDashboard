@@ -241,7 +241,7 @@ struct ProcessListCard: View {
             // disclosure animation (V2-FIX-PROCESS-ROWS wave 2).
             .animation(reduceMotion ? nil : processRowMotion, value: rowOrder)
             // …but a metric switch replaces `rows` wholesale, and animating
-            // THAT churns the whole list for 0.8 s after every tap on the
+            // THAT churns the whole list for 0.45 s after every tap on the
             // CPU|Память control. A fresh identity per metric drops the old
             // subtree instead of interpolating into the new one, so the
             // switch is instant while tick-to-tick re-sorts keep the curve.
@@ -251,7 +251,7 @@ struct ProcessListCard: View {
             // before a resample (periodic tick or the Apply button) actually shortens
             // `rows`; keying off the setting flipped identity too early (while `rows` was
             // still the old length), so the ACTUAL shrink still landed inside the old
-            // identity and rode the 0.8 s `processRowMotion` reorder curve — visible as a
+            // identity and rode the 0.45 s `processRowMotion` reorder curve — visible as a
             // sluggish "settle" after Apply instead of an instant cut. Keying off the
             // count itself remounts exactly when the array actually changes length (e.g.
             // 15 → 5 would otherwise animate ten rows out), while ordinary tick-to-tick

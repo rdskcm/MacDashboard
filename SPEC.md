@@ -23,7 +23,8 @@ it is a record of how the app was built, and it is useful as that.
 
 Verified against the tree on 2026-08-14 (branch `v2`). §1.6 and §2's output path were
 wrong and were corrected then; the historical sections were labelled rather than
-rewritten.
+rewritten. §5's smartctl step and §9's codesign line were re-verified and corrected on
+2026-08-27 (V2-RELEASE-FIXWAVE).
 
 ## 1. Goals & hard constraints
 
@@ -382,12 +383,24 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
   2) External physical disks: `diskutil list` → identifiers marked "external, physical".
      For each: `diskutil info <dev>` for model/name + SMART status line.
   3) If smartctl exists (search /opt/homebrew/{bin,sbin}, /usr/local/{bin,sbin}) —
-     try `sudo -n smartctl -A <dev>` (then plain `smartctl -A` without sudo);
+     try `sudo -n smartctl -A <dev>`, then plain `smartctl -A <dev>` without sudo;
      on success attach NVMe attrs (Critical Warning, Temperature, Available Spare,
      Percentage Used, Power Cycles, Power On Hours, Unsafe Shutdowns,
      Media and Data Integrity Errors, Error Information Log Entries).
+     The `sudo -n` attempt is gated by `ReportCollector.isSafeToRunViaSudo`: the resolved
+     binary must be a root-owned regular file with no group/world write bit that a non-root
+     actor cannot replace — either every ancestor directory up to `/` is likewise root-owned
+     and non-group/world-writable, or the file carries the `schg` immutable flag. A stock
+     Homebrew binary is `<user>:admin` and does NOT qualify, by design: the privileged path
+     opens only after the user hardens it once, with
+     `sudo chown root:wheel <path> && sudo chmod go-w <path> && sudo chflags schg <path>`
+     (and `sudo chflags noschg <path>` before any later `brew upgrade smartmontools`).
+     Un-gated, the app would hand a NOPASSWD sudo rule a binary anyone in the admin group can
+     swap. The gate is TOCTOU by construction and is a bar-raiser, not a guarantee.
      `sudo -n` MUST use stdin </dev/null; nonzero exit ⇒ just skip attrs, status from
      diskutil stands. No smartctl ⇒ still list disks with diskutil info only.
+     Internal NVMe answers `smartctl -A disk0` unprivileged, so only external/USB/SATA
+     disks depend on this branch.
   No external disks ⇒ smart = internal only. NOTHING here may error the report.
 - energy: `pmset -g custom` (fallback `pmset -g`); parse Battery Power/AC Power buckets.
 - battery full: `pmset -g batt` + `system_profiler SPPowerDataType` grep Cycle Count/
@@ -507,7 +520,13 @@ NSHumanReadableCopyright, NSAppleEventsUsageDescription. NO LSUIElement (normal 
 Localized `en.lproj`/`ru.lproj` InfoPlist.strings are generated for the display name.
 Icon: reuse legacy generator idea — render simple pulse-line icon via CoreGraphics
 swift script into iconset → iconutil (best-effort; skip icon on failure).
-codesign --force --deep --sign - "dist/MacDashboard.app".
+codesign --force --deep --options runtime --entitlements MacDashboard.entitlements --sign -
+"dist/MacDashboard.app" — ad-hoc signature plus the hardened runtime (V2-SECURITY-FIX: without
+--options runtime, DYLD_INSERT_LIBRARIES is honoured and library validation is off, so any local
+process running as this user could inject into an app the README asks users to grant Full Disk
+Access). MacDashboard.entitlements grants exactly one entitlement,
+com.apple.security.automation.apple-events, which the hardened runtime requires for the in-process
+NSAppleScript Trash action.
 `--install` flag: copies the built bundle to `~/Applications/MacDashboard.app`, removing
 any stale bundle under an old app name first.
 README-install note: on another Mac after copying, if Gatekeeper complains:

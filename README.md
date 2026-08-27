@@ -40,9 +40,10 @@ feedback and comments. Hope you like it!
   Homebrew, macOS updates) and saves it to
   `~/Library/Application Support/MacDashboard/mac_report.txt` — always a
   single file, each run overwrites the previous one.
-- Live metrics (CPU, memory, swap, disk, battery, top processes) refresh every
-  3 seconds. Switching a card between "Chart" and "Table" view doesn't stop
-  the updates — both views read from the same live data.
+- Live metrics (CPU, memory, swap, disk, battery) refresh every 2 seconds by
+  default; the interval is configurable — 1/2/3/5/10 s — in Settings → Monitoring.
+  The process lists refresh every 6 seconds. Switching a card between "Chart" and
+  "Table" view doesn't stop the updates — both views read from the same live data.
 - History (disk usage over time, battery cycles) accumulates in
   `~/Library/Application Support/MacDashboard/mac_check_state.json`
   (compatible with the old file format; can import an existing one).

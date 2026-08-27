@@ -89,17 +89,24 @@ func tight(_ parts: (value: String, unit: String)) -> String {
 /// Display-only day formatter for already-parsed dates: the history file's
 /// "yyyy-MM-dd" ids are parsed with fixed `en_US_POSIX` formatters
 /// (`HistoryCard.dateFormatter`, `HistorySeries.dayFormatter`, `HistoryStore.dayFormatter`)
-/// because day-boundary math must not depend on the user's locale — those stay. This one
-/// is the opposite job: render a `Date` for a human in the CURRENT system locale. Never
-/// parse with it. `.short` keeps the chart footer compact and digit-aligned.
+/// because day-boundary math must not depend on any locale — those stay. This one is the
+/// opposite job: render a `Date` for a human using the Mac's system Region setting
+/// (day/month/year order, separators) — independent of the app's own UI language toggle,
+/// so an app set to English on a Mac whose Region is e.g. Germany still shows German-style
+/// dates. `.autoupdatingCurrent` (not `.current`) because it is a special `Locale` value
+/// that itself tracks live Region changes even when captured once in this `let`, so a
+/// mid-session Region change is reflected on the next render without relaunching the app.
+/// Never parse with this formatter. `.short` keeps the chart footer compact and digit-aligned.
 private let displayDayFormatter: DateFormatter = {
     let f = DateFormatter()
-    f.locale = .current
+    f.locale = .autoupdatingCurrent
     f.timeZone = .current
     f.dateStyle = .short
     f.timeStyle = .none
     return f
 }()
 
-/// System-locale short date for display (never for parsing) — see `displayDayFormatter`.
-func fmtDisplayDay(_ date: Date) -> String { displayDayFormatter.string(from: date) }
+/// System-region short date for display (never for parsing) — see above.
+func fmtDisplayDay(_ date: Date) -> String {
+    displayDayFormatter.string(from: date)
+}

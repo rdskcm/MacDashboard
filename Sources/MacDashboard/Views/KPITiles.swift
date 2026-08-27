@@ -165,7 +165,7 @@ struct MemoryTile: View {
                 // satellite, a bare trailing closure is ambiguous between the
                 // Satellite==EmptyView and Visual==EmptyView convenience inits.
                 visual: {
-                    // FIX-1: memory is a live tile — .8 s cubic width animation (spec §5.3).
+                    // FIX-1: memory is a live tile — 0.45 s cubic width animation (spec §5.3).
                     MeterBar(fraction: mem.total > 0 ? Double(mem.usedBytes) / Double(mem.total) : 0, color: SeriesPalette.s1, animated: true)
                 }
             )
@@ -199,7 +199,7 @@ struct SwapTile: View {
                     // (MB, fixed constant) ÷ 0.6, capped at 1 (spec DO:895, 900).
                     // `swap.used` is bytes (see fmtBytes(swap.used) above / Parsers.swift),
                     // so convert to MB before dividing by the 2048 MB constant.
-                    // FIX-1: swap is a live tile — .8 s cubic width animation (spec §5.3).
+                    // FIX-1: swap is a live tile — 0.45 s cubic width animation (spec §5.3).
                     let swapUsedMB = Double(swap.used) / 1024.0 / 1024.0
                     let swapFraction = min(1.0, (swapUsedMB / 2048.0) / 0.6)
                     MeterBar(fraction: swapFraction, color: tone(for: model.assessment.swapSev), animated: true)

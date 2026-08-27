@@ -3,9 +3,9 @@
 // process-row gauges, memory segment bar) drawn by CoreAnimation instead of by
 // SwiftUI's animation engine.
 //
-// WHY: each of those bars re-values every ~2 s and glides over 0.8 s. Driven by
+// WHY: each of those bars re-values every ~2 s and glides over 0.45 s. Driven by
 // `.animation(_:value:)`, SwiftUI re-runs its ViewGraph/AttributeGraph update for
-// every display frame of that 0.8 s window — a ~40% duty cycle that measured at
+// every display frame of that 0.45 s window — a ~40% duty cycle that measured at
 // ~20-27% of Main Thread samples and up to ~47% of one core (V2-UI-RELAYOUT-COST).
 // Moving the animated quantity from `.frame(width:)` to `Shape.animatableData`
 // did NOT help; the cost is the per-frame SwiftUI update itself. Here the main
@@ -56,7 +56,11 @@ enum BarFillLayout: Equatable {
 /// Rects, in points, for `spans` inside a bar `width` pt wide. Single source of
 /// truth for bar geometry: `BarFillLayerView` draws these, and `MemoryCard` builds
 /// its per-segment hover hit regions from the same call, so drawn and hit-tested
-/// rects cannot drift apart.
+/// rects cannot drift apart AT REST. During a transition they can — the CALayers
+/// interpolate towards these rects over `barDuration` (0.45 s) while the hit regions
+/// jump to them on the tick the values change, so the hover boundaries lead the drawn
+/// ones by a few points until the animation lands (V2-RELEASE re-review [N6],
+/// accepted: segment boundaries move only a few pt per tick).
 func barSpanRects(_ spans: [BarSpan], layout: BarFillLayout, width: CGFloat) -> [(x: CGFloat, width: CGFloat)] {
     guard width > 0, !spans.isEmpty else { return spans.map { _ in (x: 0, width: 0) } }
     switch layout {

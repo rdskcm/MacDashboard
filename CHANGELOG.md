@@ -23,10 +23,27 @@ New since 1.0:
 - Bulk delete for orphaned startup-item plists.
 - Live disk/swap verdicts and other readings reported honestly during
   collection rather than only after it finishes.
+- Process lists are sampled natively from `ps` instead of shelling out to `top`:
+  lower overhead, real pids, and a memory column that reports the same physical
+  footprint Activity Monitor's "Memory" column shows.
+- Hardened runtime on the app bundle, so no local process can inject code into an
+  app that holds Full Disk Access.
+- SMART data for external drives can use the privileged smartctl path again, gated
+  on the binary being one a non-root user cannot replace (see SPEC §5).
+- The chart footer's dates now follow the app's language setting instead of the
+  system locale.
 
 Numerous layout, animation and accessibility fixes accumulated across the
 rebuild (segmented controls, disclosure/collapse behaviour, hover states,
 Reduce Motion support, live-resize stability).
+
+Known limitations:
+
+- kernel_task is not listed in the process tables (macOS does not expose pid 0 to
+  an unentitled app; use Activity Monitor or "top" when a kernel-side CPU spike
+  needs explaining). A host-busy/kernel-CPU-attribution estimate was built and
+  measured against real "top" output during v2.0's pre-release review; it showed a
+  systematic bias (~8pp) and was reverted rather than ship a misleading number.
 
 Licensed under the MIT License. See LICENSE.
 

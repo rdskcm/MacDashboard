@@ -548,9 +548,10 @@ final class ReportCollector {
             // exit on this controller (Error Information Log fetch fails) — and exit
             // codes are ignored anyway (CommandRunner returns stdout regardless).
             // sudo -n first (whitelisted NOPASSWD rule) — but ONLY when the resolved
-            // smartctl and its whole directory chain are root-owned and not
-            // group-writable; otherwise straight to the unprivileged run. Both fail
-            // fast, never prompt (same chain as the external path below).
+            // smartctl is a root-owned, non-group-writable regular file that a non-root
+            // actor cannot swap (see isSafeToRunViaSudo); otherwise straight to the
+            // unprivileged run. Both fail fast, never prompt (same chain as the external
+            // path below).
             if let sc = smartctl {
                 let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
                     ? CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
@@ -591,8 +592,10 @@ final class ReportCollector {
                 }
                 var attrs: [(String, String)] = []
                 if let sc = smartctl {
-                    // sudo -n first (NOPASSWD rule) and only from a root-owned,
-                    // non-group-writable path, then plain — both fail fast, never prompt.
+                    // sudo -n first (NOPASSWD rule) and only for a smartctl binary a
+                    // non-root actor cannot swap (isSafeToRunViaSudo), then plain — both
+                    // fail fast, never prompt. This is the branch external/USB/SATA disks
+                    // actually need: internal NVMe answers `smartctl -A` unprivileged.
                     let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
                         ? CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
                         : nil
@@ -677,14 +680,32 @@ final class ReportCollector {
         return nil
     }
 
-    /// Whether `path` is safe to hand to `sudo`: the binary itself (symlinks resolved)
-    /// and every ancestor directory up to `/` must be root-owned and free of group and
-    /// world write bits. On a standard Homebrew install `/opt/homebrew/{bin,sbin}` are
-    /// `drwxrwxr-x <user>:admin`, so anyone in the admin group can replace the file
-    /// there — and wherever a NOPASSWD sudoers rule for smartctl exists, that is
-    /// passwordless root. A writable *directory* is enough (unlink + recreate), which
-    /// is why this walks the whole chain instead of stat'ing only the file.
+    /// Whether `path` may be handed to `sudo`. Two things must hold, and the second one
+    /// has two admissible proofs:
+    ///
+    /// 1. The binary itself (symlinks resolved) is a regular file owned by root with no
+    ///    group or world write bit.
+    /// 2. A non-root actor cannot REPLACE it — either every ancestor directory up to `/`
+    ///    is likewise root-owned and free of group/world write bits, or the file carries
+    ///    the system-immutable flag (`schg`), which blocks unlink and rename of the file
+    ///    itself even inside a group-writable directory.
+    ///
+    /// Why the file and not only the chain: `findSmartctl()` can only ever return a path
+    /// under `/opt/homebrew/{bin,sbin}` or `/usr/local/{bin,sbin}`, and on a standard
+    /// Homebrew install those are `<user>:admin drwxrwxr-x` — so an ancestor-only walk was
+    /// false in every supported layout and made this whole branch unreachable dead code
+    /// (V2-RELEASE re-review [M4]). Anyone in the admin group can drop their own binary
+    /// there, and wherever a NOPASSWD sudoers rule for smartctl exists that is passwordless
+    /// root — hence the requirement is not weakened, only moved onto the thing that can
+    /// actually be hardened: `sudo chown root:wheel <path> && sudo chmod go-w <path> &&
+    /// sudo chflags schg <path>`, a one-time install step (documented in SPEC.md §5).
+    ///
+    /// Residual race (re-review [N8]): this is TOCTOU by construction — these checks and
+    /// the `sudo` exec are separate syscalls, so an attacker who can win the window between
+    /// them still wins. It raises the bar; it does not close the hole.
     static func isSafeToRunViaSudo(_ path: String) -> Bool {
+        // Reject a relative path before realpath(3) resolves it against the CWD.
+        guard path.hasPrefix("/") else { return false }
         // realpath(3), not URL.resolvingSymlinksInPath(): the latter deliberately
         // leaves macOS's special-cased top-level symlinks (/tmp, /var, /etc ->
         // their /private/... targets) unresolved, which would let a path reached
@@ -693,15 +714,38 @@ final class ReportCollector {
         guard let real = realpath(path, nil) else { return false }
         defer { free(real) }
         let resolved = String(cString: real)
-        guard resolved.hasPrefix("/") else { return false }
-        var component = resolved
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: resolved),
+              let uid = attrs[.ownerAccountID] as? NSNumber,
+              let mode = attrs[.posixPermissions] as? NSNumber,
+              (attrs[.type] as? FileAttributeType) == .typeRegular
+        else { return false }                               // missing/unstattable/not a file
+        guard uid.uint32Value == 0 else { return false }            // not root-owned
+        guard mode.uint16Value & 0o022 == 0 else { return false }   // group- or world-writable
+        return isSystemImmutable(resolved) || ancestorsAreRootOwned(of: resolved)
+    }
+
+    /// `SF_IMMUTABLE` (`chflags schg`): settable only by root, and it makes unlink/rename
+    /// of the file fail regardless of the containing directory's write bits.
+    private static func isSystemImmutable(_ resolvedPath: String) -> Bool {
+        var st = stat()
+        guard lstat(resolvedPath, &st) == 0 else { return false }
+        return st.st_flags & UInt32(SF_IMMUTABLE) != 0
+    }
+
+    /// Every directory from the file's parent up to `/` is root-owned and free of group
+    /// and world write bits — the original test, now one of two ways to satisfy point 2.
+    /// A writable *directory* is enough to swap a file (unlink + recreate), which is why
+    /// this walks the whole chain rather than stat'ing one level.
+    private static func ancestorsAreRootOwned(of resolvedPath: String) -> Bool {
+        var component = (resolvedPath as NSString).deletingLastPathComponent
+        if component.isEmpty { component = "/" }
         while true {
             guard let attrs = try? FileManager.default.attributesOfItem(atPath: component),
                   let uid = attrs[.ownerAccountID] as? NSNumber,
                   let mode = attrs[.posixPermissions] as? NSNumber
-            else { return false }                       // missing/unstattable => not safe
-            if uid.uint32Value != 0 { return false }    // not root-owned
-            if mode.uint16Value & 0o022 != 0 { return false }   // group- or world-writable
+            else { return false }
+            if uid.uint32Value != 0 { return false }
+            if mode.uint16Value & 0o022 != 0 { return false }
             if component == "/" { return true }
             let parent = (component as NSString).deletingLastPathComponent
             component = parent.isEmpty ? "/" : parent

@@ -60,11 +60,17 @@ func runProcessSamplerChecks() {
     }
 
     if let chromeHelper = rows.first(where: { $0.pid == 4321 }) {
-        check(chromeHelper.name == "Google Chrome Helper…",
-              "psProcesses: \"Google Chrome Helper\" (spaces preserved) gets ellipsis (got \(chromeHelper.name))")
+        check(chromeHelper.name == "Google Chrome Helper",
+              "psProcesses: \"Google Chrome Helper\" (spaces preserved, no ellipsis) (got \(chromeHelper.name))")
     } else {
         check(false, "psProcesses: pid 4321 (Google Chrome Helper) row present")
     }
+
+    // [M1] regression guard: a basename far over the old 16-char threshold must come
+    // through whole. `ps -o comm=` does not truncate, so nothing may mark it as if it did.
+    let longNameRows = Parsers.psProcesses("  777      2048   0:00.10 /usr/libexec/AppleCredentialManagerDaemon")
+    check(longNameRows.first?.name == "AppleCredentialManagerDaemon",
+          "psProcesses: 28-char basename survives whole, no trailing ellipsis (got \(longNameRows.first?.name ?? "nil"))")
 
     check(Parsers.psProcesses("").isEmpty, "psProcesses: empty string ⇒ []")
     check(Parsers.psProcesses("garbage\nnot ps output").isEmpty, "psProcesses: garbage lines ⇒ []")
@@ -113,6 +119,17 @@ func runProcessSamplerChecks() {
     // unentitled binary but readable via `ps`.
     check(second.contains { $0.name.hasPrefix("WindowServer") },
           "ProcessSampler smoke: WindowServer present (R6 coverage guard)")
+
+    // [M2] physical-footprint reading. Own pid is always readable; a pid far above
+    // macOS's max (99998) never is.
+    let ownFootprint = ProcessSampler.physFootprintBytes(pid: getpid())
+    check((ownFootprint ?? 0) > 1_000_000,
+          "physFootprintBytes: own pid ⇒ plausible footprint > 1 MB (got \(String(describing: ownFootprint)))")
+    check(ProcessSampler.physFootprintBytes(pid: 999_999) == nil,
+          "physFootprintBytes: impossible pid ⇒ nil (no trap, no bogus value)")
+    check(second.first(where: { $0.pid == myPid })?.memBytes ?? 0 > 1_000_000,
+          "ProcessSampler smoke: own row carries a memBytes value after the footprint substitution")
+
     // kernel_task (pid 0) was absent from `/bin/ps -axww` on the machine this block
     // was implemented on (Step 0 item 3) — per spec, that guard is omitted here.
 }
