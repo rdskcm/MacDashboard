@@ -2,7 +2,29 @@
 
 Rewrite of the web pipeline (mac_checkup.sh → mac_report.txt → mac_dashboard.py →
 HTML + mac_live_server.py SSE) as ONE native macOS app. No browser, no HTTP server,
-no Python. This file is the binding contract for all implementation agents.
+no Python.
+
+## Status of this document — read this before using it as a contract
+
+This was the **build-out brief**: the ТЗ handed to the agents that constructed the app
+from nothing in July 2026. Its phases (§11) are complete and its per-agent file
+ownership (§3) describes a construction crew that no longer exists. The app has since
+been rebuilt visually on the `v2` branch, and this file was not part of that work.
+
+Its sections therefore have **two different lifetimes**, and they are labelled:
+
+| Still binding | Historical — describes the v1.0 build, not today's code |
+|---|---|
+| §1 Goals & hard constraints, §2 Locations, §4 Data contracts, §5 Collectors, §6 Assessment, §7 Report text, §9 Packaging, §12 AI_ENABLED flag | §3 Package layout & file ownership, §8 UI, §10 Testing, §11 Phases |
+
+**For anything in the right-hand column the code is the source of truth, not this file.**
+Do not "restore" something it describes; do not update it to match a refactor either —
+it is a record of how the app was built, and it is useful as that.
+
+Verified against the tree on 2026-08-14 (branch `v2`). §1.6 and §2's output path were
+wrong and were corrected then; the historical sections were labelled rather than
+rewritten. §5's smartctl step and §9's codesign line were re-verified and corrected on
+2026-08-27 (V2-RELEASE-FIXWAVE).
 
 ## 1. Goals & hard constraints
 
@@ -13,6 +35,14 @@ no Python. This file is the binding contract for all implementation agents.
    - Absent hardware/feature ⇒ section shows a calm info state or hides; NEVER crash,
      NEVER show an error tone for "not present" (battery on desktops, Time Machine not
      configured, no external disks, no smartctl, no Homebrew).
+   - **A partial report is never a verdict.** The converse of the rule above: "not
+     collected yet" must not be rendered as a calm answer either. `refreshReport()`
+     streams sections into a blank `FullReport`, so mid-collect most fields are nil —
+     and `Assessment` cannot express "unknown", so an empty `problems` array means both
+     "nothing wrong" and "nothing checked". Any summary verdict (the header status chip,
+     the attention summary) is therefore computed ONLY from a completed pass, and any
+     header field backed by static data (hardware, OS, uptime) keeps its last known
+     value while collecting rather than collapsing. V2-HEADER-CHURN, 2026-08-15.
 3. **Report on launch**: app start triggers full report generation in background.
    Report is written to ONE fixed path, atomically overwritten each run — reports must
    not accumulate.
@@ -23,8 +53,43 @@ no Python. This file is the binding contract for all implementation agents.
 5. UI language: **bilingual (English/Russian)**, switchable in Settings, via the
    `L10n` protocol with `StringsEN`/`StringsRU` witness files (see §8). Code +
    comments: English only, regardless of UI language.
-6. Read-only diagnostics: the app never modifies system state (only writes its own
-   report/state files).
+6. **Read-only by default, with an enumerated set of user-initiated exceptions.**
+   Collection never mutates anything: every collector and parser only reads. On top of
+   that the app offers repair actions, each reachable ONLY by an explicit click. The
+   list below is the complete set as of 2026-08-14 — **adding an entry to it is a spec
+   change**, and no code path may mutate system state without appearing here.
+
+   | # | Action | Call site | Privileges | Confirmed before running? |
+   |---|---|---|---|---|
+   | 1 | Empty the Trash | `Views/AdviceActionRunner.swift` (`NSAppleScript`, Finder) | user + TCC | yes — `Views/AdviceActionDispatch.swift:152` |
+   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:681` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:158-162` |
+   | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:801` (`/bin/rm -f`, bulk at `:907`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:346`/`:395` |
+   | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:808` (`trashItem`, bulk at `:895`) | user | yes — same gate as 3 |
+   | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | yes — `Views/BrewUpgradeConfirm.swift:33`, opened from `Views/MaintenanceCard.swift:80` and `Views/AdviceActionDispatch.swift:60` |
+   | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:590` | user | **no** — deliberate, see below |
+   | 7 | Apply energy settings | `Views/EnergyCard.swift:363` (`pmset -b`/`-c`) | admin | yes — `Views/EnergyCard.swift:176` |
+
+   Row 1 needs a second, separate macOS grant beyond the confirmation dialog: TCC
+   Automation control of Finder, which the system asks for the first time the action
+   actually runs (observed 2026-08-14 during the end-to-end verification). Declining it
+   surfaces as a failure carrying Finder's own message. Row 1 also depends on Full Disk
+   Access to be *offered* at all: without it `du` never reports `~/.Trash`, so no Trash tip is produced.
+   Since block `V2-FDA-DEGRADE` (2026-08-17) that absence is stated instead of silent — see §5.2.
+
+   Rows 5 and 7 were gated in block `V2-ACTION-GATES` (2026-08-16), and both dialogs are
+   deliberately informative rather than a bare "are you sure": 5 states how many packages it will
+   upgrade and names up to 10 of them, 7 lists the pending edits split by battery / AC power and
+   says that admin authentication follows. Row 6 is **deliberately not gated** — a product decision,
+   recorded here so it is not read as an oversight: it is a single unprivileged Homebrew package
+   install behind a button already labelled «Установить smartmontools», it destroys nothing, and it
+   has no set of changes worth enumerating in a dialog. Note that 3 is irreversible (a permanent
+   `rm`, not a move to the Trash — see the reasoning at `DashboardModel.swift:668-677`) and that 7
+   now escalates privileges only after its confirmation.
+
+   Two further boundaries hold with no exceptions: the app writes file **content** only
+   inside `~/Library/Application Support/MacDashboard/` (rows 1, 3, 4 delete or move
+   files elsewhere but never author them), and a default build contains no networking
+   at all — see §12.
 7. min deployment: **macOS 14** (needed for @Observable + Swift Charts). Build:
    SwiftPM, universal binary (arm64 + x86_64), hand-rolled .app bundle, ad-hoc codesign.
 
@@ -34,11 +99,34 @@ no Python. This file is the binding contract for all implementation agents.
 - App data dir: `~/Library/Application Support/MacDashboard/`
   (create on first run via `FileManager.urls(for: .applicationSupportDirectory…)`).
   - `mac_report.txt` — the single report file (overwritten).
-  - `mac_check_state.json` — history (same schema as legacy file, see §6).
-- Built app: `MacDashboard/dist/Дашборд Mac.app` (installed to `~/Applications/` at
-  the end, replacing the old AppleScript launcher).
+  - `mac_check_state.json` — history (same schema as legacy file, see §7).
+- Built app: `MacDashboard/dist/MacDashboard.app` — `APP_NAME="MacDashboard"` /
+  `DIST="dist/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` copies it to
+  `~/Applications/MacDashboard.app`, removing any stale bundle under the old
+  «Дашборд Mac» name first. The bundle name is `MacDashboard` in both languages —
+  `build_app.sh:106-117` writes only `NSHumanReadableCopyright` and
+  `NSAppleEventsUsageDescription` into the `.lproj` files; `CFBundleName`/
+  `CFBundleDisplayName` are plain `"MacDashboard"` in both (`:82`, `:88`). This is
+  load-bearing, not cosmetic: because `CFBundleName` is NOT localized, `AppInfo.name`
+  (`AppInfo.swift:16-18`) matches the `CFBundleExecutable` embedded in crash-report
+  filenames, which is what `ReportCollector.crashRaisesAttention`
+  (`ReportCollector.swift:107-108`) compares against — a localized `CFBundleName` would
+  silence own-app crash attention on a Russian-locale Mac.)
 
 ## 3. Package layout & file ownership
+
+> **HISTORICAL — the v1.0 build-out layout.** The "owner" column assigned files to the
+> parallel agents of §11 phase 2; those agents finished long ago. The tree has since
+> grown to 30 files under `Engine/` and 26 under `Views/`, and none of
+> `ContentView.swift`, `Components.swift`, `Cards.swift` still exist. The real test
+> target is `Checks/` (an executable target, see §10's fallback), and
+> `Tests/MacDashboardTests/` was never created. Read the tree, not this block.
+>
+> One rule below **is** still live and is repeated here so it does not get lost with
+> the rest: `Models.swift` and `Package.swift` are frozen — if work genuinely requires
+> changing them, stop and report the conflict instead of editing. **Update:** the
+> `Models.swift` freeze was lifted for the v2 branch — it changed substantially and
+> deliberately across the V2 blocks, which own it. `Package.swift` stays frozen.
 
 ```
 MacDashboard/
@@ -76,10 +164,14 @@ enum Severity: String, Codable { case good, info, warn, serious, crit }
 
 struct CPUUsage: Equatable { var user: Double; var sys: Double; var idle: Double }
 struct ProcEntry: Identifiable, Equatable {
-    var id: String { name }
-    var name: String            // human app/process name (top truncates at 16 chars — keep raw)
+    // "p<pid>" when a pid is known (stable across re-sorts/ticks); falls back to the
+    // rank-based id (keeps ids unique when two names collide) when pid is unavailable.
+    var id: String { pid.map { "p\($0)" } ?? "\(rank)-\(name)" }
+    var rank: Int = 0
+    var name: String            // human app/process name, as `/bin/ps -o comm=` reports it (full, untruncated)
     var cpu: Double?            // percent
     var memBytes: Int64?
+    var pid: Int32? = nil
 }
 struct MemSnapshot: Equatable {
     var total: Int64            // sysctl hw.memsize
@@ -138,16 +230,21 @@ struct SecurityState: Equatable {
     // nil = unknown/no permission; true = enabled
     var fileVault: Bool?; var gatekeeper: Bool?; var sip: Bool?; var firewall: Bool?
 }
+enum TMBackupUnavailableReason: Equatable {   // a case, never a localized sentence (V2-HONEST-READINGS)
+    case noBackupsYet, diskNotConnected, noCompletedBackups, dateUnavailableNoFDA
+    var localizedText: String { … }           // rendered in the language current at READ time
+}
 struct TMDestination: Equatable {
     var name: String?; var kind: String?; var mountPoint: String?; var quotaBytes: Int64?; var lastBackup: String?
     // nil when lastBackup is set (or destination not yet checked); otherwise an
     // honest reason no date could be obtained (e.g. disk unmounted, or backup
     // date unreadable without Full Disk Access) — shown instead of a bare "—".
-    var lastBackupUnavailableReason: String? = nil
+    var lastBackupUnavailableReason: TMBackupUnavailableReason? = nil
 }
 struct AutostartInfo: Equatable {
     var loginItems: [String]?   // nil = no permission
-    var userAgents: [String] = []; var systemAgents: [String] = []; var systemDaemons: [String] = []
+    var userAgents: [LaunchdPlistInfo] = []; var systemAgents: [LaunchdPlistInfo] = []; var systemDaemons: [LaunchdPlistInfo] = []
+    // LaunchdPlistInfo (Engine/LaunchdPlistInspector.swift:10-15): { path, label?, executablePath?, isOrphan, description? } — one row's worth of data.
     var background: [(pid: String, label: String)] = []
     static func == (l: Self, r: Self) -> Bool {
         l.loginItems == r.loginItems && l.userAgents == r.userAgents &&
@@ -173,23 +270,33 @@ struct EnergySettings: Equatable { var battery: [(String, String)]; var ac: [(St
     }
 }
 
+struct CrashGroup: Identifiable, Equatable {   // V2-CRASH-SIGNAL
+    var process: String; var count: Int; var isPanic: Bool = false
+    var directory: String                      // DiagnosticReports dir the first report was in (V2-CRASH-REVEAL)
+    var id: String { process }
+}
+
 struct FullReport {
     var createdAt: Date?
     var system: SystemInfo?
     var snapshots: [String]?            // TM local snapshot names
     var homeDirs: [DirSize]?            // top-20 of $HOME (depth 1)
     var serviceDirs: [DirSize]?         // caches etc.
+    var homeDirsUnreadable: [String]    // paths seen but refused (no FDA); [] = nothing hidden
+    var serviceDirsUnreadable: [String] // same, for the fixed service-path list
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?
-    var crashes: [String]?
+    var crashes: [CrashGroup]?          // grouped by process, ≤7 days old
     var brewVersion: String??           // .some(nil) = brew not installed
     var brewOutdated: [String]?
     var updates: [String]?              // pending macOS updates ([] = up to date)
     var smart: [SmartDisk]?
     var autostart: AutostartInfo?
     var energy: EnergySettings?
+    var battery: BatteryInfo?           // report-time merge: pmset + system_profiler (cycles/condition/capacity)
     var progress: [String: Bool] = [:]  // sectionKey -> done (for UI spinners)
+    var smartctlPresent: Bool = true    // whether smartctl was found on last collectSmartDisks() run (Block N8)
 }
 
 struct Problem: Identifiable, Equatable {
@@ -200,9 +307,12 @@ struct Tip: Identifiable, Equatable {
     var id: String { text }; var text: String
     var action: AdviceAction? = nil     // advice block AR: clickable follow-up
 }
-struct Assessment {
+struct Assessment: Equatable {
     var problems: [Problem] = []        // sorted crit > serious > warn
     var tips: [Tip] = []
+    var items: [AttentionItem] = []      // v2 attention model — mirrors `problems`
+    var capsules: [TipCapsule] = []      // v2 attention model — mirrors `tips`
+    // AttentionItem/TipCapsule are defined in Engine/AttentionModel.swift.
     var summarySev: Severity = .good
     var summaryText: String = L.recommendationsAllGood  // i18n S2: was "Всё в порядке"
     var diskSev: Severity = .good; var swapSev: Severity = .good
@@ -225,7 +335,10 @@ struct HistoryState: Codable {
 
 `DashboardModel` (scaffold, `@MainActor @Observable final class`):
 ```swift
-var live: LiveSnapshot            // replaced whole each tick
+// "live" is not a single property any more — DashboardModel exposes cpu/mem/swap/disk/
+// battery/load/topCPU/topMem etc. as individual @Observable fields (see
+// Engine/DashboardModel.swift:104-108's doc comment for why); a private computed `live`
+// and `currentLiveSnapshot()` exist only for the report/assess/AI-payload code paths.
 var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
 var report: FullReport            // sections fill in as collected
 var assessment: Assessment
@@ -240,7 +353,10 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 
 ## 5. Collectors
 
-### 5.1 LiveCollector (every 3 s; runs off-main, publishes to model on main)
+### 5.1 LiveCollector (every N s, user-configurable; runs off-main, publishes to model on main)
+- interval: `AppSettings.fastIntervalSeconds` (`Sources/MacDashboard/Engine/AppSettings.swift:10-12,26-29`),
+  allowed values `[1, 2, 3, 5, 10]` seconds, default 2, user-settable in Settings, read fresh by
+  the loop every tick (no restart needed on change).
 - CPU %: `host_processor_info`/`host_statistics64(HOST_CPU_LOAD_INFO)` — diff ticks
   between samples (user+sys+idle). NO subprocess.
 - mem: `host_statistics64(HOST_VM_INFO64)` × `vm_kernel_page_size`; total `sysctl hw.memsize`.
@@ -250,12 +366,19 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 - battery: IOKit `IOPSCopyPowerSourcesInfo` (+ cycles/condition only in full report).
   Desktop Mac ⇒ nil, tile hidden.
 - load: `getloadavg`.
-- top processes: `top -l 2 -s 1 -o cpu -n 12 -stats pid,cpu,mem,command` subprocess,
-  parse LAST sample only (first is since-boot garbage). From it also build topMem?
-  NO — separate cheap `top -l 1 -o mem -n 12 -stats pid,mem,cpu,command` like legacy.
-  Both via CommandRunner with 12 s timeout. Use `pid,` in stats to get full names?
-  top truncates COMMAND anyway; acceptable (legacy did the same). Keep order parsing
-  tolerant: split by whitespace, columns per requested stats order.
+- top processes: TWO subprocesses per tick, each supplying only what the other can't.
+  `/bin/ps -axww -o pid=,rss=,time=,comm=` (CommandRunner, 5 s timeout) yields pid, full
+  untruncated name, RSS and cumulative CPU time; per-process CPU% is a delta of that
+  cumulative time against the previous sample over the measured elapsed window (top's `-l 1`
+  %CPU is a since-boot average, not a delta, and would be useless here). `/usr/bin/top -l 1
+  -stats pid,command,mem` (CommandRunner, 15 s timeout) supplies only the MEM column: the
+  physical memory footprint Activity Monitor shows, for every process on the machine —
+  `ps -o rss` undercounts shared framework pages and ignores compressed memory, and no
+  in-process API (`proc_pid_rusage`, `task_for_pid`) can read other-uid processes without the
+  task-port entitlement top carries as an Apple-signed platform binary. `ps` alone can't
+  supply the cross-uid footprint; `top` alone can't supply the CPU delta or the untruncated
+  name (its COMMAND column is hard-truncated to 16 characters). One `top` snapshot per tick
+  covers the whole process table, not one call per pid.
 - Cadence guard: if a tick's collection takes > interval, skip next tick (single-flight).
 
 ### 5.2 ReportCollector (on launch + «Обновить» button; async, per-section)
@@ -271,14 +394,20 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
   du prints errors to stderr, still use what it returns; never fail the section.
 - serviceDirs: `du -xsk` over: ~/Library/Caches, ~/Library/Application Support,
   ~/Library/Containers, ~/Library/Group Containers, ~/Library/Developer, ~/.Trash,
-  /Library/Caches, /private/var/log, /Applications (90 s total).
+  /Library/Caches, /private/var/log, /Applications (9 paths, swept sequentially, 60 s
+  timeout per path — no aggregate cap).
+- Both du sections additionally report what they could NOT read: every expected directory that exists
+  but refuses to open (`Engine/DirectoryAccess.swift` — `stat` + `opendir`, no TCC/global-status lookup
+  anywhere) lands in `homeDirsUnreadable` / `serviceDirsUnreadable` as an absolute path. `homeDirs` /
+  `serviceDirs == nil` still means "not collected yet". The UI states it as a quiet inline line in the
+  «Папки» card plus exactly one info-level recommendation capsule — never a «Требует внимания» item.
 - security: `fdesetup status`, `spctl --status`, `csrutil status`,
   `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate` (fallback
   `defaults read /Library/Preferences/com.apple.alf globalstate`; 1/2 ⇒ on).
 - tmDest: `tmutil destinationinfo` (absent ⇒ .some(nil) — "не настроен", calm info);
   `tmutil latestbackup` best-effort for lastBackup (may need FDA ⇒ nil).
 - spotlight: `mdutil -s /`.
-- crashes: newest 15 of `~/Library/Logs/DiagnosticReports` (FileManager, no shell).
+- crashes: ~/Library/Logs/DiagnosticReports via FileManager (no shell); files with mtime older than 7 days dropped, remaining ones grouped by process name (parsed off the filename) into ≤15 CrashGroup(process, count, isPanic); isPanic = at least one .panic report in the group.
 - brew: resolve from /opt/homebrew/bin/brew, /usr/local/bin/brew, PATH; absent ⇒
   brewVersion = .some(nil). Else `brew --version` + `brew outdated` (60 s).
 - updates: `softwareupdate -l` (120 s timeout; on timeout ⇒ nil = "не проверено").
@@ -293,12 +422,28 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
   2) External physical disks: `diskutil list` → identifiers marked "external, physical".
      For each: `diskutil info <dev>` for model/name + SMART status line.
   3) If smartctl exists (search /opt/homebrew/{bin,sbin}, /usr/local/{bin,sbin}) —
-     try `sudo -n smartctl -A <dev>` (then plain `smartctl -A` without sudo);
+     try `sudo -n smartctl -A <dev>`, then plain `smartctl -A <dev>` without sudo;
      on success attach NVMe attrs (Critical Warning, Temperature, Available Spare,
      Percentage Used, Power Cycles, Power On Hours, Unsafe Shutdowns,
      Media and Data Integrity Errors, Error Information Log Entries).
+     The `sudo -n` attempt is gated by `ReportCollector.isSafeToRunViaSudo`: the resolved
+     binary must be a root-owned regular file with no group/world write bit that a non-root
+     actor cannot replace — either every ancestor directory up to `/` is likewise root-owned
+     and non-group/world-writable, or the file carries the `schg` immutable flag.
+     The two proofs are not equivalent: the ancestor walk closes the whole path, while `schg`
+     protects only the file — with a group-writable ancestor left in the chain an attacker can
+     rename that directory and put their own binary at the same path, so the hardening step
+     below fixes ownership AND permissions AND sets `schg`, not just the flag.
+     A stock Homebrew binary is `<user>:admin` and does NOT qualify, by design: the privileged path
+     opens only after the user hardens it once, with
+     `sudo chown root:wheel <path> && sudo chmod go-w <path> && sudo chflags schg <path>`
+     (and `sudo chflags noschg <path>` before any later `brew upgrade smartmontools`).
+     Un-gated, the app would hand a NOPASSWD sudo rule a binary anyone in the admin group can
+     swap. The gate is TOCTOU by construction and is a bar-raiser, not a guarantee.
      `sudo -n` MUST use stdin </dev/null; nonzero exit ⇒ just skip attrs, status from
      diskutil stands. No smartctl ⇒ still list disks with diskutil info only.
+     Internal NVMe answers `smartctl -A disk0` unprivileged, so only external/USB/SATA
+     disks depend on this branch.
   No external disks ⇒ smart = internal only. NOTHING here may error the report.
 - energy: `pmset -g custom` (fallback `pmset -g`); parse Battery Power/AC Power buckets.
 - battery full: `pmset -g batt` + `system_profiler SPPowerDataType` grep Cycle Count/
@@ -316,12 +461,15 @@ returns String? (nil on any failure). Absolute paths for binaries (/usr/bin/…,
 - security: each of FileVault/Gatekeeper/SIP/Firewall == false ⇒ serious "X выключен — стоит включить." (nil ⇒ silent).
 - updates: count > 0 ⇒ warn "Доступны обновления macOS: N шт."
 - brew outdated > 0 ⇒ tip.
-- crashes > 0 ⇒ warn "Свежие крэш-репорты: N — посмотрите в Console.app."
+- crashes: a group whose process == AppInfo.name, or ANY group with isPanic (kernel panic, whatever the process), ⇒ one warn item — "Сбои <app> за последние 7 дней: N шт. …" / "Сбой системы (паника ядра) за последние 7 дней: N шт. …"; other system/third-party groups never raise severity (V2-CRASH-SIGNAL).
 - tmDest == .some(nil) ⇒ warn "Time Machine не настроен — бэкапов нет."
 - smart: any disk with Critical Warning != 0x00 or Media Errors > 0 ⇒ crit;
   Percentage Used ≥ 80 ⇒ warn; SMART "NO ACCESS" on external ⇒ tip (переподключите кабель / установите smartmontools).
 - homeDirs: Downloads > 10 GiB ⇒ tip («Загрузки» занимают X — стоит разобрать);
   .Trash > 1 GiB ⇒ tip; ~/Library/Caches > 3 GiB ⇒ tip.
+- homeDirsUnreadable / serviceDirsUnreadable non-empty ⇒ ONE tip + ONE capsule (V2-FDA-DEGRADE),
+  action = Settings → Privacy & Security → Full Disk Access. Never a Problem/AttentionItem: a
+  permission the user has not granted is not a machine fault.
 - summary: worst severity; "Замечаний: N" | "Всё в порядке".
 Assessment recomputed when report sections change AND lightly on live ticks
 (disk/swap tiles reflect live values).
@@ -339,15 +487,25 @@ Values rendered from structured data (not raw command dumps) is fine, but keep d
 disk line and vm_stat-like memory block human-readable.
 Write: to temp file in same dir + atomic replace (`FileManager.replaceItemAt` or
 Data.write(.atomic)). Path: App Support/mac_report.txt. ALWAYS the same path ⇒ no
-accumulation. Menu/button «Показать отчёт в Finder» (NSWorkspace.activateFileViewerSelecting).
+accumulation. Menu/button «Показать в Finder» ("Show in Finder")
+(NSWorkspace.activateFileViewerSelecting).
 
 HistoryStore: load legacy-compatible JSON; after each completed report upsert TODAY's
 MacHistoryEntry (replace same-date), cap 60 entries, save atomically. Preserve unknown
 JSON keys (decode into [String: JSONValue] passthrough or merge on save) so the legacy
-file schema (nvme_history etc.) survives an import. Import button: «Импортировать
-историю…» (NSOpenPanel) merges mac_history by date.
+file schema (nvme_history etc.) survives round-tripping.
 
 ## 8. UI (bilingual EN/RU; tone = old dashboard)
+
+> **HISTORICAL — this is the v1.0 interface.** The whole UI was rebuilt on the `v2`
+> branch: the two-tab «Обзор | Отчёт» shell, the card inventory and the layout below no
+> longer match what ships. Treat this as a record of the original design brief.
+>
+> Three things in it are still accurate and load-bearing: the window geometry
+> (`MacDashboardApp.swift:20,25` — default 1150×780, min 900×620), the bilingual `L10n`
+> protocol with `StringsEN`/`StringsRU` witnesses, and the `ChartOrTableCard` rule that
+> chart and table must read the SAME observable state — that last one is the regression
+> the original dashboard had, and it is still the reason the component exists.
 
 Window ~1150×780 (min 900×620). Every user-facing label below is illustrated in
 Russian for concreteness (matching the legacy dashboard's tone), but each one is a
@@ -405,16 +563,29 @@ Info.plist: CFBundleIdentifier=com.rdskcm.mac-dashboard, CFBundleName=MacDashboa
 CFBundleDisplayName=MacDashboard, LSMinimumSystemVersion=14.0, NSHighResolutionCapable,
 CFBundleShortVersionString/CFBundleVersion: version is defined solely by `VERSION`/`CODENAME` in `build_app.sh`. LSApplicationCategoryType=public.app-category.utilities,
 NSHumanReadableCopyright, NSAppleEventsUsageDescription. NO LSUIElement (normal Dock app).
-Localized `en.lproj`/`ru.lproj` InfoPlist.strings are generated for the display name.
+Localized `en.lproj`/`ru.lproj` InfoPlist.strings are generated for the copyright and the
+Apple-events usage description.
 Icon: reuse legacy generator idea — render simple pulse-line icon via CoreGraphics
 swift script into iconset → iconutil (best-effort; skip icon on failure).
-codesign --force --deep --sign - "dist/MacDashboard.app".
+codesign --force --options runtime --entitlements MacDashboard.entitlements --sign -
+"dist/MacDashboard.app" — ad-hoc signature plus the hardened runtime (V2-SECURITY-FIX: without
+--options runtime, DYLD_INSERT_LIBRARIES is honoured and library validation is off, so any local
+process running as this user could inject into an app the README asks users to grant Full Disk
+Access). MacDashboard.entitlements grants exactly one entitlement,
+com.apple.security.automation.apple-events, which the hardened runtime requires for the in-process
+NSAppleScript Trash action.
 `--install` flag: copies the built bundle to `~/Applications/MacDashboard.app`, removing
 any stale bundle under an old app name first.
 README-install note: on another Mac after copying, if Gatekeeper complains:
 `xattr -dr com.apple.quarantine "MacDashboard.app"` or right-click → Open.
 
 ## 10. Testing
+
+> **HISTORICAL — the plan, not the outcome.** The `import Testing` route in the first
+> bullet was tried and failed under bare Command Line Tools; the fallback it names is
+> what actually exists, as `Checks/` (target `MacDashboardChecks`, sources symlinked
+> into `Sources/MacDashboard/` so the checks exercise the same files as the app). See
+> the note in `Package.swift:17-23` and `Checks/README.md`.
 
 - Unit tests (swift-testing `import Testing`; if unavailable with CLT, make a separate
   `MacDashboardChecks` executable target run via `swift run` that asserts and exits
@@ -439,6 +610,10 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
   source) + manual note for user.
 
 ## 11. Phases
+
+> **HISTORICAL — all four phases completed in v1.0.** This was the construction
+> schedule for the parallel agents of §3. Current work is tracked in the project's
+> `PLAN.md`, not here.
 
 1. Scaffold (Package.swift, Models.swift, App entry, DashboardModel with stub/random
    data, minimal ContentView showing stub KPI) — must `swift build` clean.

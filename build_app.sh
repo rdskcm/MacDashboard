@@ -19,8 +19,8 @@ done
 
 APP_NAME="MacDashboard"
 DIST="dist/$APP_NAME.app"
-VERSION="1.0"
-CODENAME="Cadia"
+VERSION="2.0"
+CODENAME="Krieg"
 
 echo "== swift build (universal via per-arch --triple + lipo) =="
 # `swift build --arch arm64 --arch x86_64` requires xcbuild, which is only
@@ -94,23 +94,27 @@ cat > "$DIST/Contents/Info.plist" <<PLIST
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>The dashboard reads the Login Items list via System Events.</string>
+    <string>The dashboard uses Apple events for two things: it reads your Login Items list via System Events, and — only when you confirm it in the app — it asks Finder to empty the Trash.</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 rdskcm. MIT License.</string>
 </dict>
 </plist>
 PLIST
 
+# NSAppleEventsUsageDescription is ONE app-wide string: macOS shows the same text for the
+# System Events prompt (login items) and the Finder prompt (empty Trash), so it must name
+# both — including the destructive one. Three literals in this file (Info.plist above, plus
+# the en/ru InfoPlist.strings mirrors below), no shared source: keep all three in sync.
 echo "== localized InfoPlist.strings =="
 mkdir -p "$DIST/Contents/Resources/en.lproj" "$DIST/Contents/Resources/ru.lproj"
 
 cat > "$DIST/Contents/Resources/en.lproj/InfoPlist.strings" <<'EOSTRINGS'
 NSHumanReadableCopyright = "© 2026 rdskcm. MIT License.";
-NSAppleEventsUsageDescription = "The dashboard reads the Login Items list via System Events.";
+NSAppleEventsUsageDescription = "The dashboard uses Apple events for two things: it reads your Login Items list via System Events, and — only when you confirm it in the app — it asks Finder to empty the Trash.";
 EOSTRINGS
 
 cat > "$DIST/Contents/Resources/ru.lproj/InfoPlist.strings" <<'EOSTRINGS'
 NSHumanReadableCopyright = "© 2026 rdskcm. Лицензия MIT.";
-NSAppleEventsUsageDescription = "Дашборд читает список объектов автозагрузки (Login Items) через System Events.";
+NSAppleEventsUsageDescription = "Дашборд использует Apple events для двух задач: читает список объектов автозагрузки (Login Items) через System Events и — только после вашего подтверждения в приложении — просит Finder очистить Корзину.";
 EOSTRINGS
 
 echo "== icon (best-effort) =="
@@ -121,13 +125,22 @@ else
   /usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$DIST/Contents/Info.plist" 2>/dev/null || true
 fi
 
-echo "== codesign (ad-hoc) =="
-codesign --force --deep --sign - "$DIST"
+echo "== codesign (ad-hoc, hardened runtime) =="
+# --options runtime: without the hardened runtime DYLD_INSERT_LIBRARIES is honoured
+# and library validation is off, so any local process running as this user could
+# inject into an app the README asks users to grant Full Disk Access and inherit its
+# TCC grants. --entitlements: the hardened runtime blocks in-process Apple events
+# (AdviceActionRunner.emptyTrash) unless com.apple.security.automation.apple-events
+# is present.
+# No --deep: Apple documents it as a testing convenience, and combined with
+# --entitlements it would grant these entitlements to any nested code added later.
+# Nested code, if ever added, must be signed explicitly.
+codesign --force --options runtime --entitlements MacDashboard.entitlements --sign - "$DIST"
 
 echo "== result =="
 lipo -archs "$DIST/Contents/MacOS/MacDashboard" 2>/dev/null || true
 du -sh "$DIST"
-codesign -dv "$DIST" 2>&1 | head -3
+codesign -dvv "$DIST" 2>&1 | grep -E '^(Identifier|CodeDirectory|Signature)' | head -3
 
 if [ "$INSTALL" = "1" ]; then
   echo "== install to ~/Applications =="

@@ -15,7 +15,7 @@ struct ProcEntry: Identifiable, Equatable {
     // same name) when pid is unavailable.
     var id: String { pid.map { "p\($0)" } ?? "\(rank)-\(name)" }
     var rank: Int = 0
-    var name: String            // human app/process name (top truncates at 16 chars — keep raw)
+    var name: String            // human app/process name, as `/bin/ps -o comm=` reports it
     var cpu: Double?            // percent
     var memBytes: Int64?
     var pid: Int32? = nil       // new; default keeps existing initializers compiling
@@ -77,12 +77,41 @@ struct SecurityState: Equatable {
     // nil = unknown/no permission; true = enabled
     var fileVault: Bool?; var gatekeeper: Bool?; var sip: Bool?; var firewall: Bool?
 }
+
+/// Why the last-backup date could not be obtained. A case, never a localized
+/// sentence: the Time Machine card used to detect "no Full Disk Access" by comparing
+/// the stored string against the current language's translation, so right after a
+/// language switch the comparison stopped matching and the row lost its alarm colour
+/// until the next report refresh (V2-HONEST-READINGS).
+enum TMBackupUnavailableReason: Equatable {
+    /// `tmutil latestbackup` answered "no backup…".
+    case noBackupsYet
+    /// The destination has no mount point — the disk is not connected.
+    case diskNotConnected
+    /// `diskutil` ran fine and listed zero completed snapshots.
+    case noCompletedBackups
+    /// Mounted, but the date is unreadable — the only case that is a real problem.
+    case dateUnavailableNoFDA
+
+    /// Rendered in the language current at READ time, so a language switch updates the
+    /// card immediately instead of waiting for the next collect.
+    var localizedText: String {
+        switch self {
+        case .noBackupsYet:         return L.reportCollectorNoBackupsYet
+        case .diskNotConnected:     return L.reportCollectorDiskNotConnected
+        case .noCompletedBackups:   return L.reportCollectorNoCompletedBackups
+        case .dateUnavailableNoFDA: return L.reportCollectorDateUnavailableNoFDA
+        }
+    }
+}
+
 struct TMDestination: Equatable {
     var name: String?; var kind: String?; var mountPoint: String?; var quotaBytes: Int64?; var lastBackup: String?
     // nil when lastBackup is set (or destination not yet checked); otherwise an
     // honest reason no date could be obtained (e.g. disk unmounted, or backup
     // date unreadable without Full Disk Access) — shown instead of a bare "—".
-    var lastBackupUnavailableReason: String? = nil
+    // Stored as a case, not a sentence — see TMBackupUnavailableReason.
+    var lastBackupUnavailableReason: TMBackupUnavailableReason? = nil
 }
 struct AutostartInfo: Equatable {
     var loginItems: [String]?   // nil = no permission
@@ -112,16 +141,39 @@ struct EnergySettings: Equatable { var battery: [(String, String)]; var ac: [(St
     }
 }
 
+/// One row of the crash section: every crash report a single process produced
+/// inside the collection window, collapsed into one entry with a count
+/// (V2-CRASH-SIGNAL). `process` is parsed off the report filename — the only
+/// data source available without reading report contents. `isPanic` is true when
+/// at least one of the collapsed reports is a `.panic` (kernel panic): those
+/// raise attention whatever process logged them. `directory` is the absolute path
+/// of the DiagnosticReports directory the group's first surviving report was
+/// listed in (V2-CRASH-REVEAL); it is what the reveal action opens.
+struct CrashGroup: Identifiable, Equatable {
+    var process: String         // "diffscore"
+    var count: Int              // reports from that process inside the window
+    var isPanic: Bool = false   // at least one of them a kernel panic (.panic)
+    var directory: String       // "/Library/Logs/DiagnosticReports" — where its first report was found
+    var id: String { process }
+}
+
 struct FullReport {
     var createdAt: Date?
     var system: SystemInfo?
     var snapshots: [String]?            // TM local snapshot names
     var homeDirs: [DirSize]?            // top-20 of $HOME (depth 1)
     var serviceDirs: [DirSize]?         // caches etc.
+    // Absolute paths of directories the collector could see but not read (no Full
+    // Disk Access) — the same idea as TMDestination.lastBackupUnavailableReason:
+    // an honest reason parked next to the value it explains. `[]` = nothing was
+    // hidden. Orthogonal to homeDirs/serviceDirs == nil, which still means "not
+    // collected yet".
+    var homeDirsUnreadable: [String] = []
+    var serviceDirsUnreadable: [String] = []
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?
-    var crashes: [String]?
+    var crashes: [CrashGroup]?          // grouped, ≤7 days old (V2-CRASH-SIGNAL)
     var brewVersion: String??           // .some(nil) = brew not installed
     var brewOutdated: [String]?
     var updates: [String]?              // pending macOS updates ([] = up to date)
@@ -144,6 +196,8 @@ struct Tip: Identifiable, Equatable {
 struct Assessment: Equatable {
     var problems: [Problem] = []        // sorted crit > serious > warn
     var tips: [Tip] = []
+    var items: [AttentionItem] = []       // v2 attention model — mirrors `problems`
+    var capsules: [TipCapsule] = []       // v2 attention model — mirrors `tips`
     var summarySev: Severity = .good
     var summaryText: String = L.recommendationsAllGood
     var diskSev: Severity = .good; var swapSev: Severity = .good

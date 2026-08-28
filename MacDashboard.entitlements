@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required under the hardened runtime: AdviceActionRunner.emptyTrash sends an
+         Apple event to Finder IN-PROCESS via NSAppleScript. Without this entitlement
+         the send fails with errAEEventNotPermitted (-1743) even when TCC has approved
+         the app. (The login-items read goes through a child /usr/bin/osascript, which
+         carries its own signature — this entitlement covers only the sender. But TCC
+         attributes the Automation grant to the RESPONSIBLE PROCESS, MacDashboard, not
+         the sender, which is why the app's own NSAppleEventsUsageDescription is what
+         the user sees for the System Events prompt as well as the Finder one — see
+         build_app.sh:96.) -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+</dict>
+</plist>

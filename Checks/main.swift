@@ -31,6 +31,11 @@ func check(_ cond: Bool, _ name: String) {
     if !cond { failures += 1 }
 }
 
+// V2-CRASH-REVEAL: the two real DiagnosticReports directories, by their production
+// priority order (per-user first). Used by every crash fixture below.
+let userCrashDir = FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports"
+let systemCrashDir = "/Library/Logs/DiagnosticReports"
+
 /// Bridges an `async` operation into this synchronous top-level executable WITHOUT
 /// deadlocking. A naive `DispatchSemaphore.wait()` on the main thread blocks forever
 /// here: `ReportCollector.collect` hops onto `@MainActor` (for its `onSection`
@@ -56,142 +61,83 @@ func runAsyncBlocking<T>(_ operation: @escaping () async -> T) -> T {
 let GIB: Int64 = 1 << 30
 let MIB: Int64 = 1 << 20
 
-// =====================================================================
-// MARK: - Parsers: top (process tables)
-// =====================================================================
-
-let topCpuMemFixture = """
-Processes: 412 total, 3 running, 409 sleeping, 1901 threads
-2026/07/12 12:00:00
-Load Avg: 2.10, 2.05, 1.98
-CPU usage: 12.5% user, 5.3% sys, 82.2% idle
-SharedLibs: 512M resident, 92M data, 20M linkedit.
-MemRegions: 90000 total, 3500M resident, 200M private, 800M shared.
-PhysMem: 15G used (3200M wired), 500M unused.
-VM: 3200G vsize, 1500M framework vsize, 0(0) swapins, 0(0) swapouts.
-Networks: packets: 100000/50M in, 90000/40M out.
-Disks: 500000/10G read, 400000/8G written.
-
-PID    COMMAND      %CPU  MEM
-100    Finder       1.0   100M
-
-Processes: 412 total, 3 running, 409 sleeping, 1901 threads
-2026/07/12 12:00:03
-Load Avg: 2.10, 2.05, 1.98
-CPU usage: 12.5% user, 5.3% sys, 82.2% idle
-SharedLibs: 512M resident, 92M data, 20M linkedit.
-MemRegions: 90000 total, 3500M resident, 200M private, 800M shared.
-PhysMem: 15G used (3200M wired), 500M unused.
-VM: 3200G vsize, 1500M framework vsize, 0(0) swapins, 0(0) swapouts.
-Networks: packets: 100000/50M in, 90000/40M out.
-Disks: 500000/10G read, 400000/8G written.
-
-CPU     MEM      COMMAND
-25.3    521M     Google Chrome Helper
-10.1    1747M    WindowServer
-0.5     3808K+   mdworker
-"""
-
-do {
-    let rows = Parsers.topProcesses(topCpuMemFixture, order: (.cpu, .mem))
-    check(rows.count == 3, "topProcesses(cpu,mem): only LAST sample's 3 rows returned (got \(rows.count))")
-    check(rows.first(where: { $0.name.hasPrefix("Finder") }) == nil,
-          "topProcesses(cpu,mem): first-sample row (Finder) is excluded")
-    if rows.count == 3 {
-        check(rows[0].name == "Google Chrome Helper…", "topProcesses: 20-char command name gets ellipsis (got \(rows[0].name))")
-        check(rows[0].cpu == 25.3, "topProcesses: row0 cpu == 25.3 (got \(String(describing: rows[0].cpu)))")
-        check(rows[0].memBytes == 521 * MIB, "topProcesses: row0 mem == 521M bytes")
-        check(rows[1].name == "WindowServer", "topProcesses: row1 name == WindowServer (12 chars, no ellipsis)")
-        check(rows[1].memBytes == 1747 * MIB, "topProcesses: row1 mem == 1747M bytes")
-        check(rows[2].memBytes == Parsers.parseSize("3808K+"), "topProcesses: row2 mem parses 3808K+ suffix")
-        check(rows[2].name == "mdworker", "topProcesses: row2 name == mdworker (no ellipsis)")
-    }
-}
-
-let topMemCpuFixture = """
-Processes: 100 total, 2 running
-Load Avg: 1.0, 1.0, 1.0
-
-MEM      CPU    COMMAND
-256M     3.5    Safari
-128M     1.2    Mail
-"""
-
-do {
-    let rows = Parsers.topProcesses(topMemCpuFixture, order: (.mem, .cpu))
-    check(rows.count == 2, "topProcesses(mem,cpu order): 2 rows (got \(rows.count))")
-    if rows.count == 2 {
-        check(rows[0].name == "Safari" && rows[0].memBytes == 256 * MIB && rows[0].cpu == 3.5,
-              "topProcesses(mem,cpu order): row0 Safari 256M 3.5%")
-        check(rows[1].name == "Mail" && rows[1].memBytes == 128 * MIB && rows[1].cpu == 1.2,
-              "topProcesses(mem,cpu order): row1 Mail 128M 1.2%")
-    }
-}
-
-check(Parsers.topProcesses("", order: (.cpu, .mem)).isEmpty, "topProcesses: empty string ⇒ []")
-check(Parsers.topProcesses("this is garbage\nnot top output at all", order: (.cpu, .mem)).isEmpty,
-      "topProcesses: garbage string ⇒ []")
-
-// `top -l 2 -stats pid,cpu,mem,command` (leadingPID) — realistic two-sample output,
-// second sample authoritative (same first-sample-excluded trick as topCpuMemFixture
-// above). One row in the authoritative sample has a non-numeric PID (garbage) and
-// must be skipped rather than crashing/misaligning the rest.
-let topPidCpuMemFixture = """
-Processes: 420 total, 2 running, 418 sleeping, 1910 threads
-2026/07/16 12:00:00
-Load Avg: 1.50, 1.40, 1.30
-CPU usage: 8.0% user, 3.0% sys, 89.0% idle
-SharedLibs: 512M resident, 92M data, 20M linkedit.
-MemRegions: 90000 total, 3500M resident, 200M private, 800M shared.
-PhysMem: 15G used (3200M wired), 500M unused.
-VM: 3200G vsize, 1500M framework vsize, 0(0) swapins, 0(0) swapouts.
-Networks: packets: 100000/50M in, 90000/40M out.
-Disks: 500000/10G read, 400000/8G written.
-
-PID    %CPU MEM   COMMAND
-1      0.0  10M   launchd
-
-Processes: 420 total, 2 running, 418 sleeping, 1910 threads
-2026/07/16 12:00:03
-Load Avg: 1.50, 1.40, 1.30
-CPU usage: 8.0% user, 3.0% sys, 89.0% idle
-SharedLibs: 512M resident, 92M data, 20M linkedit.
-MemRegions: 90000 total, 3500M resident, 200M private, 800M shared.
-PhysMem: 15G used (3200M wired), 500M unused.
-VM: 3200G vsize, 1500M framework vsize, 0(0) swapins, 0(0) swapouts.
-Networks: packets: 100000/50M in, 90000/40M out.
-Disks: 500000/10G read, 400000/8G written.
-
-PID    %CPU MEM   COMMAND
-27120  25.3 521M  Google Chrome Helper
-garbage 1.0 10M   BogusRow
-27119  10.1 1747M WindowServer
-"""
-
-do {
-    let rows = Parsers.topProcesses(topPidCpuMemFixture, order: (.cpu, .mem), leadingPID: true)
-    check(rows.count == 2, "topProcesses(leadingPID): non-numeric-pid row skipped, 2 rows left (got \(rows.count))")
-    check(rows.first(where: { $0.name == "launchd" }) == nil,
-          "topProcesses(leadingPID): first-sample row (launchd) is excluded")
-    if rows.count == 2 {
-        check(rows[0].pid == 27120, "topProcesses(leadingPID): row0 pid == 27120 (got \(String(describing: rows[0].pid)))")
-        check(rows[0].name == "Google Chrome Helper…", "topProcesses(leadingPID): row0 name gets ellipsis (got \(rows[0].name))")
-        check(rows[0].cpu == 25.3, "topProcesses(leadingPID): row0 cpu == 25.3")
-        check(rows[0].memBytes == 521 * MIB, "topProcesses(leadingPID): row0 mem == 521M bytes")
-        check(rows[1].pid == 27119, "topProcesses(leadingPID): row1 pid == 27119 (got \(String(describing: rows[1].pid)))")
-        check(rows[1].name == "WindowServer", "topProcesses(leadingPID): row1 name == WindowServer")
-        check(rows[1].memBytes == 1747 * MIB, "topProcesses(leadingPID): row1 mem == 1747M bytes")
-    }
-    // leadingPID: false is unaffected by the new parameter — old fixture, re-checked
-    // via the default argument (no `leadingPID:` passed) rather than an explicit one.
-    let oldFixtureRows = Parsers.topProcesses(topCpuMemFixture, order: (.cpu, .mem))
-    check(oldFixtureRows.count == 3 && oldFixtureRows.allSatisfy { $0.pid == nil },
-          "topProcesses: leadingPID defaults false, old fixture unaffected, pid stays nil")
-}
-
 // ProcEntry.id: "p<pid>" when pid present, old rank-based form when pid is nil.
 check(ProcEntry(rank: 3, name: "X", pid: 27120).id == "p27120", "ProcEntry.id: \"p<pid>\" when pid present")
 check(ProcEntry(rank: 3, name: "X").id == "3-X", "ProcEntry.id: old rank-based form when pid is nil")
+
+// =====================================================================
+// MARK: - Array<ProcEntry>.stableOrdered(matching:) (V2-FIX-ROWID Step 2)
+// =====================================================================
+
+do {
+    let a = ProcEntry(rank: 0, name: "A", cpu: 10, pid: 1)
+    let b = ProcEntry(rank: 1, name: "B", cpu: 20, pid: 2)
+    let c = ProcEntry(rank: 2, name: "C", cpu: 5, pid: 3)
+
+    let empty = [a, b, c].stableOrdered(matching: [])
+    check(empty.map(\.pid) == [1, 2, 3], "stableOrdered: empty frozen ⇒ receiver unchanged")
+
+    // Input re-sorted (b now leads); frozen order should still win.
+    let resorted = [b, a, c].stableOrdered(matching: [1, 2, 3])
+    check(resorted.map(\.pid) == [1, 2, 3], "stableOrdered: frozen order honoured against differently-sorted input")
+
+    // A frozen pid missing from the input (process died / fell out of top-N) is skipped.
+    let missing = [a, c].stableOrdered(matching: [1, 2, 3])
+    check(missing.map(\.pid) == [1, 3], "stableOrdered: frozen pid absent from input is skipped")
+
+    // A new pid not in frozen lands after the frozen ones, in the receiver's own order.
+    let d = ProcEntry(rank: 3, name: "D", cpu: 1, pid: 4)
+    let withNew = [d, b, a].stableOrdered(matching: [1, 2])
+    check(withNew.map(\.pid) == [1, 2, 4], "stableOrdered: new pid not in frozen lands after frozen ones")
+
+    // nil-pid rows land in the trailing group.
+    let nilPidRow = ProcEntry(rank: 4, name: "E", cpu: 1)
+    let withNilPid = [nilPidRow, b, a].stableOrdered(matching: [1, 2])
+    check(withNilPid.map(\.pid) == [1, 2, nil], "stableOrdered: nil-pid row lands in trailing group")
+
+    // Returned elements carry the INPUT's (fresh) values/ids, not the frozen snapshot's.
+    let aFresh = ProcEntry(rank: 5, name: "A", cpu: 99, pid: 1)
+    let fresh = [aFresh, b].stableOrdered(matching: [1, 2])
+    check(fresh.first?.cpu == 99 && fresh.first?.id == aFresh.id,
+          "stableOrdered: returned elements are the input's fresh values/ids, not the frozen snapshot's")
+}
+
+// =====================================================================
+// MARK: - Array<ProcEntry>.rankedByCPU()/rankedByMem() (V2-RELAYOUT-RESIDUAL)
+// =====================================================================
+
+do {
+    // Both render as "0,2%": a difference below display precision must NOT reorder,
+    // and the result must not depend on the input order (Array.sorted is unstable).
+    let hi = ProcEntry(rank: 0, name: "hi", cpu: 0.24, pid: 900)
+    let lo = ProcEntry(rank: 0, name: "lo", cpu: 0.16, pid: 400)
+    check([hi, lo].rankedByCPU().map(\.pid) == [400, 900],
+          "rankedByCPU: sub-display-precision difference does not reorder (pid decides)")
+    check([lo, hi].rankedByCPU().map(\.pid) == [400, 900],
+          "rankedByCPU: same result from the opposite input order")
+
+    // A difference the display DOES show still ranks by value.
+    let big = ProcEntry(rank: 0, name: "big", cpu: 0.9, pid: 999)
+    check([lo, big].rankedByCPU().map(\.pid) == [999, 400],
+          "rankedByCPU: a visible CPU difference still ranks by value")
+
+    // nil cpu ranks as 0 and lands last, as it did before.
+    let none = ProcEntry(rank: 0, name: "none", cpu: nil, pid: 100)
+    check([none, lo].rankedByCPU().map(\.pid) == [400, 100],
+          "rankedByCPU: nil cpu ranks as 0")
+
+    // Mem list: equal footprints break by pid, not by input order.
+    let m1 = ProcEntry(rank: 0, name: "m1", cpu: 0, memBytes: 5 * MIB, pid: 700)
+    let m2 = ProcEntry(rank: 0, name: "m2", cpu: 0, memBytes: 5 * MIB, pid: 300)
+    check([m1, m2].rankedByMem().map(\.pid) == [300, 700],
+          "rankedByMem: equal memBytes break by pid")
+    check([m2, m1].rankedByMem().map(\.pid) == [300, 700],
+          "rankedByMem: same result from the opposite input order")
+    // A real difference still wins over the tie-break.
+    let m3 = ProcEntry(rank: 0, name: "m3", cpu: 0, memBytes: 9 * MIB, pid: 800)
+    check([m2, m3].rankedByMem().map(\.pid) == [800, 300],
+          "rankedByMem: a larger footprint outranks a lower pid")
+}
 
 // =====================================================================
 // MARK: - Parsers.parseSize
@@ -318,6 +264,36 @@ do {
     check(dest?.quotaBytes == 499 * 1_000_000_000, "tmDestination: quota 499 GB decimal bytes")
 
     check(Parsers.tmDestination("No destinations configured.") == nil, "tmDestination: not configured ⇒ nil")
+}
+
+// =====================================================================
+// MARK: - TMBackupUnavailableReason
+// =====================================================================
+
+do {
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+
+    let cases: [TMBackupUnavailableReason] = [.noBackupsYet, .diskNotConnected,
+                                              .noCompletedBackups, .dateUnavailableNoFDA]
+    for lang in AppLanguage.allCases {
+        L10nStore.shared.language = lang
+        let texts = cases.map(\.localizedText)
+        check(texts.allSatisfy { !$0.isEmpty }, "TMBackupUnavailableReason \(lang): every case has text")
+        check(Set(texts).count == cases.count, "TMBackupUnavailableReason \(lang): texts are distinct")
+    }
+
+    // The regression this replaces: the reason used to be a stored localized string, so a
+    // language switch broke the card's `== no-FDA` comparison. The case is language-free.
+    var dest = TMDestination()
+    L10nStore.shared.language = .ru
+    dest.lastBackupUnavailableReason = .dateUnavailableNoFDA
+    let ruText = dest.lastBackupUnavailableReason?.localizedText
+    L10nStore.shared.language = .en
+    check(dest.lastBackupUnavailableReason == .dateUnavailableNoFDA,
+          "TMBackupUnavailableReason: case survives a language switch")
+    check(dest.lastBackupUnavailableReason?.localizedText != ruText,
+          "TMBackupUnavailableReason: localizedText follows the CURRENT language")
 }
 
 // =====================================================================
@@ -538,15 +514,69 @@ do {
 
 do {
     var report = FullReport()
-    report.crashes = ["crash1.ips"]
+    report.crashes = [CrashGroup(process: AppInfo.name, count: 2, directory: userCrashDir)]
     let a = Assess.assess(report: report, live: LiveSnapshot())
-    check(a.problems.contains { $0.sev == .warn && $0.text.contains("крэш") }, "assess crashes [x]: warn")
+    check(a.problems.contains { $0.sev == .warn && $0.text == L.assessOwnCrashesRecent(AppInfo.name, 2) },
+          "assess crashes: own-app group -> warn problem naming the app")
+    check(a.items.contains { $0.kind == .crashes }, "assess crashes: own-app group -> AttentionItem(.crashes)")
+}
+do {
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
+                      CrashGroup(process: "activatehelper", count: 1, directory: userCrashDir)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(!a.items.contains { $0.kind == .crashes }, "assess crashes: system processes only -> no AttentionItem")
+    check(a.problems.isEmpty, "assess crashes: system processes only -> no problem")
+    check(a.tips.isEmpty && a.capsules.isEmpty, "assess crashes: system processes only -> no tip/capsule either")
+}
+do {
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
+                      CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: own + system -> exactly one item")
+    check(a.problems.contains { $0.text == L.assessOwnCrashesRecent(AppInfo.name, 1) },
+          "assess crashes: own + system -> count is own-app only (1, not 7)")
+}
+do {
+    // The panic exception: an arbitrary non-MacDashboard process, still raises attention.
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: systemCrashDir)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.items.filter { $0.kind == .crashes }.count == 1,
+          "assess crashes: kernel panic from a non-own process -> exactly one AttentionItem(.crashes)")
+    check(a.problems.contains { $0.sev == .warn && $0.text == L.assessKernelPanicsRecent(1) },
+          "assess crashes: kernel panic -> warn problem with the panic sentence")
+}
+do {
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
+                      CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: panic + system -> exactly one item")
+    check(a.problems.contains { $0.text == L.assessKernelPanicsRecent(2) },
+          "assess crashes: panic + system -> count is the panic group only (2, not 8)")
+    check(a.items.first { $0.kind == .crashes }?.detail == L.attnDetailCrashes(2),
+          "assess crashes: panic + system -> detail counts panic reports only")
+}
+do {
+    var report = FullReport()
+    report.crashes = [CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir),
+                      CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir),
+                      CrashGroup(process: "diffscore", count: 6, directory: userCrashDir)]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.items.filter { $0.kind == .crashes }.count == 1, "assess crashes: panic + own + system -> still one item")
+    let text = a.items.first { $0.kind == .crashes }?.fullText ?? ""
+    check(text.contains(L.assessKernelPanicsRecent(2)) && text.contains(L.assessOwnCrashesRecent(AppInfo.name, 1)),
+          "assess crashes: panic + own -> the single item carries both sentences")
+    check(a.items.first { $0.kind == .crashes }?.detail == L.attnDetailCrashes(3),
+          "assess crashes: panic + own -> detail counts panic + own reports (3, not 9)")
 }
 do {
     var report = FullReport()
     report.crashes = []
     let a = Assess.assess(report: report, live: LiveSnapshot())
-    check(!a.problems.contains { $0.text.contains("крэш") }, "assess crashes []: nothing")
+    check(!a.items.contains { $0.kind == .crashes }, "assess crashes []: nothing")
 }
 
 do {
@@ -671,7 +701,9 @@ do {
 // normal, fully-supported state (see StringsEN.reportNoBattery), not an error. Smoke
 // checks below use this to stay meaningful on battery-equipped machines while not
 // spuriously failing on desktop Macs or CI runners.
-let hasBattery = LiveCollector().collect().battery != nil
+// `collect(limit:)` takes the process-table length explicitly rather than reading
+// AppSettings.shared — checks must not depend on the user's saved preferences.
+let hasBattery = LiveCollector().collect(limit: 10).battery != nil
 
 // =====================================================================
 // MARK: - SMOKE (real machine)
@@ -679,21 +711,37 @@ let hasBattery = LiveCollector().collect().battery != nil
 
 do {
     let collector = LiveCollector()
-    _ = collector.collect()
+    _ = collector.collect(limit: 10)
     Thread.sleep(forTimeInterval: 1.3)
-    let snap2 = collector.collect()
+    let snap2 = collector.collect(limit: 10)
     check(snap2.cpu != nil, "smoke LiveCollector: 2nd sample cpu != nil")
     check((snap2.mem?.total ?? 0) > 4 * GIB, "smoke LiveCollector: mem.total > 4 GiB")
     check((snap2.disk?.size ?? 0) > 0, "smoke LiveCollector: disk.size > 0")
     check(snap2.load != nil, "smoke LiveCollector: load != nil")
     check(snap2.ncpu >= 1, "smoke LiveCollector: ncpu >= 1 (got \(snap2.ncpu))")
-    // Exercises the REAL `top -l 2 -s 1 -stats pid,cpu,mem,command` output on this
-    // machine end-to-end through the new leadingPID parse path (a synthetic fixture
-    // only proves the parser handles an assumed format, not that the real `top`
-    // header/columns actually match it).
-    check(!snap2.topCPU.isEmpty, "smoke LiveCollector: topCPU non-empty (real top+leadingPID parse)")
-    check(snap2.topCPU.first?.pid != nil, "smoke LiveCollector: live pid parsed through leadingPID path")
+    // Exercises the REAL `/bin/ps -axww -o pid=,rss=,time=,comm=` output on this
+    // machine end-to-end through the ProcessSampler ps-snapshot path (a synthetic
+    // fixture only proves the parser handles an assumed format, not that the real
+    // `ps` columns actually match it).
+    check(!snap2.topCPU.isEmpty, "smoke LiveCollector: topCPU non-empty (real ps snapshot parse)")
+    check(snap2.topCPU.first?.pid != nil, "smoke LiveCollector: live pid parsed through ps snapshot path")
     check(!snap2.topMem.isEmpty, "smoke LiveCollector: topMem non-empty")
+    // sample() may legitimately return fewer rows than the limit, so <= not ==.
+    check(snap2.topCPU.count <= 10,
+          "smoke LiveCollector: topCPU.count <= processListLimit")
+    check(snap2.topMem.count <= 10,
+          "smoke LiveCollector: topMem.count <= processListLimit")
+    check(snap2.topCPU.allSatisfy { $0.cpu != nil },
+          "smoke LiveCollector: every topCPU row has a cpu value (sampler primed itself)")
+}
+
+do {
+    check(AppSettings.allowedProcessLimits == [5, 10, 15],
+          "AppSettings.allowedProcessLimits == [5, 10, 15]")
+    // Re-check of the resolution formula via the real product function (AppSettings.init()
+    // calls the same one — see AppSettings.resolveProcessLimit).
+    check(AppSettings.resolveProcessLimit(raw: 0) == 10, "AppSettings: fresh default (unset) resolves to 10")
+    check(AppSettings.resolveProcessLimit(raw: 999) == 10, "AppSettings: out-of-range stored value resolves to 10")
 }
 
 do {
@@ -707,6 +755,8 @@ do {
     check(!hasBattery || result?.battery != nil,
           "smoke ReportCollector: battery != nil (or no battery on this machine)")
     check(result?.energy != nil, "smoke ReportCollector: energy != nil")
+    check(result?.crashes != nil,
+          "smoke ReportCollector: crashes != nil (the section answers even if a directory is unreadable)")
     // Block N7 smoke — on a real developer machine with smartctl + the NOPASSWD
     // sudo rule, the disk reporting itself as "internal" should carry parsed SMART
     // attrs. Hosted CI runners (GitHub Actions sets CI=true) have unpredictable disk
@@ -1089,7 +1139,7 @@ check(ruPlural(104, "цикл", "цикла", "циклов") == "цикла", "
 
 check(!L.kpiCpuLabel.isEmpty, "L.kpiCpuLabel: non-empty")
 check(!L.securityTitle.isEmpty, "L.securityTitle: non-empty")
-check(!L.appWindowTitle.isEmpty, "L.appWindowTitle: non-empty")
+check(!AppInfo.name.isEmpty, "AppInfo.name: non-empty")
 
 // =====================================================================
 // MARK: - L10nStore (live language switching)
@@ -1267,6 +1317,25 @@ do {
     check(elapsed < 4, "CommandRunner.runStreaming: timeout wall time < 4s (got \(elapsed))")
 }
 
+do {
+    // V2-POLISH B1: runStreaming must pin the environment it is given, the way
+    // run/runCapturing do — this is what puts Homebrew's own prefix on PATH for
+    // `brew upgrade`, not just for the short `--version`/`outdated` calls.
+    let env = CommandRunner.environment(prependingPATH: ["/opt/homebrew/bin"])
+    let result = CommandRunner.runStreaming(
+        "/bin/sh", ["-c", "printf '%s\\n' \"$PATH\""], timeout: 10, environment: env
+    ) { _, _ in }
+    let path = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    check(path.hasPrefix("/opt/homebrew/bin:"),
+          "CommandRunner.runStreaming: honours the environment it is passed (PATH prefix), got \(path)")
+
+    let defaulted = CommandRunner.runStreaming(
+        "/bin/sh", ["-c", "printf '%s\\n' \"$LC_ALL\""], timeout: 10
+    ) { _, _ in }
+    check(defaulted?.trimmingCharacters(in: .whitespacesAndNewlines) == "C",
+          "CommandRunner.runStreaming: defaults to defaultEnvironment (LC_ALL=C)")
+}
+
 // =====================================================================
 // MARK: - BrewProgressParser
 // =====================================================================
@@ -1394,6 +1463,12 @@ do {
 runSmartToolsAvailabilityChecks()
 
 // =====================================================================
+// MARK: - sudo path safety (V2-SECURITY-FIX M2, in SudoPathSafetyChecks.swift)
+// =====================================================================
+
+runSudoPathSafetyChecks()
+
+// =====================================================================
 // MARK: - LaunchdPlistInspector (Block N6, in LaunchdPlistInspectorChecks.swift)
 // =====================================================================
 
@@ -1404,6 +1479,30 @@ runLaunchdPlistInspectorChecks()
 // =====================================================================
 
 runThermalSensorsChecks()
+
+// =====================================================================
+// MARK: - ps process sampler (Block V2-PROC-NATIVE, in ProcessSamplerChecks.swift)
+// =====================================================================
+
+runProcessSamplerChecks()
+
+// MARK: - barSegmentIndex (re-review 2 [N4]/[N6]: memory-bar hover hit test)
+do {
+    // Three 10 pt segments with a 2 pt gap: [0,10] [12,22] [24,34].
+    let rects: [(x: CGFloat, width: CGFloat)] = [(0, 10), (12, 10), (24, 10)]
+    check(barSegmentIndex(at: 0, rects: rects) == 0, "barSegmentIndex: left edge ⇒ first segment")
+    check(barSegmentIndex(at: 5, rects: rects) == 0, "barSegmentIndex: inside first ⇒ 0")
+    check(barSegmentIndex(at: 10, rects: rects) == 0, "barSegmentIndex: first segment's right edge ⇒ 0")
+    check(barSegmentIndex(at: 11, rects: rects) == 0, "barSegmentIndex: inside the gap ⇒ the segment on its LEFT (was nil)")
+    check(barSegmentIndex(at: 12, rects: rects) == 1, "barSegmentIndex: second segment's left edge ⇒ 1")
+    check(barSegmentIndex(at: 23, rects: rects) == 1, "barSegmentIndex: second gap ⇒ 1")
+    check(barSegmentIndex(at: 34, rects: rects) == 2, "barSegmentIndex: right edge of the last segment ⇒ 2")
+    check(barSegmentIndex(at: 40, rects: rects) == 2, "barSegmentIndex: past the bar ⇒ last segment, never nil")
+    check(barSegmentIndex(at: -3, rects: rects) == 0, "barSegmentIndex: left of the bar ⇒ first segment, never nil")
+    check((0...34).allSatisfy { barSegmentIndex(at: CGFloat($0), rects: rects) != nil },
+          "barSegmentIndex: every integer x across the bar resolves to a segment (no boundary drop-outs)")
+    check(barSegmentIndex(at: 5, rects: []) == nil, "barSegmentIndex: no rects ⇒ nil")
+}
 
 // =====================================================================
 // MARK: - HistorySeries (Block H, in HistorySeriesChecks.swift)
@@ -1422,6 +1521,850 @@ runAIRedactionChecks()
 // =====================================================================
 
 runAIPayloadRequestChecks()
+
+// =====================================================================
+// MARK: - AttentionModel
+// =====================================================================
+
+do {
+    // 1. summaryTitle RU
+    let ruCases: [(Int, String)] = [
+        (0, "Всё в порядке"),
+        (1, "Одна задача требует внимания"),
+        (2, "Две задачи требуют внимания"),
+        (3, "Три задачи требуют внимания"),
+        (5, "Пять задач требуют внимания"),
+        (6, "Шесть задач требуют внимания"),
+        (11, "11 задач требуют внимания"),
+        (14, "14 задач требуют внимания"),
+        (21, "21 задача требует внимания"),
+    ]
+    for (n, expected) in ruCases {
+        check(AttentionModel.summaryTitle(count: n, lang: .ru) == expected,
+              "AttentionModel.summaryTitle ru(\(n)) == '\(expected)'")
+    }
+
+    // 2. summaryTitle EN
+    let enCases: [(Int, String)] = [
+        (0, "Everything is fine"),
+        (1, "1 item needs attention"),
+        (2, "2 items need attention"),
+        (14, "14 items need attention"),
+    ]
+    for (n, expected) in enCases {
+        check(AttentionModel.summaryTitle(count: n, lang: .en) == expected,
+              "AttentionModel.summaryTitle en(\(n)) == '\(expected)'")
+    }
+
+    // 3. RU number agreement spot-checks
+    let ruSpot: [(Int, String)] = [
+        (22, "22 задачи требуют внимания"),
+        (25, "25 задач требуют внимания"),
+        (111, "111 задач требуют внимания"),
+        (101, "101 задача требует внимания"),
+    ]
+    for (n, expected) in ruSpot {
+        check(AttentionModel.summaryTitle(count: n, lang: .ru) == expected,
+              "AttentionModel.summaryTitle ru(\(n)) == '\(expected)'")
+    }
+
+    // negative counts clamp to 0
+    check(AttentionModel.summaryTitle(count: -3, lang: .ru) == "Всё в порядке",
+          "AttentionModel.summaryTitle ru(-3) clamps to 0 -> 'Всё в порядке'")
+}
+
+// 4. QuietState.quiet(report:) truth table
+do {
+    var report = FullReport()
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true)
+    check(QuietState.quiet(report: report).securityQuiet, "QuietState: all-true security -> securityQuiet true")
+
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
+    check(!QuietState.quiet(report: report).securityQuiet, "QuietState: one field false -> securityQuiet false")
+
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: nil)
+    check(!QuietState.quiet(report: report).securityQuiet, "QuietState: one field nil -> securityQuiet false")
+
+    report.security = nil
+    check(!QuietState.quiet(report: report).securityQuiet, "QuietState: report.security == nil -> securityQuiet false")
+
+    var r2 = FullReport()
+    r2.updates = []; r2.crashes = []
+    check(QuietState.quiet(report: r2).updatesQuiet, "QuietState: updates=[] & crashes=[] -> updatesQuiet true")
+
+    r2.updates = nil; r2.crashes = []
+    check(!QuietState.quiet(report: r2).updatesQuiet, "QuietState: updates=nil -> updatesQuiet false")
+
+    r2.updates = []; r2.crashes = nil
+    check(!QuietState.quiet(report: r2).updatesQuiet, "QuietState: crashes=nil -> updatesQuiet false")
+
+    r2.updates = ["u1"]; r2.crashes = []
+    check(!QuietState.quiet(report: r2).updatesQuiet, "QuietState: updates non-empty -> updatesQuiet false")
+}
+
+// A "full-bad" fixture that trips every branch except disk (parameterized: disk.pct
+// picks diskFull vs. diskFullSoon — see below).
+func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
+    var report = FullReport()
+    report.security = SecurityState(fileVault: false, gatekeeper: false, sip: false, firewall: false)
+    report.updates = ["u1"]
+    report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
+    report.tmDest = .some(.none)
+    report.smart = [
+        SmartDisk(device: "internal", title: "Boot SSD", status: "SMART: ошибки носителя",
+                  attrs: [("Media and Data Integrity Errors", "3")], severity: .crit),
+        SmartDisk(device: "/dev/disk4", title: "External SSD", status: "SMART: износ на исходе",
+                  attrs: [("Percentage Used", "85")], severity: .warn),
+    ]
+    report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: nil, condition: "Replace Now", maxCapacity: 60)
+    var live = LiveSnapshot()
+    let size: Int64 = 1_000_000_000_000
+    live.disk = DiskInfo(size: size, avail: Int64(Double(size) * (1 - diskPct)), dataUsed: nil, sysUsed: nil)
+    let swapUsed = Int64(2.5 * Double(GIB))
+    live.swap = SwapInfo(total: 4 * GIB, used: swapUsed, free: 4 * GIB - swapUsed)
+    return (report, live)
+}
+
+// 5. Every AttentionKind produces non-empty label/detail/fullText in both languages.
+do {
+    // diskFull and diskFullSoon share one `if/else if` on the same live.disk.pct
+    // (Assessment.swift), so no single report can trip both; two fixtures that
+    // differ only in disk% cover all 14 kinds between them.
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+
+    for lang in AppLanguage.allCases {
+        L10nStore.shared.language = lang
+        let (reportFull, liveFull) = attnFullBadFixture(diskPct: 0.90)   // -> diskFull
+        let (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.75)   // -> diskFullSoon
+        let itemsFull = Assess.assess(report: reportFull, live: liveFull).items
+        let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon).items
+        let allItems = itemsFull + itemsSoon
+        let kinds = Set(allItems.map(\.kind))
+        check(kinds.count == AttentionKind.allCases.count, "AttentionModel coverage (\(lang)): all \(AttentionKind.allCases.count) AttentionKind cases produced (got \(kinds.count))")
+        for item in allItems {
+            check(!item.label.isEmpty, "AttentionModel coverage (\(lang)): \(item.kind.rawValue) label non-empty")
+            check(!item.detail.isEmpty, "AttentionModel coverage (\(lang)): \(item.kind.rawValue) detail non-empty")
+            check(!item.fullText.isEmpty, "AttentionModel coverage (\(lang)): \(item.kind.rawValue) fullText non-empty")
+        }
+    }
+}
+
+// A broader fixture that also trips tip/capsule-producing branches, for the verb,
+// parity and regression checks below (these don't need all 14 AttentionKinds, just
+// a healthy mix of items+capsules with both nil and non-nil actions).
+func attnMegaBadFixture() -> (FullReport, LiveSnapshot) {
+    var (report, live) = attnFullBadFixture(diskPct: 0.90)
+    report.brewOutdated = ["pkg1", "pkg2", "pkg3"]
+    report.smart?.append(SmartDisk(device: "/dev/disk5", title: "External HDD", status: "SMART недоступен",
+                                    attrs: [], severity: .warn))
+    report.homeDirs = [
+        DirSize(path: "/Users/x/Downloads", bytes: 11 * GIB),
+        DirSize(path: "/Users/x/.Trash", bytes: 2 * GIB),
+    ]
+    report.serviceDirs = [
+        DirSize(path: FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Caches", bytes: 4 * GIB),
+    ]
+    return (report, live)
+}
+
+do {
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+    L10nStore.shared.language = .ru
+
+    let (report, live) = attnMegaBadFixture()
+    let a = Assess.assess(report: report, live: live)
+
+    // 6. Verb rule.
+    for item in a.items {
+        if item.action == nil {
+            check(item.verb.isEmpty, "AttentionModel verb rule: \(item.kind.rawValue) action==nil -> verb == ''")
+        } else {
+            check(!item.verb.isEmpty, "AttentionModel verb rule: \(item.kind.rawValue) action!=nil -> verb non-empty")
+        }
+        if !item.verb.isEmpty {
+            check(!item.detail.contains(item.verb), "AttentionModel verb rule: \(item.kind.rawValue) detail does not contain its verb")
+        }
+    }
+    for capsule in a.capsules {
+        if capsule.action == nil {
+            check(capsule.verb.isEmpty, "AttentionModel verb rule: capsule '\(capsule.object)' action==nil -> verb == ''")
+        } else {
+            check(!capsule.verb.isEmpty, "AttentionModel verb rule: capsule '\(capsule.object)' action!=nil -> verb non-empty")
+        }
+        if !capsule.verb.isEmpty {
+            check(!capsule.value.contains(capsule.verb), "AttentionModel verb rule: capsule '\(capsule.object)' value does not contain its verb")
+        }
+    }
+    check(!a.items.isEmpty && !a.capsules.isEmpty, "AttentionModel verb rule: fixture produced both items and capsules")
+
+    // 7. Parity between problems/items and tips/capsules.
+    check(a.items.count == a.problems.count, "AttentionModel parity: items.count == problems.count")
+    var parityOK = a.items.count == a.problems.count
+    for i in 0..<min(a.items.count, a.problems.count) {
+        if a.items[i].sev != a.problems[i].sev || a.items[i].fullText != a.problems[i].text { parityOK = false }
+    }
+    check(parityOK, "AttentionModel parity: items[i].sev/fullText == problems[i].sev/text for every index")
+    check(a.capsules.count == a.tips.count, "AttentionModel parity: capsules.count == tips.count")
+
+    // 8. Regression guard: crit > serious > warn ordering unchanged; summary text form unchanged.
+    func rankFor(_ s: Severity) -> Int {
+        switch s {
+        case .crit: return 3
+        case .serious: return 2
+        case .warn: return 1
+        default: return 0
+        }
+    }
+    let sevRanks = a.problems.map { rankFor($0.sev) }
+    check(sevRanks == sevRanks.sorted(by: >), "AttentionModel regression guard: problems.map(sev) non-increasing (crit -> serious -> warn)")
+    check(a.summaryText == L.assessSummaryCount(a.problems.count), "AttentionModel regression guard: summaryText form unchanged")
+}
+
+// 9. QuietState three-state SectionStatus (.collecting / .quiet / .loud)
+do {
+    var report = FullReport()
+    report.security = nil
+    check(QuietState.quiet(report: report).security == .collecting, "QuietState: security==nil -> .collecting")
+
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true)
+    check(QuietState.quiet(report: report).security == .quiet, "QuietState: all four true -> .quiet")
+
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
+    do {
+        let qs = QuietState.quiet(report: report)
+        check(qs.security == .loud, "QuietState: one field false -> .loud")
+        check(qs.securityOffCount == 1 && qs.securityUnknownCount == 0, "QuietState: one field false -> offCount 1, unknownCount 0")
+    }
+
+    report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: nil)
+    do {
+        let qs = QuietState.quiet(report: report)
+        check(qs.security == .loud, "QuietState: one field nil (rest true) -> .loud")
+        check(qs.securityUnknownCount == 1 && qs.securityOffCount == 0, "QuietState: one field nil -> unknownCount 1, offCount 0")
+    }
+
+    var r2 = FullReport()
+    r2.updates = nil; r2.crashes = []
+    check(QuietState.quiet(report: r2).updates == .collecting, "QuietState: updates==nil -> .collecting")
+
+    r2.updates = []; r2.crashes = nil
+    check(QuietState.quiet(report: r2).updates == .collecting, "QuietState: crashes==nil -> .collecting")
+
+    r2.updates = []; r2.crashes = []
+    check(QuietState.quiet(report: r2).updates == .quiet, "QuietState: updates=[] & crashes=[] -> .quiet")
+
+    r2.updates = ["u1", "u2"]; r2.crashes = []
+    do {
+        let qs = QuietState.quiet(report: r2)
+        check(qs.updates == .loud, "QuietState: 2 updates + 0 crashes -> .loud")
+        check(qs.updatesCount == 2 && qs.crashesCount == 0, "QuietState: 2 updates + 0 crashes -> counts (2, 0)")
+    }
+
+    r2.updates = []; r2.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir)]
+    do {
+        let qs = QuietState.quiet(report: r2)
+        check(qs.updates == .loud, "QuietState: system crashes -> .loud (informational card stays)")
+        check(qs.crashesCount == 6, "QuietState: crashesCount counts reports, not groups")
+    }
+}
+
+// =====================================================================
+// MARK: - fmtCapacity (decimal GB/TB disk-capacity formatting)
+// =====================================================================
+do {
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+
+    // (bytes, expected-ru, expected-en, case label)
+    let cases: [(Int64, String, String, String)] = [
+        (Int64(228.3 * 1e9), "228,3 ГБ", "228.3 GB", "228.3 GB"),
+        (Int64(999.9 * 1e9), "999,9 ГБ", "999.9 GB", "999.9 GB"),
+        // Rounding-before-thresholding trap: 999.95 GB rounds to "1000.0" at
+        // one decimal, which must NOT render as "1000,0 ГБ" — the unit switch
+        // has to happen before formatting, giving "1 ТБ" instead.
+        (Int64(999.95 * 1e9), "1 ТБ", "1 TB", "999.95 GB (rounding trap)"),
+        (1_000_000_000_000, "1 ТБ", "1 TB", "1 TB"),
+        (Int64(2.24 * 1e12), "2,24 ТБ", "2.24 TB", "2.24 TB"),
+        (4_000_000_000_000, "4 ТБ", "4 TB", "4 TB (trailing zeros trimmed)"),
+        (Int64(10.5 * 1e12), "10,5 ТБ", "10.5 TB", "10.5 TB (one decimal at/above 10 TB)"),
+    ]
+
+    for (bytes, expectedRU, expectedEN, label) in cases {
+        L10nStore.shared.language = .ru
+        check(fmtCapacity(bytes) == expectedRU, "fmtCapacity: \(label) (ru) == \"\(expectedRU)\"")
+        L10nStore.shared.language = .en
+        check(fmtCapacity(bytes) == expectedEN, "fmtCapacity: \(label) (en) == \"\(expectedEN)\"")
+    }
+
+    // Round-trip: fmtCapacityParts must never diverge from fmtCapacity (V2-FIX-UNITS).
+    for (bytes, _, _, label) in cases {
+        for lang in [AppLanguage.ru, .en] {
+            L10nStore.shared.language = lang
+            let p = fmtCapacityParts(bytes)
+            check(fmtCapacity(bytes) == "\(p.value) \(p.unit)",
+                  "fmtCapacityParts round-trip: \(label) (\(lang))")
+        }
+    }
+}
+
+// =====================================================================
+// MARK: - fmtBytes / fmtBytesParts round-trip (V2-FIX-UNITS)
+// =====================================================================
+do {
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+
+    // nil ⇒ ("—", nil), matching fmtBytes's "—".
+    check(fmtBytesParts(nil).value == "—" && fmtBytesParts(nil).unit == nil,
+          "fmtBytesParts: nil ⇒ (\"—\", nil)")
+    check(fmtBytes(nil) == "—", "fmtBytes: nil ⇒ \"—\"")
+
+    // Each binary unit step (B/KB/MB/GB/TB).
+    let byteCases: [Int64] = [
+        0, 1, 512, 1023,
+        1024, 1_048_575,
+        1_048_576, 1_073_741_823,
+        1_073_741_824, 1_099_511_627_775,
+        1_099_511_627_776, 2 * 1_099_511_627_776,
+    ]
+
+    for bytes in byteCases {
+        for lang in [AppLanguage.ru, .en] {
+            L10nStore.shared.language = lang
+            let p = fmtBytesParts(bytes)
+            check(fmtBytes(bytes) == "\(p.value) \(p.unit ?? "")",
+                  "fmtBytesParts round-trip: \(bytes) bytes (\(lang))")
+        }
+    }
+}
+
+// =====================================================================
+// MARK: - CommandRunner hardening (Block B7)
+// =====================================================================
+do {
+    // F3: a single invalid UTF-8 byte in stdout must not discard the whole
+    // capture — `run` uses the lossy decoder now, same as `runStreaming`.
+    let invalidUTF8 = CommandRunner.run("/bin/sh", ["-c", "printf 'a\\xffb\\n'"], timeout: 5)
+    check(invalidUTF8 != nil, "CommandRunner.run: invalid UTF-8 byte in stdout ⇒ non-nil")
+    check(invalidUTF8?.contains("a") == true && invalidUTF8?.contains("b") == true,
+          "CommandRunner.run: invalid UTF-8 byte in stdout ⇒ surrounding valid text preserved")
+
+    // F2: output beyond the 8 MiB cap is truncated, not lost or turned into a
+    // timeout (the child must still be drained to EOF and exit normally).
+    let over = CommandRunner.runCapturing("/bin/sh", ["-c", "head -c 9000000 /dev/zero | tr '\\0' 'x'"],
+                                          timeout: 10)
+    check(over != nil, "CommandRunner.runCapturing: output over the cap ⇒ non-nil")
+    check(over?.truncated == true, "CommandRunner.runCapturing: output over the cap ⇒ truncated == true")
+    check(over?.text.utf8.count == CommandRunner.outputCap,
+          "CommandRunner.runCapturing: output over the cap ⇒ byte count == outputCap")
+
+    // F2: output under the cap must not have `truncated` stuck on.
+    let under = CommandRunner.runCapturing("/bin/sh", ["-c", "echo hello"], timeout: 5)
+    check(under != nil, "CommandRunner.runCapturing: output under the cap ⇒ non-nil")
+    check(under?.truncated == false, "CommandRunner.runCapturing: output under the cap ⇒ truncated == false")
+
+    // F4: the pinned default environment reaches the child, and an explicit
+    // `environment:` override is actually applied (not ignored).
+    let envOutput = CommandRunner.run("/usr/bin/env", [], timeout: 5)
+    check(envOutput?.contains("LC_ALL=C") == true, "CommandRunner.run: default environment pins LC_ALL=C")
+    check(envOutput?.contains("PATH=/usr/bin:/bin:/usr/sbin:/sbin") == true,
+          "CommandRunner.run: default environment pins PATH")
+
+    var customEnv = CommandRunner.defaultEnvironment
+    customEnv["MACDASHBOARD_CHECKS_VAR"] = "b7-marker"
+    let customOutput = CommandRunner.run("/usr/bin/env", [], timeout: 5, environment: customEnv)
+    check(customOutput?.contains("MACDASHBOARD_CHECKS_VAR=b7-marker") == true,
+          "CommandRunner.run: explicit environment: override is applied to the child")
+
+    let prepended = CommandRunner.environment(prependingPATH: ["/custom/prefix/bin"])
+    check(prepended["PATH"] == "/custom/prefix/bin:" + (CommandRunner.defaultEnvironment["PATH"] ?? ""),
+          "CommandRunner.environment(prependingPATH:): prepends given dir and keeps the rest of PATH")
+}
+
+// =====================================================================
+// MARK: - DirectoryAccess (Block V2-FDA-DEGRADE)
+// =====================================================================
+
+do {
+    // Pure decision table — every branch, no syscalls, no dependence on whether
+    // this machine actually holds Full Disk Access.
+    check(DirectoryAccess.classify(exists: false, isDirectory: false, open: .opened) == .missing,
+          "DirectoryAccess.classify: path absent ⇒ .missing")
+    check(DirectoryAccess.classify(exists: true, isDirectory: false, open: .opened) == .missing,
+          "DirectoryAccess.classify: exists but not a directory ⇒ .missing")
+    check(DirectoryAccess.classify(exists: true, isDirectory: true, open: .opened) == .readable,
+          "DirectoryAccess.classify: directory opened ⇒ .readable")
+    check(DirectoryAccess.classify(exists: true, isDirectory: true, open: .permissionDenied) == .denied,
+          "DirectoryAccess.classify: directory refused ⇒ .denied")
+    check(DirectoryAccess.classify(exists: true, isDirectory: true, open: .otherFailure) == .missing,
+          "DirectoryAccess.classify: open failed for a non-permission reason ⇒ .missing")
+
+    // Pure set math for the home rule.
+    let missing = DirectoryAccess.missingHomeChildren(
+        home: "/Users/x",
+        duPaths: ["/Users/x", "/Users/x/Documents", "/Users/x/Library"],
+        childNames: ["Documents", "Library", ".Trash", "notes.txt"])
+    check(missing == ["/Users/x/.Trash", "/Users/x/notes.txt"],
+          "DirectoryAccess.missingHomeChildren: exactly the children du never reported, sorted")
+
+    check(DirectoryAccess.missingHomeChildren(home: "/Users/x/",
+                                              duPaths: ["/Users/x/Documents/"],
+                                              childNames: ["Documents"]).isEmpty,
+          "DirectoryAccess.missingHomeChildren: trailing slashes on either side still count as reported")
+
+    check(DirectoryAccess.missingHomeChildren(home: "/Users/x", duPaths: [], childNames: []).isEmpty,
+          "DirectoryAccess.missingHomeChildren: $HOME unlistable ⇒ empty, never a claim")
+
+    // Live probe, grant-independent: $HOME is readable for whoever runs this;
+    // /private/var/root is 0750 root:wheel, so a non-root process is refused with
+    // or without Full Disk Access; the third path does not exist.
+    check(DirectoryAccess.probe(NSHomeDirectory()) == .readable,
+          "DirectoryAccess.probe: $HOME ⇒ .readable")
+    check(DirectoryAccess.probe("/private/var/empty/macdashboard-no-such-dir") == .missing,
+          "DirectoryAccess.probe: absent path ⇒ .missing")
+    check(DirectoryAccess.probe("/usr/bin/du") == .missing,
+          "DirectoryAccess.probe: a regular file ⇒ .missing")
+    if geteuid() != 0 {
+        check(DirectoryAccess.probe("/private/var/root") == .denied,
+              "DirectoryAccess.probe: root-only directory ⇒ .denied")
+    }
+}
+
+do {
+    var report = FullReport()
+    report.homeDirsUnreadable = ["/Users/x/.Trash"]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.tips.filter { $0.text == L.assessNoFDATip }.count == 1,
+          "assess no-FDA: unreadable home folders ⇒ exactly one tip")
+    let caps = a.capsules.filter { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) }
+    check(caps.count == 1, "assess no-FDA: exactly one capsule")
+    check(caps.first?.object == L.attnCapFolders && caps.first?.value == L.attnCapFoldersNoAccess,
+          "assess no-FDA: capsule carries the folders object/value")
+    check(caps.first?.verb == L.attnVerbSettings,
+          "assess no-FDA: capsule verb is the settings verb")
+    check(a.problems.isEmpty && a.items.isEmpty,
+          "assess no-FDA: never produces a problem / «Требует внимания» item")
+}
+do {
+    var report = FullReport()
+    report.homeDirsUnreadable = ["/Users/x/.Trash"]
+    report.serviceDirsUnreadable = ["/Users/x/Library/Containers"]
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(a.tips.filter { $0.text == L.assessNoFDATip }.count == 1,
+          "assess no-FDA: both sections unreadable ⇒ still exactly one tip")
+    check(a.capsules.filter { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) }.count == 1,
+          "assess no-FDA: both sections unreadable ⇒ still exactly one capsule")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: LiveSnapshot())
+    check(!a.tips.contains { $0.text == L.assessNoFDATip },
+          "assess no-FDA: nothing hidden ⇒ no tip")
+    check(!a.capsules.contains { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) },
+          "assess no-FDA: nothing hidden ⇒ no capsule")
+}
+do {
+    check(AdvicePanes.fullDiskAccess == "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+          "AdvicePanes.fullDiskAccess: exact pane URL")
+    for (name, s) in [("EN", StringsEN() as AppStrings), ("RU", StringsRU() as AppStrings)] {
+        check(!s.assessNoFDATip.isEmpty && !s.storageFoldersNoFDAButton.isEmpty &&
+              !s.storageFoldersNoFDAButtonA11y.isEmpty && !s.attnCapFolders.isEmpty &&
+              !s.attnCapFoldersNoAccess.isEmpty && !s.attnExplainNoFDA.isEmpty,
+              "L10n no-FDA strings: non-empty in \(name)")
+        check(s.storageFoldersNoFDA("Корзина").contains("Корзина"),
+              "L10n storageFoldersNoFDA: interpolates the folder list in \(name)")
+    }
+}
+do {
+    for (name, s) in [("EN", StringsEN() as AppStrings), ("RU", StringsRU() as AppStrings)] {
+        check(!s.autostartDeleteInvalidPath.isEmpty,
+              "L10n autostartDeleteInvalidPath: non-empty in \(name)")
+        let bulk = s.autostartDeleteBulkFailure(2, 5, "boom")
+        check(bulk.contains("2") && bulk.contains("5") && bulk.contains("boom"),
+              "L10n autostartDeleteBulkFailure: interpolates counts and detail in \(name)")
+    }
+}
+
+// =====================================================================
+// MARK: - Block V2-CRASH-SIGNAL: crash filename parsing, age window, grouping
+// =====================================================================
+do {
+    typealias RC = ReportCollector
+    check(RC.crashProcessName(from: "diffscore-2026-08-11-163444.ips") == "diffscore",
+          "crashProcessName: plain .ips -> process name")
+    check(RC.crashProcessName(from: "MacDashboard-2026-08-11-163444.ips") == "MacDashboard",
+          "crashProcessName: own app -> MacDashboard")
+    check(RC.crashProcessName(from: "Kernel-2026-08-11-163444.panic") == "Kernel",
+          "crashProcessName: .panic extension handled")
+    check(RC.crashProcessName(from: "Google Chrome Helper-2026-08-11-163444.crash") == "Google Chrome Helper",
+          "crashProcessName: spaces in the process name survive")
+    check(RC.crashProcessName(from: "com.apple.WebKit.WebContent-2026-08-11-163444.ips") == "com.apple.WebKit.WebContent",
+          "crashProcessName: dots in the process name survive")
+    check(RC.crashProcessName(from: "xpc-service-2026-08-11-163444.ips") == "xpc-service",
+          "crashProcessName: dashes in the process name survive")
+    check(RC.crashProcessName(from: "weird.ips") == "weird",
+          "crashProcessName: no date suffix -> stem")
+    check(RC.crashProcessName(from: "diffscore-2026-08-11.ips") == "diffscore-2026-08-11",
+          "crashProcessName: partial date suffix does not match -> whole stem")
+    check(RC.crashProcessName(from: "-2026-08-11-163444.ips") == "-2026-08-11-163444",
+          "crashProcessName: empty process part -> falls back to the stem, never empty")
+    check(RC.crashProcessName(from: "") == "", "crashProcessName: empty input -> empty, no trap")
+
+    check(RC.crashIsPanic(from: "Kernel-2026-08-11-163444.panic"), "crashIsPanic: .panic -> true")
+    check(!RC.crashIsPanic(from: "diffscore-2026-08-11-163444.ips"), "crashIsPanic: .ips -> false")
+    check(!RC.crashIsPanic(from: "diffscore-2026-08-11-163444.crash"), "crashIsPanic: .crash -> false")
+    check(!RC.crashIsPanic(from: "panic"), "crashIsPanic: no extension at all -> false, no trap")
+    check(!RC.crashIsPanic(from: ""), "crashIsPanic: empty input -> false, no trap")
+
+    let now = Date(timeIntervalSince1970: 1_760_000_000)
+    check(RC.crashAgeWindow == 7 * 24 * 60 * 60, "crashAgeWindow: 7 days")
+    check(RC.isCrashRecent(mtime: now.addingTimeInterval(-3600), now: now), "isCrashRecent: 1 h old -> true")
+    check(RC.isCrashRecent(mtime: now.addingTimeInterval(-6 * 86400), now: now), "isCrashRecent: 6 d old -> true")
+    check(!RC.isCrashRecent(mtime: now.addingTimeInterval(-7 * 86400), now: now),
+          "isCrashRecent: exactly 7 d old -> false (strict <)")
+    check(!RC.isCrashRecent(mtime: now.addingTimeInterval(-8 * 86400), now: now), "isCrashRecent: 8 d old -> false")
+    check(!RC.isCrashRecent(mtime: now.addingTimeInterval(60), now: now),
+          "isCrashRecent: future mtime (clock rollback) -> false")
+
+    let files: [(name: String, mtime: Date)] = [
+        ("diffscore-2026-08-11-163444.ips", now.addingTimeInterval(-3600)),
+        ("diffscore-2026-08-12-101010.ips", now.addingTimeInterval(-7200)),
+        ("diffscore-2026-08-13-101010.panic", now.addingTimeInterval(-10800)),
+        ("activatehelper-2026-08-14-101010.ips", now.addingTimeInterval(-4000)),
+        ("MacDashboard-2026-08-14-101010.ips", now.addingTimeInterval(-5000)),
+        ("ancient-2025-08-14-101010.ips", now.addingTimeInterval(-400 * 86400)),
+    ]
+    let groups = RC.crashGroups(byDirectory: [(directory: userCrashDir, files: files)], now: now)
+    check(groups.count == 3, "crashGroups: 6 files, 1 stale -> 3 groups")
+    check(groups.map(\.process) == ["diffscore", "MacDashboard", "activatehelper"],
+          "crashGroups: count desc, then name asc for ties")
+    check(groups.map(\.count) == [3, 1, 1], "crashGroups: repeats collapse into a count (mixed extensions included)")
+    check(groups.first { $0.process == "diffscore" }?.isPanic == true,
+          "crashGroups: one .panic among the files marks the whole group as a panic group")
+    check(groups.first { $0.process == "MacDashboard" }?.isPanic == false,
+          "crashGroups: .ips-only group is not a panic group")
+    check(!groups.contains { $0.process == "ancient" }, "crashGroups: file older than the window is dropped")
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("Kernel-2026-08-11-163444.panic", now)])], now: now)
+            .map { ($0.process, $0.count, $0.isPanic) }.first.map { $0 == ("Kernel", 1, true) } == true,
+          "crashGroups: lone kernel panic -> one panic group")
+    check(RC.crashGroups(byDirectory: [], now: now).isEmpty, "crashGroups: no files -> []")
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("old-2025-01-01-000000.ips", now.addingTimeInterval(-90 * 86400))])], now: now).isEmpty,
+          "crashGroups: only stale files -> []")
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("Kernel-2019-01-01-000000.panic", now.addingTimeInterval(-90 * 86400))])], now: now).isEmpty,
+          "crashGroups: a panic older than the window is dropped too (age filter applies to panics)")
+    let many: [(name: String, mtime: Date)] = (0..<20).map {
+        (name: "p\($0)-2026-08-11-163444.ips", mtime: now.addingTimeInterval(-3600))
+    }
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: many)], now: now).count == RC.crashMaxGroups,
+          "crashGroups: caps at crashMaxGroups (15) groups")
+
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+    for lang in AppLanguage.allCases {
+        L10nStore.shared.language = lang
+        check(L.maintenanceCrashRow("diffscore", 6) == "diffscore \u{00D7}6",
+              "maintenanceCrashRow (\(lang)): repeats -> 'diffscore ×6'")
+        check(L.maintenanceCrashRow("solo", 1) == "solo",
+              "maintenanceCrashRow (\(lang)): single report -> bare process name")
+        check(!L.assessKernelPanicsRecent(1).isEmpty
+              && L.assessKernelPanicsRecent(1) != L.assessOwnCrashesRecent(AppInfo.name, 1),
+              "assessKernelPanicsRecent (\(lang)): present and distinct from the own-app sentence")
+    }
+}
+
+// =====================================================================
+// MARK: - Block V2-CRASH-DETECT: both report directories, cap keeps what matters
+// =====================================================================
+do {
+    typealias RC = ReportCollector
+    let now = Date(timeIntervalSince1970: 1_760_000_000)
+    let fresh = now.addingTimeInterval(-3600)
+
+    // --- A1: the system directory is scanned at all ---
+    let dirs = RC.crashReportDirectories.map(\.path)
+    check(dirs.count == 2, "crashReportDirectories: exactly two directories")
+    check(dirs.contains("/Library/Logs/DiagnosticReports"),
+          "crashReportDirectories: the SYSTEM directory is scanned (kernel panics land only there)")
+    check(dirs.first == FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports",
+          "crashReportDirectories: the per-user directory comes first (dedup priority)")
+
+    // --- dedup: the same report listed by both directories ---
+    let dupByDir: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("\(AppInfo.name)-2026-08-11-163444.ips", fresh),
+                                          ("diffscore-2026-08-11-163444.ips", fresh)]),
+        (directory: systemCrashDir, files: [("\(AppInfo.name)-2026-08-11-163444.ips", fresh.addingTimeInterval(-60))]),
+    ]
+    check(RC.crashDedup(byDirectory: dupByDir).map(\.name)
+            == ["\(AppInfo.name)-2026-08-11-163444.ips", "diffscore-2026-08-11-163444.ips"],
+          "crashDedup: a name listed twice collapses to one entry, input order preserved")
+    check(RC.crashDedup(byDirectory: dupByDir).first?.mtime == fresh,
+          "crashDedup: the FIRST occurrence wins (per-user copy before the system one)")
+    check(RC.crashDedup(byDirectory: []).isEmpty, "crashDedup: no files -> []")
+    check(RC.crashGroups(byDirectory: dupByDir, now: now).first { $0.process == AppInfo.name }?.count == 1,
+          "crashGroups: a report present in both directories is counted once, not twice")
+
+    // --- the shared predicate ---
+    check(RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: systemCrashDir)),
+          "crashRaisesAttention: kernel panic from any process -> true")
+    check(RC.crashRaisesAttention(CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)),
+          "crashRaisesAttention: our own crash -> true")
+    check(!RC.crashRaisesAttention(CrashGroup(process: "diffscore", count: 9, directory: userCrashDir)),
+          "crashRaisesAttention: a loud third-party process -> false")
+
+    // --- A2: 20 louder foreign groups must not push out the panic and our own crash ---
+    var many: [(name: String, mtime: Date)] = []
+    for i in 0..<20 {
+        for d in 11...13 { many.append((name: "p\(i)-2026-08-\(d)-163444.ips", mtime: fresh)) }
+    }
+    many.append((name: "Kernel-2026-08-11-163444.panic", mtime: fresh))
+    many.append((name: "Kernel-2026-08-12-163444.panic", mtime: fresh))
+    many.append((name: "\(AppInfo.name)-2026-08-11-163444.ips", mtime: fresh))
+    let capped = RC.crashGroups(byDirectory: [(directory: userCrashDir, files: many)], now: now)
+    check(capped.count == RC.crashMaxGroups, "crashGroups: still capped at crashMaxGroups (15) groups")
+    check(capped.contains { $0.isPanic }, "crashGroups: the panic group survives the cap (finding A2)")
+    check(capped.contains { $0.process == AppInfo.name },
+          "crashGroups: the own-app group survives the cap (finding A2)")
+    check(capped.prefix(2).map(\.process) == ["Kernel", AppInfo.name],
+          "crashGroups: notable groups lead the list, ordered count desc (panic 2, own 1)")
+    check(capped.dropFirst(2).count == 13 && capped.dropFirst(2).allSatisfy { $0.count == 3 },
+          "crashGroups: the remaining 13 slots go to the loudest ordinary groups")
+
+    // --- ordering is untouched when nothing is notable ---
+    let ordinary: [(name: String, mtime: Date)] = [
+        ("aaa-2026-08-11-163444.ips", fresh),
+        ("bbb-2026-08-11-163444.ips", fresh),
+        ("bbb-2026-08-12-163444.ips", fresh),
+    ]
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: ordinary)], now: now).map(\.process) == ["bbb", "aaa"],
+          "crashGroups: no notable group -> order unchanged (count desc, then name asc)")
+
+    // --- degenerate: more notable groups than the cap ---
+    let allPanics: [(name: String, mtime: Date)] = (0..<20).map {
+        (name: "k\($0)-2026-08-11-163444.panic", mtime: fresh)
+    }
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: allPanics)], now: now).count == RC.crashMaxGroups,
+          "crashGroups: more notable groups than the cap -> still 15, the cap is never exceeded")
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("\(AppInfo.name)-2026-08-11-163444.panic", fresh)])], now: now).count == 1,
+          "crashGroups: a group that is both a panic AND our own app appears exactly once")
+}
+
+// =====================================================================
+// MARK: - Block V2-CRASH-REVEAL: source directory on the group, JetsamEvent is not a crash
+// =====================================================================
+do {
+    typealias RC = ReportCollector
+    let now = Date(timeIntervalSince1970: 1_760_000_000)
+    let fresh = now.addingTimeInterval(-3600)
+    let stale = now.addingTimeInterval(-30 * 86400)
+
+    // --- item 3: JetsamEvent is not a crash ---
+    check(RC.nonCrashReportPrefixes == ["jetsamevent-"],
+          "nonCrashReportPrefixes: exactly one explicit lowercase prefix, no speculative list")
+    check(RC.crashIsProcessCrash(from: "diffscore-2026-08-11-163444.ips"),
+          "crashIsProcessCrash: an ordinary .ips is a crash")
+    check(RC.crashIsProcessCrash(from: "Kernel-2026-08-11-163444.panic"),
+          "crashIsProcessCrash: a kernel panic is a crash")
+    check(!RC.crashIsProcessCrash(from: "JetsamEvent-2026-08-11-163444.ips"),
+          "crashIsProcessCrash: JetsamEvent- is excluded (memory-pressure kill, not a crash)")
+    check(!RC.crashIsProcessCrash(from: "jetsamevent-2026-08-11-163444.ips"),
+          "crashIsProcessCrash: the prefix match is case-insensitive")
+    check(RC.crashIsProcessCrash(from: "JetsamEventLogger-2026-08-11-163444.ips"),
+          "crashIsProcessCrash: the trailing dash keeps a real process named JetsamEventLogger a crash")
+    check(RC.crashIsProcessCrash(from: ""),
+          "crashIsProcessCrash: empty filename -> treated as a crash, no trap")
+
+    let mixed: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("JetsamEvent-2026-08-11-163444.ips", fresh),
+                                          ("diffscore-2026-08-11-163444.ips", fresh)]),
+    ]
+    check(RC.crashGroups(byDirectory: mixed, now: now).map(\.process) == ["diffscore"],
+          "crashGroups: JetsamEvent forms no group")
+    check(RC.crashGroups(byDirectory: mixed, now: now).reduce(0) { $0 + $1.count } == 1,
+          "crashGroups: JetsamEvent adds nothing to the crash total")
+    let onlyJetsam: [RC.CrashDirectoryListing] = [
+        (directory: systemCrashDir, files: [("JetsamEvent-2026-08-11-163444.ips", fresh)]),
+    ]
+    check(RC.crashGroups(byDirectory: onlyJetsam, now: now).isEmpty,
+          "crashGroups: a JetsamEvent-only machine reports zero crashes (the card stays quiet)")
+
+    // --- item 1: the directory travels with the group ---
+    check(RC.crashGroups(byDirectory: [(directory: systemCrashDir,
+                                        files: [("Kernel-2026-08-11-163444.panic", fresh)])], now: now)
+            .first?.directory == systemCrashDir,
+          "crashGroups: a system-directory panic carries the SYSTEM directory")
+    check(RC.crashGroups(byDirectory: [(directory: userCrashDir,
+                                        files: [("diffscore-2026-08-11-163444.ips", fresh)])], now: now)
+            .first?.directory == userCrashDir,
+          "crashGroups: a per-user report carries the PER-USER directory")
+
+    let bothDirs: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("diffscore-2026-08-11-163444.ips", fresh)]),
+        (directory: systemCrashDir, files: [("diffscore-2026-08-12-163444.ips", fresh)]),
+    ]
+    let bothGroup = RC.crashGroups(byDirectory: bothDirs, now: now).first
+    check(bothGroup?.count == 2,
+          "crashGroups: one process crashing in both directories -> one group of 2")
+    check(bothGroup?.directory == userCrashDir,
+          "crashGroups: a group spanning both directories reveals the FIRST one (per-user), which does contain a report")
+
+    let firstStale: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("diffscore-2025-01-01-000000.ips", stale)]),
+        (directory: systemCrashDir, files: [("diffscore-2026-08-12-163444.ips", fresh)]),
+    ]
+    check(RC.crashGroups(byDirectory: firstStale, now: now).first?.directory == systemCrashDir,
+          "crashGroups: the directory comes from the first SURVIVING report — a stale per-user report does not claim it")
+    check(RC.crashGroups(byDirectory: firstStale, now: now).first?.count == 1,
+          "crashGroups: the stale per-user report is still dropped from the count")
+
+    // --- dedup keeps the winning copy's directory ---
+    let sameName: [RC.CrashDirectoryListing] = [
+        (directory: userCrashDir, files: [("diffscore-2026-08-11-163444.ips", fresh)]),
+        (directory: systemCrashDir, files: [("diffscore-2026-08-11-163444.ips", fresh.addingTimeInterval(-60))]),
+    ]
+    check(RC.crashDedup(byDirectory: sameName).count == 1,
+          "crashDedup: the same filename in both directories collapses to one entry")
+    check(RC.crashDedup(byDirectory: sameName).first?.directory == userCrashDir,
+          "crashDedup: the surviving entry carries the FIRST listing's directory")
+    check(RC.crashDedup(byDirectory: []).isEmpty, "crashDedup: no listings -> []")
+    check(RC.crashDedup(byDirectory: sameName.reversed()).first?.directory == systemCrashDir,
+          "crashDedup: listing order IS the priority order, nothing else decides")
+
+    // --- the directory does not leak into the attention predicate or into identity ---
+    check(RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: userCrashDir))
+          == RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: systemCrashDir)),
+          "crashRaisesAttention: the source directory does not change whether a group raises attention")
+    check(CrashGroup(process: "a", count: 1, directory: userCrashDir)
+          != CrashGroup(process: "a", count: 1, directory: systemCrashDir),
+          "CrashGroup: Equatable includes `directory` (synthesized, not hand-written)")
+
+    // --- item 1 at the assessment layer: the reveal target is the group's own directory ---
+    do {
+        var report = FullReport()
+        report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: systemCrashDir)]
+        let a = Assess.assess(report: report, live: LiveSnapshot())
+        check(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
+              "assess crashes: an own-app crash found in the SYSTEM directory reveals the system directory")
+    }
+    do {
+        var report = FullReport()
+        report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
+        let a = Assess.assess(report: report, live: LiveSnapshot())
+        check(a.items.first { $0.kind == .crashes }?.action == .revealPath(userCrashDir),
+              "assess crashes: an own-app crash found in the PER-USER directory reveals the per-user directory")
+    }
+    do {
+        // A non-raising group listed first must not steal the target.
+        var report = FullReport()
+        report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
+                          CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir)]
+        let a = Assess.assess(report: report, live: LiveSnapshot())
+        check(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
+              "assess crashes: the target comes from the first RAISING group, not the first group")
+        check(a.problems.first { $0.text == L.assessKernelPanicsRecent(2) }?.action == .revealPath(systemCrashDir),
+              "assess crashes: the Problem carries the same reveal target as the AttentionItem")
+    }
+    do {
+        // Two raising groups from two directories: the leading one wins, deterministically.
+        var report = FullReport()
+        report.crashes = [CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir),
+                          CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
+        let a = Assess.assess(report: report, live: LiveSnapshot())
+        check(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
+              "assess crashes: raising groups from two directories -> the leading group's directory")
+    }
+
+    // --- item 2: the row's accessibility string exists in every language ---
+    let originalLang = L10nStore.shared.language
+    defer { L10nStore.shared.language = originalLang }
+    for lang in AppLanguage.allCases {
+        L10nStore.shared.language = lang
+        check(L.maintenanceCrashRevealA11y("diffscore").contains("diffscore"),
+              "maintenanceCrashRevealA11y (\(lang)): names the process")
+        check(L.maintenanceCrashRevealA11y("diffscore").count > "diffscore".count + 5,
+              "maintenanceCrashRevealA11y (\(lang)): is a real sentence, not just the process name")
+    }
+}
+
+// =====================================================================
+// MARK: - V2-DESTRUCTIVE-UX (optimistic-delete restore + AppleScript outcome)
+// =====================================================================
+
+do {
+    func orphan(_ path: String) -> LaunchdPlistInfo {
+        LaunchdPlistInfo(path: path, label: nil, executablePath: nil, isOrphan: true, description: nil)
+    }
+    let a = orphan("/Users/x/Library/LaunchAgents/a.plist")
+    let b = orphan("/Library/LaunchAgents/b.plist")
+    let c = orphan("/Library/LaunchDaemons/c.plist")
+    let canonical = [a, b, c]
+
+    // --- pathsNotDeleted: the mixed-batch rule (finding A4) ---
+    check(LaunchdPlistInspector.pathsNotDeleted(results: [(a.path, .success), (b.path, .success)]).isEmpty,
+          "pathsNotDeleted: an all-success batch restores nothing")
+    check(LaunchdPlistInspector.pathsNotDeleted(
+            results: [(a.path, .success), (b.path, .cancelled), (c.path, .cancelled)]) == [b.path, c.path],
+          "pathsNotDeleted: mixed batch restores only the cancelled system-level paths")
+    check(LaunchdPlistInspector.pathsNotDeleted(
+            results: [(a.path, .failed("boom")), (b.path, .cancelled)]) == [a.path, b.path],
+          "pathsNotDeleted: failed and cancelled both restore")
+    check(LaunchdPlistInspector.pathsNotDeleted(results: []).isEmpty,
+          "pathsNotDeleted: empty results restore nothing")
+
+    // --- restoredOrphanList: where a row comes back (finding A3) ---
+    check(LaunchdPlistInspector.restoredOrphanList(display: [a, c], restoring: [], canonical: canonical) == [a, c],
+          "restoredOrphanList: an empty restore set is the identity")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [a, c], restoring: [b.path], canonical: canonical) == [a, b, c],
+          "restoredOrphanList: a middle row comes back in the middle")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [b, c], restoring: [a.path], canonical: canonical) == [a, b, c],
+          "restoredOrphanList: the first row comes back at the front")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [a, b], restoring: [c.path], canonical: canonical) == [a, b, c],
+          "restoredOrphanList: the last row comes back at the end")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [], restoring: [a.path, b.path, c.path], canonical: canonical) == canonical,
+          "restoredOrphanList: a whole bulk batch comes back in canonical order")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [a, c], restoring: [c.path], canonical: canonical) == [a, c],
+          "restoredOrphanList: an already-displayed path is not duplicated")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [b, c], restoring: [a.path], canonical: [b, c]) == [b, c],
+          "restoredOrphanList: a path the model no longer lists is NOT resurrected")
+    check(LaunchdPlistInspector.restoredOrphanList(display: [], restoring: [a.path, b.path, c.path], canonical: [b, c]) == [b, c],
+          "restoredOrphanList: mixed batch — the successfully deleted path stays gone")
+
+    // --- the signal itself ---
+    check(PlistDeleteRestoreSignal(paths: [a.path], stamp: 1) != PlistDeleteRestoreSignal(paths: [a.path], stamp: 2),
+          "PlistDeleteRestoreSignal: Equatable includes `stamp`, so the same failure twice is two signals")
+
+    // --- AppleScriptResult: the -128 rule (finding A5) ---
+    check(AppleScriptResult.classify(error: nil) == .ok,
+          "AppleScriptResult: no error dictionary is a clean run")
+    check(AppleScriptResult.classify(error: [NSAppleScript.errorNumber: -128]) == .cancelled,
+          "AppleScriptResult: -128 is a cancel, not a failure")
+    check(AppleScriptResult.classify(
+            error: [NSAppleScript.errorNumber: -1728, NSAppleScript.errorMessage: "Finder got an error"])
+            == .failed(message: "Finder got an error"),
+          "AppleScriptResult: any other error carries Finder's own message")
+    check(AppleScriptResult.classify(error: [:]) == .failed(message: nil),
+          "AppleScriptResult: an empty error dictionary is a failure, never a success")
+    check(AppleScriptResult.classify(error: [NSAppleScript.errorNumber: -1743]) == .notPermitted,
+          "AppleScriptResult: -1743 is a declined Automation grant, not a generic failure")
+    check(AppleScriptResult.classify(
+            error: [NSAppleScript.errorNumber: -1743, NSAppleScript.errorMessage: "Not authorized"])
+            == .notPermitted,
+          "AppleScriptResult: -1743 wins over Finder's own message")
+
+    // --- PrivilegedRunner: cancellation is the ERROR NUMBER, not a substring ---
+    check(PrivilegedRunner.isUserCancellation(exitCode: 1, stderr: "0:79: execution error: User canceled. (-128)\n"),
+          "isUserCancellation: osascript's -128 error line is a cancel")
+    check(PrivilegedRunner.isUserCancellation(exitCode: 1, stderr: "0:79: execution error: Пользователь отменил операцию. (-128)"),
+          "isUserCancellation: locale-independent — the number, not the message")
+    check(!PrivilegedRunner.isUserCancellation(
+            exitCode: 1,
+            stderr: "0:126: execution error: rm: /Users/x/Library/LaunchAgents/com.foo-128.plist: Operation not permitted (1)"),
+          "isUserCancellation: a path containing -128 in a genuinely FAILED delete is not a cancel")
+    check(!PrivilegedRunner.isUserCancellation(exitCode: 0, stderr: ""),
+          "isUserCancellation: a clean run is not a cancel")
+    check(!PrivilegedRunner.isUserCancellation(exitCode: 1, stderr: ""),
+          "isUserCancellation: empty stderr is not a cancel")
+}
 
 // =====================================================================
 // MARK: - Summary

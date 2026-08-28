@@ -21,6 +21,12 @@ enum AdvicePanes {
     static let fileVault      = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?FileVault"
     static let softwareUpdate = "x-apple.systempreferences:com.apple.Software-Update-Settings.extension"
     static let timeMachine    = "x-apple.systempreferences:com.apple.Time-Machine-Settings.extension"
+    /// The classic pane id + `?Privacy_AllFiles` anchor — the form that lands on
+    /// Full Disk Access itself rather than the Privacy & Security root.
+    static let fullDiskAccess = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+    /// Privacy & Security → Automation — where a declined Apple-events grant is
+    /// re-enabled (there is no API to re-prompt; TCC records a decline permanently).
+    static let automation = "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
 }
 
 enum AdviceApps {

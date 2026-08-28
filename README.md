@@ -8,13 +8,13 @@ switchable anytime in Settings.
 
 ## Screenshots
 
-| Overview | Details |
+| Overview (light) | Overview (dark) |
 | --- | --- |
-| ![Overview: CPU, memory, swap, disk and battery tiles, recommendations](docs/screenshots/overview.png) | ![Details: security, startup items, disk SMART data, Time Machine](docs/screenshots/details.png) |
+| ![Overview: CPU, memory, swap, disk and battery tiles, recommendations](docs/screenshots/overview-light.png) | ![Overview in dark appearance: CPU, memory, swap, disk and battery tiles, recommendations](docs/screenshots/overview-dark.png) |
 
-| Energy settings | Battery popover |
+| Settings | Battery popover |
 | --- | --- |
-| ![Energy settings (pmset) editable table](docs/screenshots/energy-settings.png) | ![Battery popover: power, voltage, temperature, capacity and health](docs/screenshots/battery-popover.png) |
+| ![Settings: sidebar navigation with General and Monitoring pages](docs/screenshots/settings.png) | ![Battery popover: power, voltage, temperature, capacity and health](docs/screenshots/battery-popover.png) |
 
 ## About this project
 
@@ -40,12 +40,15 @@ feedback and comments. Hope you like it!
   Homebrew, macOS updates) and saves it to
   `~/Library/Application Support/MacDashboard/mac_report.txt` — always a
   single file, each run overwrites the previous one.
-- Live metrics (CPU, memory, swap, disk, battery, top processes) refresh every
-  3 seconds. Switching a card between "Chart" and "Table" view doesn't stop
-  the updates — both views read from the same live data.
+- Live metrics (CPU, memory, swap, disk, battery) refresh every 2 seconds by
+  default; the interval is configurable — 1/2/3/5/10 s — in Settings → Monitoring.
+  The process lists refresh every 6 seconds. Switching a card between "Chart" and
+  "Table" view doesn't stop the updates — both views read from the same live data.
 - History (disk usage over time, battery cycles) accumulates in
   `~/Library/Application Support/MacDashboard/mac_check_state.json`
-  (compatible with the old file format; can import an existing one).
+  (compatible with the old file format).
+- Detects recent crash logs (7-day window), grouped and collapsed, and flags
+  own-app crashes vs. system panics.
 - SOC and internal-disk temperatures, read via Apple Silicon's private HID
   sensor API (Intel Macs simply don't show this tile — no error, just absent).
 - A handful of one-click maintenance actions, each explicit and confirmed
@@ -151,6 +154,11 @@ Two ways — pick one.
 
 ### Build from source
 
+Requires **Xcode 26 (Tahoe SDK)** with its command-line tools selected — the app
+uses SwiftUI API (`.onGeometryChange`) that only ships in that SDK, so an older
+Xcode will fail to compile it. This is a build-time requirement only; the built
+app still runs on macOS 14 (Sonoma) and later.
+
 ```bash
 git clone https://github.com/rdskcm/MacDashboard.git
 cd MacDashboard
@@ -168,6 +176,23 @@ the corresponding sections will simply show "unavailable" instead of crashing):
 - access to the Downloads/Documents/Desktop folders — for the "what's taking up space" breakdown;
 - control over "System Events" — to read the Login Items (autostart) list.
 
+### Full Disk Access
+
+Without **Full Disk Access** macOS hides some folders from the app, and the
+"what's taking up space" breakdown silently loses them — the Trash in particular.
+The app no longer stays quiet about it: the affected Folders tab shows a calm line
+naming what it could not see, with a button that opens the right System Settings
+pane, and one matching recommendation appears in the summary.
+
+To grant it: **System Settings → Privacy & Security → Full Disk Access → +**, pick
+`MacDashboard.app` (or switch it on if it is already listed). macOS restarts the app
+afterwards.
+
+A separate, unrelated grant: the **Empty the Trash** action drives Finder through
+Automation, so the first time you use it macOS asks for permission to control
+"Finder". Declining leaves the Trash untouched and shows Finder's own message —
+nothing else in the app is affected.
+
 Missing hardware (no battery on a desktop Mac, no external disks, Time Machine
 not configured) is a normal, expected state: the relevant cards hide themselves
 or show a calm "not set up / none" instead of an error.
@@ -182,7 +207,9 @@ quarantine flag along the way, clear it exactly as in the first-launch step abov
 - `Sources/MacDashboard/` — the app itself (SwiftUI, no external dependencies).
 - `Checks/` — parser/assessment checks (`swift run MacDashboardChecks`).
 - `build_app.sh` — universal build + `.app` packaging + ad-hoc codesign.
-- `SPEC.md` — the technical spec (module contracts).
+- `SPEC.md` — the original build-out brief. Part of it is still binding (data
+  contracts, collectors, packaging); the rest records how v1.0 was built. Each section
+  is labelled — see the status table at the top of the file.
 
 ## Feedback
 

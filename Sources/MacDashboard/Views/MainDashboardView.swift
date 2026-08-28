@@ -5,12 +5,32 @@
 // Память, История — sit in their own full-width rows; below that,
 // three side-by-side pair rows (each an HStack of two equal-width cards) group
 // related cards instead of a row-aligning LazyVGrid or a height-imbalanced
-// two-column masonry: Процессы (CPU | память), Хранилище (домашняя папка |
-// служебные папки), and Система (Безопасность/Автозапуск/Энергия/Обслуживание |
+// two-column masonry: Процессы (CPU | память) | Папки (домашняя | служебные),
+// and Система (Безопасность/Автозапуск/Энергия/Обслуживание |
 // Диски (SMART)/Time Machine).
 
 import SwiftUI
 import Charts
+
+/// Vertical band the window's traffic-light buttons occupy, measured from the window's
+/// top edge. `.windowStyle(.hiddenTitleBar)` (MacDashboardApp.swift:26) keeps AppKit's
+/// standard titlebar and lets it draw those buttons over our content — they are not
+/// SwiftUI views, so nothing in `toolbar`'s layout knows they are there. `toolbar`'s
+/// `.padding(.leading, 78)` is the app's acknowledgement of them on the horizontal axis
+/// for every child EXCEPT `titleBlock` (see `headerTitlePullLeft` below); this constant is
+/// the vertical counterpart, and it is why the title block is padded down instead of being
+/// left to centre itself against the window edge. Calibrated once from a screenshot — the
+/// acceptance test is equal INK gaps above and below the title block (see the block's
+/// verification), not this literal.
+private let headerTrafficLightBand: CGFloat = 21
+
+/// Once the title sits below the traffic lights rather than beside them (see
+/// `headerTrafficLightBand` above), it no longer needs the full `.padding(.leading, 78)`
+/// gutter that the tab control and the rest of the row still need — user decision
+/// 2026-08-26 (V2-UI-POLISH). Applied as an `.offset`, not a smaller padding, so ONLY the
+/// title's paint position moves; the tab control's x stays anchored to the row's shared
+/// leading padding exactly as before, undisturbed by the title's own position.
+private let headerTitlePullLeft: CGFloat = 58
 
 @MainActor
 struct MainDashboardView: View {
@@ -19,113 +39,287 @@ struct MainDashboardView: View {
     private enum Tab { case overview, report }
     @State private var tab: Tab = .overview
 
+    // Процессы/Папки pair (V2-DRIFT-FIX): the pair is an `HStack` (the fix for
+    // the live-resize overlap, proven 2/2 in the hunt). Two follow-up attempts
+    // at an even 50/50 split under narrow widths (measuring the ScrollView, then
+    // measuring the true window via a root GeometryReader) each introduced a
+    // worse regression — see `specs/V2-DRIFT-FIX.md` HANDOFF and
+    // `specs/V2-DRIFT-FIX-B.md` — and were reverted. This file intentionally
+    // ships the plain `.frame(maxWidth: .infinity)` split: it does not guarantee
+    // an even 50/50 at narrow widths (tracked as anomaly B, NEEDS-HUMAN), but it
+    // does not reintroduce the card-over-card overlap either.
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 12)
+        ZStack {
+            DS.ground
+            OrbLayer()
+            VStack(spacing: 0) {
+                toolbar
 
-            Picker("", selection: $tab) {
-                Text(L.mainTabOverview).tag(Tab.overview)
-                Text(L.mainTabReport).tag(Tab.report)
+                switch tab {
+                case .overview: overview
+                case .report: ReportTab(model: model)
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 260)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-
-            Divider()
-
-            switch tab {
-            case .overview: overview
-            case .report: ReportTab(model: model)
-            }
+            .onChange(of: L10nStore.shared.language) { model.refreshReport() }
         }
-        .frame(minWidth: 900, minHeight: 620)
-        .onChange(of: L10nStore.shared.language) { model.refreshReport() }
+        .ignoresSafeArea()
     }
 
-    // MARK: Header
+    // MARK: Toolbar (single row: title block · leading-anchored tab control · flexible gap · chips/status/refresh)
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L.appWindowTitle)
-                    .font(.largeTitle.bold())
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+    private var toolbar: some View {
+        HStack(alignment: .center, spacing: 16) {
+            titleBlock
+                // Pushes the title/subtitle clear of the traffic lights, so the toolbar's
+                // own `.padding(.top, 14)` below reads as the gap between the buttons and
+                // the title — matching the 14 pt between the subtitle and the header's
+                // bottom hairline. Padding, not `.offset`: the header has to actually grow,
+                // or the subtitle would ride into that hairline. `titleBlock` is the
+                // tallest child, so the tab control and the chips stay exactly centred in
+                // the taller header rather than being dragged down with the title.
+                .padding(.top, headerTrafficLightBand)
+                .offset(x: -headerTitlePullLeft)
+                .layoutPriority(1)
+            // Anchored immediately after the title at a fixed gap (spacing: 16 above) —
+            // this control's x position must never depend on window width. All slack
+            // and all shrink pressure live to its right, past the flexible Spacer below.
+            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab, size: .tabs) { t in
+                switch t {
+                case .overview: return L.mainTabOverview
+                case .report: return L.mainTabReport
+                }
             }
-            Spacer()
+            .layoutPriority(2)
+            Spacer(minLength: 12)
+            // No layoutPriority here (default 0): chips own the progressive-hiding
+            // ViewThatFits tiers and must be the first child to lose space.
             HeaderChipsView(model: model)
         }
+        .padding(.leading, 78)
+        .padding(.trailing, 18)
+        .padding(.vertical, 14)
+        .background(toolbarChrome)
     }
 
-    private var subtitle: String {
-        guard let sys = model.report.system else { return L.mainCollectingInfo }
-        var bits: [String] = []
-        if let m = sys.modelName { bits.append(m) }
-        if let chip = sys.chip { bits.append(chip) }
-        if let mem = sys.memBytes { bits.append(fmtBytes(mem)) }
-        if let ver = sys.osVersion {
-            let build = sys.osBuild.map { " (\($0))" } ?? ""
-            bits.append("macOS \(ver)\(build)")
+    /// Fill `DS.glass2` layered over the same `.regularMaterial` blur backdrop
+    /// `dsCardSurface()` uses (DesignSystem.swift), a bottom hairline border, and
+    /// a 1 pt inset top highlight using the same fade-to-clear stroke technique
+    /// `dsCardSurface()` applies for its own sheen line — mirrored here on a
+    /// plain (unrounded) rectangle since the toolbar spans the full width.
+    private var toolbarChrome: some View {
+        ZStack {
+            Rectangle().fill(.regularMaterial)
+            Rectangle().fill(DS.glass2)
+            // Slightly darkens the header only (user request 2026-08-10) — a local
+            // tint on top of the shared `DS.glass2` fill rather than changing that
+            // token, since it's also shared with Settings' toolbar and the language
+            // dropdown's hover fill.
+            Rectangle().fill(Color(light: Color.black.opacity(0.035), dark: Color.black.opacity(0.12)))
         }
-        return bits.isEmpty ? L.mainCollectingInfo : bits.joined(separator: " · ")
+        .overlay(
+            Rectangle()
+                .strokeBorder(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: DS.sheenLine, location: 0),
+                            .init(color: .clear, location: 0.15),
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DS.line).frame(height: 1)
+        }
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(AppInfo.name)
+                .font(.system(size: 19, weight: .bold))
+                .tracking(-0.285) // 19 pt · −0.015em
+                .lineSpacing(1.9) // 19 pt · 1.1 line-height
+                .lineLimit(1)
+                .truncationMode(.tail)
+            subtitleView
+        }
+    }
+
+    /// Tiered subtitle: model · chip · RAM · macOS ver (build) → …ver → …RAM → …chip → model.
+    /// Mirrors `HeaderChipsView`'s `ViewThatFits` idiom — the row DROPS a trailing
+    /// segment when it doesn't fit rather than ellipsizing mid-string, so `.fixedSize`
+    /// on every tier forces `ViewThatFits` to measure intrinsic width and pick a tier,
+    /// not truncate one. `L.mainCollectingInfo` is a single segment, so it's one tier.
+    private var subtitleView: some View {
+        ViewThatFits(in: .horizontal) {
+            ForEach(subtitleTiers.indices, id: \.self) { i in
+                Text(subtitleTiers[i])
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .truncationMode(i == subtitleTiers.count - 1 ? .tail : .head)
+            }
+        }
+    }
+
+    private var subtitleTiers: [String] {
+        guard let sys = model.headerSystem else { return [L.mainCollectingInfo] }
+        let modelName = sys.modelName
+        let chip = sys.chip
+        let ram = sys.memBytes.map { tight(fmtBytesParts($0)) }
+        let osFull: String? = sys.osVersion.map { ver in
+            let build = sys.osBuild.map { " (\($0))" } ?? ""
+            return "macOS \(ver)\(build)"
+        }
+        let osShort: String? = sys.osVersion.map { "macOS \($0)" }
+
+        func join(_ parts: [String?]) -> String? {
+            let present = parts.compactMap { $0 }
+            return present.isEmpty ? nil : present.joined(separator: " · ")
+        }
+
+        let candidates: [String?] = [
+            join([modelName, chip, ram, osFull]),
+            join([modelName, chip, ram, osShort]),
+            join([modelName, chip, ram]),
+            join([modelName, chip]),
+            join([modelName]),
+        ]
+
+        // Optional fields collapse out of the join, so adjacent tiers can come out
+        // identical (e.g. no osBuild ⇒ tier 1 == tier 2; no chip ⇒ tier 3 == tier 4).
+        // Dedup consecutive duplicates so ViewThatFits never wastes a measurement slot.
+        var tiers: [String] = []
+        for t in candidates.compactMap({ $0 }) where tiers.last != t {
+            tiers.append(t)
+        }
+        return tiers.isEmpty ? [L.mainCollectingInfo] : tiers
     }
 
     // MARK: Обзор
 
     private var overview: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                RecommendationsCard(model: model)
+            VStack(alignment: .leading, spacing: 14) {
+                AttentionSummaryCard(model: model)
 
-                kpiRow
+                Text(L.overviewKickerMetrics).dsKicker()
+                KPIRowView(model: model)
 
+                Text(L.overviewKickerMemory).dsKicker()
                 MemoryCard(model: model)
 
+                LazyVGrid(columns: Self.twoColumns, spacing: 12) {
+                    Text(L.overviewKickerProcesses).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
+                    Text(L.overviewKickerFolders).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
+                }
                 HStack(alignment: .top, spacing: 12) {
-                    ProcessesCPUCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-                    ProcessesMemCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
+                    ProcessListCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
+                    FoldersCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                HStack(alignment: .top, spacing: 12) {
-                    HomeDirsCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-                    ServiceDirsCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-                }
+                Text(L.overviewKickerSystem).dsKickerCentered()
+                systemBand
 
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SecurityCard(model: model)
-                        AutostartCard(model: model)
-                        EnergyCard(model: model)
-                        MaintenanceCard(model: model)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        SmartDisksCard(model: model)
-                        TimeMachineCard(model: model)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
+                Text(L.overviewKickerHistory).dsKicker()
                 HistoryCard(model: model)
             }
             .padding(20)
         }
     }
 
-    private var kpiRow: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
-            CPUTile(model: model)
-            MemoryTile(model: model)
-            SwapTile(model: model)
-            DiskTile(model: model)
-            BatteryTile(model: model)
+    // MARK: System band (Security/Autostart/Energy/Maintenance | SMART/Time Machine)
+
+    /// Security and Updates/Crashes move out of their fixed left-column slots
+    /// once quiet (nothing to report) and collapse into `QuietStrip` rows
+    /// instead — a loud card only occupies column space while it has something
+    /// to say. The two columns intentionally do NOT match heights: each
+    /// `VStack` sizes to its own content only (no `maxHeight: .infinity`), so
+    /// expanding/collapsing a card in one column never resizes the other
+    /// (V2-FIX-COLUMN-COUPLING — an earlier version of this fix stretched the
+    /// shorter column to match, which re-introduced visible coupling: growing
+    /// Energy on the left visibly stretched the SMART card on the right).
+    private var systemBand: some View {
+        let q = QuietState.quiet(report: model.report)
+        let sections = quietSections(q)
+
+        return LazyVGrid(columns: Self.twoColumns, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                AutostartCard(model: model)
+                EnergyCard(model: model)
+                MaintenanceCard(model: model)
+                if q.security != .quiet { SecurityCard(model: model, state: q) }
+                if q.updates != .quiet { UpdatesCrashesCard(model: model, state: q) }
+                if !sections.isEmpty { QuietStrip(sections: sections) }
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+
+            VStack(alignment: .leading, spacing: 12) {
+                SmartDisksCard(model: model)
+                TimeMachineCard(model: model)
+            }
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func quietSections(_ q: QuietState) -> [QuietSection] {
+        var sections: [QuietSection] = []
+        if q.security == .quiet {
+            sections.append(QuietSection(id: "sec", title: L.securityTitle, status: L.quietStatusAllEnabled,
+                                          rows: securityRows(model.report.security ?? SecurityState())))
+        }
+        if q.updates == .quiet {
+            sections.append(QuietSection(id: "maint", title: L.quietUpdatesTitle, status: L.quietStatusAllClear,
+                                          rows: updatesRows(updates: model.report.updates ?? [], crashes: model.report.crashes ?? [])))
+        }
+        return sections
+    }
+
+    /// Two truly equal columns. `.frame(maxWidth:.infinity)` inside an HStack only
+    /// splits leftovers AFTER each child's minimum is honoured, so a dense card
+    /// (ProcessListCard) starves its neighbour; `GridItem(.flexible())` divides the
+    /// row width equally regardless of content — same reasoning as `KPIRowView`.
+    private static let twoColumns = [
+        GridItem(.flexible(), spacing: 12, alignment: .top),
+        GridItem(.flexible(), spacing: 12, alignment: .top),
+    ]
+
+}
+
+// Extracted from MainDashboardView for the same reason as `HeaderChipsView` below
+// (V2-RELAYOUT-FIX): `SwapTile.isVisible(model)` / `BatteryTile.isVisible(model)` read
+// `model.swap` / `model.battery`, which the ~2 s fast tick rewrites. Evaluated inside
+// `MainDashboardView.body` those two reads made the ENTIRE overview tree — every card,
+// the toolbar, the whole scroll content — an observer of the live tick, so one changed
+// swap byte re-ran the whole body and forced a full-tree SwiftUI layout pass
+// (~30 % of Main Thread time per tick). Kept here they invalidate only this row.
+// Do NOT move these calls back up into MainDashboardView.
+//
+// Fixed 3-5 tile single row, non-lazy (V2-FIX-BARFLY): a `LazyVGrid` here bought
+// nothing — it's never actually lazy at this size — and caused the tiles to remount on
+// ordinary scrolling, replaying MeterBar's first-layout pass and making the Memory/Swap
+// bar visibly "fly in". `.frame(maxWidth: .infinity)` per tile inside the `HStack`
+// splits the row equally rather than sizing to content, same reasoning
+// `MemoryFolderRow`'s two-column swap used (see `twoColumns`) — equal width still
+// depends on every tile's content being shrinkable: KPITileView's nowrap+ellipsis label
+// and ellipsizable "из N" slot.
+@MainActor
+struct KPIRowView: View {
+    let model: DashboardModel
+
+    var body: some View {
+        let showSwap = SwapTile.isVisible(model)
+        let showBattery = BatteryTile.isVisible(model)
+        return HStack(alignment: .top, spacing: 12) {
+            CPUTile(model: model).frame(maxWidth: .infinity)
+            MemoryTile(model: model).frame(maxWidth: .infinity)
+            if showSwap { SwapTile(model: model).frame(maxWidth: .infinity) }
+            DiskTile(model: model).frame(maxWidth: .infinity)
+            if showBattery { BatteryTile(model: model).frame(maxWidth: .infinity) }
         }
     }
 }
@@ -140,29 +334,46 @@ struct HeaderChipsView: View {
     let model: DashboardModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            if let load = model.load, !load.isEmpty {
-                Chip(text: L.headerLoadChip(load.map { fmtNum($0, decimals: 2) }.joined(separator: " / "), model.ncpu))
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                if let load = model.load, !load.isEmpty {
+                    Chip(text: L.headerLoadChip(load.map { fmtNum($0, decimals: 2) }.joined(separator: " / "), model.ncpu))
+                }
+                if let uptime = model.headerSystem?.uptime {
+                    Chip(text: L.headerUptimeChip(uptime))
+                }
+                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
+                refreshButton
             }
-            if let uptime = model.report.system?.uptime {
-                Chip(text: L.headerUptimeChip(uptime))
+            HStack(spacing: 8) {
+                if let uptime = model.headerSystem?.uptime {
+                    Chip(text: L.headerUptimeChip(uptime))
+                }
+                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
+                refreshButton
             }
-            SeverityChip(sev: model.assessment.summarySev, text: model.assessment.summaryText)
-            refreshButton
+            HStack(spacing: 8) {
+                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
+                refreshButton
+            }
         }
     }
 
+    // Status chip is bound to the live assessment — never a static severity/text
+    // pair — so it can never disagree with `model.assessment`. Tone comes from
+    // the SAME shared `tone(for:)` (SharedUI.swift) applied to the SAME
+    // `summarySev` that AttentionSummaryCard's title dot reads, instead of a
+    // second parallel "is this bad" computation — the two can no longer
+    // disagree because they're reading one computed value through one function.
+    private var statusIsGood: Bool { model.assessment.problems.isEmpty }
+    private var statusHasCrit: Bool { model.assessment.summarySev == .crit || model.assessment.summarySev == .serious }
+    private var statusTone: Color { tone(for: model.assessment.summarySev) }
+    private var statusLabel: String { statusIsGood ? L.recommendationsAllGood : L.headerStatusNeedsAttention }
+
     private var refreshButton: some View {
-        Button {
+        RainbowCapsuleButton(title: L.headerRefreshReport, busy: model.isCollectingReport, recipe: .overview, size: .primary) {
             model.refreshReport()
-        } label: {
-            HStack(spacing: 6) {
-                if model.isCollectingReport {
-                    ProgressView().controlSize(.small)
-                }
-                Text(L.headerRefreshReport)
-            }
         }
-        .disabled(model.isCollectingReport)
+        .accessibilityLabel(L.headerRefreshReport)
     }
 }

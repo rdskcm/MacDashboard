@@ -104,26 +104,6 @@ final class HistoryStore {
         raw = merged
     }
 
-    /// Merge mac_history entries by date from another state file; returns number of
-    /// NEW dates added. Existing dates in `state` are left untouched (imported data
-    /// never silently overwrites what's already here) — only genuinely new dates get
-    /// appended, matching "number of NEW dates added" literally. Only mac_history is
-    /// merged; other keys in the imported file (its own nvme_history etc.) are ignored,
-    /// per SPEC §7 ("Import button … merges mac_history by date").
-    func importMerge(from url: URL) throws -> Int {
-        let data = try Data(contentsOf: url)
-        let imported = try JSONDecoder().decode(HistoryState.self, from: data)
-
-        let existingDates = Set(state.mac_history.map { $0.date })
-        var added = 0
-        for entry in imported.mac_history where !existingDates.contains(entry.date) {
-            state.mac_history.append(entry)
-            added += 1
-        }
-        Self.sortAndCap(&state.mac_history)
-        return added
-    }
-
     // MARK: - Helpers
 
     private static func sortAndCap(_ entries: inout [MacHistoryEntry]) {

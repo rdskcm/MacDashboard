@@ -29,38 +29,36 @@ struct ReportTab: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([model.reportURL])
-            } label: {
-                Label(L.reportShowInFinder, systemImage: "folder")
-            }
-
-            Button {
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.setString(model.reportText ?? "", forType: .string)
-            } label: {
-                Label(L.reportCopy, systemImage: "doc.on.doc")
-            }
-            .disabled(model.reportText == nil)
-
-            Spacer()
-
+        HStack(spacing: 10) {
             if let updated = model.reportUpdatedAt {
-                Text(L.storageSmartUpdatedCaption(reportUpdatedTimeString(updated)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(L.reportFileUpdatedCaption(reportUpdatedTimeString(updated)))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
             }
 
             if model.isCollectingReport {
                 HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
+                    DSSpinner()
                     Text(L.reportCollecting)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(DS.muted)
                 }
             }
+
+            Spacer()
+
+            RainbowCapsuleButton(title: L.reportShowInFinder, recipe: .overview, size: .toolbar) {
+                AdviceActionRunner.reveal(model.reportURL.path)
+            }
+            .accessibilityLabel(L.reportShowInFinder)
+
+            RainbowCapsuleButton(title: L.reportCopy, recipe: .overview, size: .toolbar) {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(model.reportText ?? "", forType: .string)
+            }
+            .accessibilityLabel(L.reportCopy)
+            .disabled(model.reportText == nil)
         }
         .padding(12)
     }

@@ -1,0 +1,178 @@
+// Views/AdviceActionDispatch.swift
+// Stateful counterpart to `AdviceActionRunner` (stateless system calls, reused
+// as-is): confirmations, busy/done bookkeeping and the `AdviceAction` switch,
+// moved verbatim out of the legacy Рекомендации card (Block V2-SUMMARY) so the
+// new AttentionSummaryCard owns no dialog logic of its own.
+//
+// Shaped as an `@Observable` reference type (the codebase's established idiom
+// for shared mutable UI state — see DashboardModel/AppSettings/L10nStore)
+// rather than a `ViewModifier` value type: the card needs to READ this state
+// (completedAdviceIDs/trashError) while laying out chips/plates,
+// not just have it silently attached — a ViewModifier's own @State isn't
+// legible from outside. `.adviceActionDialogs(_:)` below is the actual
+// ViewModifier: it attaches the two confirmation dialogs to the card.
+
+import SwiftUI
+
+@MainActor
+@Observable
+final class AdviceActionDispatch {
+    let model: DashboardModel
+
+    init(model: DashboardModel) {
+        self.model = model
+    }
+
+    /// Whether the empty-trash confirmation dialog is up.
+    ///
+    /// Kept SEPARATE from the advice id below on purpose. These used to be one
+    /// optional whose nil-ness both drove the dialog and identified the target: the
+    /// dialog's dismissal cleared it, so whether the confirm button's action still saw
+    /// an id depended on whether SwiftUI runs the action before or after writing the
+    /// isPresented binding. When it lost that race the Trash was emptied but the done
+    /// state never appeared. Correctness must not rest on that ordering.
+    var showTrashConfirm = false
+    /// Advice id (AttentionItem/TipCapsule `.id`) the pending empty-trash applies to,
+    /// captured when the action is dispatched and cleared only when it completes.
+    private var trashTargetID: String? = nil
+    var showFirewallConfirm = false
+    /// Whether the brew-upgrade confirmation is up (SPEC §1.6 row 5). Same plain-Bool
+    /// shape as the firewall gate above — brew needs no target id the way trash does.
+    var showBrewConfirm = false
+    /// Advice ids whose action already completed successfully this session
+    /// (currently only `.emptyTrash`) — the plate keeps rendering (assessment
+    /// still lists it until the next report refresh drops it) but shows a done
+    /// state instead of its verb.
+    var completedAdviceIDs: Set<String> = []
+    var trashError: String? = nil
+    /// Settings pane the `trashError` above can be acted on in, when there is one
+    /// (today: Automation, after a declined grant). Same shape as
+    /// `FoldersNoFDANotice`'s FDA capsule — an error the user can fix must carry the
+    /// route to fix it, not just the sentence.
+    var trashErrorPane: String? = nil
+    /// True while `AdviceActionRunner.emptyTrash` is in flight — i.e. for the whole
+    /// time Finder works, including its own "permanently erase?" confirmation and
+    /// the first-run automation prompt. Read through `busy(for:)`, which is what
+    /// swaps the plate/capsule verb for a spinner (`dsSwapInPlace`).
+    private(set) var trashEmptying = false
+
+    /// `TipCapsule.id` embeds the formatted value (`"Корзина|1,4 ГБ"`), which changes when a
+    /// report refresh lands while Finder is still working — the captured id would then match
+    /// no capsule and the ✓ would never appear. The object part is stable and unique per
+    /// capsule, so completion is tracked by that.
+    private static func adviceKey(_ id: String) -> String { String(id.prefix { $0 != "|" }) }
+
+    var trashConfirmBinding: Binding<Bool> {
+        Binding(get: { self.showTrashConfirm }, set: { self.showTrashConfirm = $0 })
+    }
+
+    func handle(_ action: AdviceAction, id: String) {
+        // A failure message must not outlive the row/capsule it referred to: any new
+        // action press clears it.
+        trashError = nil
+        trashErrorPane = nil
+        switch action {
+        case .settingsPane(let u): AdviceActionRunner.openPane(u)
+        case .openApp(let p): AdviceActionRunner.openApp(p)
+        case .revealPath(let p): AdviceActionRunner.reveal(p)
+        case .brewUpgrade:
+            guard model.report.brewOutdated?.isEmpty == false else { return }
+            showBrewConfirm = true
+        case .emptyTrash:
+            trashTargetID = id
+            showTrashConfirm = true
+        case .enableFirewall: showFirewallConfirm = true
+        }
+    }
+
+    func confirmEmptyTrash() {
+        guard !trashEmptying else { return }
+        let id = trashTargetID
+        // Take our own dialog down BEFORE the call: it must never sit on screen
+        // while Finder puts up its own confirmation (finding A5).
+        showTrashConfirm = false
+        trashEmptying = true
+        AdviceActionRunner.emptyTrash { [weak self] outcome in
+            guard let self else { return }
+            self.trashEmptying = false
+            self.trashTargetID = nil
+            switch outcome {
+            case .emptied:
+                if let id { self.completedAdviceIDs.insert(Self.adviceKey(id)) }
+                self.trashError = nil
+                self.trashErrorPane = nil
+            case .cancelled:
+                // Backing out is not a failure: leave the plate on its verb, say nothing.
+                self.trashError = nil
+                self.trashErrorPane = nil
+            case .failed(let detail):
+                // Finder's own message is more useful than our generic line ("the item
+                // is in use", a locked file), and it arrives already localized.
+                self.trashError = detail.map { "\(L.adviceTrashError): \($0)" } ?? L.adviceTrashError
+                self.trashErrorPane = nil
+            case .notPermitted:
+                self.trashError = L.adviceTrashNotPermitted
+                self.trashErrorPane = AdvicePanes.automation
+            }
+        }
+    }
+
+    /// Cancel counterpart to `confirmEmptyTrash()`: drops the captured target so no
+    /// state outlives a dismissed dialog (V2-POLISH B8). Guarded on `trashEmptying`
+    /// because an empty-trash already in flight owns `trashTargetID` — clearing it
+    /// from a later dialog's Cancel would cost that operation its done state.
+    func cancelEmptyTrash() {
+        guard !trashEmptying else { return }
+        trashTargetID = nil
+    }
+
+    func busy(for action: AdviceAction?) -> Bool {
+        switch action {
+        case .brewUpgrade: return model.brewUpgrading
+        case .enableFirewall: return model.firewallApplying
+        case .emptyTrash: return trashEmptying
+        default: return false
+        }
+    }
+
+    func busyDetail(for action: AdviceAction?) -> String? {
+        action == .brewUpgrade && model.brewUpgrading ? model.brewProgress.map(brewProgressText) : nil
+    }
+
+    func done(_ id: String) -> Bool { completedAdviceIDs.contains(Self.adviceKey(id)) }
+}
+
+/// Attaches the trash-empty and enable-firewall confirmation dialogs — moved
+/// verbatim (behavior-identical) from the legacy Рекомендации card.
+private struct AdviceActionDialogs: ViewModifier {
+    let dispatch: AdviceActionDispatch
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(L.adviceTrashConfirmTitle, isPresented: dispatch.trashConfirmBinding) {
+                Button(L.adviceTrashConfirmButton, role: .destructive) {
+                    dispatch.confirmEmptyTrash()
+                }
+                Button(L.adviceCancel, role: .cancel) { dispatch.cancelEmptyTrash() }
+            }
+            .confirmationDialog(L.adviceFirewallConfirmTitle, isPresented: Binding(
+                get: { dispatch.showFirewallConfirm },
+                set: { dispatch.showFirewallConfirm = $0 }
+            )) {
+                Button(L.adviceFirewallConfirmButton) { dispatch.model.enableFirewallNow() }
+                Button(L.adviceCancel, role: .cancel) {}
+            } message: {
+                Text(L.adviceFirewallConfirmMessage)
+            }
+            .brewUpgradeConfirm(isPresented: Binding(
+                get: { dispatch.showBrewConfirm },
+                set: { dispatch.showBrewConfirm = $0 }
+            ), model: dispatch.model)
+    }
+}
+
+extension View {
+    func adviceActionDialogs(_ dispatch: AdviceActionDispatch) -> some View {
+        modifier(AdviceActionDialogs(dispatch: dispatch))
+    }
+}

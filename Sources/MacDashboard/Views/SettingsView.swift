@@ -11,41 +11,121 @@ enum SettingsSection: Hashable {
     #endif
 }
 
-/// System-Settings-style sidebar row: a colored rounded-square icon badge
+/// Same rounded-rect/hairline-border/top-sheen-highlight/soft-shadow treatment
+/// as the shared `.dsCardSurface()` (DesignSystem.swift), but filled with a
+/// plain `DS.glass` color instead of `.regularMaterial` — kept private to this
+/// file rather than added to `DesignSystem.swift` since it exists for exactly
+/// one call site (`SettingsView.languageCard`, Trap 2 / README §6.6: that card
+/// must carry no backdrop blur of its own, see its doc comment).
+private struct SolidCardSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(DS.glass))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(DS.line, lineWidth: 1))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [.init(color: DS.sheenLine, location: 0), .init(color: .clear, location: 0.15)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 8)
+    }
+}
+private extension View {
+    func dsSolidCardSurface() -> some View { modifier(SolidCardSurface()) }
+}
+
+/// System-Settings-style sidebar row (Spec §7.1, SW:17-31): a 22×22 icon badge
 /// followed by the section title, plus the selection highlight itself (a plain
 /// `Button` rather than `List` selection, so we control the sidebar's exact
 /// width/height instead of NavigationSplitView's toolbar-driven chrome).
 private struct SettingsSidebarRow: View {
-    let icon: String
-    let color: Color
+    let icon: SettingsSidebarIconKind
     let title: String
     let selected: Bool
     let action: () -> Void
 
+    @State private var hovering = false
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(color)
-                    .frame(width: 22, height: 22)
-                    .overlay {
-                        Image(systemName: icon)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.white)
-                    }
+            HStack(spacing: 10) {
+                iconBadge
                 Text(title)
+                    .font(.system(size: 14))
+                    .tracking(14 * -0.005)
+                    .fontWeight(selected ? .semibold : .regular)
+                    .foregroundStyle(selected ? DS.accentInk : DS.inkSoft)
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .truncationMode(.tail)
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, 5)
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 9)
+            .frame(height: 34)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.accentColor : Color.clear))
-            .foregroundStyle(selected ? .white : .primary)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(selected ? DS.accent.opacity(0.15) : (hovering ? DS.glass3 : .clear))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(selected ? DS.accent.opacity(0.34) : .clear, lineWidth: 1)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .animation(DSMotion.cardHover, value: hovering)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// 22×22, radius 7 — concentric with the row's own radius 10 (Spec §7.1).
+    /// `.gear`/`.pulse` use the new selected/unselected DS-token badge; the
+    /// legacy `.symbol` case (AI row only, out of scope) keeps its old solid-
+    /// tint-square look so it still compiles without adopting either new shape.
+    @ViewBuilder
+    private var iconBadge: some View {
+        switch icon {
+        case .gear, .pulse:
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(selected ? DS.accent.opacity(0.22) : DS.muted.opacity(0.14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(selected ? DS.accent.opacity(0.40) : DS.muted.opacity(0.30), lineWidth: 1)
+                )
+                .frame(width: 22, height: 22)
+                .overlay(glyph.padding(4))
+        case .symbol(let name, let tint):
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(tint)
+                .frame(width: 22, height: 22)
+                .overlay(
+                    Image(systemName: name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white)
+                )
+        }
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        switch icon {
+        case .gear:
+            SettingsGearIconShape()
+                .stroke(style: StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round))
+                .foregroundStyle(selected ? DS.accentInk : DS.inkSoft)
+        case .pulse:
+            SettingsPulseIconShape()
+                .stroke(style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                .foregroundStyle(selected ? DS.accentInk : DS.inkSoft)
+        case .symbol:
+            EmptyView()
+        }
     }
 }
 
@@ -165,92 +245,277 @@ private struct AISettingsForm: View {
 struct SettingsView: View {
     // Harness-only init param so offscreen renders can show any section without
     // clicks (same precedent as BatteryDetailView.startLifetimeExpanded).
-    init(startSection: SettingsSection = .general) {
+    init(model: DashboardModel, startSection: SettingsSection = .general) {
+        self.model = model
         _section = State(initialValue: startSection)
     }
 
+    var model: DashboardModel
     @State private var section: SettingsSection
     @Bindable private var store = L10nStore.shared
     @Bindable private var settings = AppSettings.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            Divider()
-            detail
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        ZStack {
+            VisualEffectBackground()
+            OrbLayer()
+            HStack(spacing: 0) {
+                sidebar
+                Rectangle().fill(DS.line).frame(width: 1)
+                detail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
+        // NO `.ignoresSafeArea()` here: the window keeps its system titlebar, so
+        // ignoring the safe area stretches the layout region by the titlebar height
+        // while this root stays pinned to 420 — the content slides up under the
+        // titlebar (top card clipped) and leaves an uncovered strip along the bottom,
+        // transparent because `VisualEffectBackground` sets the window background clear.
         .frame(width: 680, height: 420)
+        // The window's own title. macOS supplies one for a `Settings` scene, but in the
+        // SYSTEM language: an English macOS with the app set to Russian showed an
+        // English titlebar over a fully Russian window (V2-POLISH B6). Only the TEXT
+        // becomes ours — the system titlebar itself stays (user decision,
+        // V2-SETTINGS-CHROME; do not reach for `.hiddenTitleBar` or the NSWindow
+        // route). Set here rather than at the `Settings { }` call site in
+        // MacDashboardApp so the `@Bindable store = L10nStore.shared` above re-runs
+        // this body — and with it the title — the instant the in-app language changes.
         .navigationTitle(L.settingsWindowTitle)
     }
 
+    /// Spec §7.1 (SW:14-35): 196 pt fixed, never scrolls; column gap 2, padding
+    /// 12/10; fill `glass-2` over `.regularMaterial`, border-right `DS.line`
+    /// (drawn by the shared `HStack` divider above), 1 pt inset top sheen highlight.
     private var sidebar: some View {
+        // No "SETTINGS" kicker: the prototype (SW:15) has one, but with the system
+        // titlebar already naming the window it is redundant — removed by user
+        // decision at acceptance (V2-SETTINGS-CHROME, 2026-08-11), rows start at the
+        // sidebar's own top padding.
         VStack(alignment: .leading, spacing: 2) {
-            SettingsSidebarRow(
-                icon: "gearshape.fill", color: .gray, title: L.settingsSectionGeneral,
-                selected: section == .general
-            ) { section = .general }
-            SettingsSidebarRow(
-                icon: "gauge.with.needle.fill", color: .blue, title: L.settingsSectionMonitoring,
-                selected: section == .monitoring
-            ) { section = .monitoring }
+            SettingsSidebarRow(icon: .gear, title: L.settingsSectionGeneral, selected: section == .general) {
+                section = .general
+            }
+            SettingsSidebarRow(icon: .pulse, title: L.settingsSectionMonitoring, selected: section == .monitoring) {
+                section = .monitoring
+            }
             #if AI_ENABLED
-            SettingsSidebarRow(
-                icon: "sparkles", color: .purple, title: L.settingsSectionAI,
-                selected: section == .ai
-            ) { section = .ai }
+            SettingsSidebarRow(icon: .symbol(name: "sparkles", tint: .purple), title: L.settingsSectionAI, selected: section == .ai) {
+                section = .ai
+            }
             #endif
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(10)
-        .frame(width: 190, alignment: .topLeading)
-        .background(Color.primary.opacity(0.04))
+        .padding(.top, 12).padding(.bottom, 12).padding(.horizontal, 10)
+        .frame(width: 196, alignment: .topLeading)
+        .frame(maxHeight: .infinity)
+        .background(sidebarChrome)
+    }
+
+    /// `DS.glass2` layered over `.regularMaterial`, same two-layer technique
+    /// `MainDashboardView.toolbarChrome` uses for its own glass-2 surface, plus
+    /// the shared top-edge sheen-fade highlight (SW:14's `inset 0 1px 0 sheen-line`).
+    private var sidebarChrome: some View {
+        ZStack {
+            Rectangle().fill(.regularMaterial)
+            Rectangle().fill(DS.glass2)
+        }
+        .overlay(
+            Rectangle()
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [.init(color: DS.sheenLine, location: 0), .init(color: .clear, location: 0.15)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
     }
 
     @ViewBuilder
     private var detail: some View {
         switch section {
         case .general:
-            Form {
-                Section {
-                    Picker(L.settingsLanguageLabel, selection: $store.language) {
-                        Text(verbatim: "Русский").tag(AppLanguage.ru)
-                        Text(verbatim: "English").tag(AppLanguage.en)
-                    }
-                    .pickerStyle(.menu)
-                    .onChange(of: store.language) { syncAppleLanguages() }
-
-                    if store.language != L10nStore.launchLanguage {
-                        Text(L.settingsMenuLanguageHint)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        RainbowCapsuleButton(title: L.settingsRelaunchNow) { relaunchApp() }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    languageCard
+                    HStack {
+                        Spacer(minLength: 0)
+                        versionCard
                     }
                 }
-
-                Section {
-                    LabeledContent(L.settingsVersionLabel, value: appVersionString)
-                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .formStyle(.grouped)
         case .monitoring:
-            Form {
-                Section {
-                    Picker(L.settingsIntervalLabel, selection: $settings.fastIntervalSeconds) {
-                        ForEach(AppSettings.allowedIntervals, id: \.self) { s in
-                            Text(L.settingsIntervalOption(s)).tag(s)
-                        }
-                    }
-                    .pickerStyle(.menu)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    monitoringIntervalCard
+                    monitoringProcessCard
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .formStyle(.grouped)
         #if AI_ENABLED
         case .ai:
             AISettingsForm(settings: settings)
         #endif
         }
+    }
+
+    /// Spec §7.2 (SW:40-77): standard card padding/gap, but — Trap 2, README
+    /// §6.6 — **no backdrop blur of its own** (`.dsSolidCardSurface()` below,
+    /// not the shared `.dsCardSurface()`): a blurred card behind
+    /// `LanguageDropdown`'s trigger would leave its floating `.regularMaterial`
+    /// menu nothing to frost, rendering it as a flat color instead.
+    private var languageCard: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 12) {
+                Text(L.settingsLanguageLabel)
+                    .font(.system(size: 14))
+                    .foregroundStyle(DS.inkSoft)
+                Spacer(minLength: 0)
+                LanguageDropdown(selection: $store.language) { syncAppleLanguages() }
+            }
+            .frame(minHeight: 30)
+
+            if store.language != L10nStore.launchLanguage {
+                VStack(alignment: .leading, spacing: 0) {
+                    Rectangle().fill(DS.line).frame(height: 1)
+                    HStack(alignment: .center, spacing: 12) {
+                        Text(L.settingsMenuLanguageHint)
+                            .font(.system(size: 11.5))
+                            .lineSpacing(11.5 * 0.4)
+                            .foregroundStyle(DS.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        RainbowCapsuleButton(title: L.settingsRelaunchNow, recipe: .settings, size: .primary) {
+                            relaunchApp()
+                        }
+                        .accessibilityLabel(L.settingsRelaunchNow)
+                    }
+                    .padding(.top, 11)
+                }
+                .transition(.dsDisclosure(reduceMotion: reduceMotion))
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsSolidCardSurface()
+        .animation(
+            reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+            value: store.language != L10nStore.launchLanguage
+        )
+    }
+
+    /// Spec §7.2 (SW:79-82): separate card, WITH blur — the shared
+    /// `.dsCardSurface()` is fine here since nothing frosted floats above it.
+    private var versionCard: some View {
+        HStack(spacing: 12) {
+            Text(L.settingsVersionLabel)
+                .font(.system(size: 14))
+                .foregroundStyle(DS.inkSoft)
+            Spacer(minLength: 0)
+            Text(appVersionString)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(DS.muted)
+        }
+        .frame(minHeight: 30)
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .dsCardSurface()
+    }
+
+    /// Spec §7.3 (SW:85-101): one card, padding 14/16, gap 11, blur. Label sits
+    /// ABOVE the segmented control unconditionally (never fits beside it in
+    /// DE/FR) — the control itself (`DSSlidingSegmented`) stays structurally
+    /// stable, outside any data-dependent switch/if, so its identity survives
+    /// selection changes and the thumb slides instead of remounting
+    /// pre-selected (the V2-CARD-FOLD trap). Only the note row below switches.
+    private var monitoringIntervalCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.settingsIntervalLabel)
+                .font(.system(size: 14))
+                .lineSpacing(14 * 0.3)
+                .foregroundStyle(DS.inkSoft)
+
+            DSSlidingSegmented(
+                options: AppSettings.allowedIntervals,
+                selection: $settings.fastIntervalSeconds,
+                size: .settingsInterval
+            ) { s in L.settingsIntervalOption(s) }
+            .accessibilityLabel(L.settingsIntervalLabel)
+
+            HStack(alignment: .center, spacing: 8) {
+                Circle()
+                    .fill(intervalNoteTone)
+                    .frame(width: 6, height: 6)
+                Text(intervalNoteText)
+                    .font(.system(size: 11.5))
+                    .lineSpacing(11.5 * 0.4)
+                    .foregroundStyle(DS.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .animation(
+                reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : DSMotion.expand,
+                value: settings.fastIntervalSeconds
+            )
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCardSurface()
+    }
+
+    private var monitoringProcessCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.settingsProcessLimitLabel)
+                .font(.system(size: 14))
+                .lineSpacing(14 * 0.3)
+                .foregroundStyle(DS.inkSoft)
+
+            HStack(alignment: .center, spacing: 12) {
+                DSSlidingSegmented(
+                    options: AppSettings.allowedProcessLimits,
+                    selection: $settings.processListLimit,
+                    size: .settingsInterval
+                ) { n in L.settingsProcessLimitOption(n) }
+                .accessibilityLabel(L.settingsProcessLimitLabel)
+
+                Spacer(minLength: 0)
+
+                RainbowCapsuleButton(
+                    title: L.settingsProcessLimitApply,
+                    busy: model.processesRefreshing,
+                    size: .card
+                ) {
+                    model.refreshProcessesNow()
+                }
+                .accessibilityLabel(L.settingsProcessLimitApply)
+            }
+        }
+        // Top padding is 10, not 14: the label's own line box carries ~3.5 pt of
+        // internal leading above its cap height, so an equal 14 reads as a
+        // larger gap than the flat 14 under the capsule row below.
+        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCardSurface()
+    }
+
+    /// Per-value note under the interval control (SW:96-99, SW:234-255): text
+    /// switches at the 1 / 2-3 / 5-10 s bands; the leading dot's tint follows
+    /// the same band (amber at 1 s — the responsive-but-loaded end, green
+    /// otherwise), per the prototype (`Settings Window.dc.html:288`) rather
+    /// than a flat accent tint.
+    private var intervalNoteText: String {
+        switch settings.fastIntervalSeconds {
+        case ...1: return L.settingsIntervalNoteFast
+        case 2...3: return L.settingsIntervalNoteBalanced
+        default: return L.settingsIntervalNoteEconomy
+        }
+    }
+    private var intervalNoteTone: Color {
+        settings.fastIntervalSeconds <= 1 ? DS.amber : DS.green
     }
 
     /// Same write as `MacDashboardApp.syncAppleLanguages()` (duplicated rather

@@ -5,6 +5,68 @@ import SwiftUI
 
 // MARK: - Time Machine
 
+/// One label→value row (spec §5.10): 150 pt fixed label column (`DS.muted`,
+/// 11.5 pt) · value right, mono font family so numeric values (quota) read
+/// as tabular columns — a private, card-local row (same convention
+/// `DirBarRow`/`DirBarList` already use in StorageCards.swift).
+private struct TMRow: View {
+    let label: String
+    var value: String = ""
+    /// `DS.inkSoft` unless a call site opts into an alert tone; see the last-backup
+    /// row, the only site that passes `DS.hot` (V2-TM-CALM).
+    var valueColor: Color = DS.inkSoft
+    /// V2-FIX-MONO-FONT: this row renders in the system face, not mono — mono
+    /// is reserved for verbatim machine output and the few prototype-specified
+    /// sites elsewhere in the app. Numeric/quota values get `.monospacedDigit()`
+    /// so digit columns line up and don't jitter as they tick; prose values
+    /// (name, type, snapshot summary) get the plain system face.
+    var tabularNumerals: Bool = false
+    /// V2-FIX-UNITS follow-up: pre-split value/unit for the byte-quota call
+    /// site — this row renders a literal space as a full glyph advance, so
+    /// the quota row passes `fmtBytesParts` here instead of a plain `value:`
+    /// string, and gets a tight `.padding(.leading, 1.5)` gap.
+    /// (Second pass: this row's 13.5pt font makes a flat 3pt gap read
+    /// proportionally wide — ~22% of the em vs. ~11% at the 27pt tile the
+    /// value was copied from — so it's now 1.5pt here. V2-FIX-MONO-FONT:
+    /// this padding was originally sized for a mono glyph and is deliberately
+    /// held as-is rather than re-tuned now that the row is system-face —
+    /// re-tuning a gap is a size change and out of this block's scope.)
+    /// Every other TMRow call site keeps using `value:` unchanged.
+    var valueParts: (String, String)? = nil
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(label)
+                .font(.system(size: 11.5))
+                .foregroundStyle(DS.muted)
+                .frame(width: 150, alignment: .leading)
+            if let valueParts {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text(valueParts.0).monospacedDigit()
+                    Text(valueParts.1)
+                        .monospacedDigit()
+                        .padding(.leading, 1.5)
+                }
+                .font(.system(size: 13.5))
+                .foregroundStyle(valueColor)
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Group {
+                    if tabularNumerals {
+                        Text(value).monospacedDigit()
+                    } else {
+                        Text(value)
+                    }
+                }
+                .font(.system(size: 13.5))
+                .foregroundStyle(valueColor)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
 @MainActor
 struct TimeMachineCard: View {
     let model: DashboardModel
@@ -16,6 +78,16 @@ struct TimeMachineCard: View {
         model.smartUpdatedAt.map { L.storageSmartUpdatedCaption($0.formatted(date: .omitted, time: .shortened)) }
     }
 
+    /// The last-backup row's "why there is no date" text, minus `.diskNotConnected`:
+    /// that reason now has its own row (V2-TM-CONNSTATE), and printing it twice two rows
+    /// apart reads like two separate findings. Every other reason is unchanged.
+    /// V2-HONEST-READINGS: still compared as an enum case, never as a string.
+    private func lastBackupReasonText(_ dest: TMDestination) -> String? {
+        guard let reason = dest.lastBackupUnavailableReason,
+              reason != .diskNotConnected else { return nil }
+        return reason.localizedText
+    }
+
     var body: some View {
         CardChrome(title: "Time Machine", caption: updatedCaption) {
             switch model.report.tmDest {
@@ -23,23 +95,48 @@ struct TimeMachineCard: View {
                 SectionStateView(done: model.report.progress["tmDest"] ?? false)
             case .some(.none):
                 HStack(spacing: 8) {
-                    Image(systemName: "info.circle").foregroundStyle(.secondary)
-                    Text(L.timeMachineNotConfigured).font(.callout).foregroundStyle(.secondary)
+                    Image(systemName: "info.circle").foregroundStyle(DS.muted)
+                    Text(L.timeMachineNotConfigured)
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(DS.inkSoft)
                 }
             case .some(.some(let dest)):
-                VStack(alignment: .leading, spacing: 6) {
-                    LabeledRow(label: L.timeMachineDestination, value: dest.name ?? "—")
+                VStack(alignment: .leading, spacing: 10) {
+                    TMRow(label: L.timeMachineDestination, value: dest.name ?? "—")
                     if let kind = dest.kind {
-                        LabeledRow(label: L.timeMachineType, value: kind == "Local" ? L.timeMachineTypeLocal : kind)
+                        TMRow(label: L.timeMachineType, value: kind == "Local" ? L.timeMachineTypeLocal : kind)
                     }
                     if let quota = dest.quotaBytes {
-                        LabeledRow(label: L.timeMachineQuota, value: fmtBytes(quota))
+                        let quotaParts = fmtBytesParts(quota)
+                        TMRow(label: L.timeMachineQuota, valueParts: (quotaParts.value, quotaParts.unit ?? ""))
                     }
-                    LabeledRow(label: L.timeMachineLastBackup, value: dest.lastBackup ?? dest.lastBackupUnavailableReason ?? "—")
+                    TMRow(
+                        label: L.timeMachineLastBackup,
+                        value: dest.lastBackup ?? lastBackupReasonText(dest) ?? "—",
+                        // V2-TM-CALM: only a destination that IS connected and still
+                        // unreadable (no Full Disk Access) is a problem, so only that
+                        // reason gets `hot`. An unplugged disk, a destination with no
+                        // completed backups yet, and a not-yet-checked destination are
+                        // all normal states and stay calm.
+                        // V2-HONEST-READINGS: compared as an enum case, so a language switch cannot break it.
+                        valueColor: dest.lastBackupUnavailableReason == .dateUnavailableNoFDA
+                            ? DS.hot : DS.inkSoft
+                    )
+                    // V2-TM-CONNSTATE: `tmutil destinationinfo` drops its "Mount Point"
+                    // line the moment the destination volume goes away (verified live by
+                    // unplugging the disk; Name/Kind/ID/Quota keep coming from TM's own
+                    // prefs), so a nil mountPoint is the live "not connected right now"
+                    // signal. Shown IN ADDITION to the date above — the date is the last
+                    // known one, which stays useful — and in the card's calm ink
+                    // (TMRow's default), because an unplugged backup disk is a normal
+                    // state, not an error (V2-TM-CALM).
+                    if dest.mountPoint == nil {
+                        TMRow(label: L.timeMachineConnection, value: L.timeMachineConnectionNone)
+                    }
                     if let snaps = model.report.snapshots {
                         let last = snaps.max()
-                        LabeledRow(label: L.timeMachineSnapshots,
-                                   value: snaps.isEmpty ? L.timeMachineSnapshotsNone : L.timeMachineSnapshotsCount(snaps.count) + (last.map { L.timeMachineSnapshotsLast($0) } ?? ""))
+                        TMRow(label: L.timeMachineSnapshots,
+                              value: snaps.isEmpty ? L.timeMachineSnapshotsNone : L.timeMachineSnapshotsCount(snaps.count) + (last.map { L.timeMachineSnapshotsLast($0) } ?? ""))
                     }
                 }
             }

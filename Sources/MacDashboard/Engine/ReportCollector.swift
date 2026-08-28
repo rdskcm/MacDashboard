@@ -44,6 +44,153 @@ final class ReportCollector {
         return age >= 0 && age < window
     }
 
+    /// Age window for crash reports (V2-CRASH-SIGNAL): anything older is not
+    /// collected at all, so a stale crash cannot keep a surface loud forever.
+    static let crashAgeWindow: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Upper bound on crash GROUPS kept (applied after grouping, so a runaway
+    /// process keeps its true count) — the old 15-file cap, moved.
+    static let crashMaxGroups = 15
+
+    /// Both directories macOS writes crash reports to, in dedup priority order
+    /// (V2-CRASH-DETECT / finding A1). The per-user one needs Full Disk Access and
+    /// on many machines is empty; the system one is world-readable and is the ONLY
+    /// place kernel panics (`.panic`) ever land, so reading just the per-user one
+    /// meant a panic was never seen at all.
+    static var crashReportDirectories: [URL] {
+        [FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/DiagnosticReports", isDirectory: true),
+         URL(fileURLWithPath: "/Library/Logs/DiagnosticReports", isDirectory: true)]
+    }
+
+    /// Pure (Checks-tested): true iff `mtime` lies within `[now - window, now]`.
+    /// A future mtime (clock rolled back) counts as stale — same rule as
+    /// `isBrewCacheFresh`, so a bad clock can never pin a report in the list.
+    static func isCrashRecent(mtime: Date, now: Date,
+                              window: TimeInterval = crashAgeWindow) -> Bool {
+        let age = now.timeIntervalSince(mtime)
+        return age >= 0 && age < window
+    }
+
+    /// Pure (Checks-tested): process name out of a DiagnosticReports filename.
+    /// macOS names these `<process>-<YYYY-MM-DD>-<HHMMSS>.<ips|crash|panic>`;
+    /// the process part may itself contain dashes, dots and spaces, so only an
+    /// end-anchored date-time suffix is stripped. Total by construction: an
+    /// unrecognized shape yields the extension-stripped stem, and a stem that
+    /// is only a timestamp yields that stem rather than an empty row label.
+    static func crashProcessName(from filename: String) -> String {
+        let stem = (filename as NSString).deletingPathExtension
+        var name = stem
+        if let r = stem.range(of: #"-\d{4}-\d{2}-\d{2}-\d{6}$"#, options: .regularExpression) {
+            name = String(stem[stem.startIndex..<r.lowerBound])
+        }
+        name = name.trimmingCharacters(in: .whitespaces)
+        if !name.isEmpty { return name }
+        let fallback = stem.trimmingCharacters(in: .whitespaces)
+        return fallback.isEmpty ? filename : fallback
+    }
+
+    /// Pure (Checks-tested): is this report a kernel panic (`.panic`) rather than
+    /// an app-level `.ips`/`.crash`? A panic means the whole machine went down, so
+    /// it raises attention whatever process logged it — and the extension is only
+    /// visible here, at collection time, which is why the bit is carried into
+    /// `CrashGroup.isPanic` (V2-CRASH-SIGNAL).
+    static func crashIsPanic(from filename: String) -> Bool {
+        (filename as NSString).pathExtension.lowercased() == "panic"
+    }
+
+    /// Pure (Checks-tested): must this group reach the user? Exactly the two cases
+    /// from V2-CRASH-SIGNAL — a kernel panic, whatever process logged it, or a crash
+    /// of MacDashboard itself. Single source of truth on purpose (V2-CRASH-DETECT):
+    /// `crashGroups` protects these groups from the group cap and `Assessment` raises
+    /// attention for them, and those two rules must never drift apart.
+    static func crashRaisesAttention(_ group: CrashGroup) -> Bool {
+        group.isPanic || group.process == AppInfo.name
+    }
+
+    /// Report kinds macOS writes into DiagnosticReports that are NOT process crashes.
+    /// `JetsamEvent-*.ips` is the memory-pressure kill log: the kernel reclaiming
+    /// memory, already visible on the memory card, and nothing the user acts on here
+    /// (V2-CRASH-REVEAL, item 3). Entries MUST be lowercase — `crashIsProcessCrash`
+    /// lowercases the filename before comparing. Keep this list small and evidence-
+    /// backed: add a prefix only when a real report of that kind has been seen.
+    static let nonCrashReportPrefixes = ["jetsamevent-"]
+
+    /// Pure (Checks-tested): is this report an actual process/kernel crash, or one of
+    /// the non-crash kinds above? Total by construction: an empty or unrecognized
+    /// filename is treated as a crash (fail-visible, never fail-silent).
+    static func crashIsProcessCrash(from filename: String) -> Bool {
+        let lower = filename.lowercased()
+        return !nonCrashReportPrefixes.contains { lower.hasPrefix($0) }
+    }
+
+    /// One directory's crash-report filenames tagged with that directory's absolute
+    /// path. ARRAY ORDER IS DEDUP PRIORITY: `crashReportDirectories` puts the per-user
+    /// directory first, so its copy of a report wins over the system one and its path
+    /// is what the group reveals (V2-CRASH-REVEAL).
+    typealias CrashDirectoryListing = (directory: String, files: [(name: String, mtime: Date)])
+
+    /// Pure (Checks-tested): one entry per report FILE NAME, first occurrence wins.
+    /// The collector concatenates two directories (see `crashReportDirectories`) and
+    /// the same report could plausibly be listed by both; without this it would be
+    /// counted twice and inflate a process's crash count. Input order IS the priority
+    /// order, so the per-user copy wins over the system one. The surviving entry also
+    /// carries the directory it was listed in, which is what `CrashGroup.directory`
+    /// ends up holding.
+    static func crashDedup(byDirectory: [CrashDirectoryListing]) -> [(name: String, mtime: Date, directory: String)] {
+        var seen = Set<String>()
+        var out: [(name: String, mtime: Date, directory: String)] = []
+        for listing in byDirectory {
+            for f in listing.files where seen.insert(f.name).inserted {
+                out.append((name: f.name, mtime: f.mtime, directory: listing.directory))
+            }
+        }
+        return out
+    }
+
+    /// Pure (Checks-tested): the whole crash pipeline except the directory read —
+    /// drop reports listed by more than one directory, drop files outside the window,
+    /// collapse repeats per process, mark a group as a panic group if ANY of its
+    /// reports is a `.panic`, order by count (desc) then name (asc, so ties are
+    /// deterministic), cap the group count — keeping panic/own-app groups first so the
+    /// cap can never discard them (V2-CRASH-DETECT). Non-crash report kinds are dropped
+    /// before grouping (item 3), and a group's `directory` is the directory of its
+    /// FIRST surviving report — same "first occurrence wins" law as `crashDedup`, so a
+    /// process with reports in both directories reveals the per-user one, which does
+    /// contain at least one of them.
+    static func crashGroups(byDirectory: [CrashDirectoryListing], now: Date,
+                            window: TimeInterval = crashAgeWindow,
+                            maxGroups: Int = crashMaxGroups) -> [CrashGroup] {
+        var acc: [String: (count: Int, isPanic: Bool, directory: String)] = [:]
+        for f in crashDedup(byDirectory: byDirectory)
+            where crashIsProcessCrash(from: f.name)
+                  && isCrashRecent(mtime: f.mtime, now: now, window: window) {
+            let name = crashProcessName(from: f.name)
+            if var prev = acc[name] {
+                prev.count += 1
+                prev.isPanic = prev.isPanic || crashIsPanic(from: f.name)
+                acc[name] = prev                      // directory: first surviving report wins
+            } else {
+                acc[name] = (count: 1, isPanic: crashIsPanic(from: f.name), directory: f.directory)
+            }
+        }
+        let sorted = acc
+            .map { CrashGroup(process: $0.key, count: $0.value.count,
+                              isPanic: $0.value.isPanic, directory: $0.value.directory) }
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.process < $1.process
+            }
+        // The cap must never be able to drop the groups this feature exists for
+        // (V2-CRASH-DETECT / finding A2): panics and our own crashes are single by
+        // nature, so ordering by count alone put them last and truncated them first.
+        // They also lead the returned list, because the card renders only its first
+        // five rows — surviving the cap in 14th place is still invisible.
+        let notable = sorted.filter(crashRaisesAttention)
+        let rest = sorted.filter { !crashRaisesAttention($0) }
+        return Array((notable + rest).prefix(maxGroups))
+    }
+
     func collect(skipSlow: Bool = false,
                  cachedBrew: (version: String??, outdated: [String]?)? = nil,
                  onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport {
@@ -243,11 +390,15 @@ final class ReportCollector {
     /// unmounted-disk notice once the user already trusts the app with FDA — and
     /// is moot in the common no-FDA deployment, where the plist is gated identically
     /// to everything else and step 4's mount check is what actually decides the message.
+    /// V2-TM-CONNSTATE: the card no longer depends on step 4 to say so — the Time Machine
+    /// card renders a separate "no connection right now" row straight off `mountPoint == nil`,
+    /// so a stale-but-real date from step 3 is now shown correctly labelled as the LAST KNOWN
+    /// one rather than as the current state.
     private func applyLastBackup(to dest: inout TMDestination) {
         if let last = CommandRunner.run("/usr/bin/tmutil", ["latestbackup"], timeout: 15, scope: cancelScope) {
             let s = last.trimmingCharacters(in: .whitespacesAndNewlines)
             if s.lowercased().contains("no backup") {
-                dest.lastBackupUnavailableReason = L.reportCollectorNoBackupsYet
+                dest.lastBackupUnavailableReason = .noBackupsYet
                 return
             }
             if !s.isEmpty, let date = Parsers.tmLatestBackupDate(fromPath: s) {
@@ -278,11 +429,11 @@ final class ReportCollector {
             return
         }
         if dest.mountPoint == nil {
-            dest.lastBackupUnavailableReason = L.reportCollectorDiskNotConnected
+            dest.lastBackupUnavailableReason = .diskNotConnected
         } else if diskutilFoundZeroBackups {
-            dest.lastBackupUnavailableReason = L.reportCollectorNoCompletedBackups
+            dest.lastBackupUnavailableReason = .noCompletedBackups
         } else {
-            dest.lastBackupUnavailableReason = L.reportCollectorDateUnavailableNoFDA
+            dest.lastBackupUnavailableReason = .dateUnavailableNoFDA
         }
     }
 
@@ -311,20 +462,30 @@ final class ReportCollector {
     // MARK: - crashes (FileManager, no shell)
 
     private func collectCrashes() -> Outcome {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/DiagnosticReports", isDirectory: true)
+        let byDirectory = Self.crashReportDirectories.map {
+            (directory: $0.path, files: Self.crashFiles(in: $0))
+        }
+        let groups = Self.crashGroups(byDirectory: byDirectory, now: Date())
+        return Outcome(section: .crashes) { $0.crashes = groups }
+    }
+
+    /// One directory's crash reports as (name, mtime). Impure and deliberately not
+    /// Checks-covered — the pure/impure seam of this section is exactly here.
+    /// Non-recursive on purpose: both directories carry a `Retired/` subdirectory of
+    /// reports macOS has already rotated out, which the 7-day window would drop
+    /// anyway. An absent or TCC-refused directory yields [] (`try?`), which is the
+    /// right degradation: the other directory still answers, and a refused per-user
+    /// directory cannot hide a kernel panic — those only ever land in the system one.
+    private static func crashFiles(in dir: URL) -> [(name: String, mtime: Date)] {
         let keys: [URLResourceKey] = [.contentModificationDateKey]
         let items = (try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])) ?? []
         func mtime(_ u: URL) -> Date {
             (try? u.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         }
-        let names = items
+        return items
             .filter { $0.pathExtension == "ips" || $0.pathExtension == "crash" || $0.pathExtension == "panic" }
-            .sorted { mtime($0) > mtime($1) }
-            .prefix(15)
-            .map { $0.lastPathComponent }
-        return Outcome(section: .crashes) { $0.crashes = Array(names) }
+            .map { (name: $0.lastPathComponent, mtime: mtime($0)) }
     }
 
     // MARK: - autostart
@@ -386,10 +547,16 @@ final class ReportCollector {
             // wear, etc.). MUST be -A (attributes-only): -a returns a benign nonzero
             // exit on this controller (Error Information Log fetch fails) — and exit
             // codes are ignored anyway (CommandRunner returns stdout regardless).
-            // sudo -n first (whitelisted NOPASSWD rule), then plain — both fail
-            // fast, never prompt (same chain as the external path below).
+            // sudo -n first (whitelisted NOPASSWD rule) — but ONLY when the resolved
+            // smartctl is a root-owned, non-group-writable regular file that a non-root
+            // actor cannot swap (see isSafeToRunViaSudo); otherwise straight to the
+            // unprivileged run. Both fail fast, never prompt (same chain as the external
+            // path below).
             if let sc = smartctl {
-                let raw = CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
+                let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
+                    ? CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
+                    : nil
+                let raw = sudoRaw
                     ?? CommandRunner.run(sc, ["-A", "disk0"], timeout: 15, scope: cancelScope)
                 if let raw {
                     let attrs = Parsers.smartctlAttrs(raw)
@@ -425,8 +592,14 @@ final class ReportCollector {
                 }
                 var attrs: [(String, String)] = []
                 if let sc = smartctl {
-                    // sudo -n first (NOPASSWD rule), then plain — both fail fast, never prompt.
-                    let raw = CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
+                    // sudo -n first (NOPASSWD rule) and only for a smartctl binary a
+                    // non-root actor cannot swap (isSafeToRunViaSudo), then plain — both
+                    // fail fast, never prompt. This is the branch external/USB/SATA disks
+                    // actually need: internal NVMe answers `smartctl -A` unprivileged.
+                    let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
+                        ? CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
+                        : nil
+                    let raw = sudoRaw
                         ?? CommandRunner.run(sc, ["-A", dev], timeout: 15, scope: cancelScope)
                     if let raw { attrs = Parsers.smartctlAttrs(raw) }
                 }
@@ -507,6 +680,107 @@ final class ReportCollector {
         return nil
     }
 
+    /// The decision rule of `isSafeToRunViaSudo`, over facts already gathered — pure, so the
+    /// two branches an unprivileged test cannot reach through the filesystem (no stock macOS
+    /// file carries `schg`; a check process cannot create a root-owned file inside a
+    /// group-writable directory) are still covered by MacDashboardChecks (re-review 2 [N7]).
+    /// `mode` is the POSIX permission word; `ownerUID` the file's owner.
+    static func sudoSafetyVerdict(isRegularFile: Bool,
+                                  ownerUID: UInt32,
+                                  mode: UInt16,
+                                  isImmutable: Bool,
+                                  ancestorsRootOwned: Bool) -> Bool {
+        guard isRegularFile else { return false }           // missing/unstattable/not a file
+        guard ownerUID == 0 else { return false }           // not root-owned
+        guard mode & 0o022 == 0 else { return false }       // group- or world-writable
+        return isImmutable || ancestorsRootOwned            // see point 2 — not equal strength
+    }
+
+    /// Whether `path` may be handed to `sudo`. Two things must hold, and the second one
+    /// has two admissible proofs:
+    ///
+    /// 1. The binary itself (symlinks resolved) is a regular file owned by root with no
+    ///    group or world write bit.
+    /// 2. A non-root actor cannot REPLACE it — either every ancestor directory up to `/`
+    ///    is likewise root-owned and free of group/world write bits, or the file carries
+    ///    the system-immutable flag (`schg`), which blocks unlink and rename of the file
+    ///    itself even inside a group-writable directory.
+    ///
+    ///    The two proofs are NOT of equal strength (re-review 2 [N8]). The ancestor walk closes
+    ///    the whole path; `schg` closes only the FILE. Leave a group-writable ancestor in the
+    ///    chain and whoever can write that directory can rename or replace the DIRECTORY —
+    ///    `/opt/homebrew/bin` moved aside and recreated with their own `smartctl` inside — after
+    ///    which the immutable file is simply no longer at the resolved path. `schg` removes the
+    ///    trivial unlink-and-replace on a hardened file; only hardening the directory chain
+    ///    closes the group-writable-ancestor attack.
+    ///
+    /// Why the file and not only the chain: `findSmartctl()` can only ever return a path
+    /// under `/opt/homebrew/{bin,sbin}` or `/usr/local/{bin,sbin}`, and on a standard
+    /// Homebrew install those are `<user>:admin drwxrwxr-x` — so an ancestor-only walk was
+    /// false in every supported layout and made this whole branch unreachable dead code
+    /// (V2-RELEASE re-review [M4]). Anyone in the admin group can drop their own binary
+    /// there, and wherever a NOPASSWD sudoers rule for smartctl exists that is passwordless
+    /// root — hence the requirement is not weakened, only moved onto the thing that can
+    /// actually be hardened: `sudo chown root:wheel <path> && sudo chmod go-w <path> &&
+    /// sudo chflags schg <path>`, a one-time install step (documented in SPEC.md §5).
+    ///
+    /// Two residual gaps. (a) TOCTOU by construction (re-review [N8]): these checks and the
+    /// `sudo` exec are separate syscalls, so an attacker who can win the window between them
+    /// still wins. (b) The `schg`-only proof leaves the group-writable-ancestor rename described
+    /// in point 2 open. Both raise the bar; neither closes the hole.
+    static func isSafeToRunViaSudo(_ path: String) -> Bool {
+        // Reject a relative path before realpath(3) resolves it against the CWD.
+        guard path.hasPrefix("/") else { return false }
+        // realpath(3), not URL.resolvingSymlinksInPath(): the latter deliberately
+        // leaves macOS's special-cased top-level symlinks (/tmp, /var, /etc ->
+        // their /private/... targets) unresolved, which would let a path reached
+        // through one of them be judged on the symlink node's own (safe-looking)
+        // permissions instead of the real, group/world-writable target.
+        guard let real = realpath(path, nil) else { return false }
+        defer { free(real) }
+        let resolved = String(cString: real)
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: resolved),
+              let uid = attrs[.ownerAccountID] as? NSNumber,
+              let mode = attrs[.posixPermissions] as? NSNumber
+        else { return false }                               // missing/unstattable
+        // Both proofs are evaluated eagerly rather than short-circuited: this runs at most
+        // twice per report and costs a handful of lstat(2)s, and keeping the RULE in one
+        // pure, testable place is worth more than those.
+        return sudoSafetyVerdict(isRegularFile: (attrs[.type] as? FileAttributeType) == .typeRegular,
+                                 ownerUID: uid.uint32Value,
+                                 mode: mode.uint16Value,
+                                 isImmutable: isSystemImmutable(resolved),
+                                 ancestorsRootOwned: ancestorsAreRootOwned(of: resolved))
+    }
+
+    /// `SF_IMMUTABLE` (`chflags schg`): settable only by root, and it makes unlink/rename
+    /// of the file fail regardless of the containing directory's write bits.
+    private static func isSystemImmutable(_ resolvedPath: String) -> Bool {
+        var st = stat()
+        guard lstat(resolvedPath, &st) == 0 else { return false }
+        return st.st_flags & UInt32(SF_IMMUTABLE) != 0
+    }
+
+    /// Every directory from the file's parent up to `/` is root-owned and free of group
+    /// and world write bits — the original test, now one of two ways to satisfy point 2.
+    /// A writable *directory* is enough to swap a file (unlink + recreate), which is why
+    /// this walks the whole chain rather than stat'ing one level.
+    private static func ancestorsAreRootOwned(of resolvedPath: String) -> Bool {
+        var component = (resolvedPath as NSString).deletingLastPathComponent
+        if component.isEmpty { component = "/" }
+        while true {
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: component),
+                  let uid = attrs[.ownerAccountID] as? NSNumber,
+                  let mode = attrs[.posixPermissions] as? NSNumber
+            else { return false }
+            if uid.uint32Value != 0 { return false }
+            if mode.uint16Value & 0o022 != 0 { return false }
+            if component == "/" { return true }
+            let parent = (component as NSString).deletingLastPathComponent
+            component = parent.isEmpty ? "/" : parent
+        }
+    }
+
     // MARK: - SMART tools availability (Block N8: install-smartmontools UI)
 
     /// Whether the SMART CLI toolchain (`smartctl`, via Homebrew) is usable, installable,
@@ -573,14 +847,24 @@ final class ReportCollector {
     private func collectHomeDirs() -> Outcome {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         guard let out = CommandRunner.run("/usr/bin/du", ["-xk", "-d", "1", home], timeout: 120, scope: cancelScope) else {
-            return Outcome(section: .homeDirs) { $0.homeDirs = nil }
+            return Outcome(section: .homeDirs) { $0.homeDirs = nil; $0.homeDirsUnreadable = [] }
         }
+        let all = Parsers.duKilobyteLines(out)
         // Drop the $HOME total line itself; keep children, largest first, top 20.
-        let dirs = Parsers.duKilobyteLines(out)
+        let dirs = all
             .filter { $0.path != home }
             .sorted { $0.bytes > $1.bytes }
             .prefix(20)
-        return Outcome(section: .homeDirs) { $0.homeDirs = Array(dirs) }
+        // The home rule: a child $HOME actually has but du never reported is either
+        // on another filesystem (du -x stops at mount points — readable, nothing to
+        // say) or a directory du was refused. Only the refused ones are reported.
+        // Computed against the FULL du list, not the top-20 slice.
+        let unreadable = DirectoryAccess
+            .missingHomeChildren(home: home,
+                                 duPaths: Set(all.map(\.path)),
+                                 childNames: DirectoryAccess.childNames(of: home))
+            .filter { DirectoryAccess.probe($0) == .denied }
+        return Outcome(section: .homeDirs) { $0.homeDirs = Array(dirs); $0.homeDirsUnreadable = unreadable }
     }
 
     // MARK: - service dirs (slow: du -s over a fixed set)
@@ -594,14 +878,21 @@ final class ReportCollector {
             "/Library/Caches", "/private/var/log", "/Applications",
         ]
         var dirs: [DirSize] = []
+        var unreadable: [String] = []
         for p in paths {
             guard FileManager.default.fileExists(atPath: p) else { continue }
             if let out = CommandRunner.run("/usr/bin/du", ["-xsk", p], timeout: 60, scope: cancelScope) {
                 dirs.append(contentsOf: Parsers.duKilobyteLines(out))
+            } else if DirectoryAccess.probe(p) == .denied {
+                // The service rule: du produced nothing at all for THIS path. That is
+                // a timeout or a cancellation as often as it is a refusal, so the path
+                // is probed before anything is claimed.
+                unreadable.append(p)
             }
         }
         let value: [DirSize]? = dirs.isEmpty ? nil : dirs.sorted { $0.bytes > $1.bytes }
-        return Outcome(section: .serviceDirs) { $0.serviceDirs = value }
+        let unreadableOut = unreadable
+        return Outcome(section: .serviceDirs) { $0.serviceDirs = value; $0.serviceDirsUnreadable = unreadableOut }
     }
 
     // MARK: - homebrew (slow)
@@ -624,12 +915,17 @@ final class ReportCollector {
         guard let brew = Self.findBrew() else {
             return (.some(nil), nil)
         }
+        // brew is a Homebrew-prefix script that shells out to its own helper
+        // binaries (ruby, git, curl, …) inside that prefix — unlike the rest of
+        // this file's call sites (absolute-path Apple binaries), it needs its own
+        // bin dir on PATH, not just `defaultEnvironment`'s bare system PATH.
+        let brewEnv = CommandRunner.environment(prependingPATH: [(brew as NSString).deletingLastPathComponent])
         var version: String?
-        if let v = CommandRunner.run(brew, ["--version"], timeout: 20, scope: cancelScope) {
+        if let v = CommandRunner.run(brew, ["--version"], timeout: 20, environment: brewEnv, scope: cancelScope) {
             version = v.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces)
         }
         var outdated: [String] = []
-        if let o = CommandRunner.run(brew, ["outdated"], timeout: 60, scope: cancelScope) {
+        if let o = CommandRunner.run(brew, ["outdated"], timeout: 60, environment: brewEnv, scope: cancelScope) {
             outdated = o.components(separatedBy: "\n")
                 .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }

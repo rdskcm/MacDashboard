@@ -61,4 +61,63 @@ func runHistorySeriesChecks() {
           "formattedSwap: valid string ⇒ \"X / Y\" via shared fmtBytes")
     check(HistorySeries.formattedSwap(nil) == "—", "formattedSwap: nil ⇒ em dash")
     check(HistorySeries.formattedSwap("garbage") == "—", "formattedSwap: unparseable ⇒ em dash")
+
+    // MARK: last30Range
+
+    let dayFmt: DateFormatter = {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = .current
+        df.dateFormat = "yyyy-MM-dd"
+        return df
+    }()
+
+    func makeEntry(_ date: String) -> MacHistoryEntry {
+        MacHistoryEntry(date: date, disk_used_gb: 1, disk_free_gb: 1,
+                         battery_pct: 1, cycles: 1, swap: nil, macos: "14.5")
+    }
+
+    // Normal case: ≥30 entries, no gaps.
+    var thirtyDays: [MacHistoryEntry] = []
+    var cursor = dayFmt.date(from: "2026-06-01")!
+    for _ in 0..<32 {
+        thirtyDays.append(makeEntry(dayFmt.string(from: cursor)))
+        cursor = Calendar.current.date(byAdding: .day, value: 1, to: cursor)!
+    }
+    if let range = HistorySeries.last30Range(thirtyDays) {
+        let lastDate = dayFmt.date(from: thirtyDays.last!.date)!
+        let expectedStart = Calendar.current.date(byAdding: .day, value: -29, to: lastDate)!
+        check(range.upperBound == lastDate, "last30Range: ≥30 entries, no gaps ⇒ end == last entry date")
+        check(range.lowerBound == expectedStart, "last30Range: ≥30 entries, no gaps ⇒ start == last date − 29 days")
+    } else {
+        check(false, "last30Range: ≥30 entries, no gaps ⇒ non-nil")
+    }
+
+    // Fewer than 30 entries (existing 3-entry `fixture`) ⇒ still computed, not nil.
+    if let range = HistorySeries.last30Range(fixture) {
+        let lastDate = dayFmt.date(from: fixture.last!.date)!
+        let expectedStart = Calendar.current.date(byAdding: .day, value: -29, to: lastDate)!
+        check(range.upperBound == lastDate, "last30Range: <30 entries ⇒ end == last entry date")
+        check(range.lowerBound == expectedStart, "last30Range: <30 entries ⇒ start == last date − 29 days (calendar-based, not entry-count-based)")
+    } else {
+        check(false, "last30Range: <30 entries ⇒ non-nil")
+    }
+
+    // Empty entries array ⇒ nil.
+    check(HistorySeries.last30Range([]) == nil, "last30Range: empty entries ⇒ nil")
+
+    // Gap in dates ⇒ range still spans exactly 30 calendar days ending on last entry's date.
+    let gapFixture: [MacHistoryEntry] = [
+        makeEntry("2026-07-01"),
+        makeEntry("2026-07-03"),   // gap: 07-02 skipped
+        makeEntry("2026-07-10"),
+    ]
+    if let range = HistorySeries.last30Range(gapFixture) {
+        let lastDate = dayFmt.date(from: "2026-07-10")!
+        let expectedStart = Calendar.current.date(byAdding: .day, value: -29, to: lastDate)!
+        check(range.upperBound == lastDate, "last30Range: gap in dates ⇒ end == last entry date")
+        check(range.lowerBound == expectedStart, "last30Range: gap in dates ⇒ start == last date − 29 days")
+    } else {
+        check(false, "last30Range: gap in dates ⇒ non-nil")
+    }
 }

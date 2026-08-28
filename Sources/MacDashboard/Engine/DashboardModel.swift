@@ -47,6 +47,10 @@ final class DashboardModel {
     /// manual energy (pmset) refresh is in flight — mirrors `smartRefreshing`.
     var energyRefreshing = false
 
+    /// Re-entrancy guard for `refreshProcessesNow()`, true while a manual process-list
+    /// refresh is in flight — mirrors `smartRefreshing`.
+    var processesRefreshing = false
+
     /// Re-entrancy guard for `upgradeBrewNow()`, true while an in-app `brew upgrade`
     /// is in flight — mirrors `smartRefreshing`.
     var brewUpgrading = false
@@ -89,6 +93,14 @@ final class DashboardModel {
     /// the next run. Shown as an inline error on the Автозагрузка card.
     var plistDeleteError: String? = nil
 
+    /// Paths whose most recent delete attempt did NOT remove the file — the user
+    /// dismissed the Touch ID/admin prompt, the file op failed, validation
+    /// rejected the path, or the outcome is simply unknown. The Автозагрузка card
+    /// collapses a row optimistically the instant the user confirms (see
+    /// `OrphanRow.onConfirm`); this is the ONLY signal that puts it back.
+    /// Accumulates until the card acknowledges — see `PlistDeleteRestoreSignal`.
+    private(set) var plistDeleteRestore = PlistDeleteRestoreSignal()
+
     /// Assembled on demand for the imperative report/assess/history code paths ONLY.
     /// MUST stay `private` — a VIEW reading this would re-register a dependency on every
     /// field and defeat the per-field observation split. (Views read the individual
@@ -108,6 +120,27 @@ final class DashboardModel {
 
     var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
     var report: FullReport            // sections fill in as collected
+
+    /// Last non-nil `report.system`, retained across refreshes. `refreshReport()` rebuilds
+    /// from a blank FullReport, so `report.system` is nil for most of every collect; the
+    /// header reads this instead, so the subtitle does not collapse and the header's
+    /// ViewThatFits does not swap branches mid-collect. Hardware/OS are static between
+    /// passes. nil only before the very first successful collect.
+    private(set) var lastKnownSystem: SystemInfo? = nil
+
+    /// What the HEADER shows. Cards keep reading `report.system` directly.
+    var headerSystem: SystemInfo? { report.system ?? lastKnownSystem }
+
+    /// The report as it stood when the current collect started — i.e. the last fully
+    /// collected one plus any out-of-band section writes (SMART task, firewall action).
+    /// `refreshReport()` rebuilds from a blank FullReport, so `report` itself is a partial
+    /// for most of a pass and must never be assessed (V2-HEADER-CHURN); the fast tick
+    /// assesses THIS instead while a pass is in flight, so the report-derived checks stay
+    /// frozen while the live-derived ones (disk, swap) keep updating (V2-HONEST-READINGS).
+    /// Blank before the very first collect — which is correct: `Assess.assess` is total and
+    /// stays silent on absent sections.
+    private var lastCommittedReport = FullReport()
+
     var assessment: Assessment
     var history: HistoryState
     var reportText: String?           // rendered text report (for Отчёт tab)
@@ -247,13 +280,21 @@ final class DashboardModel {
                         self.cpuHistory.removeFirst(self.cpuHistory.count - 60)
                     }
                 }
-                self.setAssessment(Assess.assess(report: self.report, live: self.live))
+                // `self.report` is a partial during a collect and a partial must never be
+                // assessed — it would resurrect the header churn (V2-HEADER-CHURN). But the
+                // live disk/swap readings are ready every tick, so instead of freezing the
+                // whole verdict for the 10–30 s of a pass, assess the LAST COMMITTED report
+                // together with the FRESH live snapshot: report-derived checks stay exactly
+                // as they were when the pass started, live-derived ones keep moving
+                // (V2-HONEST-READINGS, A11).
+                let assessedReport = self.isCollectingReport ? self.lastCommittedReport : self.report
+                self.setAssessment(Assess.assess(report: assessedReport, live: self.live))
 
                 try? await Task.sleep(for: .seconds(AppSettings.shared.fastIntervalSeconds))
             }
         }
 
-        // Slow task (~6s): the `top` process tables only. No setAssessment here — the
+        // Slow task (~6s): the process tables only (via `ps` + `top`). No setAssessment here — the
         // assessment depends only on disk/swap, which the fast task owns.
         slowTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -264,10 +305,14 @@ final class DashboardModel {
                     continue
                 }
 
-                // sampleProcesses() runs `top` (~1s) — hop off the main actor for it.
+                // sampleProcesses() shells out to `/bin/ps` and `/usr/bin/top` once each (and, on the FIRST tick
+                // only, sleeps 0.6 s to prime its CPU baseline) — hop off the main actor
+                // for it. Read the setting HERE, on the main actor, and pass it across: the
+                // collector must not touch AppSettings.shared from a background queue.
+                let limit = AppSettings.shared.processListLimit
                 let procs = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .userInitiated).async {
-                        continuation.resume(returning: procBox.value.sampleProcesses())
+                        continuation.resume(returning: procBox.value.sampleProcesses(limit: limit))
                     }
                 }
                 guard !Task.isCancelled else { return }
@@ -306,9 +351,11 @@ final class DashboardModel {
                 }
                 guard !Task.isCancelled else { return }
 
-                // Assessment (smartSev) is recomputed from `self.report` every ~2s by the
-                // fast task above, so a changed report.smart flows into it automatically —
-                // no explicit setAssessment() call needed here.
+                // Assessment (smartSev) is recomputed every ~2s by the fast task above,
+                // which assesses `lastCommittedReport` while a collect is in flight (:290) —
+                // so `report.smart` must already be committed before that next tick, which
+                // is why this path awaits `waitForReportRefreshToFinish()` first. No
+                // explicit setAssessment() call needed here.
                 await self.waitForReportRefreshToFinish()
                 guard !Task.isCancelled else { return }
                 if self.report.smart != disks { self.report.smart = disks }
@@ -357,6 +404,9 @@ final class DashboardModel {
     func refreshReport() {
         guard !isCollectingReport else { reportRefreshPending = true; return }
         reportTask?.cancel()
+        // Snapshot BEFORE the collect wipes `report` section by section: this is what the
+        // fast tick assesses for the duration of the pass (V2-HONEST-READINGS).
+        lastCommittedReport = report
         isCollectingReport = true
 
         reportTask = Task { [weak self] in
@@ -382,7 +432,11 @@ final class DashboardModel {
                     self.smartUpdatedAt = Date()
                 }
                 self.report = partial
-                self.setAssessment(Assess.assess(report: partial, live: self.live))
+                if let sys = partial.system { self.lastKnownSystem = sys }
+                // Deliberately NOT recomputed here: `partial` has most sections nil during
+                // a collect, so assessing it makes "not collected yet" and "nothing is
+                // wrong" the same value and the header thrashes between them. The verdict
+                // updates once the pass completes, at the `final` assessment below.
                 self.smartToolsState = Self.recomputeSmartToolsState()
             }
             guard !Task.isCancelled else { return }
@@ -411,6 +465,7 @@ final class DashboardModel {
             self.reportUpdatedAt = Date()
 
             self.report = final
+            if let sys = final.system { self.lastKnownSystem = sys }
             self.setAssessment(Assess.assess(report: final, live: self.live))
             self.smartToolsState = Self.recomputeSmartToolsState()
         }
@@ -485,6 +540,40 @@ final class DashboardModel {
         }
     }
 
+    /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up),
+    /// triggered by the «Применить» button next to the process-limit setting so a
+    /// limit change is visible immediately instead of waiting for the next ~6s slow
+    /// tick. One-shot, independent of the periodic slowTask sampler — a fresh
+    /// LiveCollector instance is created per call, never shared with a concurrent
+    /// sampler pass (see the fastBox/procBox/smartBox comment in start()). Because
+    /// this path builds a fresh LiveCollector (and therefore a fresh ProcessSampler)
+    /// per press, its CPU% is measured over the sampler's 0.6 s priming window
+    /// rather than the periodic ~6 s one; that is deliberate (a manual re-sample
+    /// must not make the user wait 6 s) and is the only place where the window is
+    /// not the display cadence.
+    func refreshProcessesNow() {
+        guard !processesRefreshing else { return }
+        processesRefreshing = true
+
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.processesRefreshing = false }
+
+            let collectorBox = UncheckedSendableBox(LiveCollector())
+            // Same rule as the slow task: read the setting on the main actor, pass it in.
+            let limit = AppSettings.shared.processListLimit
+            let procs = await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    continuation.resume(returning: collectorBox.value.sampleProcesses(limit: limit))
+                }
+            }
+            guard !Task.isCancelled else { return }
+
+            if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
+            if self.topMem != procs.topMem { self.topMem = procs.topMem }
+        }
+    }
+
     /// In-app Homebrew package upgrade, triggered by the «Обновить пакеты» button
     /// on the Обслуживание системы card. Runs `brew upgrade` off-main, then
     /// re-collects a fresh Homebrew snapshot so the card reflects the outcome
@@ -517,6 +606,13 @@ final class DashboardModel {
                 }
             guard !Task.isCancelled else { return }
 
+            // The collect that starts while `brew upgrade` runs captures the PRE-upgrade
+            // cachedBrew and would write it over these values (`self.report = final`).
+            // Same reason the three sibling updaters wait — see
+            // waitForReportRefreshToFinish()'s doc comment.
+            await self.waitForReportRefreshToFinish()
+            guard !Task.isCancelled else { return }
+
             self.brewUpgradeError = error
             self.report.brewVersion = info.version
             self.report.brewOutdated = info.outdated
@@ -547,12 +643,20 @@ final class DashboardModel {
             }
 
             let lastLineBox = LastLineBox()
+            // brew is a Homebrew-prefix script that shells out to its own helper
+            // binaries (ruby, git, curl, …) inside that prefix — same reason
+            // BrewUpgrader.upgradeAll and collectBrewInfo() build this env
+            // (V2-POLISH B1). `brew install` is the heaviest of the three and was
+            // the one call site that never got it.
+            let brewEnv = CommandRunner.environment(
+                prependingPATH: [(brew as NSString).deletingLastPathComponent])
             _ = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
                     let result = CommandRunner.runStreaming(
                         "/usr/bin/env",
                         ["HOMEBREW_NO_AUTO_UPDATE=1", brew, "install", "smartmontools"],
                         timeout: 600,
+                        environment: brewEnv,
                         onLine: { line, _ in
                             let trimmed = line.trimmingCharacters(in: .whitespaces)
                             if !trimmed.isEmpty { lastLineBox.value = trimmed }
@@ -616,6 +720,54 @@ final class DashboardModel {
         }
     }
 
+    /// Removes `paths` from `report.autostart`'s three plist arrays in place,
+    /// WITHOUT a full `refreshReport()` recollect. `refreshReport()` rebuilds from
+    /// a blank `FullReport()` and streams sections
+    /// back in one by one, so calling it just to drop a deleted plist from the list
+    /// makes the whole Автозагрузка card (and every other section) flash through its
+    /// "collecting" placeholder before repopulating — a disproportionate, ugly
+    /// reset for a change this narrow. A local, targeted mutation lets SwiftUI's
+    /// own array diffing (and this card's `.animation(value: orphans)`) animate
+    /// just the removed row instead.
+    private func removeAutostartPlistsLocally(_ paths: Set<String>) {
+        guard var auto = report.autostart, !paths.isEmpty else { return }
+        auto.userAgents.removeAll { paths.contains($0.path) }
+        auto.systemAgents.removeAll { paths.contains($0.path) }
+        auto.systemDaemons.removeAll { paths.contains($0.path) }
+        report.autostart = auto
+        // Deliberately NO setAssessment here: `report` is a PARTIAL for most of a collect
+        // and a partial must never be assessed (V2-HEADER-CHURN) — a delete landing
+        // mid-collect would recompute the verdict from mostly-nil sections and flash the
+        // header to "all good" until the next fast tick. Nothing is lost: `Assess.assess`
+        // reads nothing from `report.autostart` (verified — no `autostart` reference in
+        // Assessment.swift), so this recompute could never change the verdict anyway.
+    }
+
+    /// Publishes `paths` as "these were not deleted, put the rows back". Unions
+    /// into whatever the card has not drained yet and always bumps `stamp`, so an
+    /// identical failure set twice in a row is still two distinct signals.
+    private func signalPlistsNotDeleted(_ paths: Set<String>) {
+        guard !paths.isEmpty else { return }
+        plistDeleteRestore = PlistDeleteRestoreSignal(
+            paths: plistDeleteRestore.paths.union(paths),
+            stamp: plistDeleteRestore.stamp &+ 1)
+    }
+
+    /// Called by the Автозагрузка card once it has restored `paths` (or decided
+    /// they are genuinely gone). Draining here rather than clearing on publish is
+    /// what makes two deletes landing in one update cycle safe.
+    func acknowledgePlistRestore(_ paths: Set<String>) {
+        guard !paths.isEmpty, !plistDeleteRestore.paths.isEmpty else { return }
+        plistDeleteRestore = PlistDeleteRestoreSignal(
+            paths: plistDeleteRestore.paths.subtracting(paths),
+            stamp: plistDeleteRestore.stamp &+ 1)
+    }
+
+    /// Clears the delete banner. It is otherwise only ever cleared by STARTING the next
+    /// delete, so a failure message stayed pinned under the card long after the row it
+    /// referred to was gone.
+    func clearPlistDeleteError() { plistDeleteError = nil }
+
     /// Deletes an orphaned launchd .plist detected by the Автозагрузка card's
     /// "check for outdated" flow. `isSystemLevel` selects the deletion path:
     /// user-level (~/Library/LaunchAgents) goes to Trash via FileManager (reversible);
@@ -623,12 +775,16 @@ final class DashboardModel {
     /// PrivilegedRunner (Touch ID/admin password), since Trash semantics don't apply
     /// across privilege boundaries. Neither unloads a currently-running agent/daemon
     /// (no `launchctl bootout` in v1) — the UI confirmation dialog must say so; the
-    /// change takes effect after relogin/reboot. Re-collects the full report on
-    /// success so the deleted entry drops out of the list.
+    /// change takes effect after relogin/reboot. Removes the deleted entry from
+    /// `report.autostart` locally on success (see `removeAutostartPlistsLocally`)
+    /// so it drops out of the list without a full report recollect.
     func deleteOrphanPlist(path: String, isSystemLevel: Bool) {
+        // A delete for this path is already in flight and owns the outcome —
+        // signalling here would restore a row whose delete may still succeed.
         guard !deletingPlistPaths.contains(path) else { return }
         guard LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel) else {
-            plistDeleteError = "invalid plist path"
+            plistDeleteError = L.autostartDeleteInvalidPath
+            signalPlistsNotDeleted([path])
             return
         }
         deletingPlistPaths.insert(path)
@@ -638,9 +794,7 @@ final class DashboardModel {
             guard let self else { return }
             defer { self.deletingPlistPaths.remove(path) }
 
-            enum DeleteOutcome { case success, cancelled, failed(String) }
-
-            let outcome: DeleteOutcome = await withCheckedContinuation { continuation in
+            let outcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
                     if isSystemLevel {
                         let quoted = "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
@@ -659,16 +813,132 @@ final class DashboardModel {
                     }
                 }
             }
-            guard !Task.isCancelled else { return }
+            // An unknown outcome must never read as "deleted": put the row back. If the
+            // file op did land, the next report refresh drops it again — showing a row
+            // that no longer exists is recoverable, hiding one that does is not.
+            guard !Task.isCancelled else {
+                self.signalPlistsNotDeleted([path])
+                return
+            }
 
             switch outcome {
             case .success:
-                self.refreshReport()
+                self.removeAutostartPlistsLocally([path])
             case .cancelled:
-                break   // user dismissed Touch ID/admin prompt — no error banner
+                // User dismissed Touch ID/admin prompt — no error banner, but the row
+                // must come back (finding A3).
+                self.signalPlistsNotDeleted([path])
             case .failed(let msg):
                 self.plistDeleteError = msg
+                self.signalPlistsNotDeleted([path])
             }
+        }
+    }
+
+    /// Bulk variant of `deleteOrphanPlist` (Автозагрузка card's "select multiple,
+    /// delete all" flow). Deletes user-level (~/Library) plists first, each
+    /// independently via Trash, so one failure doesn't block the rest; THEN — if any
+    /// system-level (/Library) paths survive validation — issues exactly one
+    /// `PrivilegedRunner` call covering an `rm -f` of all of them together, so the
+    /// whole batch costs a single Touch ID/admin prompt instead of one per path. A
+    /// cancelled or failed system-level batch never overwrites or hides the outcome
+    /// of the user-level paths that already succeeded — every row's spinner is
+    /// cleared independently and a combined error (if any) is reported once.
+    func deleteOrphanPlists(paths: [String]) {
+        let batch = paths.filter { path in
+            guard !deletingPlistPaths.contains(path) else { return false }
+            let isSystemLevel = path.hasPrefix("/Library/")
+            return LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel)
+        }
+        // Paths the card already collapsed that this call will never touch:
+        // validation rejected them. Paths excluded because a delete is already in
+        // flight are NOT signalled — that call owns their outcome.
+        let inFlight = paths.filter { deletingPlistPaths.contains($0) }
+        let rejected = Set(paths).subtracting(batch).subtracting(inFlight)
+        signalPlistsNotDeleted(rejected)
+        guard !batch.isEmpty else {
+            // Never a silent no-op: if nothing survived validation the button looked
+            // broken — rows flicked back and no message appeared (V2-POLISH B7). Paths
+            // skipped only because a delete is already in flight are NOT an error;
+            // that call owns their outcome, so a batch that is empty for that reason
+            // alone stays quiet and leaves any existing error text as it was.
+            if !rejected.isEmpty { plistDeleteError = L.autostartDeleteInvalidPath }
+            return
+        }
+
+        for path in batch { deletingPlistPaths.insert(path) }
+        plistDeleteError = nil
+
+        let userPaths = batch.filter { !$0.hasPrefix("/Library/") }
+        let systemPaths = batch.filter { $0.hasPrefix("/Library/") }
+
+        Task { [weak self] in
+            guard let self else { return }
+            defer {
+                for path in batch { self.deletingPlistPaths.remove(path) }
+            }
+
+            var results: [(path: String, outcome: PlistDeleteOutcome)] = []
+
+            // Everything in the batch whose delete is not a recorded success yet —
+            // an unknown outcome must not read as "deleted" (same reasoning as the
+            // single-path variant).
+            func notRecordedAsDeleted() -> Set<String> {
+                let succeeded = Set(results.compactMap { $0.outcome == .success ? $0.path : nil })
+                return Set(batch).subtracting(succeeded)
+            }
+
+            for path in userPaths {
+                let outcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
+                    DispatchQueue.global(qos: .utility).async {
+                        do {
+                            try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
+                            continuation.resume(returning: .success)
+                        } catch {
+                            continuation.resume(returning: .failed(error.localizedDescription))
+                        }
+                    }
+                }
+                guard !Task.isCancelled else { self.signalPlistsNotDeleted(notRecordedAsDeleted()); return }
+                results.append((path, outcome))
+            }
+
+            if !systemPaths.isEmpty {
+                let command = "/bin/rm -f " + systemPaths.map { path in
+                    "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+                }.joined(separator: " ")
+
+                let systemOutcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
+                    DispatchQueue.global(qos: .utility).async {
+                        switch PrivilegedRunner.run(command) {
+                        case .success: continuation.resume(returning: .success)
+                        case .cancelled: continuation.resume(returning: .cancelled)
+                        case .failed(let msg): continuation.resume(returning: .failed(msg))
+                        }
+                    }
+                }
+                guard !Task.isCancelled else { self.signalPlistsNotDeleted(notRecordedAsDeleted()); return }
+                for path in systemPaths { results.append((path, systemOutcome)) }
+            }
+
+            let failures = results.compactMap { result -> String? in
+                if case .failed(let msg) = result.outcome { return msg }
+                return nil
+            }
+            if let firstFailure = failures.first {
+                self.plistDeleteError = failures.count > 1
+                    ? L.autostartDeleteBulkFailure(failures.count, results.count, firstFailure)
+                    : firstFailure
+            }
+
+            let succeededPaths = Set(results.compactMap { result -> String? in
+                if case .success = result.outcome { return result.path }
+                return nil
+            })
+            if !succeededPaths.isEmpty {
+                self.removeAutostartPlistsLocally(succeededPaths)
+            }
+            self.signalPlistsNotDeleted(LaunchdPlistInspector.pathsNotDeleted(results: results))
         }
     }
 

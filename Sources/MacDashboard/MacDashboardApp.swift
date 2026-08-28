@@ -15,7 +15,7 @@ struct MacDashboardApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(L.appWindowTitle) {
+        WindowGroup(AppInfo.name) {
             MainDashboardView(model: model)
                 .frame(minWidth: 900, minHeight: 620)
                 .onAppear {
@@ -23,9 +23,17 @@ struct MacDashboardApp: App {
                 }
         }
         .defaultSize(width: 1150, height: 780)
+        .windowStyle(.hiddenTitleBar)
 
+        // The Settings window intentionally keeps its system titlebar (V2-SETTINGS-CHROME,
+        // user decision at acceptance) — only its background is made translucent, by
+        // `VisualEffectBackground`. Note for anyone tempted to hide it again:
+        // `.windowStyle(.hiddenTitleBar)` does nothing for a `Settings` scene on this
+        // SDK/OS (macOS 26, screenshot-verified), and the NSWindow route
+        // (`.fullSizeContentView`) breaks the fixed-size 680×420 layout — see the
+        // comment in `VisualEffectBackground.swift`.
         Settings {
-            SettingsView()
+            SettingsView(model: model)
         }
     }
 }

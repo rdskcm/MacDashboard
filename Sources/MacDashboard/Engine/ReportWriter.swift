@@ -1,9 +1,11 @@
 // Engine/ReportWriter.swift
 // Report agent owns this file (SPEC §3, §7).
 //
-// Renders the Russian text report (mirroring legacy mac_checkup.sh / mac_report.txt
-// layout) from structured data, and writes it atomically to disk. Pure rendering only
-// — NO command execution / subprocess calls happen in this file.
+// Renders the text report (mirroring the legacy mac_checkup.sh / mac_report.txt layout)
+// from structured data, and writes it atomically to disk. The report is BILINGUAL: every
+// string goes through `L` / `L.reportSection*` (StringsEN/StringsRU via
+// `L10nStore.shared.language`), so it renders in whichever language the app is set to.
+// Pure rendering only — NO command execution / subprocess calls happen in this file.
 
 import Foundation
 
@@ -11,7 +13,7 @@ enum ReportWriter {
 
     // MARK: - Public API (verbatim per SPEC §7 / integration contract)
 
-    /// Renders the full Russian text report from structured data.
+    /// Renders the full text report from structured data, in the app's current language.
     static func render(report: FullReport, live: LiveSnapshot, history: HistoryState) -> String {
         // `history` is accepted for interface parity (integration phase depends on this
         // exact signature) but is intentionally NOT rendered into the text report: the
@@ -25,8 +27,8 @@ enum ReportWriter {
         addSection(&out, L.reportSectionSystem, renderSystem(report.system))
         addSection(&out, L.reportSectionDisk, renderDisk(live.disk))
         addSection(&out, L.reportSectionSnapshots, renderSnapshots(report.snapshots))
-        addSection(&out, L.reportSectionHomeDirs, renderDirs(report.homeDirs, cap: 20))
-        addSection(&out, L.reportSectionServiceDirs, renderDirs(report.serviceDirs, cap: nil))
+        addSection(&out, L.reportSectionHomeDirs, renderDirs(report.homeDirs, cap: 20, unreadable: report.homeDirsUnreadable))
+        addSection(&out, L.reportSectionServiceDirs, renderDirs(report.serviceDirs, cap: nil, unreadable: report.serviceDirsUnreadable))
         addSection(&out, L.reportSectionMemory, renderMemory(live.mem, live.swap))
         addSection(&out, L.reportSectionTopMem, renderProcTable(live.topMem, primary: .mem))
         addSection(&out, L.reportSectionTopCPU, renderProcTable(live.topCPU, primary: .cpu))
@@ -157,11 +159,23 @@ enum ReportWriter {
         return s
     }
 
-    private static func renderDirs(_ dirs: [DirSize]?, cap: Int?) -> [String] {
-        guard let d = dirs else { return [L.sharedUnavailable] }
-        if d.isEmpty { return [L.reportNone] }
-        let limited = cap.map { Array(d.prefix($0)) } ?? d
-        return limited.map { padLeft(fmtBytes($0.bytes), 10) + "  " + $0.path }
+    // The exported text report is the one artefact the user shares; an FDA-truncated
+    // folder list must not read as complete (V2-FDA-DEGRADE honesty, same statement
+    // the UI already makes).
+    private static func renderDirs(_ dirs: [DirSize]?, cap: Int?, unreadable: [String] = []) -> [String] {
+        var lines: [String]
+        if let d = dirs {
+            lines = d.isEmpty ? [L.reportNone] : {
+                let limited = cap.map { Array(d.prefix($0)) } ?? d
+                return limited.map { padLeft(fmtBytes($0.bytes), 10) + "  " + $0.path }
+            }()
+        } else {
+            lines = [L.sharedUnavailable]
+        }
+        if !unreadable.isEmpty {
+            lines.append(L.storageFoldersNoFDA(unreadable.joined(separator: ", ")))
+        }
+        return lines
     }
 
     // MARK: - ПАМЯТЬ
@@ -313,7 +327,7 @@ enum ReportWriter {
             if let v = dest.mountPoint { lines.append("Mount Point   : \(v)") }
             if let v = dest.quotaBytes { lines.append("Quota         : \(fmtBytes(v))") }
             if let v = dest.lastBackup { lines.append(L.reportTMLastBackup(v)) }
-            else if let v = dest.lastBackupUnavailableReason { lines.append(L.reportTMLastBackup(v)) }
+            else if let v = dest.lastBackupUnavailableReason { lines.append(L.reportTMLastBackup(v.localizedText)) }
             return lines.isEmpty ? [L.reportTMNotConfigured] : lines
         }
     }
@@ -327,10 +341,10 @@ enum ReportWriter {
 
     // MARK: - КРАШИ
 
-    private static func renderCrashes(_ crashes: [String]?) -> [String] {
+    private static func renderCrashes(_ crashes: [CrashGroup]?) -> [String] {
         guard let c = crashes else { return [L.sharedUnavailable] }
         if c.isEmpty { return [L.reportNone] }
-        return Array(c.prefix(15))
+        return c.prefix(15).map { L.maintenanceCrashRow($0.process, $0.count) }
     }
 
     // MARK: - HOMEBREW

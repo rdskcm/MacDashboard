@@ -10,17 +10,33 @@ enum Assess {
 
     static func assess(report: FullReport, live: LiveSnapshot) -> Assessment {
         var a = Assessment()
-        var problems: [Problem] = []
+        // Paired with its `Problem` so the final sort keeps `items` in lockstep
+        // with `problems` (see §3 of the v2 attention spec — parity is structural,
+        // not re-derived by a second sort).
+        var pairs: [(Problem, AttentionItem)] = []
         var tips: [Tip] = []
+        var capsules: [TipCapsule] = []
+        let lang = L10nStore.shared.language
+        func verb(_ action: AdviceAction?) -> String { AttentionModel.verb(for: action, lang: lang) }
 
         // --- disk (live is the freshest source; report carries none) ---
         if let disk = live.disk {
             if disk.pct >= 0.85 {
                 a.diskSev = .crit
-                problems.append(Problem(sev: .crit, text: L.assessDiskFull(pct(disk.pct)), action: .settingsPane(AdvicePanes.storage)))
+                let action = AdviceAction.settingsPane(AdvicePanes.storage)
+                let text = L.assessDiskFull(pct(disk.pct))
+                pairs.append((Problem(sev: .crit, text: text, action: action),
+                               AttentionItem(kind: .diskFull, sev: .crit, label: L.attnLabelDiskFull,
+                                             detail: L.attnDetailDiskFull(pct(disk.pct)), fullText: text,
+                                             verb: verb(action), action: action)))
             } else if disk.pct >= 0.70 {
                 a.diskSev = .warn
-                problems.append(Problem(sev: .warn, text: L.assessDiskFullSoon(pct(disk.pct)), action: .settingsPane(AdvicePanes.storage)))
+                let action = AdviceAction.settingsPane(AdvicePanes.storage)
+                let text = L.assessDiskFullSoon(pct(disk.pct))
+                pairs.append((Problem(sev: .warn, text: text, action: action),
+                               AttentionItem(kind: .diskFullSoon, sev: .warn, label: L.attnLabelDiskFullSoon,
+                                             detail: L.attnDetailDiskFullSoon(pct(disk.pct)), fullText: text,
+                                             verb: verb(action), action: action)))
             }
         }
 
@@ -28,10 +44,18 @@ enum Assess {
         if let swap = live.swap {
             if swap.used >= 2 * GIB {
                 a.swapSev = .serious
-                problems.append(Problem(sev: .serious, text: L.assessSwapHighSerious(fmt(swap.used)), action: .openApp(AdviceApps.activityMonitor)))
+                let action = AdviceAction.openApp(AdviceApps.activityMonitor)
+                let text = L.assessSwapHighSerious(fmt(swap.used))
+                pairs.append((Problem(sev: .serious, text: text, action: action),
+                               AttentionItem(kind: .swapHigh, sev: .serious, label: L.attnLabelSwapHigh,
+                                             detail: L.attnDetailSwapHigh(fmt(swap.used)), fullText: text,
+                                             verb: verb(action), action: action)))
             } else if swap.used >= 1 * GIB {
                 a.swapSev = .warn
-                tips.append(Tip(text: L.assessSwapHighWarn(fmt(swap.used)), action: .openApp(AdviceApps.activityMonitor)))
+                let action = AdviceAction.openApp(AdviceApps.activityMonitor)
+                tips.append(Tip(text: L.assessSwapHighWarn(fmt(swap.used)), action: action))
+                capsules.append(TipCapsule(object: L.attnCapSwap, value: fmt(swap.used), verb: verb(action),
+                                            explanation: L.attnExplainSwap, action: action))
             }
         }
 
@@ -40,44 +64,128 @@ enum Assess {
         if let cap = batt?.maxCapacity {
             if cap < 70 {
                 a.battSev = .serious
-                problems.append(Problem(sev: .serious, text: L.assessBatteryCapacityLow(cap), action: .settingsPane(AdvicePanes.battery)))
+                let action = AdviceAction.settingsPane(AdvicePanes.battery)
+                let text = L.assessBatteryCapacityLow(cap)
+                pairs.append((Problem(sev: .serious, text: text, action: action),
+                               AttentionItem(kind: .batteryCapacity, sev: .serious, label: L.attnLabelBatteryCapacity,
+                                             detail: L.attnDetailBatteryCapacity(cap), fullText: text,
+                                             verb: verb(action), action: action)))
             } else if cap < 80 {
                 a.battSev = .warn
-                tips.append(Tip(text: L.assessBatteryCapacityWarn(cap), action: .settingsPane(AdvicePanes.battery)))
+                let action = AdviceAction.settingsPane(AdvicePanes.battery)
+                tips.append(Tip(text: L.assessBatteryCapacityWarn(cap), action: action))
+                capsules.append(TipCapsule(object: L.attnCapBattery, value: L.attnCapBatteryValue(cap), verb: verb(action),
+                                            explanation: L.attnExplainBattery, action: action))
             }
         }
         if let cond = batt?.condition, !cond.isEmpty, cond != "Normal" {
             a.battSev = .serious
-            problems.append(Problem(sev: .serious, text: L.assessBatteryConditionBad(cond), action: .settingsPane(AdvicePanes.battery)))
+            let action = AdviceAction.settingsPane(AdvicePanes.battery)
+            let text = L.assessBatteryConditionBad(cond)
+            pairs.append((Problem(sev: .serious, text: text, action: action),
+                           AttentionItem(kind: .batteryCondition, sev: .serious, label: L.attnLabelBatteryCondition,
+                                         detail: L.attnDetailBatteryCondition(cond), fullText: text,
+                                         verb: verb(action), action: action)))
         }
 
         // --- security (nil = unknown ⇒ silent; only an explicit false warns) ---
         if let sec = report.security {
-            if sec.fileVault == false { problems.append(Problem(sev: .serious, text: L.assessFileVaultOff, action: .settingsPane(AdvicePanes.fileVault))) }
-            if sec.gatekeeper == false { problems.append(Problem(sev: .serious, text: L.assessGatekeeperOff, action: .settingsPane(AdvicePanes.privacySecurity))) }
-            if sec.sip == false { problems.append(Problem(sev: .serious, text: L.assessSipOff)) }
-            if sec.firewall == false { problems.append(Problem(sev: .serious, text: L.assessFirewallOff, action: .enableFirewall)) }
+            if sec.fileVault == false {
+                let action = AdviceAction.settingsPane(AdvicePanes.fileVault)
+                let text = L.assessFileVaultOff
+                pairs.append((Problem(sev: .serious, text: text, action: action),
+                               AttentionItem(kind: .fileVaultOff, sev: .serious, label: L.attnLabelFileVaultOff,
+                                             detail: L.attnDetailFileVaultOff, fullText: text,
+                                             verb: verb(action), action: action)))
+            }
+            if sec.gatekeeper == false {
+                let action = AdviceAction.settingsPane(AdvicePanes.privacySecurity)
+                let text = L.assessGatekeeperOff
+                pairs.append((Problem(sev: .serious, text: text, action: action),
+                               AttentionItem(kind: .gatekeeperOff, sev: .serious, label: L.attnLabelGatekeeperOff,
+                                             detail: L.attnDetailGatekeeperOff, fullText: text,
+                                             verb: verb(action), action: action)))
+            }
+            if sec.sip == false {
+                let text = L.assessSipOff
+                pairs.append((Problem(sev: .serious, text: text),
+                               AttentionItem(kind: .sipOff, sev: .serious, label: L.attnLabelSipOff,
+                                             detail: L.attnDetailSipOff, fullText: text,
+                                             verb: verb(nil), action: nil)))
+            }
+            if sec.firewall == false {
+                let action = AdviceAction.enableFirewall
+                let text = L.assessFirewallOff
+                pairs.append((Problem(sev: .serious, text: text, action: action),
+                               AttentionItem(kind: .firewallOff, sev: .serious, label: L.attnLabelFirewallOff,
+                                             detail: L.attnDetailFirewallOff, fullText: text,
+                                             verb: verb(action), action: action)))
+            }
         }
 
         // --- macOS updates ---
         if let upd = report.updates, !upd.isEmpty {
-            problems.append(Problem(sev: .warn, text: L.assessMacUpdatesAvailable(upd.count), action: .settingsPane(AdvicePanes.softwareUpdate)))
+            let action = AdviceAction.settingsPane(AdvicePanes.softwareUpdate)
+            let text = L.assessMacUpdatesAvailable(upd.count)
+            pairs.append((Problem(sev: .warn, text: text, action: action),
+                           AttentionItem(kind: .updates, sev: .warn, label: L.attnLabelUpdates,
+                                         detail: L.attnDetailUpdates(upd.count), fullText: text,
+                                         verb: verb(action), action: action)))
         }
 
         // --- homebrew ---
         if let outdated = report.brewOutdated, !outdated.isEmpty {
-            tips.append(Tip(text: L.assessBrewOutdatedTip(outdated.count), action: .brewUpgrade))
+            let action = AdviceAction.brewUpgrade
+            tips.append(Tip(text: L.assessBrewOutdatedTip(outdated.count), action: action))
+            capsules.append(TipCapsule(object: L.attnCapBrew, value: L.attnCapBrewValue(outdated.count), verb: verb(action),
+                                        explanation: L.attnExplainBrew, action: action))
         }
 
         // --- crashes ---
-        if let crashes = report.crashes, !crashes.isEmpty {
-            problems.append(Problem(sev: .warn, text: L.assessCrashesRecent(crashes.count),
-                                     action: .revealPath(FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports")))
+        // Exactly two things raise attention here (V2-CRASH-SIGNAL):
+        //   1. OUR OWN crash. The report filename carries CFBundleExecutable,
+        //      which build_app.sh keeps equal to CFBundleName == AppInfo.name,
+        //      so this compare is exact and needs no allowlist of "Apple daemons".
+        //   2. A KERNEL PANIC (`.panic` report → CrashGroup.isPanic), whatever
+        //      process logged it: the whole machine went down and rebooted, which
+        //      is always news the user should see (user correction 2026-08-17).
+        // A system/third-party process merely crashing (diffscore,
+        // activatehelper…) is something the user cannot act on, and a permanent
+        // «Требует внимания» item for it is exactly what trains the indicator to
+        // be ignored. Those groups stay visible in the card and the text report.
+        // The predicate lives in ReportCollector.crashRaisesAttention: the group cap
+        // in crashGroups protects exactly these groups, and the two must not drift
+        // apart (V2-CRASH-DETECT).
+        let raisingCrashes = (report.crashes ?? []).filter {
+            ReportCollector.crashRaisesAttention($0) && $0.count > 0
+        }
+        if !raisingCrashes.isEmpty {
+            // The reveal target is DATA now, not a guess: a report from the system directory
+            // used to open the (often empty) per-user one (V2-CRASH-REVEAL, item 1).
+            // `raisingCrashes` preserves crashGroups' order — notable groups lead, count desc —
+            // so this is the loudest raising group's directory. Per-group precision lives on the
+            // card's own rows; this single item can only carry one target.
+            let action = AdviceAction.revealPath(raisingCrashes[0].directory)
+            let panicCount = raisingCrashes.filter { $0.isPanic }.reduce(0) { $0 + $1.count }
+            let ownCount = raisingCrashes.filter { !$0.isPanic }.reduce(0) { $0 + $1.count }
+            var sentences: [String] = []
+            if panicCount > 0 { sentences.append(L.assessKernelPanicsRecent(panicCount)) }
+            if ownCount > 0 { sentences.append(L.assessOwnCrashesRecent(AppInfo.name, ownCount)) }
+            let text = sentences.joined(separator: " ")
+            pairs.append((Problem(sev: .warn, text: text, action: action),
+                           AttentionItem(kind: .crashes, sev: .warn, label: L.attnLabelCrashes,
+                                         detail: L.attnDetailCrashes(panicCount + ownCount), fullText: text,
+                                         verb: verb(action), action: action)))
         }
 
         // --- Time Machine (double optional: .some(nil) = checked & not configured) ---
         if case .some(.none) = report.tmDest {
-            problems.append(Problem(sev: .warn, text: L.assessTimeMachineNotSetUp, action: .settingsPane(AdvicePanes.timeMachine)))
+            let action = AdviceAction.settingsPane(AdvicePanes.timeMachine)
+            let text = L.assessTimeMachineNotSetUp
+            pairs.append((Problem(sev: .warn, text: text, action: action),
+                           AttentionItem(kind: .timeMachine, sev: .warn, label: L.attnLabelTimeMachine,
+                                         detail: L.attnDetailTimeMachine, fullText: text,
+                                         verb: verb(action), action: action)))
         }
 
         // --- SMART / disks ---
@@ -87,11 +195,27 @@ enum Assess {
                 let media = attrInt(d, "Media and Data Integrity Errors") ?? 0
                 let crit = attr(d, "Critical Warning")
                 if (crit != nil && crit != "0x00") || media > 0 {
-                    problems.append(Problem(sev: .crit, text: L.assessSmartDiskErrors(d.title), action: .openApp(AdviceApps.diskUtility)))
+                    let action = AdviceAction.openApp(AdviceApps.diskUtility)
+                    let text = L.assessSmartDiskErrors(d.title)
+                    pairs.append((Problem(sev: .crit, text: text, action: action),
+                                   AttentionItem(kind: .smartErrors, sev: .crit, label: L.attnLabelSmartErrors(d.title),
+                                                 detail: L.attnDetailSmartErrors, fullText: text,
+                                                 verb: verb(action), action: action)))
                 } else if let pu = attrInt(d, "Percentage Used"), pu >= 80 {
-                    problems.append(Problem(sev: .warn, text: L.assessSmartDiskWearHigh(d.title, pu), action: .openApp(AdviceApps.diskUtility)))
+                    let action = AdviceAction.openApp(AdviceApps.diskUtility)
+                    let text = L.assessSmartDiskWearHigh(d.title, pu)
+                    pairs.append((Problem(sev: .warn, text: text, action: action),
+                                   AttentionItem(kind: .smartWear, sev: .warn, label: L.attnLabelSmartWear(d.title),
+                                                 detail: L.attnDetailSmartWear(pu), fullText: text,
+                                                 verb: verb(action), action: action)))
                 } else if isExternal(d), d.attrs.isEmpty, d.severity == .warn {
+                    // Note: the Tip keeps action == nil (no logic drift from today's
+                    // behaviour); the capsule gets an action so it stays actionable —
+                    // the one intentional place item/tip and capsule actions differ.
                     tips.append(Tip(text: L.assessSmartDiskUnavailableTip(d.title)))
+                    let capsuleAction = AdviceAction.openApp(AdviceApps.diskUtility)
+                    capsules.append(TipCapsule(object: d.title, value: L.attnCapSmartNoData, verb: verb(capsuleAction),
+                                                explanation: L.attnExplainSmart, action: capsuleAction))
                 }
             }
         }
@@ -106,25 +230,64 @@ enum Assess {
                     if let disk = live.disk, disk.size > 0 {
                         share = L.assessDownloadsShareSuffix(pct(Double(d.bytes) / Double(disk.size)))
                     }
-                    tips.append(Tip(text: L.assessDownloadsTip(fmt(d.bytes), share), action: .revealPath(d.path)))
+                    let action = AdviceAction.revealPath(d.path)
+                    tips.append(Tip(text: L.assessDownloadsTip(fmt(d.bytes), share), action: action))
+                    capsules.append(TipCapsule(object: L.attnCapDownloads, value: fmt(d.bytes), verb: verb(action),
+                                                explanation: L.attnExplainDownloads, action: action))
                 }
                 if name == ".Trash", d.bytes > 1 * GIB {
-                    tips.append(Tip(text: L.assessTrashTip(fmt(d.bytes)), action: .emptyTrash))
+                    let action = AdviceAction.emptyTrash
+                    tips.append(Tip(text: L.assessTrashTip(fmt(d.bytes)), action: action))
+                    capsules.append(TipCapsule(object: L.attnCapTrash, value: fmt(d.bytes), verb: verb(action),
+                                                explanation: L.attnExplainTrash, action: action))
                 }
             }
         }
         if let sdirs = report.serviceDirs {
             for d in sdirs where d.path.hasSuffix("/Library/Caches") && d.path.hasPrefix(home) && d.bytes > 3 * GIB {
-                tips.append(Tip(text: L.assessCachesTip(fmt(d.bytes)), action: .revealPath(d.path)))
+                let action = AdviceAction.revealPath(d.path)
+                tips.append(Tip(text: L.assessCachesTip(fmt(d.bytes)), action: action))
+                capsules.append(TipCapsule(object: L.attnCapCaches, value: fmt(d.bytes), verb: verb(action),
+                                            explanation: L.attnExplainCaches, action: action))
             }
         }
 
+        // --- folders the collector was refused (V2-FDA-DEGRADE) ---
+        // ONE tip + ONE capsule for the whole condition, whichever card(s) it
+        // affects — and never a Problem/AttentionItem: a permission the user has
+        // not granted is not a machine fault and does not belong in «Требует
+        // внимания». TipCapsule carries no Severity, so this is info by
+        // construction; no colour mapping is involved.
+        if !report.homeDirsUnreadable.isEmpty || !report.serviceDirsUnreadable.isEmpty {
+            let action = AdviceAction.settingsPane(AdvicePanes.fullDiskAccess)
+            tips.append(Tip(text: L.assessNoFDATip, action: action))
+            capsules.append(TipCapsule(object: L.attnCapFolders, value: L.attnCapFoldersNoAccess,
+                                        verb: verb(action), explanation: L.attnExplainNoFDA, action: action))
+        }
+
         // --- sort & summarize (crit > serious > warn, others last) ---
-        problems.sort { rank($0.sev) > rank($1.sev) }
-        a.problems = problems
+        // `Array.sort` is NOT documented stable, and `items` is now a visible ordered list
+        // recomputed on every fast tick — equal-severity rows could swap places between
+        // ticks for no reason. Decorating with the build index (which is AttentionKind's
+        // declaration order, AttentionModel.swift:9-14 — the spec order) makes the order
+        // deterministic. The dedupe guards the one way ids can collide: two identical
+        // external disks failing the same SMART test yield the same kind AND the same
+        // text, and `Problem.id`/`AttentionItem.id` are derived from those — duplicate
+        // ids make SwiftUI's ForEach misbehave silently.
+        var seen = Set<String>()
+        pairs = pairs.enumerated()
+            .sorted { l, r in
+                let a = rank(l.element.0.sev), b = rank(r.element.0.sev)
+                return a == b ? l.offset < r.offset : a > b
+            }
+            .map(\.element)
+            .filter { seen.insert($0.0.id + "\u{1}" + $0.1.id).inserted }
+        a.problems = pairs.map(\.0)
+        a.items = pairs.map(\.1)
         a.tips = tips
-        a.summarySev = problems.first?.sev ?? .good
-        a.summaryText = problems.isEmpty ? L.recommendationsAllGood : L.assessSummaryCount(problems.count)
+        a.capsules = capsules
+        a.summarySev = a.problems.first?.sev ?? .good
+        a.summaryText = a.problems.isEmpty ? L.recommendationsAllGood : L.assessSummaryCount(a.problems.count)
         return a
     }
 

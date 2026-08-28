@@ -5,13 +5,18 @@ import Foundation
 
 struct StringsRU: AppStrings {
     // MARK: App
-    var appWindowTitle: String { "Диагностика Mac" }
     var decimalSeparator: String { "," }
 
     // MARK: Settings
     var settingsLanguageLabel: String { "Язык интерфейса" }
     var settingsIntervalLabel: String { "Интервал обновления (процессор/память)" }
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) с" }
+    var settingsIntervalNoteFast: String { "1 с — самый отзывчивый график, заметная фоновая нагрузка." }
+    var settingsIntervalNoteBalanced: String { "Рабочий диапазон: живые графики без заметной нагрузки." }
+    var settingsIntervalNoteEconomy: String { "Экономный режим: значения обновляются реже, батарея живёт дольше." }
+    var settingsProcessLimitLabel: String { "Процессов в списке" }
+    func settingsProcessLimitOption(_ count: Int) -> String { "\(count)" }
+    var settingsProcessLimitApply: String { "Применить" }
     var settingsMenuLanguageHint: String { "Язык меню и системных диалогов применится после перезапуска приложения" }
     var settingsRelaunchNow: String { "Перезапустить сейчас" }
     var settingsSectionGeneral: String { "Общие" }
@@ -23,59 +28,69 @@ struct StringsRU: AppStrings {
     var mainTabOverview: String { "Обзор" }
     var mainTabReport: String { "Отчёт" }
     var mainCollectingInfo: String { "Собираем сведения о системе…" }
+
+    // MARK: Overview page section kickers
+    var overviewKickerMetrics: String { "Метрики" }
+    var overviewKickerMemory: String { "Память" }
+    var overviewKickerProcesses: String { "Процессы" }
+    var overviewKickerFolders: String { "Папки" }
+    var overviewKickerSystem: String { "Система" }
+    var overviewKickerHistory: String { "История" }
+
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String { "load \(load) · \(ncpu) ядер" }
     func headerUptimeChip(_ uptime: String) -> String { "аптайм \(uptime)" }
     var headerRefreshReport: String { "Обновить отчёт" }
+    var headerStatusNeedsAttention: String { "Требует внимания" }
 
     // MARK: KPI tiles
-    var kpiCpuLabel: String { "Процессор (CPU)" }
-    func kpiLoad(_ v: String) -> String { "load \(v)" }
+    var kpiCpuLabel: String { "CPU" }
     var kpiLoadUnavailable: String { "load —" }
-    func kpiCpuSub(_ loadStr: String, _ ncpu: Int) -> String { "\(loadStr) · \(ncpu) ядер" }
-    func kpiCpuSocTemp(_ t: Int) -> String { "SOC \(t) °C" }
-    var kpiCpuChartTimeLabel: String { "Время" }
+    func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String { "нагрузка \(l1) · \(l2) · \(l3)" }
     var kpiMemLabel: String { "Память" }
     func kpiMemUnit(_ total: String) -> String { "из \(total)" }
     func kpiMemSub(_ compressor: String, _ purgeable: String) -> String { "сжатая \(compressor) · выгружаемая \(purgeable)" }
     var kpiSwapLabel: String { "Подкачка (swap)" }
     func kpiSwapUnit(_ total: String) -> String { "из \(total)" }
     func kpiSwapSub(_ free: String) -> String { "свободно \(free)" }
-    var kpiDiskLabel: String { "Диск" }
-    func kpiDiskUnit(_ size: String) -> String { "свободно из \(size)" }
+    var kpiDiskLabel: String { "Диск · свободно" }
+    func kpiDiskUnit(_ size: String) -> String { "из \(size)" }
     func kpiDiskUsedPct(_ pct: Int) -> String { "занято \(pct)%" }
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
         base + " · данные \(dataUsed), система \(sysUsed)"
     }
-    func kpiDiskTemp(_ t: Int) -> String { "темп. \(t) °C" }
     var kpiBatteryLabel: String { "Батарея" }
     func kpiBatteryCycles(_ n: Int) -> String { "\(n) " + ruPlural(n, "цикл", "цикла", "циклов") }
-    func kpiBatteryCondition(_ cond: String) -> String { "состояние \(cond)" }
     func kpiBatteryChargeNow(_ charge: Int) -> String { "сейчас \(charge)%" }
     var kpiBatteryDetailsButton: String { "Детали" }
 
     // MARK: Security card
     var securityTitle: String { "Безопасность" }
-    var securityFileVault: String { "FileVault (шифрование диска)" }
-    var securitySip: String { "SIP (защита системы)" }
+    var securityFileVault: String { "FileVault" }
+    var securitySip: String { "SIP" }
     var securityFirewall: String { "Файрвол" }
+    var securityGatekeeper: String { "Gatekeeper" }
+    var securityFileVaultTip: String { "Шифрование диска — без вашего пароля данные на диске прочитать нельзя." }
+    var securitySipTip: String { "Защита целостности системы — даже администратор не может менять системные файлы." }
+    var securityFirewallTip: String { "Блокирует незапрошенные входящие сетевые подключения." }
+    var securityGatekeeperTip: String { "Проверяет, что запускаемые приложения подписаны и заверены Apple." }
 
     // MARK: Report tab
     var reportPlaceholder: String { "Отчёт ещё не собран. Нажмите «Обновить отчёт»." }
     var reportShowInFinder: String { "Показать в Finder" }
     var reportCopy: String { "Скопировать" }
     var reportCollecting: String { "Собираем отчёт…" }
+    func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · обновлено \(time)" }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Рекомендации" }
-    var recommendationsCaption: String { "по отчёту" }
     var recommendationsAllGood: String { "Всё в порядке" }
-    var recommendationsTipPrefix: String { "Совет: " }
 
     // MARK: Advice actions
     var adviceTrashConfirmTitle: String { "Очистить Корзину?" }
     var adviceTrashConfirmButton: String { "Очистить" }
     var adviceTrashError: String { "Не удалось очистить Корзину" }
-    var adviceDone: String { "готово" }
+    var adviceTrashNotPermitted: String { "У Дашборда нет разрешения управлять Finder, поэтому очистить Корзину не получилось. Разрешите это в «Конфиденциальность и безопасность» → «Автоматизация»." }
+    var adviceTrashOpenAutomation: String { "Открыть настройки автоматизации" }
     var adviceFirewallConfirmTitle: String { "Включить файрвол?" }
     var adviceFirewallConfirmMessage: String { "Понадобится Touch ID или пароль администратора." }
     var adviceFirewallConfirmButton: String { "Включить" }
@@ -92,10 +107,10 @@ struct StringsRU: AppStrings {
     var sharedToggleShowTable: String { "Показать таблицу" }
     var sharedInfoHide: String { "Скрыть пояснение" }
     var sharedInfoShow: String { "Показать пояснение" }
+    func sharedMoreN(_ n: Int) -> String { "Ещё \(n)" }
+    var sharedCollapse: String { "Свернуть" }
 
     // MARK: Storage — shared folder labels
-    var storageColFolder: String { "Папка" }
-    var storageColSize: String { "Размер" }
     var storageColShare: String { "Доля" }
     var storageTrashLabel: String { "Корзина" }
     var storageAppsLabel: String { "Программы" }
@@ -107,6 +122,11 @@ struct StringsRU: AppStrings {
     // MARK: Storage — Служебные папки
     var storageServiceDirsTitle: String { "Служебные папки" }
     var storageServiceDirsCaption: String { "кэши, контейнеры, логи, программы" }
+    var folderTabHome: String { "Домашняя" }
+    var folderTabSvc: String { "Служебные" }
+    func storageFoldersNoFDA(_ folders: String) -> String { "Здесь не показаны: \(folders) — у приложения нет полного доступа к диску." }
+    var storageFoldersNoFDAButton: String { "Открыть настройки" }
+    var storageFoldersNoFDAButtonA11y: String { "Открыть настройки полного доступа к диску" }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { "Диски (SMART)" }
@@ -117,11 +137,15 @@ struct StringsRU: AppStrings {
     var storageSmartInstallButton: String { "Установить smartmontools" }
     var storageSmartNeedsHomebrew: String { "Для SMART внешних дисков нужны Homebrew и smartmontools" }
     func storageSmartInstallFailed(_ msg: String) -> String { "Установка не удалась: \(msg)" }
+    var storageSmartKindInternal: String { "ВНУТРЕННИЙ" }
+    var storageSmartKindExternal: String { "ВНЕШНИЙ" }
 
     // MARK: Process cards
-    var processCpuTitle: String { "Процессы по CPU" }
-    var processMemTitle: String { "Процессы по памяти" }
-    var processListCaption: String { "живой снимок top" }
+    var processesTitle: String { "Процессы" }
+    var processSegCPU: String { "CPU" }
+    var processSegMem: String { "Память" }
+    var processesMetricA11y: String { "Метрика процессов" }
+    var processListCaption: String { "живой снимок" }
     var processLoadingDetails: String { "Загружаем детали…" }
     var processDetailThreads: String { "Потоки" }
     var processDetailMemory: String { "Память" }
@@ -130,19 +154,30 @@ struct StringsRU: AppStrings {
     var processSignalError: String { "Не удалось отправить сигнал (нет прав)" }
     var processForceQuit: String { "Снять принудительно" }
     var processForceQuitConfirm: String { "Снять" }
-    func processForceQuitTitle(_ name: String) -> String { "Принудительно снять процесс „\(name)“?" }
+    var processForceQuitInlineQuestion: String { "Снять принудительно?" }
+    func processRevealA11y(_ name: String) -> String { "Показать „\(name)“ в Finder" }
+    func processTerminateA11y(_ name: String) -> String { "Завершить процесс „\(name)“" }
+    func processKillA11y(_ name: String) -> String { "Принудительно снять процесс „\(name)“" }
 
     // MARK: Maintenance card
     var maintenanceTitle: String { "Обслуживание системы" }
     var maintenanceBrewNotInstalled: String { "не установлен" }
     var maintenanceBrewAllFresh: String { "Все пакеты свежие \u{2713}" }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Устаревших пакетов: \(n)" }
-    var maintenanceUpdatesSection: String { "Обновления macOS" }
-    var maintenanceUpdatesAllUpdated: String { "Всё обновлено \u{2713}" }
-    var maintenanceCrashesSection: String { "Недавние краши" }
-    var maintenanceCrashesNone: String { "Свежих крашей нет \u{2713}" }
+    var maintenanceUpdatesSection: String { "Обновления" }
+    var maintenanceUpdatesAllUpdated: String { "\u{2713}" }
+    var maintenanceCrashesSection: String { "Краши" }
+    var maintenanceCrashesNone: String { "\u{2713}" }
+    var maintenanceUpdatesTip: String { "Ожидающие обновления macOS и App Store." }
+    var maintenanceCrashesTip: String { "Отчёты о падениях приложений за последние 7 дней." }
+    func maintenanceCrashRow(_ process: String, _ count: Int) -> String { count > 1 ? "\(process) \u{00D7}\(count)" : process }
+    func maintenanceCrashRevealA11y(_ process: String) -> String { "Показать отчёты о падениях «\(process)» в Finder" }
     func maintenanceAndMore(_ n: Int) -> String { "и ещё \(n)" }
     var maintenanceBrewUpgradeButton: String { "Обновить пакеты" }
+    func maintenanceBrewConfirmTitle(_ n: Int) -> String {
+        "Обновить \(n) \(ruPlural(n, "пакет", "пакета", "пакетов"))?"
+    }
+    var maintenanceBrewConfirmButton: String { "Обновить" }
     var maintenanceBrewUpgrading: String { "Обновляем пакеты… (может занять несколько минут)" }
     func maintenanceBrewProgressDownloading(_ files: Int) -> String {
         "Скачиваем пакеты… (готово: \(files) \(ruPlural(files, "файл", "файла", "файлов")))"
@@ -161,6 +196,8 @@ struct StringsRU: AppStrings {
     var timeMachineTypeLocal: String { "локальный диск" }
     var timeMachineQuota: String { "Квота" }
     var timeMachineLastBackup: String { "Последний бэкап" }
+    var timeMachineConnection: String { "Подключение" }
+    var timeMachineConnectionNone: String { "сейчас нет подключения" }
     var timeMachineSnapshots: String { "Локальные снапшоты" }
     var timeMachineSnapshotsNone: String { "нет" }
     func timeMachineSnapshotsCount(_ n: Int) -> String { "\(n) шт." }
@@ -174,15 +211,22 @@ struct StringsRU: AppStrings {
     var autostartSystemDaemons: String { "Системные демоны" }
     var autostartBackgroundTasks: String { "Фоновые задачи (не Apple)" }
     var autostartCheckOutdated: String { "Проверить устаревшие" }
-    func autostartCheckOutdatedCount(_ n: Int) -> String { "Проверить устаревшие: \(n)" }
+    func autostartCheckOutdatedCount(_ n: Int) -> String { "Устаревших: \(n)" }
+    var autostartOrphanEmptyText: String { "Устаревших плистов нет" }
     var autostartOrphanTooltip: String { "Устарел — приложение удалено, безопасно удалить" }
     var autostartDeleteButton: String { "Удалить" }
-    var autostartDeleteConfirmTitle: String { "Удалить устаревший пункт автозагрузки?" }
     var autostartDeleteConfirmMessageUser: String { "Файл будет перемещён в Корзину. Изменение вступит в силу после повторного входа в систему или перезагрузки." }
     var autostartDeleteConfirmMessageSystem: String { "Файл будет удалён без возможности восстановления (потребуется Touch ID или пароль администратора). Изменение вступит в силу после повторного входа в систему или перезагрузки." }
     func autostartDeleteError(_ detail: String) -> String { "Не удалось удалить: \(detail)" }
+    func autostartDeleteAllButton(_ n: Int) -> String { "Удалить все (\(n))" }
+    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String { "Переместить в Корзину все устаревшие плисты (\(n))?" }
+    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String { "Среди них есть системные — потребуется пароль. Удалить все (\(n))?" }
+    var autostartDeletingAll: String { "Удаляю…" }
     var autostartOkTooltip: String { "В порядке" }
-    var autostartNoOrphans: String { "Устаревших не найдено" }
+    var autostartDeleteInvalidPath: String { "путь не похож на плист автозагрузки" }
+    func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String {
+        "\(failed) из \(total): \(detail)"
+    }
 
     // MARK: Memory card
     var memoryLegendActive: String { "Активная" }
@@ -220,6 +264,7 @@ struct StringsRU: AppStrings {
     var historyMetricPickerBattery: String { "Батарея" }
     var historyMetricPickerCycles: String { "Циклы" }
     var historyMetricPickerSwap: String { "Swap" }
+    var historyMetricA11y: String { "Метрика истории" }
     var historyMetricYLabelDisk: String { "Занято, ГБ" }
     var historyMetricYLabelBattery: String { "%" }
     var historyMetricYLabelCycles: String { "циклы" }
@@ -256,6 +301,11 @@ struct StringsRU: AppStrings {
     var energyValueNever: String { "никогда" }
     var energyCardTitle: String { "Настройки энергии (pmset)" }
     func energyApply(_ n: Int) -> String { "Применить (\(n))" }
+    func energyApplyConfirmTitle(_ n: Int) -> String {
+        "Применить \(n) \(ruPlural(n, "изменение", "изменения", "изменений"))?"
+    }
+    var energyApplyConfirmButton: String { "Применить" }
+    var energyApplyConfirmAdmin: String { "Понадобится Touch ID или пароль администратора." }
     var energyCancel: String { "Отменить" }
     var energyResetToDefaults: String { "Сбросить к стандартным" }
     var energyResetHelp: String { "Вернуть редактируемые параметры к значениям macOS по умолчанию" }
@@ -340,7 +390,8 @@ struct StringsRU: AppStrings {
     var assessFirewallOff: String { "Файрвол выключен — стоит включить." }
     func assessMacUpdatesAvailable(_ n: Int) -> String { "Доступны обновления macOS: \(n) шт." }
     func assessBrewOutdatedTip(_ n: Int) -> String { "Homebrew: устаревших пакетов — \(n) (brew upgrade)." }
-    func assessCrashesRecent(_ n: Int) -> String { "Свежие крэш-репорты: \(n) — посмотрите в Console.app." }
+    func assessOwnCrashesRecent(_ app: String, _ n: Int) -> String { "Сбои \(app) за последние 7 дней: \(n) шт. — отчёты в Console.app." }
+    func assessKernelPanicsRecent(_ n: Int) -> String { "Сбой системы (паника ядра) за последние 7 дней: \(n) шт. — отчёты в Console.app." }
     var assessTimeMachineNotSetUp: String { "Time Machine не настроен — бэкапов нет." }
     func assessSmartDiskErrors(_ title: String) -> String { "Диск «\(title)»: SMART сообщает об ошибках носителя — проверьте диск и бэкапы." }
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String { "Диск «\(title)»: износ \(pct)% — ресурс на исходе." }
@@ -349,6 +400,7 @@ struct StringsRU: AppStrings {
     func assessDownloadsShareSuffix(_ pct: String) -> String { " (\(pct)% всего диска)" }
     func assessTrashTip(_ sizeStr: String) -> String { "Корзина: \(sizeStr) — можно очистить." }
     func assessCachesTip(_ sizeStr: String) -> String { "Кэши ~/Library/Caches: \(sizeStr) — чистить безопасно." }
+    var assessNoFDATip: String { "Часть папок не попала в отчёт: у приложения нет полного доступа к диску." }
     func assessSummaryCount(_ n: Int) -> String { "Замечаний: \(n)" }
 
     // MARK: Parsers / live status
@@ -485,4 +537,74 @@ struct StringsRU: AppStrings {
     var reportCollectorSmartWearHigh: String { "SMART: износ на исходе" }
     var reportCollectorSmartUnavailable: String { "SMART недоступен" }
     var reportCollectorSmartUnavailableNoTools: String { "SMART недоступен (нет smartmontools)" }
+
+    // MARK: v2 attention
+    var attnLabelDiskFull: String { "Диск" }
+    func attnDetailDiskFull(_ pct: String) -> String { "заполнен на \(pct) %" }
+    var attnLabelDiskFullSoon: String { "Диск" }
+    func attnDetailDiskFullSoon(_ pct: String) -> String { "заполнен на \(pct) %" }
+    var attnLabelSwapHigh: String { "Swap" }
+    func attnDetailSwapHigh(_ used: String) -> String { used }
+    var attnLabelBatteryCapacity: String { "Батарея" }
+    func attnDetailBatteryCapacity(_ cap: Int) -> String { "ёмкость \(cap) %" }
+    var attnLabelBatteryCondition: String { "Батарея" }
+    func attnDetailBatteryCondition(_ cond: String) -> String { "состояние: \(cond)" }
+    var attnLabelFileVaultOff: String { "FileVault" }
+    var attnDetailFileVaultOff: String { "выключен" }
+    var attnLabelGatekeeperOff: String { "Gatekeeper" }
+    var attnDetailGatekeeperOff: String { "выключен" }
+    var attnLabelSipOff: String { "SIP" }
+    var attnDetailSipOff: String { "выключен" }
+    var attnLabelFirewallOff: String { "Брандмауэр" }
+    var attnDetailFirewallOff: String { "выключен" }
+    var attnLabelUpdates: String { "Обновления" }
+    func attnDetailUpdates(_ n: Int) -> String { "\(n) доступно" }
+    var attnLabelCrashes: String { "Сбои" }
+    func attnDetailCrashes(_ n: Int) -> String { "\(n) отчётов" }
+    var attnLabelTimeMachine: String { "Time Machine" }
+    var attnDetailTimeMachine: String { "не настроена" }
+    func attnLabelSmartErrors(_ title: String) -> String { title }
+    var attnDetailSmartErrors: String { "ошибки SMART" }
+    func attnLabelSmartWear(_ title: String) -> String { title }
+    func attnDetailSmartWear(_ pu: Int) -> String { "износ \(pu) %" }
+
+    var attnVerbSettings: String { "Настройки" }
+    var attnVerbActivityMonitor: String { "Мониторинг системы" }
+    var attnVerbDiskUtility: String { "Дисковая утилита" }
+    var attnVerbShow: String { "Показать" }
+    var attnVerbEmpty: String { "Очистить" }
+    var attnVerbEnable: String { "Включить" }
+    var attnVerbUpgrade: String { "Обновить" }
+    var attnVerbOpen: String { "Открыть" }
+
+    var attnCapSwap: String { "Swap" }
+    var attnCapBattery: String { "Батарея" }
+    func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
+    var attnCapBrew: String { "Homebrew" }
+    func attnCapBrewValue(_ n: Int) -> String { "\(n) пакетов" }
+    var attnCapSmartNoData: String { "нет данных SMART" }
+    var attnCapDownloads: String { "Загрузки" }
+    var attnCapTrash: String { "Корзина" }
+    var attnCapCaches: String { "Кэши" }
+    var attnExplainSwap: String { "Система выгружает память на диск. Откроется «Мониторинг системы» — вкладка «Память» покажет, какие процессы её занимают." }
+    var attnExplainBattery: String { "Ёмкость снижается естественным образом со временем. Откроются системные настройки батареи; ничего не изменится без вашего подтверждения." }
+    var attnExplainBrew: String { "Запустит `brew upgrade` в фоне — прогресс виден в карточке Homebrew. Установленные пакеты заменяются на свежие версии." }
+    var attnExplainSmart: String { "Откроет «Дисковую утилиту». У внешних дисков SMART-атрибуты часто недоступны через USB — это не признак поломки." }
+    var attnExplainDownloads: String { "Откроет папку в Finder. Ничего не удаляется — вы сами решаете, что убрать." }
+    var attnExplainTrash: String { "Спросит подтверждение, затем очистит Корзину через Finder. Восстановить файлы после этого нельзя." }
+    var attnExplainCaches: String { "Откроет ~/Library/Caches в Finder. Приложения пересоздадут кэш при следующем запуске." }
+    var attnCapFolders: String { "Папки" }
+    var attnCapFoldersNoAccess: String { "видны не все" }
+    var attnExplainNoFDA: String { "Откроет «Системные настройки» → «Конфиденциальность и безопасность» → «Полный доступ к диску». Без него приложение не видит Корзину и часть служебных папок, поэтому их размер не попадает в отчёт." }
+
+    func attnMore(_ n: Int) -> String { "Ещё \(n)" }
+    var attnCollapse: String { "Свернуть" }
+
+    var quietUpdatesTitle: String { "Обновления и краши" }
+    var quietNeedsAttention: String { "требует внимания" }
+    var quietStatusAllEnabled: String { "всё включено" }
+    var quietStatusAllClear: String { "всё в норме" }
+    var quietMarkOff: String { "выключен" }
+    var quietMarkUnknown: String { "неизвестно" }
+    func quietCountItems(_ n: Int) -> String { "\(n) шт." }
 }

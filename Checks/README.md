@@ -7,13 +7,14 @@ a plain executable: `main.swift` runs a tiny assert-and-print harness and calls
 `exit(1)` if anything fails, so `swift run MacDashboardChecks` is a normal CI-style
 pass/fail check.
 
-Every other file in this directory (`Models.swift`, `Parsers.swift`, `Assessment.swift`,
-`CommandRunner.swift`, `LiveCollector.swift`, `ReportCollector.swift`,
+Every other file in this directory (`Models.swift`, `AppInfo.swift`, `AttentionModel.swift`,
+`Parsers.swift`, `Assessment.swift`,
+`CommandRunner.swift`, `LiveCollector.swift`, `ProcessSampler.swift`, `ReportCollector.swift`,
 `ReportWriter.swift`, `HistoryStore.swift`, `L10n.swift`, `BrewProgress.swift`,
 `ThermalSensors.swift`, `AppSettings.swift`, `StringsRU.swift`, `StringsEN.swift`,
-`LaunchdPlistInspector.swift`, `Formatting.swift`, `BatteryInspector.swift`,
+`LaunchdPlistInspector.swift`, `Formatting.swift`, `BarHitTest.swift`, `BatteryInspector.swift`,
 `Advice.swift`, `HistorySeries.swift`, `AIRedaction.swift`, `AIPayload.swift`,
-`AIRequest.swift`) is a **symlink** back into
+`AIRequest.swift`, `DirectoryAccess.swift`, `AppleScriptResult.swift`, `PrivilegedRunner.swift`) is a **symlink** back into
 `../Sources/MacDashboard/...`. SwiftPM compiles whatever source files it finds under a
 target's `path`, following symlinks, so this target builds and tests the exact same pure
 engine source files the app itself ships — no copy-paste drift, no separate module to
@@ -25,8 +26,8 @@ misbehave (duplicate-file errors, etc.), replace the symlinks with a `sync_check
 script that copies the files in before each build instead of restructuring `Sources/`.
 
 `SmartToolsAvailabilityChecks.swift`, `ThermalSensorsChecks.swift`,
-`HistorySeriesChecks.swift`, `LaunchdPlistInspectorChecks.swift`,
-`AIRedactionChecks.swift`, and `AIPayloadRequestChecks.swift` are real
+`ProcessSamplerChecks.swift`, `HistorySeriesChecks.swift`, `LaunchdPlistInspectorChecks.swift`,
+`AIRedactionChecks.swift`, `AIPayloadRequestChecks.swift`, and `SudoPathSafetyChecks.swift` are real
 (non-symlinked) files, like `main.swift`.
 Swift executable targets only permit ONE file with top-level (script-mode) statements —
 `main.swift` owns that slot — so additional check files must instead define a plain

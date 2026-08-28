@@ -60,4 +60,28 @@ enum HistorySeries {
         let totalBytes = Int64(totalMiB) * 1_048_576
         return "\(fmtBytes(usedBytes)) / \(fmtBytes(totalBytes))"
     }
+
+    /// Same locale/timeZone/format as HistoryStore's `dayFormatter` and
+    /// HistoryCard's `dateFormatter` — local timeZone, not UTC, so the range
+    /// this returns lines up with how the view parses each point's date string
+    /// (a UTC parse would disagree by up to a day for anyone west of UTC).
+    private static var dayFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = .current
+        df.dateFormat = "yyyy-MM-dd"
+        return df
+    }()
+
+    /// 30-consecutive-calendar-day range ending on the last entry's date.
+    /// Entries are already chronological — `entries.last` is the most recent.
+    /// nil if `entries` is empty or the last entry's date string fails to parse.
+    static func last30Range(_ entries: [MacHistoryEntry]) -> ClosedRange<Date>? {
+        guard let last = entries.last,
+              let endDate = dayFormatter.date(from: last.date)
+        else { return nil }
+        guard let startDate = Calendar.current.date(byAdding: .day, value: -29, to: endDate)
+        else { return nil }
+        return startDate...endDate
+    }
 }
