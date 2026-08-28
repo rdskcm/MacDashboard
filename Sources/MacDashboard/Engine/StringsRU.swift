@@ -89,6 +89,8 @@ struct StringsRU: AppStrings {
     var adviceTrashConfirmTitle: String { "Очистить Корзину?" }
     var adviceTrashConfirmButton: String { "Очистить" }
     var adviceTrashError: String { "Не удалось очистить Корзину" }
+    var adviceTrashNotPermitted: String { "У Дашборда нет разрешения управлять Finder, поэтому очистить Корзину не получилось. Разрешите это в «Конфиденциальность и безопасность» → «Автоматизация»." }
+    var adviceTrashOpenAutomation: String { "Открыть настройки автоматизации" }
     var adviceFirewallConfirmTitle: String { "Включить файрвол?" }
     var adviceFirewallConfirmMessage: String { "Понадобится Touch ID или пароль администратора." }
     var adviceFirewallConfirmButton: String { "Включить" }

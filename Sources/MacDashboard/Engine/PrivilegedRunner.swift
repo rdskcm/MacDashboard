@@ -33,13 +33,29 @@ enum PrivilegedRunner {
         let osaResult = runProcess("/usr/bin/osascript", ["-e", script], timeout: 120)
         if osaResult.exitCode == 0 { return .success }
 
-        let stderrText = osaResult.stderr
-        if stderrText.contains("-128") || stderrText.contains("User cancel") {
+        if Self.isUserCancellation(exitCode: osaResult.exitCode, stderr: osaResult.stderr) {
             return .cancelled
         }
-        let trimmed = stderrText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = osaResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         let capped = trimmed.isEmpty ? "unknown error" : String(trimmed.prefix(200))
         return .failed(capped)
+    }
+
+    /// True when osascript reported the ADMIN-PASSWORD DIALOG being dismissed, i.e.
+    /// AppleEvent error -128. Anchored on the trailing `(-128)` error-number field of
+    /// osascript's error line, never a bare substring: the command we ran is embedded
+    /// in that same text and carries user-controlled file paths, so a plist named
+    /// `com.foo-128.plist` whose delete genuinely FAILED used to be reported as a
+    /// cancel — no error banner, row restored, user told nothing went wrong.
+    /// `do shell script` failures report the shell's exit status (0…255, never
+    /// negative) in that field, so `(-128)` is unambiguous. The error number, not the
+    /// message, is also what makes this locale-independent.
+    static func isUserCancellation(exitCode: Int32, stderr: String) -> Bool {
+        guard exitCode == 1 else { return false }
+        guard let last = stderr.split(whereSeparator: \.isNewline)
+            .map({ $0.trimmingCharacters(in: .whitespaces) })
+            .last(where: { !$0.isEmpty }) else { return false }
+        return last.hasSuffix("(-128)")
     }
 
     private struct ProcessResult { let exitCode: Int32; let stderr: String }
@@ -81,10 +97,10 @@ enum PrivilegedRunner {
             _ = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
             drainGroup.leave()
         }
-        var stderrData = Data()
+        let stderrBox = DataBox()
         drainGroup.enter()
         DispatchQueue.global(qos: .utility).async {
-            stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            stderrBox.set(stderrPipe.fileHandleForReading.readDataToEndOfFile())
             drainGroup.leave()
         }
 
@@ -104,8 +120,18 @@ enum PrivilegedRunner {
         if killGate.winner == .timeout {
             return ProcessResult(exitCode: -1, stderr: "timed out")
         }
-        let stderrText = String(data: stderrData, encoding: .utf8) ?? ""
+        let stderrText = String(data: stderrBox.value, encoding: .utf8) ?? ""
         return ProcessResult(exitCode: process.terminationStatus, stderr: stderrText)
+    }
+
+    /// stderr is written on a background reader and read on the calling thread after a
+    /// BOUNDED wait — on the timeout branch the reader is still running, so the buffer
+    /// needs a lock. Mirrors CommandRunner's own box.
+    private final class DataBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data = Data()
+        func set(_ d: Data) { lock.lock(); data = d; lock.unlock() }
+        var value: Data { lock.lock(); defer { lock.unlock() }; return data }
     }
 
     /// Single-fire gate shared between the timeout timer and the termination-handler

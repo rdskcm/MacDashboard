@@ -249,6 +249,11 @@ struct AutostartCard: View {
     @ViewBuilder
     private func checkButton(orphans: [LaunchdPlistInfo]) -> some View {
         Button {
+            // An armed destructive confirm must not survive hiding the list: it would
+            // be re-presented pre-armed on the next reveal, without a fresh ask.
+            pendingDeletePath = nil
+            pendingBulkDelete = false
+            model.clearPlistDeleteError()
             showOrphans.toggle()
         } label: {
             if orphans.isEmpty {
@@ -372,9 +377,15 @@ struct AutostartCard: View {
                 // Always mounted (not gated behind `displayOrphans.count >=
                 // 2`): see `BulkDeleteRow`'s own doc comment for why it needs
                 // the same `openAmount` collapse treatment as a row instead
-                // of an `if`-gated appear/disappear.
+                // of an `if`-gated appear/disappear. The count and the
+                // user-vs-system wording must come from the list the action
+                // actually deletes (`onConfirm` below already uses
+                // `modelOrphans`); `BulkDeleteRow`'s own `busy` fallback
+                // (`BulkDeleteRow.visible`) keeps it on screen while the
+                // batch runs, which is what `displayOrphans` was
+                // compensating for.
                 BulkDeleteRow(
-                    orphans: displayOrphans,
+                    orphans: orphans,
                     busy: bulkBusy,
                     pendingBulkDelete: $pendingBulkDelete,
                     onAsk: {
@@ -851,10 +862,10 @@ private struct BulkDeleteRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Spacer(minLength: 8)
-                OrphanConfirmDeleteButton(title: L.autostartDeleteAllButton(orphans.count), action: onConfirm)
-                    .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))
                 OrphanCancelButton(title: L.adviceCancel, action: onCancel)
                     .accessibilityLabel(L.adviceCancel)
+                OrphanConfirmDeleteButton(title: L.autostartDeleteAllButton(orphans.count), action: onConfirm)
+                    .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))
             } else {
                 BulkDeleteAskButton(title: L.autostartDeleteAllButton(orphans.count), action: onAsk)
                     .accessibilityLabel(L.autostartDeleteAllButton(orphans.count))

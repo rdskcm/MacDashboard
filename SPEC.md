@@ -103,9 +103,15 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
 - Built app: `MacDashboard/dist/MacDashboard.app` — `APP_NAME="MacDashboard"` /
   `DIST="dist/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` copies it to
   `~/Applications/MacDashboard.app`, removing any stale bundle under the old
-  «Дашборд Mac» name first. The bundle's *display* name is still «Дашборд Mac» via the
-  localized InfoPlist.strings — that is what §9 means, and it is not the directory
-  name.)
+  «Дашборд Mac» name first. The bundle name is `MacDashboard` in both languages —
+  `build_app.sh:106-117` writes only `NSHumanReadableCopyright` and
+  `NSAppleEventsUsageDescription` into the `.lproj` files; `CFBundleName`/
+  `CFBundleDisplayName` are plain `"MacDashboard"` in both (`:82`, `:88`). This is
+  load-bearing, not cosmetic: because `CFBundleName` is NOT localized, `AppInfo.name`
+  (`AppInfo.swift:16-18`) matches the `CFBundleExecutable` embedded in crash-report
+  filenames, which is what `ReportCollector.crashRaisesAttention`
+  (`ReportCollector.swift:69-71`) compares against — a localized `CFBundleName` would
+  silence own-app crash attention on a Russian-locale Mac.)
 
 ## 3. Package layout & file ownership
 
@@ -118,7 +124,9 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
 >
 > One rule below **is** still live and is repeated here so it does not get lost with
 > the rest: `Models.swift` and `Package.swift` are frozen — if work genuinely requires
-> changing them, stop and report the conflict instead of editing.
+> changing them, stop and report the conflict instead of editing. **Update:** the
+> `Models.swift` freeze was lifted for the v2 branch — it changed substantially and
+> deliberately across the V2 blocks, which own it. `Package.swift` stays frozen.
 
 ```
 MacDashboard/
@@ -156,10 +164,14 @@ enum Severity: String, Codable { case good, info, warn, serious, crit }
 
 struct CPUUsage: Equatable { var user: Double; var sys: Double; var idle: Double }
 struct ProcEntry: Identifiable, Equatable {
-    var id: String { name }
-    var name: String            // human app/process name (top truncates at 16 chars — keep raw)
+    // "p<pid>" when a pid is known (stable across re-sorts/ticks); falls back to the
+    // rank-based id (keeps ids unique when two names collide) when pid is unavailable.
+    var id: String { pid.map { "p\($0)" } ?? "\(rank)-\(name)" }
+    var rank: Int = 0
+    var name: String            // human app/process name, as `/bin/ps -o comm=` reports it (full, untruncated)
     var cpu: Double?            // percent
     var memBytes: Int64?
+    var pid: Int32? = nil
 }
 struct MemSnapshot: Equatable {
     var total: Int64            // sysctl hw.memsize
@@ -218,12 +230,16 @@ struct SecurityState: Equatable {
     // nil = unknown/no permission; true = enabled
     var fileVault: Bool?; var gatekeeper: Bool?; var sip: Bool?; var firewall: Bool?
 }
+enum TMBackupUnavailableReason: Equatable {   // a case, never a localized sentence (V2-HONEST-READINGS)
+    case noBackupsYet, diskNotConnected, noCompletedBackups, dateUnavailableNoFDA
+    var localizedText: String { … }           // rendered in the language current at READ time
+}
 struct TMDestination: Equatable {
     var name: String?; var kind: String?; var mountPoint: String?; var quotaBytes: Int64?; var lastBackup: String?
     // nil when lastBackup is set (or destination not yet checked); otherwise an
     // honest reason no date could be obtained (e.g. disk unmounted, or backup
     // date unreadable without Full Disk Access) — shown instead of a bare "—".
-    var lastBackupUnavailableReason: String? = nil
+    var lastBackupUnavailableReason: TMBackupUnavailableReason? = nil
 }
 struct AutostartInfo: Equatable {
     var loginItems: [String]?   // nil = no permission
@@ -251,6 +267,12 @@ struct EnergySettings: Equatable { var battery: [(String, String)]; var ac: [(St
     static func == (l: Self, r: Self) -> Bool {
         l.battery.elementsEqual(r.battery, by: { $0 == $1 }) && l.ac.elementsEqual(r.ac, by: { $0 == $1 })
     }
+}
+
+struct CrashGroup: Identifiable, Equatable {   // V2-CRASH-SIGNAL
+    var process: String; var count: Int; var isPanic: Bool = false
+    var directory: String                      // DiagnosticReports dir the first report was in (V2-CRASH-REVEAL)
+    var id: String { process }
 }
 
 struct FullReport {
@@ -285,6 +307,9 @@ struct Tip: Identifiable, Equatable {
 struct Assessment {
     var problems: [Problem] = []        // sorted crit > serious > warn
     var tips: [Tip] = []
+    var items: [AttentionItem] = []      // v2 attention model — mirrors `problems`
+    var capsules: [TipCapsule] = []      // v2 attention model — mirrors `tips`
+    // AttentionItem/TipCapsule are defined in Engine/AttentionModel.swift.
     var summarySev: Severity = .good
     var summaryText: String = L.recommendationsAllGood  // i18n S2: was "Всё в порядке"
     var diskSev: Severity = .good; var swapSev: Severity = .good
@@ -335,12 +360,19 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 - battery: IOKit `IOPSCopyPowerSourcesInfo` (+ cycles/condition only in full report).
   Desktop Mac ⇒ nil, tile hidden.
 - load: `getloadavg`.
-- top processes: single `top -l 2 -s 1 -stats pid,cpu,mem,command` subprocess (NO `-n` cap —
-  top prints ALL processes, so sorting by memory in Swift finds the true memory hogs, which an
-  `-n` cap would hide), parse LAST sample only (first is since-boot garbage). topMem is derived
-  from the SAME parsed output, re-sorted by memory in Swift — no second `top` call. Via
-  CommandRunner with 12 s timeout. Keep order parsing tolerant: split by whitespace, columns per
-  requested stats order.
+- top processes: TWO subprocesses per tick, each supplying only what the other can't.
+  `/bin/ps -axww -o pid=,rss=,time=,comm=` (CommandRunner, 5 s timeout) yields pid, full
+  untruncated name, RSS and cumulative CPU time; per-process CPU% is a delta of that
+  cumulative time against the previous sample over the measured elapsed window (top's `-l 1`
+  %CPU is a since-boot average, not a delta, and would be useless here). `/usr/bin/top -l 1
+  -stats pid,command,mem` (CommandRunner, 15 s timeout) supplies only the MEM column: the
+  physical memory footprint Activity Monitor shows, for every process on the machine —
+  `ps -o rss` undercounts shared framework pages and ignores compressed memory, and no
+  in-process API (`proc_pid_rusage`, `task_for_pid`) can read other-uid processes without the
+  task-port entitlement top carries as an Apple-signed platform binary. `ps` alone can't
+  supply the cross-uid footprint; `top` alone can't supply the CPU delta or the untruncated
+  name (its COMMAND column is hard-truncated to 16 characters). One `top` snapshot per tick
+  covers the whole process table, not one call per pid.
 - Cadence guard: if a tick's collection takes > interval, skip next tick (single-flight).
 
 ### 5.2 ReportCollector (on launch + «Обновить» button; async, per-section)
@@ -428,6 +460,9 @@ returns String? (nil on any failure). Absolute paths for binaries (/usr/bin/…,
   Percentage Used ≥ 80 ⇒ warn; SMART "NO ACCESS" on external ⇒ tip (переподключите кабель / установите smartmontools).
 - homeDirs: Downloads > 10 GiB ⇒ tip («Загрузки» занимают X — стоит разобрать);
   .Trash > 1 GiB ⇒ tip; ~/Library/Caches > 3 GiB ⇒ tip.
+- homeDirsUnreadable / serviceDirsUnreadable non-empty ⇒ ONE tip + ONE capsule (V2-FDA-DEGRADE),
+  action = Settings → Privacy & Security → Full Disk Access. Never a Problem/AttentionItem: a
+  permission the user has not granted is not a machine fault.
 - summary: worst severity; "Замечаний: N" | "Всё в порядке".
 Assessment recomputed when report sections change AND lightly on live ticks
 (disk/swap tiles reflect live values).
@@ -521,10 +556,11 @@ Info.plist: CFBundleIdentifier=com.rdskcm.mac-dashboard, CFBundleName=MacDashboa
 CFBundleDisplayName=MacDashboard, LSMinimumSystemVersion=14.0, NSHighResolutionCapable,
 CFBundleShortVersionString/CFBundleVersion: version is defined solely by `VERSION`/`CODENAME` in `build_app.sh`. LSApplicationCategoryType=public.app-category.utilities,
 NSHumanReadableCopyright, NSAppleEventsUsageDescription. NO LSUIElement (normal Dock app).
-Localized `en.lproj`/`ru.lproj` InfoPlist.strings are generated for the display name.
+Localized `en.lproj`/`ru.lproj` InfoPlist.strings are generated for the copyright and the
+Apple-events usage description.
 Icon: reuse legacy generator idea — render simple pulse-line icon via CoreGraphics
 swift script into iconset → iconutil (best-effort; skip icon on failure).
-codesign --force --deep --options runtime --entitlements MacDashboard.entitlements --sign -
+codesign --force --options runtime --entitlements MacDashboard.entitlements --sign -
 "dist/MacDashboard.app" — ad-hoc signature plus the hardened runtime (V2-SECURITY-FIX: without
 --options runtime, DYLD_INSERT_LIBRARIES is honoured and library validation is off, so any local
 process running as this user could inject into an app the README asks users to grant Full Disk

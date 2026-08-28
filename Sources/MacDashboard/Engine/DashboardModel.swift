@@ -294,7 +294,7 @@ final class DashboardModel {
             }
         }
 
-        // Slow task (~6s): the `/bin/ps` process tables only. No setAssessment here — the
+        // Slow task (~6s): the process tables only (via `ps` + `top`). No setAssessment here — the
         // assessment depends only on disk/swap, which the fast task owns.
         slowTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -305,7 +305,7 @@ final class DashboardModel {
                     continue
                 }
 
-                // sampleProcesses() shells out to `/bin/ps` once (and, on the FIRST tick
+                // sampleProcesses() shells out to `/bin/ps` and `/usr/bin/top` once each (and, on the FIRST tick
                 // only, sleeps 0.6 s to prime its CPU baseline) — hop off the main actor
                 // for it. Read the setting HERE, on the main actor, and pass it across: the
                 // collector must not touch AppSettings.shared from a background queue.
@@ -351,9 +351,11 @@ final class DashboardModel {
                 }
                 guard !Task.isCancelled else { return }
 
-                // Assessment (smartSev) is recomputed from `self.report` every ~2s by the
-                // fast task above, so a changed report.smart flows into it automatically —
-                // no explicit setAssessment() call needed here.
+                // Assessment (smartSev) is recomputed every ~2s by the fast task above,
+                // which assesses `lastCommittedReport` while a collect is in flight (:290) —
+                // so `report.smart` must already be committed before that next tick, which
+                // is why this path awaits `waitForReportRefreshToFinish()` first. No
+                // explicit setAssessment() call needed here.
                 await self.waitForReportRefreshToFinish()
                 guard !Task.isCancelled else { return }
                 if self.report.smart != disks { self.report.smart = disks }
@@ -561,7 +563,7 @@ final class DashboardModel {
             // Same rule as the slow task: read the setting on the main actor, pass it in.
             let limit = AppSettings.shared.processListLimit
             let procs = await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .utility).async {
+                DispatchQueue.global(qos: .userInitiated).async {
                     continuation.resume(returning: collectorBox.value.sampleProcesses(limit: limit))
                 }
             }
@@ -604,6 +606,13 @@ final class DashboardModel {
                 }
             guard !Task.isCancelled else { return }
 
+            // The collect that starts while `brew upgrade` runs captures the PRE-upgrade
+            // cachedBrew and would write it over these values (`self.report = final`).
+            // Same reason the three sibling updaters wait — see
+            // waitForReportRefreshToFinish()'s doc comment.
+            await self.waitForReportRefreshToFinish()
+            guard !Task.isCancelled else { return }
+
             self.brewUpgradeError = error
             self.report.brewVersion = info.version
             self.report.brewOutdated = info.outdated
@@ -634,12 +643,20 @@ final class DashboardModel {
             }
 
             let lastLineBox = LastLineBox()
+            // brew is a Homebrew-prefix script that shells out to its own helper
+            // binaries (ruby, git, curl, …) inside that prefix — same reason
+            // BrewUpgrader.upgradeAll and collectBrewInfo() build this env
+            // (V2-POLISH B1). `brew install` is the heaviest of the three and was
+            // the one call site that never got it.
+            let brewEnv = CommandRunner.environment(
+                prependingPATH: [(brew as NSString).deletingLastPathComponent])
             _ = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
                     let result = CommandRunner.runStreaming(
                         "/usr/bin/env",
                         ["HOMEBREW_NO_AUTO_UPDATE=1", brew, "install", "smartmontools"],
                         timeout: 600,
+                        environment: brewEnv,
                         onLine: { line, _ in
                             let trimmed = line.trimmingCharacters(in: .whitespaces)
                             if !trimmed.isEmpty { lastLineBox.value = trimmed }
@@ -703,9 +720,9 @@ final class DashboardModel {
         }
     }
 
-    /// Removes `paths` from `report.autostart`'s three plist arrays in place and
-    /// recomputes the assessment, WITHOUT a full `refreshReport()` recollect.
-    /// `refreshReport()` rebuilds from a blank `FullReport()` and streams sections
+    /// Removes `paths` from `report.autostart`'s three plist arrays in place,
+    /// WITHOUT a full `refreshReport()` recollect. `refreshReport()` rebuilds from
+    /// a blank `FullReport()` and streams sections
     /// back in one by one, so calling it just to drop a deleted plist from the list
     /// makes the whole Автозагрузка card (and every other section) flash through its
     /// "collecting" placeholder before repopulating — a disproportionate, ugly
@@ -718,7 +735,12 @@ final class DashboardModel {
         auto.systemAgents.removeAll { paths.contains($0.path) }
         auto.systemDaemons.removeAll { paths.contains($0.path) }
         report.autostart = auto
-        setAssessment(Assess.assess(report: report, live: live))
+        // Deliberately NO setAssessment here: `report` is a PARTIAL for most of a collect
+        // and a partial must never be assessed (V2-HEADER-CHURN) — a delete landing
+        // mid-collect would recompute the verdict from mostly-nil sections and flash the
+        // header to "all good" until the next fast tick. Nothing is lost: `Assess.assess`
+        // reads nothing from `report.autostart` (verified — no `autostart` reference in
+        // Assessment.swift), so this recompute could never change the verdict anyway.
     }
 
     /// Publishes `paths` as "these were not deleted, put the rows back". Unions
@@ -740,6 +762,11 @@ final class DashboardModel {
             paths: plistDeleteRestore.paths.subtracting(paths),
             stamp: plistDeleteRestore.stamp &+ 1)
     }
+
+    /// Clears the delete banner. It is otherwise only ever cleared by STARTING the next
+    /// delete, so a failure message stayed pinned under the card long after the row it
+    /// referred to was gone.
+    func clearPlistDeleteError() { plistDeleteError = nil }
 
     /// Deletes an orphaned launchd .plist detected by the Автозагрузка card's
     /// "check for outdated" flow. `isSystemLevel` selects the deletion path:

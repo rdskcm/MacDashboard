@@ -67,7 +67,15 @@ struct AttentionSummaryCard: View {
             // Both must still surface — trashError is UI-local (this card owns
             // the confirmation), adviceActionError is model-owned (firewall).
             if let trashError = dispatch.trashError {
-                Text(trashError).font(.system(size: 11)).foregroundStyle(.red)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(trashError).font(.system(size: 11)).foregroundStyle(.red)
+                    if let pane = dispatch.trashErrorPane {
+                        RainbowCapsuleButton(title: L.adviceTrashOpenAutomation, size: .card) {
+                            AdviceActionRunner.openPane(pane)
+                        }
+                        .accessibilityLabel(L.adviceTrashOpenAutomation)
+                    }
+                }
             }
             if let adviceActionError = model.adviceActionError {
                 Text(adviceActionError).font(.system(size: 11)).foregroundStyle(.red)

@@ -124,7 +124,10 @@ private struct MemoryStackChart: View {
                     // six as one bar so the shared boundaries never desync.
                     // V2-RELAYOUT-COREANIM: all six are CALayers inside ONE
                     // NSView, animated by CoreAnimation on the same 0.45 s curve —
-                    // no `.animation(_:value:)` anywhere in this subtree. The
+                    // no TICK-DRIVEN `.animation(_:value:)` anywhere in this subtree
+                    // (the VStack below does carry one keyed to `hoveredKey`, but that's
+                    // hover-driven, not tick-driven, so it can't reintroduce the
+                    // per-frame-update bug the rule exists to prevent). The
                     // hover dim rides the layers' `opacity` on CA's own 0.12 s
                     // ease-out; the transparent overlay below only hit-tests.
                     BarFillLayer(spans: spans, layout: memoryBarLayout, animated: !reduceMotion)

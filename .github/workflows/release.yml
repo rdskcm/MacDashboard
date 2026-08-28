@@ -129,6 +129,28 @@ jobs:
           # never gate the release on it.
           spctl -a -vvv --type execute "_verify/MacDashboard.app" || true
 
+      - name: Assert hardened runtime + AppleEvents entitlement
+        run: |
+          set -euo pipefail
+          # `codesign --verify` passes just as happily on a binary with NO hardened runtime
+          # and NO entitlements blob, so it cannot catch build_app.sh losing `--options
+          # runtime` or `--entitlements`. Without them the shipped app fails empty-Trash
+          # with -1743 for every user, and the DYLD_INSERT_LIBRARIES hole reopens.
+          flags="$(codesign -dvv "_verify/MacDashboard.app" 2>&1 | sed -n 's/^CodeDirectory .*flags=\([^ ]*\).*/\1/p')"
+          echo "CodeDirectory flags: $flags"
+          case "$flags" in
+            *runtime*) echo "hardened runtime OK" ;;
+            *) echo "::error::hardened runtime flag missing (flags=${flags:-none}) — build_app.sh must sign with --options runtime"; exit 1 ;;
+          esac
+          codesign -d --entitlements :- --xml "_verify/MacDashboard.app" > _entitlements.plist 2>/dev/null
+          plutil -p _entitlements.plist
+          val="$(plutil -extract 'com\.apple\.security\.automation\.apple-events' raw -o - _entitlements.plist 2>/dev/null || echo missing)"
+          if [ "$val" != "true" ]; then
+            echo "::error::com.apple.security.automation.apple-events entitlement is $val — build_app.sh must sign with --entitlements MacDashboard.entitlements"
+            exit 1
+          fi
+          echo "AppleEvents entitlement OK"
+
       - name: Attach to release
         run: |
           set -euo pipefail

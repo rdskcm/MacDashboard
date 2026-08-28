@@ -101,7 +101,10 @@ enum AttentionModel {
         "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать", "шестнадцать",
         "семнадцать", "восемнадцать", "девятнадцать", "двадцать",
     ]
-    private static func ruWordForm(_ n: Int) -> String { ruWords[n] }
+    // Bounds-guarded: `ruWords` only covers 0...20 (today's only call site is guarded
+    // by `(1...6).contains(n)` in a DIFFERENT function, :131), so a future caller
+    // widening that range must not trap on a bare subscript.
+    private static func ruWordForm(_ n: Int) -> String { ruWords[max(0, min(n, ruWords.count - 1))] }
 
     private static func capitalized(_ s: String) -> String {
         guard let first = s.first else { return s }

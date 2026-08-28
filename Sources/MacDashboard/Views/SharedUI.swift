@@ -1194,8 +1194,6 @@ extension View {
     }
 }
 
-// MARK: - Shared "Ещё N" toggle
-
 // MARK: - "Ещё N" / "Свернуть" toggle (item grid overflow)
 
 struct MoreLessToggle: View {

@@ -2344,6 +2344,26 @@ do {
           "AppleScriptResult: any other error carries Finder's own message")
     check(AppleScriptResult.classify(error: [:]) == .failed(message: nil),
           "AppleScriptResult: an empty error dictionary is a failure, never a success")
+    check(AppleScriptResult.classify(error: [NSAppleScript.errorNumber: -1743]) == .notPermitted,
+          "AppleScriptResult: -1743 is a declined Automation grant, not a generic failure")
+    check(AppleScriptResult.classify(
+            error: [NSAppleScript.errorNumber: -1743, NSAppleScript.errorMessage: "Not authorized"])
+            == .notPermitted,
+          "AppleScriptResult: -1743 wins over Finder's own message")
+
+    // --- PrivilegedRunner: cancellation is the ERROR NUMBER, not a substring ---
+    check(PrivilegedRunner.isUserCancellation(exitCode: 1, stderr: "0:79: execution error: User canceled. (-128)\n"),
+          "isUserCancellation: osascript's -128 error line is a cancel")
+    check(PrivilegedRunner.isUserCancellation(exitCode: 1, stderr: "0:79: execution error: Пользователь отменил операцию. (-128)"),
+          "isUserCancellation: locale-independent — the number, not the message")
+    check(!PrivilegedRunner.isUserCancellation(
+            exitCode: 1,
+            stderr: "0:126: execution error: rm: /Users/x/Library/LaunchAgents/com.foo-128.plist: Operation not permitted (1)"),
+          "isUserCancellation: a path containing -128 in a genuinely FAILED delete is not a cancel")
+    check(!PrivilegedRunner.isUserCancellation(exitCode: 0, stderr: ""),
+          "isUserCancellation: a clean run is not a cancel")
+    check(!PrivilegedRunner.isUserCancellation(exitCode: 1, stderr: ""),
+          "isUserCancellation: empty stderr is not a cancel")
 }
 
 // =====================================================================

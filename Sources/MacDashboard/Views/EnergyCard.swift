@@ -5,8 +5,10 @@
 //
 // SPEC Block K: editable toggles/sleep timers with a pending-changes model, applied
 // in one batched `pmset` call via PrivilegedRunner (Touch ID / admin password), plus
-// a click-toggled ℹ️ explanation per parameter. Apply/reset LOGIC below is
-// untouched from the pre-v2 implementation — this file is a visual restyle only.
+// a click-toggled ℹ️ explanation per parameter. Apply/reset logic is otherwise unchanged
+// from the pre-v2 implementation; the one BEHAVIOURAL addition of this restyle is the
+// «Применить» confirmation dialog (`showApplyConfirm`, :176-184), which now gates
+// `applyPending()`.
 
 import SwiftUI
 

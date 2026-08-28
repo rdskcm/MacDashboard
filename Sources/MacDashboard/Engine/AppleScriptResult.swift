@@ -13,6 +13,12 @@ enum AppleScriptResult: Equatable {
     case cancelled
     /// `message` is Finder's own localized error text when AppleScript supplied one.
     case failed(message: String?)
+    /// AppleEvent error -1743 (`errAEEventNotPermitted`): the Automation grant for
+    /// this target app was declined. TCC records a decline persistently and never
+    /// re-prompts, so this is NOT a transient Finder failure — it needs its own UI
+    /// (a route to System Settings → Privacy & Security → Automation), not Finder's
+    /// raw error text.
+    case notPermitted
 
     /// `error` is `NSAppleScript.executeAndReturnError`'s out-dictionary, nil when
     /// the script ran cleanly. An EMPTY dictionary is still an error (the script
@@ -20,6 +26,7 @@ enum AppleScriptResult: Equatable {
     static func classify(error: [AnyHashable: Any]?) -> AppleScriptResult {
         guard let error else { return .ok }
         if (error[NSAppleScript.errorNumber] as? Int) == -128 { return .cancelled }
+        if (error[NSAppleScript.errorNumber] as? Int) == -1743 { return .notPermitted }
         return .failed(message: error[NSAppleScript.errorMessage] as? String)
     }
 }

@@ -106,6 +106,8 @@ protocol AppStrings {
     var adviceTrashConfirmTitle: String { get }
     var adviceTrashConfirmButton: String { get }
     var adviceTrashError: String { get }
+    var adviceTrashNotPermitted: String { get }
+    var adviceTrashOpenAutomation: String { get }
     var adviceFirewallConfirmTitle: String { get }
     var adviceFirewallConfirmMessage: String { get }
     var adviceFirewallConfirmButton: String { get }

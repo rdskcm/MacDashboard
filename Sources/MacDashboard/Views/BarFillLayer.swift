@@ -11,8 +11,10 @@
 // did NOT help; the cost is the per-frame SwiftUI update itself. Here the main
 // thread does one commit per tick and CoreAnimation interpolates the rest.
 //
-// NEVER attach `.animation(_:value:)` to a `BarFillLayer` — that would put the
-// SwiftUI animation engine back on top of the CA animation and re-create the bug.
+// NEVER attach a TICK-DRIVEN `.animation(_:value:)` to a `BarFillLayer` (i.e. one keyed
+// to a value that changes every sampling tick) — that would put the SwiftUI animation
+// engine back on top of the CA animation and re-create the bug. An animation keyed to a
+// hover-only value on an ancestor view is fine; it can't fire on a sampling tick.
 
 import AppKit
 import SwiftUI

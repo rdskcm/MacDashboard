@@ -266,7 +266,22 @@ enum Assess {
         }
 
         // --- sort & summarize (crit > serious > warn, others last) ---
-        pairs.sort { rank($0.0.sev) > rank($1.0.sev) }
+        // `Array.sort` is NOT documented stable, and `items` is now a visible ordered list
+        // recomputed on every fast tick — equal-severity rows could swap places between
+        // ticks for no reason. Decorating with the build index (which is AttentionKind's
+        // declaration order, AttentionModel.swift:9-14 — the spec order) makes the order
+        // deterministic. The dedupe guards the one way ids can collide: two identical
+        // external disks failing the same SMART test yield the same kind AND the same
+        // text, and `Problem.id`/`AttentionItem.id` are derived from those — duplicate
+        // ids make SwiftUI's ForEach misbehave silently.
+        var seen = Set<String>()
+        pairs = pairs.enumerated()
+            .sorted { l, r in
+                let a = rank(l.element.0.sev), b = rank(r.element.0.sev)
+                return a == b ? l.offset < r.offset : a > b
+            }
+            .map(\.element)
+            .filter { seen.insert($0.0.id + "\u{1}" + $0.1.id).inserted }
         a.problems = pairs.map(\.0)
         a.items = pairs.map(\.1)
         a.tips = tips

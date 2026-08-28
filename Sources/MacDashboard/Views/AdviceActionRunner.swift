@@ -49,11 +49,19 @@ private final class AppleScriptThread {
         ready.wait()
     }
 
-    /// Runs `body` on the owning thread, asynchronously.
-    func async(_ body: @escaping () -> Void) {
-        guard let runLoop else { return }
+    /// Runs `body` on the owning thread, asynchronously. Returns false if the run loop
+    /// is somehow missing — unreachable (the `ready.wait()` semaphore guarantees it),
+    /// but this is the only place in the trash flow that could lose a completion and
+    /// strand the capsule on a spinner for the rest of the session.
+    @discardableResult
+    func async(_ body: @escaping () -> Void) -> Bool {
+        guard let runLoop else {
+            assertionFailure("AppleScriptThread.runLoop is nil after ready.wait()")
+            return false
+        }
         CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue, body)
         CFRunLoopWakeUp(runLoop)
+        return true
     }
 }
 
@@ -98,6 +106,8 @@ enum AdviceActionRunner {
         case cancelled
         /// `detail` is Finder's localized error message, when AppleScript supplied one.
         case failed(detail: String?)
+        /// The Automation grant was declined — recoverable only through System Settings.
+        case notPermitted
     }
 
     /// Empties the Trash via Finder (our own confirmation dialog precedes this and
@@ -106,7 +116,7 @@ enum AdviceActionRunner {
     /// queue); `completion` is delivered on the main actor exactly once.
     @MainActor
     static func emptyTrash(completion: @escaping @MainActor (TrashOutcome) -> Void) {
-        AppleScriptThread.shared.async {
+        if !AppleScriptThread.shared.async({
             // Created AND executed on the owning thread — an NSAppleScript
             // instance must not travel between threads.
             guard let script = NSAppleScript(source: "tell application \"Finder\" to empty trash") else {
@@ -122,8 +132,9 @@ enum AdviceActionRunner {
             case .ok: deliver(.emptied, to: completion)
             case .cancelled: deliver(.cancelled, to: completion)
             case .failed(let message): deliver(.failed(detail: message), to: completion)
+            case .notPermitted: deliver(.notPermitted, to: completion)
             }
-        }
+        }) { deliver(.failed(detail: nil), to: completion) }
     }
 
     /// The only way `emptyTrash` ever calls its completion: one hop back to the

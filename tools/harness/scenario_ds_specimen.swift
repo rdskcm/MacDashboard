@@ -16,7 +16,7 @@ MainActor.assumeIsolated {
         ("muted", DS.muted), ("line", DS.line), ("lineStrong", DS.lineStrong), ("track", DS.track),
         ("row", DS.row), ("accent", DS.accent), ("accentInk", DS.accentInk), ("green", DS.green),
         ("greenInk", DS.greenInk), ("amber", DS.amber), ("amberInk", DS.amberInk), ("hot", DS.hot),
-        ("violet", DS.violet), ("glass3", DS.glass3),
+        ("glass3", DS.glass3),
     ]
 
     harnessRender(width: 820) {

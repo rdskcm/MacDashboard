@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [2.0] (Krieg) - 2026-08-23
+## [2.0] (Krieg) - 2026-08-28
 
 Complete visual and structural rebuild of the interface on a new
 design-token system: card-based layout, KPI tiles, an attention summary
@@ -46,6 +46,12 @@ Known limitations:
   needs explaining). A host-busy/kernel-CPU-attribution estimate was built and
   measured against real "top" output during v2.0's pre-release review; it showed a
   systematic bias (~8pp) and was reverted rather than ship a misleading number.
+- The process list can briefly show a double-exposure render glitch (stale and fresh row
+  content compositing in one frame, sometimes bleeding slightly past the card edge) during
+  rapid resorts — a long-standing structural issue present since v1.0, deferred post-release
+  by explicit decision, not a v2.0 regression.
+- At narrow window widths, the Процессы/Папки two-column pair doesn't always split exactly
+  50/50 — cosmetic, accepted after two fix attempts made it worse.
 
 Licensed under the MIT License. See LICENSE.
 

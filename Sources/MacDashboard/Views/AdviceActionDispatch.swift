@@ -45,17 +45,32 @@ final class AdviceActionDispatch {
     /// state instead of its verb.
     var completedAdviceIDs: Set<String> = []
     var trashError: String? = nil
+    /// Settings pane the `trashError` above can be acted on in, when there is one
+    /// (today: Automation, after a declined grant). Same shape as
+    /// `FoldersNoFDANotice`'s FDA capsule — an error the user can fix must carry the
+    /// route to fix it, not just the sentence.
+    var trashErrorPane: String? = nil
     /// True while `AdviceActionRunner.emptyTrash` is in flight — i.e. for the whole
     /// time Finder works, including its own "permanently erase?" confirmation and
     /// the first-run automation prompt. Read through `busy(for:)`, which is what
     /// swaps the plate/capsule verb for a spinner (`dsSwapInPlace`).
     private(set) var trashEmptying = false
 
+    /// `TipCapsule.id` embeds the formatted value (`"Корзина|1,4 ГБ"`), which changes when a
+    /// report refresh lands while Finder is still working — the captured id would then match
+    /// no capsule and the ✓ would never appear. The object part is stable and unique per
+    /// capsule, so completion is tracked by that.
+    private static func adviceKey(_ id: String) -> String { String(id.prefix { $0 != "|" }) }
+
     var trashConfirmBinding: Binding<Bool> {
         Binding(get: { self.showTrashConfirm }, set: { self.showTrashConfirm = $0 })
     }
 
     func handle(_ action: AdviceAction, id: String) {
+        // A failure message must not outlive the row/capsule it referred to: any new
+        // action press clears it.
+        trashError = nil
+        trashErrorPane = nil
         switch action {
         case .settingsPane(let u): AdviceActionRunner.openPane(u)
         case .openApp(let p): AdviceActionRunner.openApp(p)
@@ -83,15 +98,21 @@ final class AdviceActionDispatch {
             self.trashTargetID = nil
             switch outcome {
             case .emptied:
-                if let id { self.completedAdviceIDs.insert(id) }
+                if let id { self.completedAdviceIDs.insert(Self.adviceKey(id)) }
                 self.trashError = nil
+                self.trashErrorPane = nil
             case .cancelled:
                 // Backing out is not a failure: leave the plate on its verb, say nothing.
                 self.trashError = nil
+                self.trashErrorPane = nil
             case .failed(let detail):
                 // Finder's own message is more useful than our generic line ("the item
                 // is in use", a locked file), and it arrives already localized.
                 self.trashError = detail.map { "\(L.adviceTrashError): \($0)" } ?? L.adviceTrashError
+                self.trashErrorPane = nil
+            case .notPermitted:
+                self.trashError = L.adviceTrashNotPermitted
+                self.trashErrorPane = AdvicePanes.automation
             }
         }
     }
@@ -118,7 +139,7 @@ final class AdviceActionDispatch {
         action == .brewUpgrade && model.brewUpgrading ? model.brewProgress.map(brewProgressText) : nil
     }
 
-    func done(_ id: String) -> Bool { completedAdviceIDs.contains(id) }
+    func done(_ id: String) -> Bool { completedAdviceIDs.contains(Self.adviceKey(id)) }
 }
 
 /// Attaches the trash-empty and enable-firewall confirmation dialogs — moved

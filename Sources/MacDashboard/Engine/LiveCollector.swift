@@ -1,7 +1,8 @@
 // Engine/LiveCollector.swift
 // Live metrics via native Mach/sysctl/IOKit calls (no subprocess for CPU/mem/swap/
-// disk/battery/load) plus a single non-sleeping `/bin/ps` snapshot for both process
-// tables. SPEC §5.1. NOT thread-safe: keep one instance and call collect() from a single
+// disk/battery/load) plus two subprocesses for both process tables: a non-sleeping
+// `/bin/ps` snapshot and a `/usr/bin/top` memory-footprint snapshot. SPEC §5.1. NOT
+// thread-safe: keep one instance and call collect() from a single
 // background context (the model drives it off the main actor on a serial cadence).
 // It reads no shared app state of its own — everything tunable arrives as a
 // parameter, so the only state it owns is prevTicks (see collectFast).
@@ -38,7 +39,8 @@ final class LiveCollector {
         return snap
     }
 
-    // Slow sample: one non-sleeping `/bin/ps` snapshot plus the CPU- and memory-sorted
+    // Slow sample: a non-sleeping `/bin/ps` snapshot plus a `/usr/bin/top` memory-footprint
+    // snapshot, feeding the CPU- and memory-sorted
     // process tables (prefix(limit) + reranked()). CPU% is a delta over the interval
     // since this instance's previous sample; the first sample primes itself over
     // 0.6 s (see ProcessSampler). Split out so it can run on a slower cadence than

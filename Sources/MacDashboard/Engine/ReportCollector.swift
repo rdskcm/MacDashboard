@@ -680,6 +680,22 @@ final class ReportCollector {
         return nil
     }
 
+    /// The decision rule of `isSafeToRunViaSudo`, over facts already gathered — pure, so the
+    /// two branches an unprivileged test cannot reach through the filesystem (no stock macOS
+    /// file carries `schg`; a check process cannot create a root-owned file inside a
+    /// group-writable directory) are still covered by MacDashboardChecks (re-review 2 [N7]).
+    /// `mode` is the POSIX permission word; `ownerUID` the file's owner.
+    static func sudoSafetyVerdict(isRegularFile: Bool,
+                                  ownerUID: UInt32,
+                                  mode: UInt16,
+                                  isImmutable: Bool,
+                                  ancestorsRootOwned: Bool) -> Bool {
+        guard isRegularFile else { return false }           // missing/unstattable/not a file
+        guard ownerUID == 0 else { return false }           // not root-owned
+        guard mode & 0o022 == 0 else { return false }       // group- or world-writable
+        return isImmutable || ancestorsRootOwned            // see point 2 — not equal strength
+    }
+
     /// Whether `path` may be handed to `sudo`. Two things must hold, and the second one
     /// has two admissible proofs:
     ///
@@ -712,23 +728,6 @@ final class ReportCollector {
     /// `sudo` exec are separate syscalls, so an attacker who can win the window between them
     /// still wins. (b) The `schg`-only proof leaves the group-writable-ancestor rename described
     /// in point 2 open. Both raise the bar; neither closes the hole.
-
-    /// The decision rule of `isSafeToRunViaSudo`, over facts already gathered — pure, so the
-    /// two branches an unprivileged test cannot reach through the filesystem (no stock macOS
-    /// file carries `schg`; a check process cannot create a root-owned file inside a
-    /// group-writable directory) are still covered by MacDashboardChecks (re-review 2 [N7]).
-    /// `mode` is the POSIX permission word; `ownerUID` the file's owner.
-    static func sudoSafetyVerdict(isRegularFile: Bool,
-                                  ownerUID: UInt32,
-                                  mode: UInt16,
-                                  isImmutable: Bool,
-                                  ancestorsRootOwned: Bool) -> Bool {
-        guard isRegularFile else { return false }           // missing/unstattable/not a file
-        guard ownerUID == 0 else { return false }           // not root-owned
-        guard mode & 0o022 == 0 else { return false }       // group- or world-writable
-        return isImmutable || ancestorsRootOwned            // see point 2 — not equal strength
-    }
-
     static func isSafeToRunViaSudo(_ path: String) -> Bool {
         // Reject a relative path before realpath(3) resolves it against the CWD.
         guard path.hasPrefix("/") else { return false }

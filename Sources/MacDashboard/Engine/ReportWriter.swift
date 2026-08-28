@@ -27,8 +27,8 @@ enum ReportWriter {
         addSection(&out, L.reportSectionSystem, renderSystem(report.system))
         addSection(&out, L.reportSectionDisk, renderDisk(live.disk))
         addSection(&out, L.reportSectionSnapshots, renderSnapshots(report.snapshots))
-        addSection(&out, L.reportSectionHomeDirs, renderDirs(report.homeDirs, cap: 20))
-        addSection(&out, L.reportSectionServiceDirs, renderDirs(report.serviceDirs, cap: nil))
+        addSection(&out, L.reportSectionHomeDirs, renderDirs(report.homeDirs, cap: 20, unreadable: report.homeDirsUnreadable))
+        addSection(&out, L.reportSectionServiceDirs, renderDirs(report.serviceDirs, cap: nil, unreadable: report.serviceDirsUnreadable))
         addSection(&out, L.reportSectionMemory, renderMemory(live.mem, live.swap))
         addSection(&out, L.reportSectionTopMem, renderProcTable(live.topMem, primary: .mem))
         addSection(&out, L.reportSectionTopCPU, renderProcTable(live.topCPU, primary: .cpu))
@@ -159,11 +159,23 @@ enum ReportWriter {
         return s
     }
 
-    private static func renderDirs(_ dirs: [DirSize]?, cap: Int?) -> [String] {
-        guard let d = dirs else { return [L.sharedUnavailable] }
-        if d.isEmpty { return [L.reportNone] }
-        let limited = cap.map { Array(d.prefix($0)) } ?? d
-        return limited.map { padLeft(fmtBytes($0.bytes), 10) + "  " + $0.path }
+    // The exported text report is the one artefact the user shares; an FDA-truncated
+    // folder list must not read as complete (V2-FDA-DEGRADE honesty, same statement
+    // the UI already makes).
+    private static func renderDirs(_ dirs: [DirSize]?, cap: Int?, unreadable: [String] = []) -> [String] {
+        var lines: [String]
+        if let d = dirs {
+            lines = d.isEmpty ? [L.reportNone] : {
+                let limited = cap.map { Array(d.prefix($0)) } ?? d
+                return limited.map { padLeft(fmtBytes($0.bytes), 10) + "  " + $0.path }
+            }()
+        } else {
+            lines = [L.sharedUnavailable]
+        }
+        if !unreadable.isEmpty {
+            lines.append(L.storageFoldersNoFDA(unreadable.joined(separator: ", ")))
+        }
+        return lines
     }
 
     // MARK: - ПАМЯТЬ
