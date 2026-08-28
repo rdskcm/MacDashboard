@@ -46,7 +46,9 @@ feedback and comments. Hope you like it!
   "Table" view doesn't stop the updates — both views read from the same live data.
 - History (disk usage over time, battery cycles) accumulates in
   `~/Library/Application Support/MacDashboard/mac_check_state.json`
-  (compatible with the old file format; can import an existing one).
+  (compatible with the old file format).
+- Detects recent crash logs (7-day window), grouped and collapsed, and flags
+  own-app crashes vs. system panics.
 - SOC and internal-disk temperatures, read via Apple Silicon's private HID
   sensor API (Intel Macs simply don't show this tile — no error, just absent).
 - A handful of one-click maintenance actions, each explicit and confirmed
@@ -151,6 +153,11 @@ Two ways — pick one.
    That's it — every later launch opens with no prompt.
 
 ### Build from source
+
+Requires **Xcode 26 (Tahoe SDK)** with its command-line tools selected — the app
+uses SwiftUI API (`.onGeometryChange`) that only ships in that SDK, so an older
+Xcode will fail to compile it. This is a build-time requirement only; the built
+app still runs on macOS 14 (Sonoma) and later.
 
 ```bash
 git clone https://github.com/rdskcm/MacDashboard.git

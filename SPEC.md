@@ -61,10 +61,10 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
 
    | # | Action | Call site | Privileges | Confirmed before running? |
    |---|---|---|---|---|
-   | 1 | Empty the Trash | `Views/AdviceActionRunner.swift` (`NSAppleScript`, Finder) | user + TCC | yes — `Views/AdviceActionDispatch.swift:110` |
-   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:674` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:116` |
-   | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:768` (`/bin/rm -f`, bulk at `:874`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:604`/`:619` |
-   | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:775` (`trashItem`, bulk at `:862`) | user | yes — same gate as 3 |
+   | 1 | Empty the Trash | `Views/AdviceActionRunner.swift` (`NSAppleScript`, Finder) | user + TCC | yes — `Views/AdviceActionDispatch.swift:152` |
+   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:681` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:158-162` |
+   | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:801` (`/bin/rm -f`, bulk at `:907`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:346`/`:395` |
+   | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:808` (`trashItem`, bulk at `:895`) | user | yes — same gate as 3 |
    | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | yes — `Views/BrewUpgradeConfirm.swift:33`, opened from `Views/MaintenanceCard.swift:80` and `Views/AdviceActionDispatch.swift:60` |
    | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:590` | user | **no** — deliberate, see below |
    | 7 | Apply energy settings | `Views/EnergyCard.swift:363` (`pmset -b`/`-c`) | admin | yes — `Views/EnergyCard.swift:176` |
@@ -99,7 +99,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
 - App data dir: `~/Library/Application Support/MacDashboard/`
   (create on first run via `FileManager.urls(for: .applicationSupportDirectory…)`).
   - `mac_report.txt` — the single report file (overwritten).
-  - `mac_check_state.json` — history (same schema as legacy file, see §6).
+  - `mac_check_state.json` — history (same schema as legacy file, see §7).
 - Built app: `MacDashboard/dist/MacDashboard.app` — `APP_NAME="MacDashboard"` /
   `DIST="dist/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` copies it to
   `~/Applications/MacDashboard.app`, removing any stale bundle under the old
@@ -110,7 +110,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
   load-bearing, not cosmetic: because `CFBundleName` is NOT localized, `AppInfo.name`
   (`AppInfo.swift:16-18`) matches the `CFBundleExecutable` embedded in crash-report
   filenames, which is what `ReportCollector.crashRaisesAttention`
-  (`ReportCollector.swift:69-71`) compares against — a localized `CFBundleName` would
+  (`ReportCollector.swift:107-108`) compares against — a localized `CFBundleName` would
   silence own-app crash attention on a Russian-locale Mac.)
 
 ## 3. Package layout & file ownership
@@ -243,7 +243,8 @@ struct TMDestination: Equatable {
 }
 struct AutostartInfo: Equatable {
     var loginItems: [String]?   // nil = no permission
-    var userAgents: [String] = []; var systemAgents: [String] = []; var systemDaemons: [String] = []
+    var userAgents: [LaunchdPlistInfo] = []; var systemAgents: [LaunchdPlistInfo] = []; var systemDaemons: [LaunchdPlistInfo] = []
+    // LaunchdPlistInfo (Engine/LaunchdPlistInspector.swift:10-15): { path, label?, executablePath?, isOrphan, description? } — one row's worth of data.
     var background: [(pid: String, label: String)] = []
     static func == (l: Self, r: Self) -> Bool {
         l.loginItems == r.loginItems && l.userAgents == r.userAgents &&
@@ -293,7 +294,9 @@ struct FullReport {
     var smart: [SmartDisk]?
     var autostart: AutostartInfo?
     var energy: EnergySettings?
+    var battery: BatteryInfo?           // report-time merge: pmset + system_profiler (cycles/condition/capacity)
     var progress: [String: Bool] = [:]  // sectionKey -> done (for UI spinners)
+    var smartctlPresent: Bool = true    // whether smartctl was found on last collectSmartDisks() run (Block N8)
 }
 
 struct Problem: Identifiable, Equatable {
@@ -304,7 +307,7 @@ struct Tip: Identifiable, Equatable {
     var id: String { text }; var text: String
     var action: AdviceAction? = nil     // advice block AR: clickable follow-up
 }
-struct Assessment {
+struct Assessment: Equatable {
     var problems: [Problem] = []        // sorted crit > serious > warn
     var tips: [Tip] = []
     var items: [AttentionItem] = []      // v2 attention model — mirrors `problems`
@@ -332,7 +335,10 @@ struct HistoryState: Codable {
 
 `DashboardModel` (scaffold, `@MainActor @Observable final class`):
 ```swift
-var live: LiveSnapshot            // replaced whole each tick
+// "live" is not a single property any more — DashboardModel exposes cpu/mem/swap/disk/
+// battery/load/topCPU/topMem etc. as individual @Observable fields (see
+// Engine/DashboardModel.swift:104-108's doc comment for why); a private computed `live`
+// and `currentLiveSnapshot()` exist only for the report/assess/AI-payload code paths.
 var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
 var report: FullReport            // sections fill in as collected
 var assessment: Assessment
@@ -388,7 +394,8 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
   du prints errors to stderr, still use what it returns; never fail the section.
 - serviceDirs: `du -xsk` over: ~/Library/Caches, ~/Library/Application Support,
   ~/Library/Containers, ~/Library/Group Containers, ~/Library/Developer, ~/.Trash,
-  /Library/Caches, /private/var/log, /Applications (90 s total).
+  /Library/Caches, /private/var/log, /Applications (9 paths, swept sequentially, 60 s
+  timeout per path — no aggregate cap).
 - Both du sections additionally report what they could NOT read: every expected directory that exists
   but refuses to open (`Engine/DirectoryAccess.swift` — `stat` + `opendir`, no TCC/global-status lookup
   anywhere) lands in `homeDirsUnreadable` / `serviceDirsUnreadable` as an absolute path. `homeDirs` /
@@ -480,13 +487,13 @@ Values rendered from structured data (not raw command dumps) is fine, but keep d
 disk line and vm_stat-like memory block human-readable.
 Write: to temp file in same dir + atomic replace (`FileManager.replaceItemAt` or
 Data.write(.atomic)). Path: App Support/mac_report.txt. ALWAYS the same path ⇒ no
-accumulation. Menu/button «Показать отчёт в Finder» (NSWorkspace.activateFileViewerSelecting).
+accumulation. Menu/button «Показать в Finder» ("Show in Finder")
+(NSWorkspace.activateFileViewerSelecting).
 
 HistoryStore: load legacy-compatible JSON; after each completed report upsert TODAY's
 MacHistoryEntry (replace same-date), cap 60 entries, save atomically. Preserve unknown
 JSON keys (decode into [String: JSONValue] passthrough or merge on save) so the legacy
-file schema (nvme_history etc.) survives an import. Import button: «Импортировать
-историю…» (NSOpenPanel) merges mac_history by date.
+file schema (nvme_history etc.) survives round-tripping.
 
 ## 8. UI (bilingual EN/RU; tone = old dashboard)
 

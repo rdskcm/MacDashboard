@@ -1,5 +1,11 @@
 # Contributing
 
+## Pull requests
+
+Open PRs against `main`, the repository's default branch. `main` is protected:
+nobody pushes to it directly, so every change — including the maintainer's —
+arrives as a pull request.
+
 ## Build
 
 ```
