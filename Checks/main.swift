@@ -752,6 +752,8 @@ do {
     check(result?.security != nil, "smoke ReportCollector: security != nil")
     check((result?.smart?.isEmpty == false), "smoke ReportCollector: smart non-empty")
     check(result?.autostart != nil, "smoke ReportCollector: autostart != nil")
+    check(result?.snapshots != nil,
+          "smoke ReportCollector: snapshots != nil — an empty local-snapshot list is an ANSWER, not 'not checked' (V21-HONEST-EXITS)")
     check(!hasBattery || result?.battery != nil,
           "smoke ReportCollector: battery != nil (or no battery on this machine)")
     check(result?.energy != nil, "smoke ReportCollector: energy != nil")
@@ -1467,6 +1469,12 @@ runSmartToolsAvailabilityChecks()
 // =====================================================================
 
 runSudoPathSafetyChecks()
+
+// =====================================================================
+// MARK: - CommandRunner exit-status rule (V21-HONEST-EXITS, in CommandRunnerExitChecks.swift)
+// =====================================================================
+
+runCommandRunnerExitChecks()
 
 // =====================================================================
 // MARK: - LaunchdPlistInspector (Block N6, in LaunchdPlistInspectorChecks.swift)
@@ -2364,6 +2372,21 @@ do {
           "isUserCancellation: a clean run is not a cancel")
     check(!PrivilegedRunner.isUserCancellation(exitCode: 1, stderr: ""),
           "isUserCancellation: empty stderr is not a cancel")
+
+    // --- PrivilegedRunner: isSudoOwnFailure distinguishes sudo's own errors from a
+    // privileged command that ran and failed (V21-HONEST-EXITS) ---
+    check(PrivilegedRunner.isSudoOwnFailure(exitCode: 1, stderr: "sudo: a password is required\n"),
+          "isSudoOwnFailure: \"sudo: a password is required\" ⇒ true")
+    check(PrivilegedRunner.isSudoOwnFailure(exitCode: 1, stderr: "sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper\n"),
+          "isSudoOwnFailure: \"sudo: a terminal is required...\" ⇒ true")
+    check(!PrivilegedRunner.isSudoOwnFailure(exitCode: 1, stderr: "rm: /Library/LaunchDaemons/x.plist: Operation not permitted\n"),
+          "isSudoOwnFailure: command ran and failed (no sudo: line) ⇒ false")
+    check(!PrivilegedRunner.isSudoOwnFailure(exitCode: 1, stderr: ""),
+          "isSudoOwnFailure: empty stderr ⇒ false")
+    check(!PrivilegedRunner.isSudoOwnFailure(exitCode: 127, stderr: "sudo: command not found\n"),
+          "isSudoOwnFailure: only exit 1 is sudo's own error code ⇒ false")
+    check(!PrivilegedRunner.isSudoOwnFailure(exitCode: 0, stderr: ""),
+          "isSudoOwnFailure: exit 0 ⇒ false")
 }
 
 // =====================================================================

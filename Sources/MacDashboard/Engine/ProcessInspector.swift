@@ -49,7 +49,7 @@ enum ProcessInspector {
     /// line plus one line per thread (verified: WindowServer → 21 lines = 20
     /// threads). Returns nil if `ps` itself fails (timeout/launch error/no output).
     private static func threadCountViaPS(for pid: Int32) -> Int? {
-        guard let out = CommandRunner.run("/bin/ps", ["-M", "-p", "\(pid)"], timeout: 3) else { return nil }
+        guard let out = CommandRunner.runNonEmpty("/bin/ps", ["-M", "-p", "\(pid)"], timeout: 3) else { return nil }
         let lines = out.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         return max(lines.count - 1, 0)
     }

@@ -26,6 +26,13 @@ enum PrivilegedRunner {
         let sudoResult = runProcess("/usr/bin/sudo", ["/bin/sh", "-c", command], timeout: 120)
         if sudoResult.exitCode == 0 { return .success }
 
+        // The privileged command RAN and failed (or sudo timed out / could not launch).
+        // Re-running the same failing command as root behind a password dialog just fails
+        // again after an unnecessary prompt (V2-SECURITY-AUDIT N1).
+        guard Self.isSudoOwnFailure(exitCode: sudoResult.exitCode, stderr: sudoResult.stderr) else {
+            return Self.failure(from: sudoResult)
+        }
+
         let escaped = command
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
@@ -36,9 +43,7 @@ enum PrivilegedRunner {
         if Self.isUserCancellation(exitCode: osaResult.exitCode, stderr: osaResult.stderr) {
             return .cancelled
         }
-        let trimmed = osaResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        let capped = trimmed.isEmpty ? "unknown error" : String(trimmed.prefix(200))
-        return .failed(capped)
+        return Self.failure(from: osaResult)
     }
 
     /// True when osascript reported the ADMIN-PASSWORD DIALOG being dismissed, i.e.
@@ -58,11 +63,33 @@ enum PrivilegedRunner {
         return last.hasSuffix("(-128)")
     }
 
-    private struct ProcessResult { let exitCode: Int32; let stderr: String }
+    /// True when SUDO ITSELF refused, as opposed to the privileged command running and
+    /// exiting non-zero. sudo exits 1 for its own errors and writes them as `sudo: …`
+    /// stderr lines ("a password is required", "a terminal is required to read the
+    /// password", "Sorry, try again", "<user> is not in the sudoers file"); a command sudo
+    /// actually ran keeps its own exit status and its own stderr. macOS ships sudo
+    /// unlocalized, so the prefix is stable across UI languages.
+    static func isSudoOwnFailure(exitCode: Int32, stderr: String) -> Bool {
+        guard exitCode == 1 else { return false }
+        return stderr.split(whereSeparator: \.isNewline)
+            .contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("sudo:") }
+    }
+
+    /// stderr first, then stdout (socketfilterfw and pmset report failures on stdout), then
+    /// a last-resort literal — `.failed("")` would render as a blank error banner.
+    private static func failure(from result: ProcessResult) -> Outcome {
+        for candidate in [result.stderr, result.stdout] {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return .failed(String(trimmed.prefix(200))) }
+        }
+        return .failed("unknown error")
+    }
+
+    private struct ProcessResult { let exitCode: Int32; let stderr: String; let stdout: String }
 
     /// Runs `path` with `args`, waiting up to `timeout` seconds, and returns the
-    /// exit code plus captured stderr (unlike `CommandRunner`, which discards exit
-    /// codes — we need them here to distinguish success/cancel/failure).
+    /// exit code plus captured stdout/stderr (unlike `CommandRunner`, which discards
+    /// exit codes — we need them here to distinguish success/cancel/failure).
     private static func runProcess(_ path: String, _ args: [String], timeout: TimeInterval) -> ProcessResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
@@ -88,13 +115,14 @@ enum PrivilegedRunner {
         do {
             try process.run()
         } catch {
-            return ProcessResult(exitCode: -1, stderr: "launch failed: \(error.localizedDescription)")
+            return ProcessResult(exitCode: -1, stderr: "launch failed: \(error.localizedDescription)", stdout: "")
         }
 
+        let stdoutBox = DataBox()
         let drainGroup = DispatchGroup()
         drainGroup.enter()
         DispatchQueue.global(qos: .utility).async {
-            _ = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            stdoutBox.set(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
             drainGroup.leave()
         }
         let stderrBox = DataBox()
@@ -118,10 +146,11 @@ enum PrivilegedRunner {
         _ = drainGroup.wait(timeout: .now() + 3)
 
         if killGate.winner == .timeout {
-            return ProcessResult(exitCode: -1, stderr: "timed out")
+            return ProcessResult(exitCode: -1, stderr: "timed out", stdout: "")
         }
+        let stdoutText = String(data: stdoutBox.value, encoding: .utf8) ?? ""
         let stderrText = String(data: stderrBox.value, encoding: .utf8) ?? ""
-        return ProcessResult(exitCode: process.terminationStatus, stderr: stderrText)
+        return ProcessResult(exitCode: process.terminationStatus, stderr: stderrText, stdout: stdoutText)
     }
 
     /// stderr is written on a background reader and read on the calling thread after a
