@@ -319,8 +319,9 @@ final class ReportCollector {
         if let t = CommandRunner.run("/usr/bin/fdesetup", ["status"], timeout: 10, scope: cancelScope) { s.fileVault = Parsers.fileVaultStatus(t) }
         if let t = CommandRunner.run("/usr/sbin/spctl", ["--status"], timeout: 10, scope: cancelScope) { s.gatekeeper = Parsers.gatekeeperStatus(t) }
         if let t = CommandRunner.run("/usr/bin/csrutil", ["status"], timeout: 10, scope: cancelScope) { s.sip = Parsers.sipStatus(t) }
-        if let t = CommandRunner.run("/usr/libexec/ApplicationFirewall/socketfilterfw", ["--getglobalstate"], timeout: 10, scope: cancelScope) {
-            s.firewall = Parsers.firewallStatus(t)
+        if let t = CommandRunner.run("/usr/libexec/ApplicationFirewall/socketfilterfw", ["--getglobalstate"], timeout: 10, scope: cancelScope),
+           let v = Parsers.firewallStatus(t) {
+            s.firewall = v
         } else if let t = CommandRunner.run("/usr/bin/defaults", ["read", "/Library/Preferences/com.apple.alf", "globalstate"], timeout: 10, scope: cancelScope) {
             s.firewall = Parsers.firewallStatus(t)
         }
@@ -354,8 +355,8 @@ final class ReportCollector {
     }
 
     /// Fills in `dest.lastBackup` via a fallback chain, since `tmutil latestbackup`
-    /// silently yields empty stdout (⇒ `CommandRunner.run` returns nil, indistinguishable
-    /// here from a launch failure — both mean "try the next source") without Full Disk
+    /// exits 0 with silently empty stdout (⇒ `CommandRunner.run` returns `""`; the
+    /// `!s.isEmpty` guard below is what routes on to the next source) without Full Disk
     /// Access, which this ad-hoc-signed, non-entitled app does not have:
     ///   1. `tmutil latestbackup`'s path timestamp (works once FDA is granted).
     ///   2. `diskutil apfs listSnapshots <mount>`'s latest `.backup` snapshot name —
@@ -450,7 +451,7 @@ final class ReportCollector {
     // MARK: - spotlight
 
     private func collectSpotlight() -> Outcome {
-        let out = CommandRunner.run("/usr/bin/mdutil", ["-s", "/"], timeout: 10, scope: cancelScope)
+        let out = CommandRunner.runNonEmpty("/usr/bin/mdutil", ["-s", "/"], timeout: 10, scope: cancelScope)
         let text: String? = out.map { raw in
             if raw.lowercased().contains("indexing enabled") { return L.reportCollectorSpotlightEnabled }
             if raw.lowercased().contains("indexing disabled") { return L.reportCollectorSpotlightDisabled }
@@ -538,7 +539,7 @@ final class ReportCollector {
         let smartctl = Self.findSmartctl()
 
         // Internal boot disk.
-        if let info = CommandRunner.run("/usr/sbin/diskutil", ["info", "disk0"], timeout: 15, scope: cancelScope) {
+        if let info = CommandRunner.runNonEmpty("/usr/sbin/diskutil", ["info", "disk0"], timeout: 15, scope: cancelScope) {
             let (status, media) = Parsers.diskutilSmart(info)
             var disk = makeDiskutilDisk(device: "internal",
                                         fallbackTitle: L.reportCollectorInternalDiskFallbackTitle,
@@ -554,7 +555,7 @@ final class ReportCollector {
             // path below).
             if let sc = smartctl {
                 let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
-                    ? CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
+                    ? CommandRunner.runNonEmpty("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
                     : nil
                 let raw = sudoRaw
                     ?? CommandRunner.run(sc, ["-A", "disk0"], timeout: 15, scope: cancelScope)
@@ -597,7 +598,7 @@ final class ReportCollector {
                     // fail fast, never prompt. This is the branch external/USB/SATA disks
                     // actually need: internal NVMe answers `smartctl -A` unprivileged.
                     let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
-                        ? CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
+                        ? CommandRunner.runNonEmpty("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
                         : nil
                     let raw = sudoRaw
                         ?? CommandRunner.run(sc, ["-A", dev], timeout: 15, scope: cancelScope)
@@ -806,8 +807,8 @@ final class ReportCollector {
     /// it directly without going through the `Outcome` plumbing (mirrors
     /// `collectSmartDisks()` above).
     func collectEnergySettings() -> EnergySettings? {
-        let out = CommandRunner.run("/usr/bin/pmset", ["-g", "custom"], timeout: 10, scope: cancelScope)
-            ?? CommandRunner.run("/usr/bin/pmset", ["-g"], timeout: 10, scope: cancelScope)
+        let out = CommandRunner.runNonEmpty("/usr/bin/pmset", ["-g", "custom"], timeout: 10, scope: cancelScope)
+            ?? CommandRunner.runNonEmpty("/usr/bin/pmset", ["-g"], timeout: 10, scope: cancelScope)
         return out.map { Parsers.pmsetCustom($0) }
     }
 
@@ -846,7 +847,7 @@ final class ReportCollector {
 
     private func collectHomeDirs() -> Outcome {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        guard let out = CommandRunner.run("/usr/bin/du", ["-xk", "-d", "1", "--", home], timeout: 120, scope: cancelScope) else {
+        guard let out = CommandRunner.runNonEmpty("/usr/bin/du", ["-xk", "-d", "1", "--", home], timeout: 120, scope: cancelScope) else {
             return Outcome(section: .homeDirs) { $0.homeDirs = nil; $0.homeDirsUnreadable = [] }
         }
         let all = Parsers.duKilobyteLines(out)
@@ -881,7 +882,7 @@ final class ReportCollector {
         var unreadable: [String] = []
         for p in paths {
             guard FileManager.default.fileExists(atPath: p) else { continue }
-            if let out = CommandRunner.run("/usr/bin/du", ["-xsk", "--", p], timeout: 60, scope: cancelScope) {
+            if let out = CommandRunner.runNonEmpty("/usr/bin/du", ["-xsk", "--", p], timeout: 60, scope: cancelScope) {
                 dirs.append(contentsOf: Parsers.duKilobyteLines(out))
             } else if DirectoryAccess.probe(p) == .denied {
                 // The service rule: du produced nothing at all for THIS path. That is
@@ -921,7 +922,7 @@ final class ReportCollector {
         // bin dir on PATH, not just `defaultEnvironment`'s bare system PATH.
         let brewEnv = CommandRunner.environment(prependingPATH: [(brew as NSString).deletingLastPathComponent])
         var version: String?
-        if let v = CommandRunner.run(brew, ["--version"], timeout: 20, environment: brewEnv, scope: cancelScope) {
+        if let v = CommandRunner.runNonEmpty(brew, ["--version"], timeout: 20, environment: brewEnv, scope: cancelScope) {
             version = v.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces)
         }
         var outdated: [String] = []

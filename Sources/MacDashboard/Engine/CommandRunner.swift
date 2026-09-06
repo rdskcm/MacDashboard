@@ -3,9 +3,10 @@
 //
 // Thin, defensive wrapper around Foundation.Process for running read-only system
 // binaries with a hard timeout. Mirrors the legacy `run_cmd()` helper from
-// mac_live_server.py (capture stdout+stderr, swallow any launch error, return nil
-// on empty stdout) but adds a real timeout with SIGKILL, which the Python version
-// only had via `subprocess.run(..., timeout=...)`.
+// mac_live_server.py (capture stdout+stderr, swallow any launch error) but adds a
+// real timeout with SIGKILL, which the Python version only had via
+// `subprocess.run(..., timeout=...)`, and returns nil only on launch failure,
+// timeout, or an unclean exit — not merely on empty stdout (V21-HONEST-EXITS).
 
 import Foundation
 #if canImport(Darwin)
@@ -58,11 +59,27 @@ enum CommandRunner {
     ///   non-zero (legacy `run_cmd` semantics: only emptiness of stdout matters, not
     ///   the exit code — many of these tools write useful data with a non-zero exit,
     ///   e.g. `softwareupdate -l`). Returns `nil` when the process could not be
-    ///   launched, timed out (and was killed), or produced empty stdout.
+    ///   launched, timed out (and was killed), died by signal, or exited non-zero
+    ///   with empty stdout. Empty stdout on a clean (status 0) exit returns `""`,
+    ///   not `nil` — an empty answer is still an answer (V21-HONEST-EXITS).
     static func run(_ path: String, _ args: [String], timeout: TimeInterval,
                     environment: [String: String] = defaultEnvironment,
                     scope: CommandCancellationScope? = nil) -> String? {
         runCapturing(path, args, timeout: timeout, environment: environment, scope: scope)?.text
+    }
+
+    /// `run`, but with the narrow "no output means nothing was learned" rule applied
+    /// EXPLICITLY at the call site instead of hidden in `runCapturing`: for commands whose
+    /// output is a blob to parse (a version string, a diskutil block, a pmset table), an
+    /// empty answer supports no claim at all, so it is reported as a failure. Commands whose
+    /// result is a LIST must use `run` — an empty list is a real answer (V21-HONEST-EXITS).
+    static func runNonEmpty(_ path: String, _ args: [String], timeout: TimeInterval,
+                            environment: [String: String] = defaultEnvironment,
+                            scope: CommandCancellationScope? = nil) -> String? {
+        guard let text = run(path, args, timeout: timeout, environment: environment, scope: scope) else {
+            return nil
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
     }
 
     /// Result of `runCapturing`: the captured stdout text plus whether it was
@@ -220,17 +237,25 @@ enum CommandRunner {
             return nil
         }
         let (stdoutData, truncated) = stdoutBox.snapshot()
-        if stdoutData.isEmpty {
+        if stdoutData.isEmpty && !exitedCleanly(process) {
             return nil
         }
         return CaptureResult(text: String(decoding: stdoutData, as: UTF8.self), truncated: truncated)
     }
 
+    /// True when the child exited normally with status 0 — the ONLY case in which empty
+    /// stdout is a valid answer ("nothing outdated", "no snapshots") rather than a failure.
+    /// A signalled child reports the signal number in `terminationStatus`, so the reason is
+    /// checked too. Read only after the child has exited.
+    private static func exitedCleanly(_ process: Process) -> Bool {
+        process.terminationReason == .exit && process.terminationStatus == 0
+    }
+
     /// Like `run`, but additionally delivers each complete output line (stdout AND
     /// stderr) to `onLine` as it arrives. `onLine` is invoked on a private serial
     /// queue — callers must hop threads themselves. Returns accumulated stdout on
-    /// normal exit (nil on launch failure, timeout, or empty stdout — same
-    /// semantics as `run`).
+    /// normal exit (nil on launch failure, timeout, death by signal, or a non-zero
+    /// exit with empty stdout — same semantics as `run`; V21-HONEST-EXITS).
     ///
     /// `environment` has the same meaning and default as in `run`/`runCapturing`:
     /// pinned rather than inherited, so a dev run and the shipped `.app` under
@@ -390,7 +415,7 @@ enum CommandRunner {
             return nil
         }
         let finalStdout = lineQueue.sync { stdoutData }
-        if finalStdout.isEmpty {
+        if finalStdout.isEmpty && !exitedCleanly(process) {
             return nil
         }
         // Lossy, like runCapturing and like the per-line decoding above: the byte-level

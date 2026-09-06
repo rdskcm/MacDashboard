@@ -413,9 +413,9 @@ enum Parsers {
     /// Outcome of parsing `diskutil apfs listSnapshots <mount>` output, distinguishing
     /// "ran fine, found a date", "ran fine, zero completed backups exist" and "output
     /// doesn't look like a diskutil snapshot listing at all" — the last case is a
-    /// safety net only, since a genuinely failed/unavailable `diskutil` invocation
-    /// already yields empty stdout upstream (⇒ `CommandRunner.run` returns nil before
-    /// this function is ever called).
+    /// safety net for a genuinely failed/unavailable `diskutil` invocation — but not an
+    /// unreachable one: a clean exit with empty stdout now reaches this parser as `""`
+    /// (⇒ `CommandRunner.run` no longer returns nil for that case) and lands here.
     enum DiskutilBackupSnapshotResult: Equatable {
         case found(Date)
         case noBackupsFound
