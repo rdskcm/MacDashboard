@@ -2367,6 +2367,84 @@ do {
 }
 
 // =====================================================================
+// MARK: - Block V21-PRIVACY-CI: file permissions, output caps, TCC strings
+// =====================================================================
+
+func v21PosixMode(_ path: String) -> UInt16? {
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+          let mode = attrs[.posixPermissions] as? NSNumber else { return nil }
+    return mode.uint16Value & 0o777
+}
+
+do {
+    // Block A: N6 (file permissions on 0600 files and 0700 directory)
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("macdashboard-v21-\(UUID().uuidString)", isDirectory: true)
+    defer {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    // Case 1: upgrade path (pre-existing 0755 directory is tightened)
+    do {
+        let dir = root.appendingPathComponent("old/MacDashboard", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o755])
+        let file = dir.appendingPathComponent("mac_report.txt")
+        do {
+            try ReportWriter.write(text: "x", to: file)
+        } catch {
+            check(false, "ReportWriter.write: upgrade path created file (\(error))")
+        }
+        check(v21PosixMode(dir.path) == 0o700, "ReportWriter.write: pre-existing 0755 directory is tightened to 0700")
+        check(v21PosixMode(file.path) == 0o600, "ReportWriter.write: file created 0600")
+    }
+
+    // Case 2: fresh path (non-existent directory is created 0700)
+    do {
+        let dir = root.appendingPathComponent("new/MacDashboard", isDirectory: true)
+        let file = dir.appendingPathComponent("mac_report.txt")
+        do {
+            try ReportWriter.write(text: "x", to: file)
+        } catch {
+            check(false, "ReportWriter.write: fresh path created file (\(error))")
+        }
+        check(v21PosixMode(dir.path) == 0o700, "ReportWriter.write: fresh directory created 0700")
+        check(v21PosixMode(file.path) == 0o600, "ReportWriter.write: file created 0600")
+    }
+
+    // Case 3: HistoryStore (same permissions as ReportWriter)
+    do {
+        let dir = root.appendingPathComponent("history/MacDashboard", isDirectory: true)
+        let file = dir.appendingPathComponent("mac_check_state.json")
+        let store = HistoryStore(url: file)
+        do {
+            try store.save()
+        } catch {
+            check(false, "HistoryStore.save: file created (\(error))")
+        }
+        check(v21PosixMode(file.path) == 0o600, "HistoryStore.save: file created 0600")
+        check(v21PosixMode(dir.path) == 0o700, "HistoryStore.save: directory remains 0700")
+    }
+
+    // Block B: N5 (stdout cap at outputCap with lineBufferCap enforcement)
+    let collector = LockedLines()
+    let result = CommandRunner.runStreaming("/bin/sh", ["-c", "head -c 9000000 /dev/zero | tr '\\0' 'x'"],
+                                           timeout: 30) { line, _ in
+        collector.append(line, false)
+    }
+    check(result != nil, "CommandRunner.runStreaming: 9 MB output ⇒ non-nil (not truncated to empty)")
+    check(result?.utf8.count == CommandRunner.outputCap, "CommandRunner.runStreaming: 9 MB output ⇒ byte count == outputCap")
+    let lineCount = collector.lines.count
+    check(lineCount >= 2, "CommandRunner.runStreaming: 9 MB newline-free stream ⇒ \(lineCount) delivered lines (>= 2, lineBufferCap flushed)")
+    let totalDelivered = collector.lines.map { $0.0.utf8.count }.reduce(0, +)
+    check(totalDelivered > CommandRunner.outputCap, "CommandRunner.runStreaming: delivered line count (\(totalDelivered) bytes) > outputCap (proof onLine gets bytes past cap)")
+
+    // Check the small-output path is untouched
+    let smallResult = CommandRunner.runStreaming("/bin/sh", ["-c", "printf 'a\\nb\\n'"], timeout: 10) { _, _ in
+    }
+    check(smallResult == "a\nb\n", "CommandRunner.runStreaming: small output under cap ⇒ full output preserved")
+}
+
+// =====================================================================
 // MARK: - Summary
 // =====================================================================
 

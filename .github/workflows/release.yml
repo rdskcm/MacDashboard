@@ -106,7 +106,17 @@ jobs:
           # ThermalHIDReader resolves these six at runtime via dlopen/dlsym on
           # purpose: hard-linking them means the app fails to LAUNCH on a macOS
           # that dropped them. `nm` prints the Mach-O leading underscore.
-          bad="$(nm -u dist/MacDashboard.app/Contents/MacOS/MacDashboard | grep -E '_IOHID(EventSystemClient(Create|SetMatching|CopyServices)|ServiceClientCopy(Property|Event)|EventGetFloatValue)' || true)"
+          bin="dist/MacDashboard.app/Contents/MacOS/MacDashboard"
+          syms="${RUNNER_TEMP:-.}/iokit-syms.txt"
+          # Own command, not a pipeline: `nm` failing (renamed binary, toolchain
+          # change) must fail the job. The old form buried it in a command
+          # substitution ending in `|| true`, so the gate passed vacuously.
+          nm -u "$bin" > "$syms"
+          if [ ! -s "$syms" ]; then
+            echo "::error::nm -u produced no undefined symbols for $bin — the gate cannot prove anything (wrong path or broken toolchain?)"
+            exit 1
+          fi
+          bad="$(grep -E '_IOHID(EventSystemClient(Create|SetMatching|CopyServices)|ServiceClientCopy(Property|Event)|EventGetFloatValue)' "$syms" || true)"
           if [ -n "$bad" ]; then
             echo "$bad"
             echo "::error::private IOKit symbols are hard-linked again — they must stay behind dlopen/dlsym in ThermalHIDReader.swift"

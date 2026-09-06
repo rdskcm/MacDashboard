@@ -1035,7 +1035,8 @@ final class DashboardModel {
             create: true
         )) ?? fm.homeDirectoryForCurrentUser
         let dir = base.appendingPathComponent("MacDashboard", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true,
+                                attributes: [.posixPermissions: 0o700])
         return dir.appendingPathComponent("mac_report.txt")
     }
 }

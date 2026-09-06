@@ -41,6 +41,12 @@ enum CommandRunner {
     /// F2 discussion there). 8 MiB.
     static let outputCap = 8 * 1024 * 1024
 
+    /// Cap on a single un-newline-terminated line buffer in `runStreaming`. A stream
+    /// that never emits '\n' would otherwise grow the buffer without limit; past this
+    /// many bytes the pending bytes are delivered to `onLine` as one line and the
+    /// buffer is cleared. 1 MiB.
+    static let lineBufferCap = 1024 * 1024
+
     /// Runs the binary at `path` (resolved via `/usr/bin/env` when `path` has no "/",
     /// i.e. is a bare command name rather than an absolute path) with `args`, waiting
     /// up to `timeout` seconds. Thin wrapper over `runCapturing` — see there for the
@@ -233,10 +239,9 @@ enum CommandRunner {
     /// `environment(prependingPATH:)` here exactly as they already do for the
     /// short-lived calls (V2-POLISH B1).
     ///
-    /// Unlike `runCapturing`, accumulated stdout here is NOT bounded by
-    /// `outputCap`. This entry point has one caller (`brew upgrade`, 900 s
-    /// timeout), and its output is small in practice, but a very chatty or
-    /// runaway subprocess could grow this buffer unbounded.
+    /// Accumulated stdout is capped at `outputCap`, exactly like `runCapturing`: bytes past
+    /// the cap are dropped from the returned string, but BOTH pipes are still drained to EOF
+    /// and `onLine` still receives every line, so progress parsing keeps working past the cap.
     static func runStreaming(_ path: String, _ args: [String], timeout: TimeInterval,
                               environment: [String: String] = defaultEnvironment,
                               onLine: @escaping (_ line: String, _ isStderr: Bool) -> Void) -> String? {
@@ -326,9 +331,17 @@ enum CommandRunner {
                     flushRemainder(from: &stdoutBuffer, isStderr: false)
                     drainGroup.leave()
                 } else {
-                    stdoutData.append(data)
+                    // Same cap as runCapturing (F2): keep at most `outputCap` bytes for the
+                    // return value, but keep reading and keep emitting lines regardless.
+                    if stdoutData.count < outputCap {
+                        let remaining = outputCap - stdoutData.count
+                        stdoutData.append(data.count > remaining ? data.prefix(remaining) : data)
+                    }
                     stdoutBuffer.append(data)
                     emitCompleteLines(from: &stdoutBuffer, isStderr: false)
+                    if stdoutBuffer.count > lineBufferCap {
+                        flushRemainder(from: &stdoutBuffer, isStderr: false)
+                    }
                 }
             }
         }
@@ -344,6 +357,9 @@ enum CommandRunner {
                 } else {
                     stderrBuffer.append(data)
                     emitCompleteLines(from: &stderrBuffer, isStderr: true)
+                    if stderrBuffer.count > lineBufferCap {
+                        flushRemainder(from: &stderrBuffer, isStderr: true)
+                    }
                 }
             }
         }
@@ -377,7 +393,10 @@ enum CommandRunner {
         if finalStdout.isEmpty {
             return nil
         }
-        return String(data: finalStdout, encoding: .utf8)
+        // Lossy, like runCapturing and like the per-line decoding above: the byte-level
+        // cap can split a multi-byte character, and the strict initializer would turn that
+        // into `nil` — i.e. a large-but-successful run would look like a failure.
+        return String(decoding: finalStdout, as: UTF8.self)
     }
 }
 

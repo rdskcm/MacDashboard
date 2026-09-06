@@ -846,7 +846,7 @@ final class ReportCollector {
 
     private func collectHomeDirs() -> Outcome {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        guard let out = CommandRunner.run("/usr/bin/du", ["-xk", "-d", "1", home], timeout: 120, scope: cancelScope) else {
+        guard let out = CommandRunner.run("/usr/bin/du", ["-xk", "-d", "1", "--", home], timeout: 120, scope: cancelScope) else {
             return Outcome(section: .homeDirs) { $0.homeDirs = nil; $0.homeDirsUnreadable = [] }
         }
         let all = Parsers.duKilobyteLines(out)
@@ -881,7 +881,7 @@ final class ReportCollector {
         var unreadable: [String] = []
         for p in paths {
             guard FileManager.default.fileExists(atPath: p) else { continue }
-            if let out = CommandRunner.run("/usr/bin/du", ["-xsk", p], timeout: 60, scope: cancelScope) {
+            if let out = CommandRunner.run("/usr/bin/du", ["-xsk", "--", p], timeout: 60, scope: cancelScope) {
                 dirs.append(contentsOf: Parsers.duKilobyteLines(out))
             } else if DirectoryAccess.probe(p) == .denied {
                 // The service rule: du produced nothing at all for THIS path. That is
