@@ -51,11 +51,21 @@ enum ReportWriter {
     }
 
     /// Atomic overwrite (temp file + replace or Data.write(.atomic)). Creates parent dir.
+    /// The report profiles the user (home paths, login items, process names, hardware
+    /// model), so the file is 0600 and the directory 0700 — the defaults (0644/0755) make
+    /// it readable by every other local account.
     static func write(text: String, to url: URL) throws {
         let dir = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        // `attributes:` only applies to directories createDirectory actually creates; an
+        // install that already has this directory from an older build keeps its 0755 until
+        // it is tightened explicitly. Best-effort: a chmod failure on a pre-existing,
+        // possibly foreign-owned directory must not block writing the report.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
         let data = Data(text.utf8)
         try data.write(to: url, options: [.atomic])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     // MARK: - Section plumbing

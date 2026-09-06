@@ -95,6 +95,14 @@ cat > "$DIST/Contents/Info.plist" <<PLIST
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>The dashboard uses Apple events for two things: it reads your Login Items list via System Events, and — only when you confirm it in the app — it asks Finder to empty the Trash.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>The dashboard measures how much space your Desktop folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>The dashboard measures how much space your Documents folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>The dashboard measures how much space your Downloads folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>The dashboard reports free space and Time Machine destinations for connected volumes, including removable disks. It reads volume sizes only — file contents are never opened.</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 rdskcm. MIT License.</string>
 </dict>
 </plist>
@@ -102,19 +110,29 @@ PLIST
 
 # NSAppleEventsUsageDescription is ONE app-wide string: macOS shows the same text for the
 # System Events prompt (login items) and the Finder prompt (empty Trash), so it must name
-# both — including the destructive one. Three literals in this file (Info.plist above, plus
-# the en/ru InfoPlist.strings mirrors below), no shared source: keep all three in sync.
+# both — including the destructive one. NSDesktopFolderUsageDescription,
+# NSDocumentsFolderUsageDescription, NSDownloadsFolderUsageDescription, and
+# NSRemovableVolumesUsageDescription follow the same three-place rule (Info.plist plus en/ru
+# InfoPlist.strings), no shared source: keep all three in sync for each key.
 echo "== localized InfoPlist.strings =="
 mkdir -p "$DIST/Contents/Resources/en.lproj" "$DIST/Contents/Resources/ru.lproj"
 
 cat > "$DIST/Contents/Resources/en.lproj/InfoPlist.strings" <<'EOSTRINGS'
 NSHumanReadableCopyright = "© 2026 rdskcm. MIT License.";
 NSAppleEventsUsageDescription = "The dashboard uses Apple events for two things: it reads your Login Items list via System Events, and — only when you confirm it in the app — it asks Finder to empty the Trash.";
+NSDesktopFolderUsageDescription = "The dashboard measures how much space your Desktop folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
+NSDocumentsFolderUsageDescription = "The dashboard measures how much space your Documents folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
+NSDownloadsFolderUsageDescription = "The dashboard measures how much space your Downloads folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
+NSRemovableVolumesUsageDescription = "The dashboard reports free space and Time Machine destinations for connected volumes, including removable disks. It reads volume sizes only — file contents are never opened.";
 EOSTRINGS
 
 cat > "$DIST/Contents/Resources/ru.lproj/InfoPlist.strings" <<'EOSTRINGS'
 NSHumanReadableCopyright = "© 2026 rdskcm. Лицензия MIT.";
 NSAppleEventsUsageDescription = "Дашборд использует Apple events для двух задач: читает список объектов автозагрузки (Login Items) через System Events и — только после вашего подтверждения в приложении — просит Finder очистить Корзину.";
+NSDesktopFolderUsageDescription = "Дашборд измеряет, сколько места занимает папка «Рабочий стол», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
+NSDocumentsFolderUsageDescription = "Дашборд измеряет, сколько места занимает папка «Документы», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
+NSDownloadsFolderUsageDescription = "Дашборд измеряет, сколько места занимает папка «Загрузки», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
+NSRemovableVolumesUsageDescription = "Дашборд показывает свободное место и адреса резервных копий Time Machine для подключённых томов, включая съёмные диски. Читаются только размеры томов — содержимое файлов не открывается.";
 EOSTRINGS
 
 echo "== icon (best-effort) =="
