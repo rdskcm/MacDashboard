@@ -452,54 +452,120 @@ do {
 // MARK: - Assessment (SPEC §6)
 // =====================================================================
 
-func diskLive(pct: Double) -> LiveSnapshot {
+func diskLive(pct: Double, size: Int64 = 256 * GIB) -> LiveSnapshot {
     var live = LiveSnapshot()
-    let size: Int64 = 1_000_000_000_000
     let avail = Int64(Double(size) * (1 - pct))
     live.disk = DiskInfo(size: size, avail: avail, dataUsed: nil, sysUsed: nil)
     return live
 }
 
 do {
-    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.86))
-    check(a.diskSev == .crit, "assess disk 86%: diskSev == .crit")
+    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.94))
+    check(a.diskSev == .crit, "assess disk 94%: diskSev == .crit")
     check(a.problems.contains { $0.sev == .crit && $0.text.contains("срочно освободите место") },
-          "assess disk 86%: crit problem present")
+          "assess disk 94%: crit problem present")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.72))
-    check(a.diskSev == .warn, "assess disk 72%: diskSev == .warn")
+    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.80))
+    check(a.diskSev == .warn, "assess disk 80%: diskSev == .warn")
 }
 do {
     let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.50))
     check(a.diskSev == .good, "assess disk 50%: diskSev == .good")
     check(!a.problems.contains { $0.text.contains("Диск заполнен") }, "assess disk 50%: no disk problem")
 }
+do {
+    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.80, size: 4096 * GIB))
+    check(a.diskSev == .good, "assess disk 4TiB@80%: diskSev == .good (R3, large volume quiet)")
+    check(!a.problems.contains { $0.text.contains("Диск") } && !a.tips.contains { $0.text.contains("Диск") },
+          "assess disk 4TiB@80%: no disk problem or tip (R3)")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.99, size: 4096 * GIB))
+    check(a.diskSev == .warn, "assess disk 4TiB@99% (41 GiB free): diskSev == .warn")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.995, size: 4096 * GIB))
+    check(a.diskSev == .crit, "assess disk 4TiB@99.5% (20.5 GiB free): diskSev == .crit")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.86, size: 128 * GIB))
+    check(a.diskSev == .crit, "assess disk 128GiB@86%: diskSev == .crit (R2 parity with old 0.85 constant)")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.72, size: 128 * GIB))
+    check(a.diskSev == .warn, "assess disk 128GiB@72%: diskSev == .warn (R2 parity with old 0.70 constant)")
+}
 
-func swapLive(usedBytes: Int64) -> LiveSnapshot {
+func memFixture(total: Int64, compressor: Int64 = 0) -> MemSnapshot {
+    MemSnapshot(total: total, pageSize: 16384,
+                free: total / 16, active: total / 4, inactive: total / 8,
+                speculative: total / 32, wired: total / 4,
+                compressor: compressor, purgeable: total / 64, fileBacked: total / 8)
+}
+
+func swapLive(usedBytes: Int64, ramTotal: Int64 = 16 * GIB, compressor: Int64 = 0) -> LiveSnapshot {
     var live = LiveSnapshot()
-    live.swap = SwapInfo(total: 4 * GIB, used: usedBytes, free: 4 * GIB - usedBytes)
+    live.swap = SwapInfo(total: 8 * GIB, used: usedBytes, free: 8 * GIB - usedBytes)
+    live.mem = memFixture(total: ramTotal, compressor: compressor)
     return live
 }
 
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: Int64(2.5 * Double(GIB))))
-    check(a.problems.contains { $0.sev == .serious && $0.text.contains("Swap") }, "assess swap 2.5GiB: serious problem")
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 5 * GIB))
+    check(a.problems.contains { $0.sev == .serious && $0.text.contains("Swap") }, "assess swap 5GiB@16GiB RAM: serious problem")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: Int64(1.2 * Double(GIB))))
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: Int64(2.5 * Double(GIB))))
     check(a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
-          "assess swap 1.2GiB: tip, not a problem")
+          "assess swap 2.5GiB@16GiB RAM: tip, not a problem")
 }
 do {
     let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 100 * MIB))
     check(!a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
           "assess swap 100MiB: nothing")
 }
+do {
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 3 * GIB, ramTotal: 8 * GIB))
+    check(a.problems.contains { $0.sev == .serious && $0.text.contains("Swap") },
+          "assess swap 3GiB@8GiB RAM: serious problem (R6)")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 3 * GIB, ramTotal: 16 * GIB))
+    check(a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
+          "assess swap 3GiB@16GiB RAM: tip, no problem (R6)")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 3 * GIB, ramTotal: 64 * GIB))
+    check(!a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
+          "assess swap 3GiB@64GiB RAM: silent (R6)")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 960 * MIB, ramTotal: 16 * GIB, compressor: Int64(1.3 * Double(GIB))))
+    check(a.tips.contains { $0.text.contains("Swap") },
+          "assess swap 960MiB + 1.3GiB compressed@16GiB RAM: tip (R4, observed case)")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 960 * MIB, ramTotal: 16 * GIB, compressor: 0))
+    check(!a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
+          "assess swap 960MiB, no compressor@16GiB RAM: nothing (R4, compressed input load-bearing)")
+}
+do {
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0, ramTotal: 16 * GIB, compressor: 8 * GIB))
+    check(!a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
+          "assess swap 0 used, 8GiB compressed: nothing (R5, no swap gate)")
+}
+do {
+    var live = LiveSnapshot()
+    live.swap = SwapInfo(total: 8 * GIB, used: 5 * GIB, free: 3 * GIB)
+    let a = Assess.assess(report: FullReport(), live: live)
+    check(!a.problems.contains { $0.text.contains("Swap") } && !a.tips.contains { $0.text.contains("Swap") },
+          "assess swap 5GiB, mem == nil: nothing (R7)")
+}
 
-func batteryReport(maxCapacity: Int?, condition: String? = nil) -> FullReport {
+func batteryReport(maxCapacity: Int?, condition: String? = nil, cycles: Int? = nil) -> FullReport {
     var report = FullReport()
-    report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: nil, condition: condition, maxCapacity: maxCapacity)
+    report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: cycles, condition: condition, maxCapacity: maxCapacity)
     return report
 }
 
@@ -509,7 +575,7 @@ do {
 }
 do {
     let a = Assess.assess(report: batteryReport(maxCapacity: 78), live: LiveSnapshot())
-    check(a.tips.contains { $0.text.contains("Ёмкость") }, "assess battery 78%: tip")
+    check(a.tips.contains { $0.text.contains("Ёмкость") }, "assess battery 78%, cycles == nil: tip (still warns)")
 }
 do {
     let a = Assess.assess(report: batteryReport(maxCapacity: 90), live: LiveSnapshot())
@@ -520,6 +586,20 @@ do {
     let a = Assess.assess(report: batteryReport(maxCapacity: 90, condition: "Replace Soon"), live: LiveSnapshot())
     check(a.problems.contains { $0.sev == .serious && $0.text.contains("Состояние батареи") },
           "assess battery condition 'Replace Soon': serious")
+}
+do {
+    let a = Assess.assess(report: batteryReport(maxCapacity: 78, cycles: 350), live: LiveSnapshot())
+    check(a.tips.contains { $0.text.contains("Ёмкость") }, "assess battery 78%, cycles 350: tip (early wear, R8)")
+}
+do {
+    let a = Assess.assess(report: batteryReport(maxCapacity: 78, cycles: 900), live: LiveSnapshot())
+    check(!a.tips.contains { $0.text.contains("Ёмкость") } && !a.problems.contains { $0.text.contains("Ёмкость") },
+          "assess battery 78%, cycles 900: nothing (on-spec wear, R8)")
+}
+do {
+    let a = Assess.assess(report: batteryReport(maxCapacity: 65, cycles: 900), live: LiveSnapshot())
+    check(a.problems.contains { $0.sev == .serious && $0.text.contains("Ёмкость") },
+          "assess battery 65%, cycles 900: serious (level rule survives any cycle count, R8)")
 }
 
 do {
@@ -671,7 +751,7 @@ do {
 do {
     var report = FullReport()
     report.updates = ["u1"]
-    let a = Assess.assess(report: report, live: diskLive(pct: 0.90))
+    let a = Assess.assess(report: report, live: diskLive(pct: 0.94))
     check(a.summaryText == "Замечаний: \(a.problems.count)", "assess summary: 'Замечаний: N' text")
     check(a.summarySev == a.problems.first?.sev, "assess summary: summarySev == worst")
     check(a.problems.count >= 2, "assess summary: multiple problems present for ordering check")
@@ -1697,10 +1777,11 @@ func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
     ]
     report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: nil, condition: "Replace Now", maxCapacity: 60)
     var live = LiveSnapshot()
-    let size: Int64 = 1_000_000_000_000
+    let size: Int64 = 256 * GIB
     live.disk = DiskInfo(size: size, avail: Int64(Double(size) * (1 - diskPct)), dataUsed: nil, sysUsed: nil)
-    let swapUsed = Int64(2.5 * Double(GIB))
-    live.swap = SwapInfo(total: 4 * GIB, used: swapUsed, free: 4 * GIB - swapUsed)
+    let swapUsed = 5 * GIB
+    live.swap = SwapInfo(total: 8 * GIB, used: swapUsed, free: 3 * GIB)
+    live.mem = memFixture(total: 16 * GIB)
     return (report, live)
 }
 
@@ -1714,8 +1795,8 @@ do {
 
     for lang in AppLanguage.allCases {
         L10nStore.shared.language = lang
-        let (reportFull, liveFull) = attnFullBadFixture(diskPct: 0.90)   // -> diskFull
-        let (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.75)   // -> diskFullSoon
+        let (reportFull, liveFull) = attnFullBadFixture(diskPct: 0.94)   // -> diskFull
+        let (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.80)   // -> diskFullSoon
         let itemsFull = Assess.assess(report: reportFull, live: liveFull).items
         let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon).items
         let allItems = itemsFull + itemsSoon
