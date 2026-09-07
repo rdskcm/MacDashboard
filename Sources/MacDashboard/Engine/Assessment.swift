@@ -65,16 +65,16 @@ enum Assess {
             if reclaimed >= mem.total / 4 {
                 a.swapSev = .serious
                 let action = AdviceAction.openApp(AdviceApps.activityMonitor)
-                let text = L.assessSwapHighSerious(fmt(swap.used))
+                let text = L.assessSwapHighSerious(fmt(swap.used), fmt(mem.compressor))
                 pairs.append((Problem(sev: .serious, text: text, action: action),
                                AttentionItem(kind: .swapHigh, sev: .serious, label: L.attnLabelSwapHigh,
-                                             detail: L.attnDetailSwapHigh(fmt(swap.used)), fullText: text,
+                                             detail: L.attnDetailSwapHigh(fmt(swap.used), fmt(mem.compressor)), fullText: text,
                                              verb: verb(action), action: action)))
             } else if reclaimed >= mem.total / 8 {
                 a.swapSev = .warn
                 let action = AdviceAction.openApp(AdviceApps.activityMonitor)
-                tips.append(Tip(text: L.assessSwapHighWarn(fmt(swap.used)), action: action))
-                capsules.append(TipCapsule(object: L.attnCapSwap, value: fmt(swap.used), verb: verb(action),
+                tips.append(Tip(text: L.assessSwapHighWarn(fmt(swap.used), fmt(mem.compressor)), action: action))
+                capsules.append(TipCapsule(object: L.attnCapSwap, value: fmt(reclaimed), verb: verb(action),
                                             explanation: L.attnExplainSwap, action: action))
             }
         }
