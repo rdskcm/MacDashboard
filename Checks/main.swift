@@ -1132,12 +1132,45 @@ do {
 // MARK: - L10n (ruPlural + StringsRU smoke)
 // =====================================================================
 
-check(ruPlural(1, "цикл", "цикла", "циклов") == "цикл", "ruPlural: n=1 ⇒ цикл")
-check(ruPlural(2, "цикл", "цикла", "циклов") == "цикла", "ruPlural: n=2 ⇒ цикла")
-check(ruPlural(5, "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=5 ⇒ циклов")
-check(ruPlural(11, "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=11 ⇒ циклов")
-check(ruPlural(21, "цикл", "цикла", "циклов") == "цикл", "ruPlural: n=21 ⇒ цикл")
-check(ruPlural(104, "цикл", "цикла", "циклов") == "цикла", "ruPlural: n=104 ⇒ цикла")
+// Full Russian plural-form edge-case set (V21-RU-PLURAL).
+check(ruPlural(0,   "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=0 ⇒ циклов")
+check(ruPlural(1,   "цикл", "цикла", "циклов") == "цикл",   "ruPlural: n=1 ⇒ цикл")
+check(ruPlural(2,   "цикл", "цикла", "циклов") == "цикла",  "ruPlural: n=2 ⇒ цикла")
+check(ruPlural(3,   "цикл", "цикла", "циклов") == "цикла",  "ruPlural: n=3 ⇒ цикла")
+check(ruPlural(4,   "цикл", "цикла", "циклов") == "цикла",  "ruPlural: n=4 ⇒ цикла")
+check(ruPlural(5,   "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=5 ⇒ циклов")
+check(ruPlural(11,  "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=11 ⇒ циклов (teen exception)")
+check(ruPlural(12,  "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=12 ⇒ циклов (teen exception)")
+check(ruPlural(14,  "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=14 ⇒ циклов (teen exception)")
+check(ruPlural(21,  "цикл", "цикла", "циклов") == "цикл",   "ruPlural: n=21 ⇒ цикл")
+check(ruPlural(100, "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=100 ⇒ циклов")
+check(ruPlural(101, "цикл", "цикла", "циклов") == "цикл",   "ruPlural: n=101 ⇒ цикл")
+check(ruPlural(104, "цикл", "цикла", "циклов") == "цикла",  "ruPlural: n=104 ⇒ цикла")
+check(ruPlural(111, "цикл", "цикла", "циклов") == "циклов", "ruPlural: n=111 ⇒ циклов (teen exception)")
+
+// The three RU strings converted in V21-RU-PLURAL. StringsRU() directly, not L,
+// so these do not depend on the language pin.
+do {
+    let ru = StringsRU()
+    check(ru.attnDetailCrashes(1) == "1 отчёт",    "StringsRU.attnDetailCrashes(1) ⇒ 1 отчёт")
+    check(ru.attnDetailCrashes(2) == "2 отчёта",   "StringsRU.attnDetailCrashes(2) ⇒ 2 отчёта")
+    check(ru.attnDetailCrashes(5) == "5 отчётов",  "StringsRU.attnDetailCrashes(5) ⇒ 5 отчётов")
+    check(ru.attnDetailCrashes(11) == "11 отчётов", "StringsRU.attnDetailCrashes(11) ⇒ 11 отчётов")
+    check(ru.attnCapBrewValue(1) == "1 пакет",     "StringsRU.attnCapBrewValue(1) ⇒ 1 пакет")
+    check(ru.attnCapBrewValue(3) == "3 пакета",    "StringsRU.attnCapBrewValue(3) ⇒ 3 пакета")
+    check(ru.attnCapBrewValue(8) == "8 пакетов",   "StringsRU.attnCapBrewValue(8) ⇒ 8 пакетов")
+    check(ru.headerLoadChip("1,00", 1) == "load 1,00 · 1 ядро",  "StringsRU.headerLoadChip ncpu=1 ⇒ 1 ядро")
+    check(ru.headerLoadChip("1,00", 2) == "load 1,00 · 2 ядра",  "StringsRU.headerLoadChip ncpu=2 ⇒ 2 ядра")
+    check(ru.headerLoadChip("1,00", 8) == "load 1,00 · 8 ядер",  "StringsRU.headerLoadChip ncpu=8 ⇒ 8 ядер")
+    // Amendment 1: the history chart's cycles tooltip renders exactly this string.
+    // HistoryCard.valueParts is a private method on a SwiftUI View and is not
+    // reachable from this target, so this asserts the composed string, not the
+    // call site.
+    check(ru.kpiBatteryCycles(1) == "1 цикл",       "StringsRU.kpiBatteryCycles(1) ⇒ 1 цикл")
+    check(ru.kpiBatteryCycles(2) == "2 цикла",      "StringsRU.kpiBatteryCycles(2) ⇒ 2 цикла")
+    check(ru.kpiBatteryCycles(11) == "11 циклов",   "StringsRU.kpiBatteryCycles(11) ⇒ 11 циклов")
+    check(ru.kpiBatteryCycles(357) == "357 циклов", "StringsRU.kpiBatteryCycles(357) ⇒ 357 циклов")
+}
 
 check(!L.kpiCpuLabel.isEmpty, "L.kpiCpuLabel: non-empty")
 check(!L.securityTitle.isEmpty, "L.securityTitle: non-empty")
