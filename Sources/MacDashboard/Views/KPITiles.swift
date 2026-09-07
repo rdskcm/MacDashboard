@@ -226,8 +226,14 @@ struct DiskTile: View {
     /// next to the free-space value it actually describes.
     private func footer(for disk: DiskInfo) -> String {
         let base = L.kpiDiskUsedPct(Int((disk.pct * 100).rounded()))
-        guard let dataUsed = disk.dataUsed, let sysUsed = disk.sysUsed else { return base }
-        return L.kpiDiskUsedDetail(base, fmtBytes(dataUsed), fmtBytes(sysUsed))
+        let withDetail: String
+        if let dataUsed = disk.dataUsed, let sysUsed = disk.sysUsed {
+            withDetail = L.kpiDiskUsedDetail(base, fmtBytes(dataUsed), fmtBytes(sysUsed))
+        } else {
+            withDetail = base
+        }
+        guard let purgeable = disk.purgeable else { return withDetail }
+        return L.kpiDiskPurgeableDetail(withDetail, fmtCapacity(purgeable))
     }
 
     var body: some View {

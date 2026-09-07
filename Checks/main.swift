@@ -297,6 +297,42 @@ do {
 }
 
 // =====================================================================
+// MARK: - LiveCollector.purgeableBytes
+// =====================================================================
+
+do {
+    check(LiveCollector.purgeableBytes(importantAvailable: 500_000_000_000, available: 420_000_000_000) == 80_000_000_000,
+          "purgeableBytes: importantAvailable - available")
+    check(LiveCollector.purgeableBytes(importantAvailable: nil, available: 420_000_000_000) == nil,
+          "purgeableBytes: nil importantAvailable -> nil")
+    check(LiveCollector.purgeableBytes(importantAvailable: 500_000_000_000, available: nil) == nil,
+          "purgeableBytes: nil available -> nil")
+    check(LiveCollector.purgeableBytes(importantAvailable: 420_000_000_000, available: 420_000_000_000) == nil,
+          "purgeableBytes: equal inputs -> nil, not 0")
+    check(LiveCollector.purgeableBytes(importantAvailable: 400_000_000_000, available: 420_000_000_000) == nil,
+          "purgeableBytes: important < available (nonsense reading) -> nil, never negative")
+}
+
+// =====================================================================
+// MARK: - ReportCollector.localSnapshotNames
+// =====================================================================
+
+do {
+    let realistic = "Snapshots for volume group containing disk /:\n com.apple.TimeMachine.2026-09-06-101010.local\n com.apple.TimeMachine.2026-09-07-020304.local"
+    let names = ReportCollector.localSnapshotNames(realistic)
+    check(names.count == 2, "localSnapshotNames: realistic fixture -> 2 names")
+    check(names.first == "com.apple.TimeMachine.2026-09-06-101010.local",
+          "localSnapshotNames: leading whitespace trimmed")
+    check(names.allSatisfy { $0.hasPrefix("com.apple.TimeMachine.") },
+          "localSnapshotNames: every name has the TimeMachine prefix")
+    check(ReportCollector.localSnapshotNames("") == [], "localSnapshotNames: empty output -> []")
+    check(ReportCollector.localSnapshotNames("Snapshots for volume group containing disk /:") == [],
+          "localSnapshotNames: header-only output -> []")
+    check(ReportCollector.localSnapshotNames("Snapshots for volume group containing disk /:\n com.apple.something.else") == [],
+          "localSnapshotNames: unrelated line dropped")
+}
+
+// =====================================================================
 // MARK: - Parsers.diskutilSmart
 // =====================================================================
 
@@ -717,6 +753,8 @@ do {
     check(snap2.cpu != nil, "smoke LiveCollector: 2nd sample cpu != nil")
     check((snap2.mem?.total ?? 0) > 4 * GIB, "smoke LiveCollector: mem.total > 4 GiB")
     check((snap2.disk?.size ?? 0) > 0, "smoke LiveCollector: disk.size > 0")
+    check(snap2.disk?.purgeable.map { $0 > 0 } ?? true, "smoke LiveCollector: purgeable, when known, is > 0")
+    check(snap2.disk.map { d in (d.purgeable ?? 0) < d.size } ?? false, "smoke LiveCollector: purgeable < volume size")
     check(snap2.load != nil, "smoke LiveCollector: load != nil")
     check(snap2.ncpu >= 1, "smoke LiveCollector: ncpu >= 1 (got \(snap2.ncpu))")
     // Exercises the REAL `/bin/ps -axww -o pid=,rss=,time=,comm=` output on this

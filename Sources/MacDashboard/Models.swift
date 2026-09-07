@@ -39,6 +39,10 @@ struct DiskInfo: Equatable {
     var pct: Double { size > 0 ? Double(usedTotal) / Double(size) : 0 }
     var dataUsed: Int64?        // /System/Volumes/Data df "Used" if distinguishable
     var sysUsed: Int64?
+    /// Purgeable bytes = important-usage available minus plain available. `nil` means unknown
+    /// (the `.volumeAvailableCapacityKey` was unavailable, or the two values coincide).
+    /// Note that `avail` (important usage) already INCLUDES this amount.
+    var purgeable: Int64? = nil
 }
 struct BatteryInfo: Equatable {
     var source: String?         // "от сети" | "от батареи"

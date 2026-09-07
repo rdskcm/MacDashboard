@@ -362,7 +362,10 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 - mem: `host_statistics64(HOST_VM_INFO64)` × `vm_kernel_page_size`; total `sysctl hw.memsize`.
 - swap: `sysctl vm.swapusage` (struct xsw_usage via sysctlbyname).
 - disk: `URL(fileURLWithPath:"/System/Volumes/Data")` (fallback "/")
-  `.volumeTotalCapacity` + `.volumeAvailableCapacityForImportantUsage`.
+  `.volumeTotalCapacity` + `.volumeAvailableCapacityForImportantUsage` + `.volumeAvailableCapacity`.
+  Purgeable = important-usage available minus plain available (`LiveCollector.purgeableBytes`);
+  `nil` when either key is unavailable or the difference is `<= 0`. Surfaced in the Disk KPI tile
+  footer and the Time Machine card.
 - battery: IOKit `IOPSCopyPowerSourcesInfo` (+ cycles/condition only in full report).
   Desktop Mac ⇒ nil, tile hidden.
 - load: `getloadavg`.
@@ -388,7 +391,8 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
 - system: `sw_vers`, `system_profiler SPHardwareDataType` (Model Name/Identifier,
   Chip OR "Processor Name" on Intel, Cores, Memory), `sysctl -n machdep.cpu.brand_string`
   fallback for chip, `uptime` (parse → Russian human form).
-- snapshots: `tmutil listlocalsnapshots /`.
+- snapshots: `tmutil listlocalsnapshots /`, parsed by `ReportCollector.localSnapshotNames`. The UI
+  reports COUNT only — never a per-snapshot size, because snapshots share disk blocks.
 - homeDirs: `du -xk -d 1 $HOME` (120 s timeout) → top-20 by size. NOTE: first run on a
   fresh Mac triggers TCC prompts (Desktop/Documents/Downloads) — that's OK; on denial
   du prints errors to stderr, still use what it returns; never fail the section.

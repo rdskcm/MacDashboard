@@ -60,6 +60,7 @@ struct StringsRU: AppStrings {
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
         base + " · данные \(dataUsed), система \(sysUsed)"
     }
+    func kpiDiskPurgeableDetail(_ base: String, _ purgeable: String) -> String { base + " · очищаемое \(purgeable)" }
     var kpiBatteryLabel: String { "Батарея" }
     func kpiBatteryCycles(_ n: Int) -> String { "\(n) " + ruPlural(n, "цикл", "цикла", "циклов") }
     func kpiBatteryChargeNow(_ charge: Int) -> String { "сейчас \(charge)%" }
@@ -204,6 +205,8 @@ struct StringsRU: AppStrings {
     var timeMachineSnapshotsNone: String { "нет" }
     func timeMachineSnapshotsCount(_ n: Int) -> String { "\(n) шт." }
     func timeMachineSnapshotsLast(_ date: String) -> String { ", последний \(date)" }
+    var timeMachinePurgeable: String { "Очищаемое место" }
+    var timeMachinePurgeableTip: String { "Место, которое macOS освободит сама, когда оно понадобится: локальные снапшоты Time Machine и кэши. Размер отдельного снапшота посчитать нельзя — снапшоты делят общие блоки диска." }
 
     // MARK: Autostart card
     var autostartTitle: String { "Автозагрузка" }
