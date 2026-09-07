@@ -411,7 +411,11 @@ private struct HistoryTrendChart: View {
         case .battery:
             return ("\(Int(point.value.rounded()))%", nil)
         case .cycles:
-            return ("\(Int(point.value.rounded())) \(L.historyMetricYLabelCycles)", nil)
+            // V21-RU-PLURAL amendment: `historyMetricYLabelCycles` is the Y-AXIS
+            // caption ("циклы"), one fixed form that cannot agree with a numeral.
+            // `kpiBatteryCycles` is the existing localized "N + noun" form and
+            // inflects correctly in RU (ruPlural) and EN (1 vs. other).
+            return (L.kpiBatteryCycles(Int(point.value.rounded())), nil)
         case .swap:
             return (String(format: "%.1f", point.value), L.byteUnitGB)
         }

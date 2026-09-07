@@ -37,7 +37,9 @@ struct StringsRU: AppStrings {
     var overviewKickerSystem: String { "Система" }
     var overviewKickerHistory: String { "История" }
 
-    func headerLoadChip(_ load: String, _ ncpu: Int) -> String { "load \(load) · \(ncpu) ядер" }
+    func headerLoadChip(_ load: String, _ ncpu: Int) -> String {
+        "load \(load) · \(ncpu) \(ruPlural(ncpu, "ядро", "ядра", "ядер"))"
+    }
     func headerUptimeChip(_ uptime: String) -> String { "аптайм \(uptime)" }
     var headerRefreshReport: String { "Обновить отчёт" }
     var headerStatusNeedsAttention: String { "Требует внимания" }
@@ -560,7 +562,7 @@ struct StringsRU: AppStrings {
     var attnLabelUpdates: String { "Обновления" }
     func attnDetailUpdates(_ n: Int) -> String { "\(n) доступно" }
     var attnLabelCrashes: String { "Сбои" }
-    func attnDetailCrashes(_ n: Int) -> String { "\(n) отчётов" }
+    func attnDetailCrashes(_ n: Int) -> String { "\(n) \(ruPlural(n, "отчёт", "отчёта", "отчётов"))" }
     var attnLabelTimeMachine: String { "Time Machine" }
     var attnDetailTimeMachine: String { "не настроена" }
     func attnLabelSmartErrors(_ title: String) -> String { title }
@@ -581,7 +583,7 @@ struct StringsRU: AppStrings {
     var attnCapBattery: String { "Батарея" }
     func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
     var attnCapBrew: String { "Homebrew" }
-    func attnCapBrewValue(_ n: Int) -> String { "\(n) пакетов" }
+    func attnCapBrewValue(_ n: Int) -> String { "\(n) \(ruPlural(n, "пакет", "пакета", "пакетов"))" }
     var attnCapSmartNoData: String { "нет данных SMART" }
     var attnCapDownloads: String { "Загрузки" }
     var attnCapTrash: String { "Корзина" }
