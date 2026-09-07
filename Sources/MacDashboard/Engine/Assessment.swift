@@ -8,6 +8,25 @@ import Foundation
 enum Assess {
     private static let GIB: Int64 = 1 << 30
 
+    // --- V21-THRESHOLDS: every rule below states the mechanism it reads and the
+    // machine parameter it scales with. Values are fixed by the block spec; do not
+    // re-tune them to make a fixture pass.
+
+    /// Free bytes at or below which the volume is critically full.
+    /// Mechanism: free space (`DiskInfo.avail`). Parameter: volume size, capped by the
+    /// fixed reserve macOS needs for a major upgrade (~24 GiB) — a reserve that does not
+    /// grow with the volume, which is why 15 % of a 4 TB disk is not a real shortage.
+    private static func diskCritFloor(_ size: Int64) -> Int64 { min(size * 15 / 100, 24 * GIB) }
+
+    /// Free bytes at or below which the volume is filling up. Upgrade reserve plus
+    /// ordinary working headroom; 30 % restates today's `pct >= 0.70` for small volumes.
+    private static func diskWarnFloor(_ size: Int64) -> Int64 { min(size * 30 / 100, 64 * GIB) }
+
+    /// Cycles below which a capacity under 80 % counts as early wear. Mechanism:
+    /// `BatteryInfo.maxCapacity` + `cycles`. Parameter: rated cycle life (1000 cycles to
+    /// 80 % on modern Mac notebooks); 800 is 80 % of that life.
+    private static let batteryEarlyWearCycles = 800
+
     static func assess(report: FullReport, live: LiveSnapshot) -> Assessment {
         var a = Assessment()
         // Paired with its `Problem` so the final sort keeps `items` in lockstep
@@ -20,8 +39,8 @@ enum Assess {
         func verb(_ action: AdviceAction?) -> String { AttentionModel.verb(for: action, lang: lang) }
 
         // --- disk (live is the freshest source; report carries none) ---
-        if let disk = live.disk {
-            if disk.pct >= 0.85 {
+        if let disk = live.disk, disk.size > 0 {
+            if disk.avail <= diskCritFloor(disk.size) {
                 a.diskSev = .crit
                 let action = AdviceAction.settingsPane(AdvicePanes.storage)
                 let text = L.assessDiskFull(pct(disk.pct))
@@ -29,7 +48,7 @@ enum Assess {
                                AttentionItem(kind: .diskFull, sev: .crit, label: L.attnLabelDiskFull,
                                              detail: L.attnDetailDiskFull(pct(disk.pct)), fullText: text,
                                              verb: verb(action), action: action)))
-            } else if disk.pct >= 0.70 {
+            } else if disk.avail <= diskWarnFloor(disk.size) {
                 a.diskSev = .warn
                 let action = AdviceAction.settingsPane(AdvicePanes.storage)
                 let text = L.assessDiskFullSoon(pct(disk.pct))
@@ -40,9 +59,10 @@ enum Assess {
             }
         }
 
-        // --- swap ---
-        if let swap = live.swap {
-            if swap.used >= 2 * GIB {
+        // --- memory pressure (swap + compressed pages, relative to installed RAM) ---
+        if let swap = live.swap, let mem = live.mem, mem.total > 0, swap.used > 0 {
+            let reclaimed = swap.used + mem.compressor
+            if reclaimed >= mem.total / 4 {
                 a.swapSev = .serious
                 let action = AdviceAction.openApp(AdviceApps.activityMonitor)
                 let text = L.assessSwapHighSerious(fmt(swap.used))
@@ -50,7 +70,7 @@ enum Assess {
                                AttentionItem(kind: .swapHigh, sev: .serious, label: L.attnLabelSwapHigh,
                                              detail: L.attnDetailSwapHigh(fmt(swap.used)), fullText: text,
                                              verb: verb(action), action: action)))
-            } else if swap.used >= 1 * GIB {
+            } else if reclaimed >= mem.total / 8 {
                 a.swapSev = .warn
                 let action = AdviceAction.openApp(AdviceApps.activityMonitor)
                 tips.append(Tip(text: L.assessSwapHighWarn(fmt(swap.used)), action: action))
@@ -70,7 +90,7 @@ enum Assess {
                                AttentionItem(kind: .batteryCapacity, sev: .serious, label: L.attnLabelBatteryCapacity,
                                              detail: L.attnDetailBatteryCapacity(cap), fullText: text,
                                              verb: verb(action), action: action)))
-            } else if cap < 80 {
+            } else if cap < 80, (batt?.cycles ?? 0) < batteryEarlyWearCycles {
                 a.battSev = .warn
                 let action = AdviceAction.settingsPane(AdvicePanes.battery)
                 tips.append(Tip(text: L.assessBatteryCapacityWarn(cap), action: action))
