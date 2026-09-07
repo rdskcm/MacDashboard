@@ -67,6 +67,33 @@ private struct TMRow: View {
     }
 }
 
+/// The local-snapshots row and the purgeable row, factored out of `TimeMachineCard.body`.
+/// Both read `model.disk`/`model.report`, and `model.disk` is rewritten by the ~2 s live
+/// tick (`MainDashboardView.swift:293-309` documents why reading a live field inside a big
+/// view body turns that whole body into an observer of the tick). Kept in this small
+/// `View` struct, the tick invalidates only these two rows instead of the whole Time
+/// Machine card. Do NOT inline these rows back into `TimeMachineCard.body`.
+@MainActor
+private struct TMStorageRows: View {
+    let model: DashboardModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let snaps = model.report.snapshots {
+                let last = snaps.max()
+                TMRow(label: L.timeMachineSnapshots,
+                      value: snaps.isEmpty ? L.timeMachineSnapshotsNone : L.timeMachineSnapshotsCount(snaps.count) + (last.map { L.timeMachineSnapshotsLast($0) } ?? ""))
+            } else if model.report.progress["snapshots"] == true {
+                TMRow(label: L.timeMachineSnapshots, value: L.sharedUnavailable)
+            }
+            if let purgeable = model.disk?.purgeable {
+                TMRow(label: L.timeMachinePurgeable, value: fmtCapacity(purgeable), tabularNumerals: true)
+                    .hoverTip(L.timeMachinePurgeableTip)
+            }
+        }
+    }
+}
+
 @MainActor
 struct TimeMachineCard: View {
     let model: DashboardModel
@@ -94,11 +121,14 @@ struct TimeMachineCard: View {
             case .none:
                 SectionStateView(done: model.report.progress["tmDest"] ?? false)
             case .some(.none):
-                HStack(spacing: 8) {
-                    Image(systemName: "info.circle").foregroundStyle(DS.muted)
-                    Text(L.timeMachineNotConfigured)
-                        .font(.system(size: 13.5))
-                        .foregroundStyle(DS.inkSoft)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle").foregroundStyle(DS.muted)
+                        Text(L.timeMachineNotConfigured)
+                            .font(.system(size: 13.5))
+                            .foregroundStyle(DS.inkSoft)
+                    }
+                    TMStorageRows(model: model)
                 }
             case .some(.some(let dest)):
                 VStack(alignment: .leading, spacing: 10) {
@@ -133,11 +163,7 @@ struct TimeMachineCard: View {
                     if dest.mountPoint == nil {
                         TMRow(label: L.timeMachineConnection, value: L.timeMachineConnectionNone)
                     }
-                    if let snaps = model.report.snapshots {
-                        let last = snaps.max()
-                        TMRow(label: L.timeMachineSnapshots,
-                              value: snaps.isEmpty ? L.timeMachineSnapshotsNone : L.timeMachineSnapshotsCount(snaps.count) + (last.map { L.timeMachineSnapshotsLast($0) } ?? ""))
-                    }
+                    TMStorageRows(model: model)
                 }
             }
         }

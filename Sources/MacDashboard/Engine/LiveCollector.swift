@@ -160,14 +160,26 @@ final class LiveCollector {
 
     // MARK: - disk (volume resource values; Data volume, fall back to root)
 
+    /// Purgeable space is the slice of "important usage" availability that macOS can reclaim on its
+    /// own (local Time Machine snapshots, caches). The two capacity keys coinciding (difference `<= 0`)
+    /// means the platform isn't telling us anything distinguishable — that is reported as unknown
+    /// (`nil`), not as "zero purgeable space", which would be a different claim.
+    static func purgeableBytes(importantAvailable: Int64?, available: Int64?) -> Int64? {
+        guard let importantAvailable, let available else { return nil }
+        let diff = importantAvailable - available
+        return diff > 0 ? diff : nil
+    }
+
     private func readDisk() -> DiskInfo? {
         for path in ["/System/Volumes/Data", "/"] {
             let url = URL(fileURLWithPath: path)
             guard let vals = try? url.resourceValues(forKeys: [
-                .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey
+                .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey
             ]), let total = vals.volumeTotalCapacity, total > 0 else { continue }
             let avail = vals.volumeAvailableCapacityForImportantUsage ?? 0
-            return DiskInfo(size: Int64(total), avail: Int64(avail), dataUsed: nil, sysUsed: nil)
+            let purgeable = Self.purgeableBytes(importantAvailable: vals.volumeAvailableCapacityForImportantUsage,
+                                                 available: vals.volumeAvailableCapacity.map(Int64.init))
+            return DiskInfo(size: Int64(total), avail: Int64(avail), dataUsed: nil, sysUsed: nil, purgeable: purgeable)
         }
         return nil
     }

@@ -75,6 +75,7 @@ protocol AppStrings {
     func kpiDiskUnit(_ size: String) -> String
     func kpiDiskUsedPct(_ pct: Int) -> String
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String
+    func kpiDiskPurgeableDetail(_ base: String, _ purgeable: String) -> String
     var kpiBatteryLabel: String { get }
     func kpiBatteryCycles(_ n: Int) -> String
     func kpiBatteryChargeNow(_ charge: Int) -> String
@@ -218,6 +219,11 @@ protocol AppStrings {
     var timeMachineSnapshotsNone: String { get }
     func timeMachineSnapshotsCount(_ n: Int) -> String
     func timeMachineSnapshotsLast(_ date: String) -> String
+    var timeMachinePurgeable: String { get }
+    /// Records the constraint the tip text encodes: the number is a VOLUME total that also
+    /// covers caches, and a per-snapshot size is not a real number because snapshots share
+    /// disk blocks (BACKLOG F1).
+    var timeMachinePurgeableTip: String { get }
 
     // MARK: Autostart card
     var autostartTitle: String { get }

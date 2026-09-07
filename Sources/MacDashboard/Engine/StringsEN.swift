@@ -58,6 +58,7 @@ struct StringsEN: AppStrings {
     func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
         base + " · data \(dataUsed), system \(sysUsed)"
     }
+    func kpiDiskPurgeableDetail(_ base: String, _ purgeable: String) -> String { base + " · purgeable \(purgeable)" }
     var kpiBatteryLabel: String { "Battery" }
     func kpiBatteryCycles(_ n: Int) -> String { "\(n) " + (n == 1 ? "cycle" : "cycles") }
     func kpiBatteryChargeNow(_ charge: Int) -> String { "now \(charge)%" }
@@ -200,6 +201,8 @@ struct StringsEN: AppStrings {
     var timeMachineSnapshotsNone: String { "none" }
     func timeMachineSnapshotsCount(_ n: Int) -> String { "\(n)" }
     func timeMachineSnapshotsLast(_ date: String) -> String { ", last \(date)" }
+    var timeMachinePurgeable: String { "Purgeable space" }
+    var timeMachinePurgeableTip: String { "Space macOS frees on its own when it is needed: Time Machine local snapshots and caches. A per-snapshot size cannot be computed — snapshots share disk blocks." }
 
     // MARK: Autostart card
     var autostartTitle: String { "Startup items" }

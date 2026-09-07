@@ -293,13 +293,15 @@ final class ReportCollector {
 
     // MARK: - Time Machine local snapshots
 
+    static func localSnapshotNames(_ text: String) -> [String] {
+        text.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("com.apple.TimeMachine.") }
+    }
+
     private func collectSnapshots() -> Outcome {
         let out = CommandRunner.run("/usr/bin/tmutil", ["listlocalsnapshots", "/"], timeout: 15, scope: cancelScope)
-        let names: [String]? = out.map { text in
-            text.components(separatedBy: "\n")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { $0.hasPrefix("com.apple.TimeMachine.") }
-        }
+        let names = out.map(Self.localSnapshotNames)
         return Outcome(section: .snapshots) { $0.snapshots = names }
     }
 
