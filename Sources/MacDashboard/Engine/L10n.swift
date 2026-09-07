@@ -402,8 +402,8 @@ protocol AppStrings {
     // MARK: Assessment
     func assessDiskFull(_ pct: String) -> String
     func assessDiskFullSoon(_ pct: String) -> String
-    func assessSwapHighSerious(_ used: String) -> String
-    func assessSwapHighWarn(_ used: String) -> String
+    func assessSwapHighSerious(_ swap: String, _ compressed: String) -> String
+    func assessSwapHighWarn(_ swap: String, _ compressed: String) -> String
     func assessBatteryCapacityLow(_ cap: Int) -> String
     func assessBatteryCapacityWarn(_ cap: Int) -> String
     func assessBatteryConditionBad(_ cond: String) -> String
@@ -569,7 +569,7 @@ protocol AppStrings {
     var attnLabelDiskFullSoon: String { get }
     func attnDetailDiskFullSoon(_ pct: String) -> String
     var attnLabelSwapHigh: String { get }
-    func attnDetailSwapHigh(_ used: String) -> String
+    func attnDetailSwapHigh(_ swap: String, _ compressed: String) -> String
     var attnLabelBatteryCapacity: String { get }
     func attnDetailBatteryCapacity(_ cap: Int) -> String
     var attnLabelBatteryCondition: String { get }

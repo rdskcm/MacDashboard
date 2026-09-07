@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.1] (Krieg) - 2026-09-07
+
+A maintenance release: the app is franker about what it could not measure, its
+warning thresholds scale with the machine it runs on, and Russian counts read
+correctly everywhere.
+
+- macOS permission prompts for Desktop, Documents, Downloads and removable
+  volumes now carry the app's own explanation of what it measures and why,
+  instead of a bare system message.
+- Files the app writes — the report, the history and the settings — are created
+  readable only by your own account.
+- An empty result is reported as an empty result. A check that ran and found
+  nothing no longer looks like a failure, and Time Machine in particular is no
+  longer reported as "not set up" when its status could not be read at all.
+- A privileged check that ran and failed is reported as that check failing, not
+  as a refused permission.
+- Russian counts agree with their numbers everywhere ("3 отчёта", not
+  "3 отчётов").
+- Disk figures account for purgeable space and local APFS snapshots, so the free
+  space shown matches what macOS itself reports.
+- Warning thresholds for disk, memory and battery scale with the machine — RAM
+  size, volume size and rated battery cycle life — instead of fixed numbers
+  carried over from one Mac.
+- The memory warning names both figures behind it, swap and compressed memory,
+  instead of showing swap alone.
+
 ## [2.0] (Krieg) - 2026-08-28
 
 Complete visual and structural rebuild of the interface on a new

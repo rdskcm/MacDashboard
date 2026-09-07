@@ -19,8 +19,16 @@ done
 
 APP_NAME="MacDashboard"
 DIST="dist/$APP_NAME.app"
-VERSION="2.0"
+VERSION="2.1"
+# Codename names the whole 2.x branch, not the point release — stays "Krieg" until 3.0.
+# Only a NON-empty codename is appended to CFBundleShortVersionString — an empty one must not
+# leave "2.1 ()".
 CODENAME="Krieg"
+if [ -n "$CODENAME" ]; then
+  SHORT_VERSION="$VERSION ($CODENAME)"
+else
+  SHORT_VERSION="$VERSION"
+fi
 
 echo "== swift build (universal via per-arch --triple + lipo) =="
 # `swift build --arch arm64 --arch x86_64` requires xcbuild, which is only
@@ -87,7 +95,7 @@ cat > "$DIST/Contents/Info.plist" <<PLIST
     <key>CFBundleLocalizations</key><array><string>en</string><string>ru</string></array>
     <key>CFBundleName</key><string>MacDashboard</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>${VERSION} (${CODENAME})</string>
+    <key>CFBundleShortVersionString</key><string>${SHORT_VERSION}</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>

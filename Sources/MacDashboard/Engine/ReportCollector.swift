@@ -347,7 +347,9 @@ final class ReportCollector {
     /// Double optional: outer `nil` = command failed / not checked (leave `report.tmDest`
     /// untouched); `.some(nil)` = checked, no destination configured; `.some(x)` = configured.
     func collectTMDestInfo() -> TMDestination?? {
-        guard let out = CommandRunner.run("/usr/bin/tmutil", ["destinationinfo"], timeout: 15, scope: cancelScope) else {
+        // Empty stdout is not evidence of "no destination" — Parsers.tmDestination recognises the
+        // literal "No destinations configured" text (Parsers.swift:362), which is the only thing that may map to .some(nil).
+        guard let out = CommandRunner.runNonEmpty("/usr/bin/tmutil", ["destinationinfo"], timeout: 15, scope: cancelScope) else {
             return nil
         }
         var dest = Parsers.tmDestination(out)
@@ -560,7 +562,7 @@ final class ReportCollector {
                     ? CommandRunner.runNonEmpty("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
                     : nil
                 let raw = sudoRaw
-                    ?? CommandRunner.run(sc, ["-A", "disk0"], timeout: 15, scope: cancelScope)
+                    ?? CommandRunner.runNonEmpty(sc, ["-A", "disk0"], timeout: 15, scope: cancelScope)
                 if let raw {
                     let attrs = Parsers.smartctlAttrs(raw)
                     if !attrs.isEmpty {
@@ -603,7 +605,7 @@ final class ReportCollector {
                         ? CommandRunner.runNonEmpty("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
                         : nil
                     let raw = sudoRaw
-                        ?? CommandRunner.run(sc, ["-A", dev], timeout: 15, scope: cancelScope)
+                        ?? CommandRunner.runNonEmpty(sc, ["-A", dev], timeout: 15, scope: cancelScope)
                     if let raw { attrs = Parsers.smartctlAttrs(raw) }
                 }
                 disks.append(makeExternalDisk(device: dev, title: title, duStatus: duStatus,
@@ -818,7 +820,7 @@ final class ReportCollector {
 
     private func collectBattery() -> Outcome {
         var b: BatteryInfo?
-        if let pm = CommandRunner.run("/usr/bin/pmset", ["-g", "batt"], timeout: 10, scope: cancelScope) {
+        if let pm = CommandRunner.runNonEmpty("/usr/bin/pmset", ["-g", "batt"], timeout: 10, scope: cancelScope) {
             b = Parsers.batteryPmset(pm)
         }
         if let sp = CommandRunner.run("/usr/sbin/system_profiler", ["SPPowerDataType"], timeout: 25, scope: cancelScope) {
