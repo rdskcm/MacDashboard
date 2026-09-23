@@ -29,7 +29,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
 ## 1. Goals & hard constraints
 
 1. Native SwiftUI macOS app; single window. No network listeners of any kind.
-2. **Portable to any Mac** (Apple Silicon or Intel, laptop or desktop):
+2. **Portable to any Mac** (any Apple Silicon Mac, laptop or desktop; Intel builds ended with v2.1):
    - NO hardcoded hardware names (no "Samsung SSD 9100 PRO"), usernames, or absolute
      paths outside standard APIs (`FileManager`, `NSHomeDirectory()`).
    - Absent hardware/feature ⇒ section shows a calm info state or hides; NEVER crash,
@@ -91,7 +91,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
    files elsewhere but never author them), and a default build contains no networking
    at all — see §12.
 7. min deployment: **macOS 14** (needed for @Observable + Swift Charts). Build:
-   SwiftPM, universal binary (arm64 + x86_64), hand-rolled .app bundle, ad-hoc codesign.
+   SwiftPM, Apple Silicon (arm64) binary, hand-rolled .app bundle, ad-hoc codesign.
 
 ## 2. Locations
 
@@ -554,14 +554,16 @@ Structure:
 ## 9. Packaging (build_app.sh)
 
 ```
-swift build -c release --triple <arch>-apple-macosx   # per-arch, then `lipo` into a universal binary
+swift build -c release --build-system native --triple arm64-apple-macosx14.0 \
+  -Xswiftc -sdk -Xswiftc <SDK path> -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker <SDK version>
 dist/MacDashboard.app/Contents/{MacOS/MacDashboard, Info.plist, Resources/AppIcon.icns, Resources/{en,ru}.lproj/InfoPlist.strings}
 ```
-`--arch` universal builds require Xcode's xcbuild and aren't available under bare
-Command Line Tools, so build_app.sh instead builds arm64 and x86_64 separately via
-`--triple`, then combines them with `lipo`. If only one arch's toolchain is available,
-it falls back to a native-arch-only build (either direction) and records that in the
-build output.
+Apple Silicon only (arm64) from v2.2 on; Intel Macs stay on v2.1, the last universal release.
+The SDK is whatever `xcrun --sdk macosx` resolves; the explicit `-sdk`,
+`-platform_version` and `--build-system native` make the binary's LC_BUILD_VERSION
+`sdk` record that SDK (it decides the app's appearance). The script ends by checking
+with `lipo`/`vtool` that the binary is exactly arm64 and records that `sdk` and
+`minos 14.0`, and fails on any mismatch.
 
 Info.plist: CFBundleIdentifier=com.rdskcm.mac-dashboard, CFBundleName=MacDashboard,
 CFBundleDisplayName=MacDashboard, LSMinimumSystemVersion=14.0, NSHighResolutionCapable,
@@ -606,7 +608,7 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
 - Assessment tests: thresholds table (§6) — one test per rule incl. "absent ⇒ good/silent".
 - Portability tests = fixtures above with absent pieces (nil battery, no TM, no
   external disks, no smartctl, Intel).
-- E2E (tester agent): build universal; verify `lipo -archs` shows both; assemble .app;
+- E2E (tester agent): build; verify `lipo -archs` prints exactly `arm64`; assemble .app;
   launch via `open`; poll App Support for mac_report.txt (≤3 min); check window exists
   (`osascript`/`lsappinfo`); relaunch → file mtime changes, still exactly ONE report
   file; app quits cleanly; Console shows no crash for bundle id. Live-table bug: covered
@@ -637,7 +639,7 @@ The optional AI assistant feature is gated behind the Swift compile-time flag
   `swift run MacDashboardChecks` regardless of how the app itself is built.
 - The `MacDashboard` app target does NOT get `AI_ENABLED` by default. It is only
   passed in when building with `MACDASHBOARD_AI=1 ./build_app.sh`, which adds
-  `-Xswiftc -DAI_ENABLED` to both the arm64 and x86_64 slice builds (see
+  `-Xswiftc -DAI_ENABLED` to the arm64 build (see
   `build_app.sh`).
 - A default build (`./build_app.sh` with no environment override) therefore ships
   zero AI/networking code: no AI request/redaction/payload logic is compiled into

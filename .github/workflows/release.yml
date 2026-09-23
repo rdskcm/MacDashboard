@@ -1,6 +1,6 @@
 name: Release
 
-# Builds the universal MacDashboard.app, packages it with `ditto` (which
+# Builds the Apple Silicon (arm64) MacDashboard.app, packages it with `ditto` (which
 # preserves the ad-hoc signature across the zip round-trip), and attaches the
 # .zip to a GitHub Release. The app is ad-hoc signed (not notarized), so on
 # first launch users must clear Gatekeeper — see the README install section.
@@ -27,11 +27,11 @@ permissions:
 
 jobs:
   release:
-    # macos-latest is the Tahoe (macOS 26) image; the step below selects an
-    # Xcode 26 toolchain so the app links against the macOS 26 SDK and renders
-    # with the native Tahoe "Liquid Glass" look. A macos-14 runner links the
-    # SDK 14 → the old compatibility appearance, which differs from a local
-    # build made with the current Command Line Tools on Tahoe.
+    # The app's appearance follows the SDK recorded in its binary (LC_BUILD_VERSION
+    # `sdk`), not the OS it runs on. The next step picks the newest release Xcode
+    # >= 26 on whatever image macos-latest currently is (never assumed in advance),
+    # and the SDK check below fails the run unless the binary records exactly
+    # that Xcode's SDK.
     runs-on: macos-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -62,43 +62,64 @@ jobs:
           fi
           echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Use the macOS 26 (Tahoe) SDK
+      - name: Select the newest Xcode (>= 26)
         run: |
           set -euo pipefail
-          xc="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
-          [ -n "$xc" ] || { echo "::error::no Xcode 26 on this runner — Tahoe SDK unavailable"; exit 1; }
-          echo "selecting: $xc"
+          # Discovered at run time: the runner image's Xcode set is never assumed.
+          # Pre-release Xcodes (beta / RC in the bundle name) are skipped — a release
+          # asset must not be built on a pre-release toolchain.
+          echo "Xcodes on this runner:"
+          candidates=""
+          for xc in /Applications/Xcode*.app; do
+            [ -d "$xc" ] || continue
+            ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$xc/Contents/Info.plist" 2>/dev/null || echo '?')"
+            echo "  $xc ($ver)"
+            case "$xc" in *[Bb]eta*|*_RC*|*[Rr]elease_[Cc]andidate*) continue ;; esac
+            major="${ver%%.*}"
+            case "$major" in ''|*[!0-9]*) continue ;; esac
+            [ "$major" -ge 26 ] || continue
+            candidates="${candidates}${ver} ${xc}"$'\n'
+          done
+          best="$(printf '%s' "$candidates" | sort -V | tail -1)"
+          [ -n "$best" ] || { echo "::error::no release Xcode >= 26 on this runner"; exit 1; }
+          xc="${best#* }"
+          echo "selecting: $xc (${best%% *})"
           sudo xcode-select -s "$xc/Contents/Developer"
           xcodebuild -version
-          sdk="$(xcrun --show-sdk-version)"
-          echo "macOS SDK: $sdk"
-          case "$sdk" in
-            26.*) echo "SDK 26 OK — app will get the Tahoe appearance" ;;
-            *) echo "::error::selected SDK is $sdk, expected 26.x"; exit 1 ;;
-          esac
+          sdk="$(xcrun --sdk macosx --show-sdk-version)"
+          sdk_major="${sdk%%.*}"
+          case "$sdk_major" in ''|*[!0-9]*) echo "::error::cannot parse the selected SDK version '$sdk'"; exit 1 ;; esac
+          [ "$sdk_major" -ge 26 ] || { echo "::error::selected Xcode's macOS SDK is $sdk, expected >= 26"; exit 1; }
+          echo "::notice::building with $xc, macOS SDK $sdk"
+          echo "EXPECTED_SDK=$sdk" >> "$GITHUB_ENV"
 
-      - name: Build universal .app
+      - name: Build .app
         run: ./build_app.sh
 
-      - name: Assert universal binary
+      - name: Assert arm64-only binary
         run: |
           set -euo pipefail
           archs="$(lipo -archs dist/MacDashboard.app/Contents/MacOS/MacDashboard)"
           echo "archs: $archs"
-          case "$archs" in
-            *arm64*x86_64*|*x86_64*arm64*) echo "universal OK" ;;
-            *) echo "::error::binary is not universal ($archs)"; exit 1 ;;
-          esac
+          if [ "$archs" != "arm64" ]; then
+            echo "::error::binary archs are '$archs', expected exactly 'arm64' (the app is Apple Silicon only)"
+            exit 1
+          fi
+          echo "arm64 OK"
 
-      - name: Assert Tahoe SDK baked into the binary
+      - name: Assert the binary records the selected Xcode's SDK
         run: |
           set -euo pipefail
-          sdk="$(vtool -show-build dist/MacDashboard.app/Contents/MacOS/MacDashboard | awk '/sdk/{print $2; exit}')"
-          echo "linked macOS SDK: $sdk"
-          case "$sdk" in
-            26.*) echo "OK — matches the local build (Tahoe appearance)" ;;
-            *) echo "::error::binary linked against SDK $sdk, expected 26.x (Tahoe look would be wrong)"; exit 1 ;;
-          esac
+          bin="dist/MacDashboard.app/Contents/MacOS/MacDashboard"
+          norm() { sed -E 's/(\.0)+$//' <<<"$1"; }
+          info="$(vtool -show-build "$bin")"
+          rec="$(awk '$1=="sdk"{print $2; exit}' <<<"$info")"
+          echo "selected Xcode's macOS SDK: $EXPECTED_SDK; binary records sdk ${rec:-none}"
+          if [ "$(norm "$rec")" != "$(norm "$EXPECTED_SDK")" ]; then
+            echo "::error::binary records SDK ${rec:-none}, but the selected Xcode's SDK is $EXPECTED_SDK"
+            exit 1
+          fi
+          echo "OK — binary records SDK $EXPECTED_SDK"
 
       - name: Assert the private IOKit symbols are not hard-linked
         run: |
@@ -168,7 +189,7 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --title "MacDashboard $TAG" \
-              --notes "Universal (arm64 + x86_64) build. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
+              --notes "Apple Silicon (arm64) build. Intel Macs: download v2.1 from https://github.com/rdskcm/MacDashboard/releases/tag/v2.1. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
           fi
           gh release upload "$TAG" MacDashboard.zip --clobber
           sum="$(shasum -a 256 MacDashboard.zip | awk '{print $1}')"

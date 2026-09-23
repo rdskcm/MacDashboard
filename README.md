@@ -115,7 +115,7 @@ privacy notice before attaching anything.
 
 ## Requirements
 
-- macOS 14 (Sonoma) or newer, Apple Silicon or Intel (universal binary).
+- macOS 14 (Sonoma) or newer on an Apple Silicon Mac. Intel Macs: use [v2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1), the last release built for them.
 - Nothing to install. Optionally: `smartmontools` (`brew install
   smartmontools`) to see SMART attributes for external NVMe drives — the app
   can also install it for you with one click.
@@ -125,6 +125,8 @@ privacy notice before attaching anything.
 Two ways — pick one.
 
 ### Download the ready-made app (easiest)
+
+> **Intel Mac?** Version 2.2 and later run on Apple Silicon only. On an Intel Mac, download `MacDashboard.zip` from the [v2.1 release](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1) instead — it is the last version built for Intel.
 
 1. Open the [Releases](../../releases) page and download `MacDashboard.zip` from the latest release.
 2. *Optional — verify the download.* Compare the hash against the **SHA-256** line in the release notes:
@@ -206,7 +208,7 @@ quarantine flag along the way, clear it exactly as in the first-launch step abov
 
 - `Sources/MacDashboard/` — the app itself (SwiftUI, no external dependencies).
 - `Checks/` — parser/assessment checks (`swift run MacDashboardChecks`).
-- `build_app.sh` — universal build + `.app` packaging + ad-hoc codesign.
+- `build_app.sh` — Apple Silicon (arm64) build + `.app` packaging + ad-hoc codesign.
 - `SPEC.md` — the original build-out brief. Part of it is still binding (data
   contracts, collectors, packaging); the rest records how v1.0 was built. Each section
   is labelled — see the status table at the top of the file.
