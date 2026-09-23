@@ -11,8 +11,9 @@ enum SettingsSection: Hashable {
     #endif
 }
 
-/// Same rounded-rect/hairline-border/top-sheen-highlight/soft-shadow treatment
-/// as the shared `.dsCardSurface()` (DesignSystem.swift), but filled with a
+/// Same rounded-rect/hairline-border/top-sheen-highlight treatment and the same
+/// shared elevation (`.dsCardElevation()`) as `.dsCardSurface()`
+/// (DesignSystem.swift), but filled with a
 /// plain `DS.glass` color instead of `.regularMaterial` — kept private to this
 /// file rather than added to `DesignSystem.swift` since it exists for exactly
 /// one call site (`SettingsView.languageCard`, Trap 2 / README §6.6: that card
@@ -32,7 +33,9 @@ private struct SolidCardSurface: ViewModifier {
                         lineWidth: 1
                     )
             )
-            .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 8)
+            // Flattened first for the same reason as in `DSCardSurface`.
+            .compositingGroup()
+            .dsCardElevation()
     }
 }
 private extension View {
@@ -259,19 +262,42 @@ struct SettingsView: View {
     var body: some View {
         ZStack {
             VisualEffectBackground()
+                .ignoresSafeArea()
             OrbLayer()
-            HStack(spacing: 0) {
-                sidebar
-                Rectangle().fill(DS.line).frame(width: 1)
-                detail
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea()
+            // INTERIM STRUCTURE (V27-SETTINGS-WINDOW): one ScrollView around the
+            // whole HStack, no ScrollView per column or per section. On macOS 27
+            // every SwiftUI ScrollView is backed by an AppKit HostingScrollView that
+            // extends under the titlebar with its own hover-reactive BackdropView,
+            // sized to the scroll document's width. One ScrollView over the full
+            // 680 pt document gives the titlebar ONE backdrop that reacts to hover
+            // as a unit. A ScrollView per column gives one backdrop per column:
+            // a seam at the sidebar edge, and each half lights up on its own.
+            // Cost: sidebar and detail are one scroll document. Today nothing
+            // scrolls (the sidebar pins the document to 420 pt and both sections
+            // fit). Once the sidebar or a section outgrows 420 pt they must scroll
+            // independently, and that needs a different solution for the titlebar
+            // backdrop, not a second ScrollView added here.
+            ScrollView {
+                HStack(spacing: 0) {
+                    sidebar
+                    Rectangle().fill(DS.line).frame(width: 1)
+                    detail
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
             }
+            .scrollBounceBehavior(.basedOnSize)
         }
-        // NO `.ignoresSafeArea()` here: the window keeps its system titlebar, so
-        // ignoring the safe area stretches the layout region by the titlebar height
-        // while this root stays pinned to 420 — the content slides up under the
-        // titlebar (top card clipped) and leaves an uncovered strip along the bottom,
-        // transparent because `VisualEffectBackground` sets the window background clear.
+        // `.ignoresSafeArea()` is on the two background layers above ONLY — never
+        // on this root, the ScrollView or the HStack. The window keeps its system
+        // titlebar, so ignoring the safe area on the layout stretches its region by
+        // the titlebar height while this root stays pinned to 420: the content
+        // slides up under the titlebar (top card clipped) and leaves an uncovered
+        // strip along the bottom, transparent because `VisualEffectBackground` sets
+        // the window background clear. The background layers are the opposite
+        // case: they must reach under the titlebar. On macOS 27 without them the
+        // titlebar strip above the sidebar is left unpainted — see-through to the
+        // desktop — and only the red window button is drawn.
         .frame(width: 680, height: 420)
         // The window's own title. macOS supplies one for a `Settings` scene, but in the
         // SYSTEM language: an English macOS with the app set to Russian showed an
@@ -307,8 +333,11 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(.top, 12).padding(.bottom, 12).padding(.horizontal, 10)
-        .frame(width: 196, alignment: .topLeading)
-        .frame(maxHeight: .infinity)
+        // Concrete height, not `maxHeight: .infinity`: under the root ScrollView's
+        // unbounded height proposal `.infinity` resolves to the sidebar's ideal
+        // height and the whole HStack drops to the vertical centre. 420 = the
+        // window content height, which also pins the scroll document to it.
+        .frame(width: 196, height: 420, alignment: .topLeading)
         .background(sidebarChrome)
     }
 
@@ -335,29 +364,27 @@ struct SettingsView: View {
     @ViewBuilder
     private var detail: some View {
         switch section {
+        // No ScrollView here: the root ScrollView in `body` scrolls the detail
+        // (see the INTERIM STRUCTURE comment there).
         case .general:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    languageCard
-                    HStack {
-                        Spacer(minLength: 0)
-                        versionCard
-                    }
+            VStack(alignment: .leading, spacing: 12) {
+                languageCard
+                HStack {
+                    Spacer(minLength: 0)
+                    versionCard
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 18)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
         case .monitoring:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    monitoringIntervalCard
-                    monitoringProcessCard
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 18)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 12) {
+                monitoringIntervalCard
+                monitoringProcessCard
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
         #if AI_ENABLED
         case .ai:
             AISettingsForm(settings: settings)

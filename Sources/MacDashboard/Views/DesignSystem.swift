@@ -128,14 +128,23 @@ struct DSCardSurface: ViewModifier {
             // which would also flatten the `.regularMaterial` backdrop sample and
             // silently change the visual result — `.compositingGroup()` does not).
             .compositingGroup()
-            .shadow(color: DSCardSurfaceTokens.contact, radius: 0.75, x: 0, y: 1)
-            .shadow(color: DSCardSurfaceTokens.mid, radius: 5, x: 0, y: 4)
-            .shadow(color: DSCardSurfaceTokens.ambient, radius: 17, x: 0, y: 16)
+            .dsCardElevation()
     }
 }
 
 extension View {
     func dsCardSurface() -> some View { modifier(DSCardSurface()) }
+
+    /// The card elevation alone: the three appearance-adaptive shadow layers of
+    /// `DSCardSurfaceTokens`. Used by `DSCardSurface` and by Settings'
+    /// `SolidCardSurface`, which needs the same elevation without the material
+    /// fill. Apply it after `.compositingGroup()`, as `DSCardSurface` does.
+    func dsCardElevation() -> some View {
+        self
+            .shadow(color: DSCardSurfaceTokens.contact, radius: 0.75, x: 0, y: 1)
+            .shadow(color: DSCardSurfaceTokens.mid, radius: 5, x: 0, y: 4)
+            .shadow(color: DSCardSurfaceTokens.ambient, radius: 17, x: 0, y: 16)
+    }
 }
 
 // MARK: - Hover lift
