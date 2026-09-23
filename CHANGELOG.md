@@ -9,6 +9,10 @@ All notable changes to this project are documented in this file.
   `MacDashboard.zip` from the
   [v2.1 release](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1) —
   the last version built for Intel.
+- Settings window on macOS 27: the strip across the top of the window is one
+  continuous panel again, with no see-through area above the sidebar, and the
+  close, minimize and zoom buttons are all shown. The two cards in the General
+  section now have the same shadow.
 
 ## [2.1] (Krieg) - 2026-09-07
 
