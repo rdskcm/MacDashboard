@@ -117,7 +117,7 @@ Time Machine. Всё это остаётся локально — но если 
 
 ## Требования
 
-- macOS 14 (Sonoma) и новее, Apple Silicon или Intel (universal binary).
+- macOS 14 (Sonoma) и новее на Mac с Apple Silicon. Для Mac с Intel — [версия 2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1), последняя, собранная для них.
 - Ничего устанавливать не нужно. Опционально: `smartmontools` (`brew install
   smartmontools`) — тогда для внешних NVMe появятся атрибуты SMART; приложение
   умеет поставить его само в один клик.
@@ -127,6 +127,8 @@ Time Machine. Всё это остаётся локально — но если 
 Два способа — выберите один.
 
 ### Скачать готовое приложение (проще всего)
+
+> **Mac с Intel?** Версия 2.2 и новее работает только на Apple Silicon. На Mac с Intel скачайте `MacDashboard.zip` из [релиза v2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1) — это последняя версия, собранная для Intel.
 
 1. Откройте страницу [Releases](../../releases) и скачайте `MacDashboard.zip` из последнего релиза.
 2. *Необязательно — проверьте загрузку.* Сверьте хеш со строкой **SHA-256** в описании релиза:
@@ -209,7 +211,7 @@ Finder через Automation, поэтому при первом использ�
 
 - `Sources/MacDashboard/` — приложение (SwiftUI, без внешних зависимостей).
 - `Checks/` — проверки парсеров/оценок (`swift run MacDashboardChecks`).
-- `build_app.sh` — сборка universal + упаковка .app + ad-hoc подпись.
+- `build_app.sh` — сборка для Apple Silicon (arm64) + упаковка .app + ad-hoc подпись.
 - `SPEC.md` — исходное ТЗ на постройку приложения. Часть его действует до сих пор
   (контракты данных, сборщики, упаковка), остальное описывает, как строилась 1.0.
   Каждый раздел помечен — см. таблицу статуса в начале файла.

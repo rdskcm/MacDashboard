@@ -1,18 +1,15 @@
 #!/bin/bash
-# Build "MacDashboard.app": universal (arm64 + x86_64) release, hand-rolled bundle,
+# Build "MacDashboard.app": Apple Silicon (arm64) release, hand-rolled bundle,
 # ad-hoc codesign. Output: dist/MacDashboard.app
-# Usage: ./build_app.sh [--install] [--allow-single-arch]
+# Usage: ./build_app.sh [--install]
 #   --install             also copies the built app to ~/Applications
-#   --allow-single-arch   don't fail if only one architecture builds (default: fail)
 set -euo pipefail
 cd "$(dirname "$0")"
 
 INSTALL=0
-ALLOW_SINGLE_ARCH=0
 for arg in "$@"; do
   case "$arg" in
     --install) INSTALL=1 ;;
-    --allow-single-arch) ALLOW_SINGLE_ARCH=1 ;;
     *) echo "unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
@@ -30,13 +27,30 @@ else
   SHORT_VERSION="$VERSION"
 fi
 
-echo "== swift build (universal via per-arch --triple + lipo) =="
-# `swift build --arch arm64 --arch x86_64` requires xcbuild, which is only
-# shipped with Xcode (not Command Line Tools). Build each slice separately
-# via --triple (works under CLT), then merge with lipo.
-ARM64_BIN=".build/arm64-apple-macosx/release/MacDashboard"
-X86_64_BIN=".build/x86_64-apple-macosx/release/MacDashboard"
-BIN=""
+echo "== toolchain =="
+# The LC_BUILD_VERSION `sdk` field of the binary decides which appearance macOS
+# gives the app (an old sdk => old compatibility look), so it must record the SDK
+# this script really compiled against. Three flags make that hold (V27-TOOLCHAIN):
+#   --build-system native  the default `swiftbuild` system injects its own -sdk next
+#                          to ours (duplicate -sdk => mixed-SDK link failures)
+#   -Xswiftc -sdk          compile against exactly $SDK_PATH
+#   -platform_version      with --triple alone, ld records sdk == minos (14.0)
+# The check under "== result ==" fails the build if the recorded value drifts.
+MIN_MACOS="14.0"
+SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+if [ ! -d "$SDK_PATH" ] || [ -z "$SDK_VERSION" ]; then
+  echo "!! could not resolve the macOS SDK via xcrun (path='$SDK_PATH', version='$SDK_VERSION')" >&2
+  exit 1
+fi
+echo "developer dir: $(xcode-select -p)"
+echo "macOS SDK: $SDK_VERSION ($SDK_PATH); deployment target: $MIN_MACOS"
+
+echo "== swift build (Apple Silicon, arm64) =="
+# Apple Silicon only: Intel Macs stay on v2.1. --triple pins the architecture and
+# the deployment target independently of the host this script runs on.
+EXPECTED_ARCH="arm64"
+BIN=".build/$EXPECTED_ARCH-apple-macosx/release/MacDashboard"
 
 AI_FLAGS=()
 if [ "${MACDASHBOARD_AI:-}" = "1" ]; then
@@ -44,36 +58,11 @@ if [ "${MACDASHBOARD_AI:-}" = "1" ]; then
   AI_FLAGS=(-Xswiftc -DAI_ENABLED)
 fi
 
-ARM64_OK=0
-X86_64_OK=0
-swift build -c release --product MacDashboard --triple arm64-apple-macosx14.0 "${AI_FLAGS[@]+"${AI_FLAGS[@]}"}" && ARM64_OK=1 || ARM64_OK=0
-swift build -c release --product MacDashboard --triple x86_64-apple-macosx14.0 "${AI_FLAGS[@]+"${AI_FLAGS[@]}"}" && X86_64_OK=1 || X86_64_OK=0
-
-if [ "$ARM64_OK" = "1" ] && [ "$X86_64_OK" = "1" ] \
-   && [ -x "$ARM64_BIN" ] && [ -x "$X86_64_BIN" ]; then
-  UNIVERSAL_BIN=".build/universal-MacDashboard"
-  rm -f "$UNIVERSAL_BIN"
-  lipo -create -output "$UNIVERSAL_BIN" "$ARM64_BIN" "$X86_64_BIN"
-  ARCHES="$(lipo -archs "$UNIVERSAL_BIN")"
-  case "$ARCHES" in
-    *arm64*x86_64*|*x86_64*arm64*) ;;
-    *) echo "!! lipo produced single-arch binary ($ARCHES) — treating as error" >&2; exit 1 ;;
-  esac
-  BIN="$UNIVERSAL_BIN"
-  echo "universal build OK: $ARCHES"
-else
-  echo "!! per-arch --triple build failed for one or both slices — falling back to native arch" >&2
-  [ "$ARM64_OK" = "1" ] || echo "   (arm64 slice failed)" >&2
-  [ "$X86_64_OK" = "1" ] || echo "   (x86_64 slice failed)" >&2
-  swift build -c release --product MacDashboard
-  BIN=".build/release/MacDashboard"
-  NATIVE_ARCH="$(uname -m)"
-  echo "!! WARNING: shipping single-arch app (native: $NATIVE_ARCH) — will NOT run on the other architecture" >&2
-  if [ "$ALLOW_SINGLE_ARCH" != "1" ]; then
-    echo "!! refusing to ship a single-arch release build — pass --allow-single-arch to override" >&2
-    exit 1
-  fi
-fi
+swift build -c release --product MacDashboard --build-system native \
+  --triple "$EXPECTED_ARCH-apple-macosx$MIN_MACOS" \
+  -Xswiftc -sdk -Xswiftc "$SDK_PATH" \
+  -Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_MACOS" -Xlinker "$SDK_VERSION" \
+  "${AI_FLAGS[@]+"${AI_FLAGS[@]}"}"
 [ -x "$BIN" ] || { echo "binary not found: $BIN" >&2; exit 1; }
 
 echo "== bundle =="
@@ -98,7 +87,7 @@ cat > "$DIST/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key><string>${SHORT_VERSION}</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
-    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>LSMinimumSystemVersion</key><string>${MIN_MACOS}</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSAppleEventsUsageDescription</key>
@@ -164,7 +153,31 @@ echo "== codesign (ad-hoc, hardened runtime) =="
 codesign --force --options runtime --entitlements MacDashboard.entitlements --sign - "$DIST"
 
 echo "== result =="
-lipo -archs "$DIST/Contents/MacOS/MacDashboard" 2>/dev/null || true
+# Fail-loud gate (V27-TOOLCHAIN): the binary must be arm64 only and record the SDK
+# compiled against above and the deployment target. Runs before --install, so a
+# wrong build is never installed.
+FINAL_BIN="$DIST/Contents/MacOS/MacDashboard"
+# "27" and "27.0" are the same version; xcrun and vtool need not format alike.
+norm_version() { sed -E 's/(\.0)+$//' <<<"$1"; }
+FINAL_ARCHS="$(lipo -archs "$FINAL_BIN")"
+echo "archs: $FINAL_ARCHS (expected: $EXPECTED_ARCH)"
+if [ "$FINAL_ARCHS" != "$EXPECTED_ARCH" ]; then
+  echo "!! ARCH MISMATCH: $FINAL_BIN has archs '$FINAL_ARCHS', expected exactly '$EXPECTED_ARCH'" >&2
+  exit 1
+fi
+BUILD_INFO="$(vtool -show-build "$FINAL_BIN")"
+REC_SDK="$(awk '$1=="sdk"{print $2; exit}' <<<"$BUILD_INFO")"
+REC_MINOS="$(awk '$1=="minos"{print $2; exit}' <<<"$BUILD_INFO")"
+echo "binary records minos ${REC_MINOS:-none} / sdk ${REC_SDK:-none}; compiled against SDK $SDK_VERSION, target $MIN_MACOS"
+if [ "$(norm_version "$REC_SDK")" != "$(norm_version "$SDK_VERSION")" ]; then
+  echo "!! SDK MISMATCH: binary records sdk ${REC_SDK:-none}, but it was compiled against SDK $SDK_VERSION" >&2
+  exit 1
+fi
+if [ "$(norm_version "$REC_MINOS")" != "$(norm_version "$MIN_MACOS")" ]; then
+  echo "!! DEPLOYMENT TARGET MISMATCH: binary records minos ${REC_MINOS:-none}, expected $MIN_MACOS" >&2
+  exit 1
+fi
+echo "SDK check OK: arm64 binary records sdk $SDK_VERSION"
 du -sh "$DIST"
 codesign -dvv "$DIST" 2>&1 | grep -E '^(Identifier|CodeDirectory|Signature)' | head -3
 

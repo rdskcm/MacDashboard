@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+- Apple Silicon only. Version 2.2 and later are built for Apple Silicon (arm64)
+  alone; Intel Macs are no longer supported. On an Intel Mac, download
+  `MacDashboard.zip` from the
+  [v2.1 release](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1) —
+  the last version built for Intel.
+
 ## [2.1] (Krieg) - 2026-09-07
 
 A maintenance release: the app is franker about what it could not measure, its
