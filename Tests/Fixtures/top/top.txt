@@ -1,0 +1,37 @@
+Processes: 522 total, 3 running, 519 sleeping, 2305 threads 
+2026/09/24 14:17:22
+Load Avg: 1.58, 1.69, 1.71 
+CPU usage: 3.87% user, 11.61% sys, 84.51% idle 
+SharedLibs: 431M resident, 87M data, 62M linkedit.
+MemRegions: 105367 total, 980M resident, 105M private, 530M shared.
+PhysMem: 7039M used (1246M wired, 2940M compressor), 584M unused.
+VM: 238T vsize, 57G framework vsize, 2479(0) swapins, 5164(0) swapouts.
+Networks: packets: 4203304/5989M in, 3645094/5612M out.
+Disks: 13177072/248G read, 3047856/73G written.
+
+PID    COMMAND          MEM  
+96947  SomeApp          6080K
+96830  SomeApp          600M 
+96809  SomeApp          30M  
+95983  naturallanguaged 7600K
+95942  VTDecoderXPCServ 4257K
+95936  com.apple.photos 6160K
+95932  mediaanalysisd-a 4672K
+92361  SetStoreUpdateSe 3888K
+89589  SomeApp           358M 
+89548  SomeApp           18M  
+88026  ThemeWidgetContr 6256K
+88005  zsh              2624K
+88004  login            2865K
+88003  SetStoreUpdateSe 3488K
+88002  Terminal         205M 
+64183  icloudwebd       9728K
+60825  WindowManagerCon 10M  
+60824  ScreenshotContro 9729K
+60793  DisplayControls  10M  
+60791  AquaAppearanceHe 11M  
+60587  PerfPowerService 14M  
+60435  installd         2480K
+60434  geodMachServiceB 2240K
+60433  system_installd  2464K
+60360  applekeystored   2896K

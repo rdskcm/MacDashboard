@@ -110,6 +110,7 @@ final class DashboardModel {
         s.t = lastSampleAt; s.load = load; s.ncpu = ncpu; s.cpu = cpu
         s.topCPU = topCPU; s.topMem = topMem; s.mem = mem; s.swap = swap
         s.disk = disk; s.battery = battery
+        s.parseFailures = procParseFailures
         return s
     }
 
@@ -140,6 +141,8 @@ final class DashboardModel {
     /// Blank before the very first collect — which is correct: `Assess.assess` is total and
     /// stays silent on absent sections.
     private var lastCommittedReport = FullReport()
+    /// ps/top output the parser rejected on the most recent process sample (R3-FIXTURES).
+    private var procParseFailures: [ParseFailure] = []
 
     var assessment: Assessment
     var history: HistoryState
@@ -317,6 +320,7 @@ final class DashboardModel {
 
                 if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
                 if self.topMem != procs.topMem { self.topMem = procs.topMem }
+                if self.procParseFailures != procs.parseFailures { self.procParseFailures = procs.parseFailures }
 
                 try? await Task.sleep(for: .seconds(6))
             }
@@ -553,6 +557,7 @@ final class DashboardModel {
 
             if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
             if self.topMem != procs.topMem { self.topMem = procs.topMem }
+            if self.procParseFailures != procs.parseFailures { self.procParseFailures = procs.parseFailures }
         }
     }
 

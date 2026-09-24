@@ -53,11 +53,11 @@ final class LiveCollector {
     // background read mutates shared bookkeeping. The caller now reads the setting on
     // the main actor and passes the value in, which also stops the collector reaching
     // into global UI state at all.
-    func sampleProcesses(limit: Int) async -> (topCPU: [ProcEntry], topMem: [ProcEntry]) {
+    func sampleProcesses(limit: Int) async -> (topCPU: [ProcEntry], topMem: [ProcEntry], parseFailures: [ParseFailure]) {
         let procs = await procSampler.sample()
         let topCPU = Array(procs.rankedByCPU().prefix(limit)).reranked()
         let topMem = Array(procs.rankedByMem().prefix(limit)).reranked()
-        return (topCPU, topMem)
+        return (topCPU, topMem, procSampler.lastParseFailures)
     }
 
     // Full snapshot: composed from the two halves above so existing callers (and the
@@ -67,6 +67,7 @@ final class LiveCollector {
         let p = await sampleProcesses(limit: limit)
         s.topCPU = p.topCPU
         s.topMem = p.topMem
+        s.parseFailures = p.parseFailures
         return s
     }
 

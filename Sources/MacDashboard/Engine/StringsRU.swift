@@ -453,6 +453,9 @@ struct StringsRU: AppStrings {
     var reportSectionCrashes: String { "НЕДАВНИЕ КРАШИ ПРОГРАММ" }
     var reportSectionUpdates: String { "ОБНОВЛЕНИЯ macOS" }
     var reportSectionSmart: String { "ВНЕШНИЕ И ВСТРОЕННЫЕ ДИСКИ: SMART" }
+    var reportSectionUnparsed: String { "НЕРАСПОЗНАННЫЙ ВЫВОД КОМАНД (первые строки)" }
+    var reportUnparsedHint: String { "MacDashboard не смог разобрать вывод этих команд. Серийные номера и UUID скрыты; приложите этот блок к сообщению об ошибке." }
+    func reportUnparsedMoreLines(_ n: Int) -> String { "(ещё не показано строк: \(n))" }
     var reportDoneBanner: String { "ГОТОВО" }
     func reportSavedTo(_ path: String) -> String { "Отчёт сохранён: \(path)" }
     var reportNone: String { "(нет)" }

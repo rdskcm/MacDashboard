@@ -471,6 +471,9 @@ protocol AppStrings {
     var reportSectionCrashes: String { get }
     var reportSectionUpdates: String { get }
     var reportSectionSmart: String { get }
+    var reportSectionUnparsed: String { get }
+    var reportUnparsedHint: String { get }
+    func reportUnparsedMoreLines(_ n: Int) -> String
     var reportDoneBanner: String { get }
     func reportSavedTo(_ path: String) -> String
     var reportNone: String { get }

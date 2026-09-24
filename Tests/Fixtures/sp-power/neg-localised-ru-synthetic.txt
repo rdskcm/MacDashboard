@@ -1,0 +1,72 @@
+Power:
+
+    Battery Information:
+
+      Model Information:
+          Serial Number: XXXXXXXXXX
+          Device Name: bq40z651
+          Pack Lot Code: 0
+          PCB Lot Code: 0
+          Firmware Version: 0b00
+          Hardware Revision: 100
+          Cell Revision: f914
+      Charge Information:
+          The battery’s charge is below the warning level: No
+          Fully Charged: Yes
+          Charging: No
+          State of Charge (%): 100
+      Health Information:
+          Количество циклов: 363
+          Состояние: Normal
+          Максимальная ёмкость: 86%
+
+    System Power Settings:
+
+      AC Power:
+          System Sleep Timer (Minutes): 1
+          Disk Sleep Timer (Minutes): 10
+          Display Sleep Timer (Minutes): 10
+          Sleep on Power Button: Yes
+          Wake on LAN: Yes
+          Hibernate Mode: 3
+          Low Power Mode: No
+          Prioritize Network Reachability Over Sleep: No
+          SleepServices: 1
+      Battery Power:
+          System Sleep Timer (Minutes): 1
+          Disk Sleep Timer (Minutes): 10
+          Display Sleep Timer (Minutes): 5
+          Sleep on Power Button: Yes
+          Wake on LAN: No
+          Current Power Source: Yes
+          Hibernate Mode: 3
+          Low Power Mode: Yes
+          Prioritize Network Reachability Over Sleep: No
+          Reduce Brightness: No
+          SleepServices: 1
+
+    Hardware Configuration:
+
+      UPS Installed: No
+
+    AC Charger Information:
+
+      Connected: No
+      Charging: No
+
+    Power Events:
+
+        Next Scheduled Events:
+
+              appPID: 336
+              Type: Wake
+              Scheduled By: com.apple.alarm.user-invisible-com.apple.acmd.alarm
+              Time: 24.09.2026, 2:14 PM
+              UserVisible: 0
+
+              appPID: 601
+              Type: Wake
+              Scheduled By: com.apple.alarm.user-invisible-com.apple.calaccessd.travelEngine.periodicRefreshTimer
+              Time: 24.09.2026, 4:38 PM
+              UserVisible: 0
+
