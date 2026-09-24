@@ -250,16 +250,16 @@ final class ReportCollector {
 
     private func collectSystem() async -> Outcome {
         var info = SystemInfo()
-        if let sv = await CommandRunner.run("/usr/bin/sw_vers", [], timeout: 10).text {
-            let parsed = Parsers.swVers(sv)
+        if let data = FileManager.default.contents(atPath: "/System/Library/CoreServices/SystemVersion.plist"),
+           let parsed = Parsers.systemVersion(plist: data) {
             info.osName = parsed.osName; info.osVersion = parsed.osVersion; info.osBuild = parsed.osBuild
         }
-        if let hw = await CommandRunner.run("/usr/sbin/system_profiler", ["SPHardwareDataType"], timeout: 25).text {
-            let h = Parsers.hardwareProfile(hw)
+        if let hw = await CommandRunner.run("/usr/sbin/system_profiler", ["-json", "SPHardwareDataType"], timeout: 25).text,
+           let h = Parsers.hardwareProfile(json: Data(hw.utf8)) {
             info.modelName = h.modelName; info.modelId = h.modelId; info.chip = h.chip
             info.cores = h.cores; info.memBytes = h.memBytes
         }
-        if info.chip == nil, let brand = await CommandRunner.run("/usr/sbin/sysctl", ["-n", "machdep.cpu.brand_string"], timeout: 5).text {
+        if info.chip == nil, let brand = Self.sysctlString("machdep.cpu.brand_string") {
             let s = brand.trimmingCharacters(in: .whitespacesAndNewlines)
             if !s.isEmpty { info.chip = s }
         }
@@ -269,6 +269,14 @@ final class ReportCollector {
         info.hostName = ProcessInfo.processInfo.hostName
         let has = info.osName != nil || info.modelName != nil || info.chip != nil
         return Outcome(section: .system) { $0.system = has ? info : nil }
+    }
+
+    private static func sysctlString(_ name: String) -> String? {
+        var size = 0
+        guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+        var buf = [CChar](repeating: 0, count: size)
+        guard sysctlbyname(name, &buf, &size, nil, 0) == 0 else { return nil }
+        return String(cString: buf)
     }
 
     // MARK: - Time Machine local snapshots
@@ -327,15 +335,17 @@ final class ReportCollector {
     /// Double optional: outer `nil` = command failed / not checked (leave `report.tmDest`
     /// untouched); `.some(nil)` = checked, no destination configured; `.some(x)` = configured.
     func collectTMDestInfo() async -> TMDestination?? {
-        // Empty stdout is not evidence of "no destination" — Parsers.tmDestination recognises the
-        // literal "No destinations configured" text (Parsers.swift:362), which is the only thing that may map to .some(nil).
-        guard let out = await CommandRunner.run("/usr/bin/tmutil", ["destinationinfo"], timeout: 15).nonEmptyText else {
+        // `-X` prints a plist; empty stdout is not evidence of "no destination", so it stays "not checked".
+        guard let out = await CommandRunner.run("/usr/bin/tmutil", ["destinationinfo", "-X"], timeout: 15).nonEmptyText else {
             return nil
         }
-        var dest = Parsers.tmDestination(out)
-        if var d = dest { await applyLastBackup(to: &d); dest = d }
-        let value: TMDestination? = dest
-        return .some(value)
+        switch Parsers.tmDestination(plist: Data(out.utf8)) {
+        case .undecodable: return nil
+        case .notConfigured: return .some(nil)
+        case .configured(var d):
+            await applyLastBackup(to: &d)
+            return .some(d)
+        }
     }
 
     /// Fills in `dest.lastBackup` via a fallback chain, since `tmutil latestbackup`
@@ -523,8 +533,8 @@ final class ReportCollector {
         let smartctl = Self.findSmartctl()
 
         // Internal boot disk.
-        if let info = await CommandRunner.run("/usr/sbin/diskutil", ["info", "disk0"], timeout: 15).nonEmptyText {
-            let (status, media) = Parsers.diskutilSmart(info)
+        if let info = await CommandRunner.run("/usr/sbin/diskutil", ["info", "-plist", "disk0"], timeout: 15).nonEmptyText {
+            let (status, media) = Parsers.diskutilSmart(plist: Data(info.utf8))
             var disk = makeDiskutilDisk(device: "internal",
                                         fallbackTitle: L.reportCollectorInternalDiskFallbackTitle,
                                         media: media, status: status, external: false)
@@ -532,6 +542,7 @@ final class ReportCollector {
             // wear, etc.). MUST be -A (attributes-only): -a returns a benign nonzero
             // exit on this controller (Error Information Log fetch fails) — and exit
             // codes are ignored anyway (CommandRunner returns stdout regardless).
+            // -j makes smartctl print JSON (decoded by Parsers.smartctlAttrs(json:)).
             // sudo -n first (whitelisted NOPASSWD rule) — but ONLY when the resolved
             // smartctl is a root-owned, non-group-writable regular file that a non-root
             // actor cannot swap (see isSafeToRunViaSudo); otherwise straight to the
@@ -540,11 +551,11 @@ final class ReportCollector {
             if let sc = smartctl {
                 var raw: String? = nil
                 if Self.isSafeToRunViaSudo(sc) {
-                    raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15).nonEmptyText
+                    raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "-j", "disk0"], timeout: 15).nonEmptyText
                 }
-                if raw == nil { raw = await CommandRunner.run(sc, ["-A", "disk0"], timeout: 15).nonEmptyText }
+                if raw == nil { raw = await CommandRunner.run(sc, ["-A", "-j", "disk0"], timeout: 15).nonEmptyText }
                 if let raw {
-                    let attrs = Parsers.smartctlAttrs(raw)
+                    let attrs = Parsers.smartctlAttrs(json: Data(raw.utf8))
                     if !attrs.isEmpty {
                         disk.attrs = attrs
                         // Real SMART data can only worsen the diskutil-derived
@@ -566,12 +577,12 @@ final class ReportCollector {
         }
 
         // External physical disks.
-        if let list = await CommandRunner.run("/usr/sbin/diskutil", ["list"], timeout: 15).text {
-            for dev in externalPhysicalDisks(list) {
+        if let list = await CommandRunner.run("/usr/sbin/diskutil", ["list", "-plist", "external", "physical"], timeout: 15).text {
+            for dev in Parsers.externalPhysicalDisks(plist: Data(list.utf8)) {
                 var title = dev
                 var duStatus: String?
-                if let info = await CommandRunner.run("/usr/sbin/diskutil", ["info", dev], timeout: 15).text {
-                    let (status, media) = Parsers.diskutilSmart(info)
+                if let info = await CommandRunner.run("/usr/sbin/diskutil", ["info", "-plist", dev], timeout: 15).text {
+                    let (status, media) = Parsers.diskutilSmart(plist: Data(info.utf8))
                     duStatus = status
                     if let media, !media.isEmpty { title = media }
                 }
@@ -583,31 +594,16 @@ final class ReportCollector {
                     // actually need: internal NVMe answers `smartctl -A` unprivileged.
                     var raw: String? = nil
                     if Self.isSafeToRunViaSudo(sc) {
-                        raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15).nonEmptyText
+                        raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "-j", dev], timeout: 15).nonEmptyText
                     }
-                    if raw == nil { raw = await CommandRunner.run(sc, ["-A", dev], timeout: 15).nonEmptyText }
-                    if let raw { attrs = Parsers.smartctlAttrs(raw) }
+                    if raw == nil { raw = await CommandRunner.run(sc, ["-A", "-j", dev], timeout: 15).nonEmptyText }
+                    if let raw { attrs = Parsers.smartctlAttrs(json: Data(raw.utf8)) }
                 }
                 disks.append(makeExternalDisk(device: dev, title: title, duStatus: duStatus,
                                               attrs: attrs, smartctlPresent: smartctl != nil))
             }
         }
         return disks
-    }
-
-    private func externalPhysicalDisks(_ diskutilList: String) -> [String] {
-        var devices: [String] = []
-        for line in diskutilList.components(separatedBy: "\n") {
-            guard line.contains("external, physical") else { continue }
-            // "/dev/disk4 (external, physical):"
-            if let slash = line.range(of: "/dev/") {
-                let rest = line[slash.lowerBound...]
-                let dev = rest.prefix { !$0.isWhitespace && $0 != "(" }
-                let name = String(dev).trimmingCharacters(in: CharacterSet(charactersIn: ": "))
-                if !name.isEmpty { devices.append(name) }
-            }
-        }
-        return devices
     }
 
     private func makeDiskutilDisk(device: String, fallbackTitle: String,

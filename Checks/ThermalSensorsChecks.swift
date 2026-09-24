@@ -57,14 +57,7 @@ func runThermalSensorsChecks() {
     check(ThermalSensors.smartTemperatureCelsius(attrs: [("Temperature", "N/A")]) == nil,
           "smartTemperatureCelsius: unparseable value ⇒ nil")
 
-    let disk0Fixture = """
-    === START OF SMART DATA SECTION ===
-    SMART/Health Information (NVMe Log 0x02, NSID 0xffffffff)
-    Critical Warning:                   0x00
-    Temperature:                        32 Celsius
-    Available Spare:                    100%
-    Percentage Used:                    1%
-    """
-    check(ThermalSensors.smartTemperatureCelsius(attrs: Parsers.smartctlAttrs(disk0Fixture)) == 32,
+    let disk0Fixture = Data(#"{"nvme_smart_health_information_log":{"critical_warning":0,"temperature":32,"available_spare":100,"percentage_used":1}}"#.utf8)
+    check(ThermalSensors.smartTemperatureCelsius(attrs: Parsers.smartctlAttrs(json: disk0Fixture)) == 32,
           "smartTemperatureCelsius: smartctl -A disk0 fixture end-to-end ⇒ 32")
 }

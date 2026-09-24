@@ -205,28 +205,59 @@ do {
 // =====================================================================
 
 do {
-    let appleSilicon = "Chip: Apple M3\nTotal Number of Cores: 8 (4 performance and 4 efficiency)\nMemory: 8 GB"
-    let info = Parsers.hardwareProfile(appleSilicon)
-    check(info.chip == "Apple M3", "hardwareProfile: Apple Silicon chip")
-    check(info.cores?.contains("8") == true, "hardwareProfile: Apple Silicon cores contains 8")
-    check(info.memBytes == 8 * GIB, "hardwareProfile: Apple Silicon memBytes == 8 GiB")
+    func hwJSON(_ item: String) -> Data { Data("{\"SPHardwareDataType\":[{\(item)}]}".utf8) }
+    let asItem = "\"machine_name\":\"MacBook Pro\",\"machine_model\":\"Mac15,3\",\"chip_type\":\"Apple M3\","
+        + "\"number_processors\":\"proc 8:0:4:4\",\"physical_memory\":\"8 GB\""
+    let info = Parsers.hardwareProfile(json: hwJSON(asItem))
+    check(info?.modelName == "MacBook Pro", "hardwareProfile: modelName")
+    check(info?.modelId == "Mac15,3", "hardwareProfile: modelId")
+    check(info?.chip == "Apple M3", "hardwareProfile: Apple Silicon chip")
+    check(info?.cores == "8 (4 Performance and 4 Efficiency)", "hardwareProfile: cores from proc 8:0:4:4")
+    check(info?.memBytes == 8 * GIB, "hardwareProfile: Apple Silicon memBytes == 8 GiB")
+    let three = Parsers.hardwareProfile(json: hwJSON(asItem.replacingOccurrences(of: "proc 8:0:4:4", with: "proc 8:4:4")))
+    check(three?.cores == "8 (4 Performance and 4 Efficiency)", "hardwareProfile: three-field proc form, same cores")
 
-    let intel = "Processor Name: 6-Core Intel Core i7\nTotal Number of Cores: 6\nMemory: 16 GB"
-    let intelInfo = Parsers.hardwareProfile(intel)
-    check(intelInfo.chip?.contains("Intel") == true, "hardwareProfile: Intel chip contains Intel")
-    check(intelInfo.cores == "6", "hardwareProfile: Intel cores == 6")
+    let intel = "\"cpu_type\":\"6-Core Intel Core i7\",\"number_processors\":6,\"physical_memory\":\"16 GB\""
+    let intelInfo = Parsers.hardwareProfile(json: hwJSON(intel))
+    check(intelInfo?.chip == "6-Core Intel Core i7", "hardwareProfile: Intel chip from cpu_type")
+    check(intelInfo?.cores == "6", "hardwareProfile: Intel cores == 6")
+    check(intelInfo?.memBytes == 16 * GIB, "hardwareProfile: Intel memBytes")
+
+    for odd in ["proc 10:x:2", "proc 18:6:8:4", "proc 8:0:4:4:1"] {
+        let r = Parsers.hardwareProfile(json: hwJSON(asItem.replacingOccurrences(of: "proc 8:0:4:4", with: odd)))
+        check(r != nil && r?.cores == nil && r?.chip == "Apple M3", "hardwareProfile: '\(odd)' ⇒ cores nil, other fields set")
+    }
+    check(Parsers.hardwareProfile(json: hwJSON("\"chip_type\":\"Apple M3\",\"number_processors\":true")) == nil,
+          "hardwareProfile: number_processors bool ⇒ nil")
+    check(Parsers.hardwareProfile(json: Data("{\"SPHardwareDataType\":[]}".utf8)) == nil, "hardwareProfile: empty array ⇒ nil")
+    check(Parsers.hardwareProfile(json: Data()) == nil, "hardwareProfile: empty data ⇒ nil")
+    check(Parsers.hardwareProfile(json: Data("garbage".utf8)) == nil, "hardwareProfile: garbage ⇒ nil")
+    let full = hwJSON(asItem)
+    check(Parsers.hardwareProfile(json: full.prefix(full.count / 2)) == nil, "hardwareProfile: truncated ⇒ nil")
 }
 
 // =====================================================================
-// MARK: - Parsers.swVers
+// MARK: - Parsers.systemVersion
 // =====================================================================
 
 do {
-    let sv = "ProductName: macOS\nProductVersion: 26.5.2\nBuildVersion: 25F84"
-    let info = Parsers.swVers(sv)
-    check(info.osName == "macOS", "swVers: osName")
-    check(info.osVersion == "26.5.2", "swVers: osVersion")
-    check(info.osBuild == "25F84", "swVers: osBuild")
+    let plist = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <plist version="1.0"><dict>
+    <key>ProductName</key><string>macOS</string>
+    <key>ProductVersion</key><string>26.5.2</string>
+    <key>ProductBuildVersion</key><string>25F84</string>
+    </dict></plist>
+    """
+    let info = Parsers.systemVersion(plist: Data(plist.utf8))
+    check(info?.osName == "macOS", "systemVersion: osName")
+    check(info?.osVersion == "26.5.2", "systemVersion: osVersion")
+    check(info?.osBuild == "25F84", "systemVersion: osBuild")
+    check(Parsers.systemVersion(plist: Data("garbage".utf8)) == nil, "systemVersion: garbage ⇒ nil")
+    check(Parsers.systemVersion(plist: Data()) == nil, "systemVersion: empty ⇒ nil")
+    let live = FileManager.default.contents(atPath: "/System/Library/CoreServices/SystemVersion.plist")
+        .flatMap { Parsers.systemVersion(plist: $0) }
+    check(live?.osName == "macOS" && live?.osVersion != nil && live?.osBuild != nil, "systemVersion: real file smoke")
 }
 
 // =====================================================================
@@ -249,21 +280,39 @@ do {
 // =====================================================================
 
 do {
-    let configured = """
-    ====================
-    Name : X
-    Kind : Local
-    Mount Point : /Volumes/Y
-    Quota : 499 GB
-    ====================
-    Name : ShouldNotAppear
-    Kind : Network
-    """
-    let dest = Parsers.tmDestination(configured)
-    check(dest?.name == "X", "tmDestination: name from FIRST block only")
-    check(dest?.quotaBytes == 499 * 1_000_000_000, "tmDestination: quota 499 GB decimal bytes")
+    func tmPlist(_ body: String) -> Data {
+        Data("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict>\(body)</dict></plist>".utf8)
+    }
+    func entry(_ f: String) -> String { "<dict>\(f)</dict>" }
+    let x = "<key>Name</key><string>X</string><key>Kind</key><string>Local</string>"
+        + "<key>MountPoint</key><string>/Volumes/Y</string><key>QuotaGB</key><integer>499</integer>"
+    let two = tmPlist("<key>Destinations</key><array>\(entry(x))"
+        + "\(entry("<key>Name</key><string>ShouldNotAppear</string><key>Kind</key><string>Network</string>"))</array>")
+    if case .configured(let d) = Parsers.tmDestination(plist: two) {
+        check(d.name == "X" && d.kind == "Local" && d.mountPoint == "/Volumes/Y", "tmDestination: FIRST entry fields")
+        check(d.quotaBytes == 499 * 1_000_000_000, "tmDestination: QuotaGB integer 499 ⇒ decimal bytes")
+    } else { check(false, "tmDestination: two destinations ⇒ configured") }
 
-    check(Parsers.tmDestination("No destinations configured.") == nil, "tmDestination: not configured ⇒ nil")
+    let real = tmPlist("<key>Destinations</key><array>\(entry("<key>Name</key><string>X</string><key>QuotaGB</key><real>499.5</real>"))</array>")
+    if case .configured(let d) = Parsers.tmDestination(plist: real) {
+        check(d.quotaBytes == 499_500_000_000, "tmDestination: QuotaGB real 499.5")
+        check(d.mountPoint == nil, "tmDestination: no MountPoint ⇒ nil")
+    } else { check(false, "tmDestination: real quota ⇒ configured") }
+    let noQuota = tmPlist("<key>Destinations</key><array>\(entry("<key>Name</key><string>X</string>"))</array>")
+    if case .configured(let d) = Parsers.tmDestination(plist: noQuota) {
+        check(d.quotaBytes == nil, "tmDestination: no QuotaGB ⇒ quotaBytes nil")
+    } else { check(false, "tmDestination: no quota ⇒ configured") }
+
+    check(Parsers.tmDestination(plist: tmPlist("<key>Destinations</key><array/>")) == .notConfigured, "tmDestination: empty array ⇒ notConfigured")
+    check(Parsers.tmDestination(plist: tmPlist("")) == .notConfigured, "tmDestination: no Destinations key ⇒ notConfigured")
+    check(Parsers.tmDestination(plist: Data("No destinations configured.".utf8)) == .notConfigured, "tmDestination: text sentence ⇒ notConfigured")
+    check(Parsers.tmDestination(plist: tmPlist("<key>Destinations</key><array>\(entry("<key>ID</key><string>Z</string>"))</array>")) == .undecodable,
+          "tmDestination: entry without the four keys ⇒ undecodable")
+    check(Parsers.tmDestination(plist: Data("garbage".utf8)) == .undecodable, "tmDestination: garbage ⇒ undecodable")
+    check(Parsers.tmDestination(plist: Data()) == .undecodable, "tmDestination: empty ⇒ undecodable")
+    check(Parsers.tmDestination(plist: two.prefix(two.count / 2)) == .undecodable, "tmDestination: truncated ⇒ undecodable")
+    check(Parsers.tmDestination(plist: tmPlist("<key>Destinations</key><array>\(entry("<key>Name</key><integer>5</integer>"))</array>")) == .undecodable,
+          "tmDestination: Name as integer ⇒ undecodable")
 }
 
 // =====================================================================
@@ -337,13 +386,23 @@ do {
 // =====================================================================
 
 do {
-    let verified = "SMART Status: Verified\nDevice / Media Name: APPLE SSD"
-    let r = Parsers.diskutilSmart(verified)
+    func duPlist(_ body: String) -> Data {
+        Data("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict>\(body)</dict></plist>".utf8)
+    }
+    let r = Parsers.diskutilSmart(plist: duPlist("<key>SMARTStatus</key><string>Verified</string><key>MediaName</key><string>APPLE SSD</string>"))
     check(r.status == "Verified" && r.mediaName == "APPLE SSD", "diskutilSmart: Verified + media name")
-
-    let notSupported = "SMART Status: Not Supported\nDevice / Media Name: External HDD"
-    let r2 = Parsers.diskutilSmart(notSupported)
+    let r2 = Parsers.diskutilSmart(plist: duPlist("<key>SMARTStatus</key><string>Not Supported</string><key>MediaName</key><string>External HDD</string>"))
     check(r2.status == "Not Supported" && r2.mediaName == "External HDD", "diskutilSmart: Not Supported variant")
+    let r3 = Parsers.diskutilSmart(plist: Data("garbage".utf8))
+    check(r3.status == nil && r3.mediaName == nil, "diskutilSmart: garbage ⇒ (nil, nil)")
+    let r4 = Parsers.diskutilSmart(plist: Data())
+    check(r4.status == nil && r4.mediaName == nil, "diskutilSmart: empty ⇒ (nil, nil)")
+
+    let two = duPlist("<key>WholeDisks</key><array><string>disk4</string><string>disk6</string></array>")
+    check(Parsers.externalPhysicalDisks(plist: two) == ["/dev/disk4", "/dev/disk6"], "externalPhysicalDisks: two disks")
+    check(Parsers.externalPhysicalDisks(plist: duPlist("<key>WholeDisks</key><array/>")).isEmpty, "externalPhysicalDisks: empty array ⇒ []")
+    check(Parsers.externalPhysicalDisks(plist: Data("garbage".utf8)).isEmpty, "externalPhysicalDisks: garbage ⇒ []")
+    check(Parsers.externalPhysicalDisks(plist: two.prefix(two.count / 2)).isEmpty, "externalPhysicalDisks: truncated ⇒ []")
 }
 
 // =====================================================================
@@ -351,24 +410,29 @@ do {
 // =====================================================================
 
 do {
-    let nvme = """
-    Percentage Used:                    0%
-    Critical Warning:                   0x00
-    Power On Hours:                     500
-    Temperature:                        39 Celsius
-    Media and Data Integrity Errors:    0
-    Available Spare:                    100%
-    Error Information Log Entries:      0
-    Power Cycles:                       120
-    Unsafe Shutdowns:                   3
-    """
-    let attrs = Parsers.smartctlAttrs(nvme)
+    func nvme(_ log: String) -> Data { Data("{\"nvme_smart_health_information_log\":{\(log)}}".utf8) }
+    let full = nvme("\"percentage_used\":0,\"critical_warning\":0,\"power_on_hours\":1234,\"temperature\":39,"
+        + "\"media_errors\":0,\"available_spare\":100,\"num_err_log_entries\":0,\"power_cycles\":120,\"unsafe_shutdowns\":3")
+    let attrs = Parsers.smartctlAttrs(json: full)
     let expectedOrder = ["Critical Warning", "Temperature", "Available Spare", "Percentage Used",
                           "Power Cycles", "Power On Hours", "Unsafe Shutdowns",
                           "Media and Data Integrity Errors", "Error Information Log Entries"]
     check(attrs.map { $0.0 } == expectedOrder, "smartctlAttrs: canonical order regardless of source order")
-    check(attrs.count == 9, "smartctlAttrs: all 9 attrs found")
-    check(Parsers.smartctlAttrs("").isEmpty, "smartctlAttrs: empty input ⇒ []")
+    check(attrs.map { $0.1 } == ["0x00", "39 Celsius", "100%", "0%", "120", "1,234", "3", "0", "0"],
+          "smartctlAttrs: exact value strings")
+    func value(_ log: String, _ label: String) -> String? {
+        Parsers.smartctlAttrs(json: nvme(log)).first { $0.0 == label }?.1
+    }
+    check(value("\"critical_warning\":4", "Critical Warning") == "0x04", "smartctlAttrs: critical_warning 4 ⇒ 0x04")
+    check(value("\"power_on_hours\":1234567", "Power On Hours") == "1,234,567", "smartctlAttrs: 1234567 grouped")
+    check(value("\"power_on_hours\":999", "Power On Hours") == "999", "smartctlAttrs: 999 ungrouped")
+    check(value("\"power_on_hours\":1000", "Power On Hours") == "1,000", "smartctlAttrs: 1000 grouped")
+    check(value("\"critical_warning\":0", "Temperature") == "-", "smartctlAttrs: log without temperature ⇒ '-'")
+    check(Parsers.smartctlAttrs(json: Data("{\"ata_smart_attributes\":{\"table\":[]}}".utf8)).isEmpty, "smartctlAttrs: ATA-shaped JSON ⇒ []")
+    check(Parsers.smartctlAttrs(json: nvme("\"power_on_hours\":\"824\"")).isEmpty, "smartctlAttrs: string power_on_hours ⇒ []")
+    check(Parsers.smartctlAttrs(json: Data()).isEmpty, "smartctlAttrs: empty ⇒ []")
+    check(Parsers.smartctlAttrs(json: Data("garbage".utf8)).isEmpty, "smartctlAttrs: garbage ⇒ []")
+    check(Parsers.smartctlAttrs(json: full.prefix(full.count / 2)).isEmpty, "smartctlAttrs: truncated ⇒ []")
 }
 
 // =====================================================================
@@ -886,6 +950,11 @@ do {
     // assertion only runs outside CI; `smart non-empty` two lines above already
     // covers that the smartctl parsing pipeline works at all in every environment.
     let isCI = ProcessInfo.processInfo.environment["CI"] != nil
+    check(result?.system?.osVersion != nil, "smoke ReportCollector: system osVersion != nil (SystemVersion.plist)")
+    check(result?.system?.osBuild != nil, "smoke ReportCollector: system osBuild != nil")
+    check(result?.system?.chip != nil, "smoke ReportCollector: system chip != nil")
+    check(isCI || (result?.system?.modelName != nil && result?.system?.cores != nil && result?.system?.memBytes != nil),
+          "smoke ReportCollector: system_profiler -json model/cores/memory (skipped under CI)")
     let internalDisk = result?.smart?.first { $0.device == "internal" }
     check(isCI || internalDisk?.attrs.isEmpty == false,
           "smoke ReportCollector: internal disk has parsed SMART attrs (smartctl -A disk0; skipped under CI)")
