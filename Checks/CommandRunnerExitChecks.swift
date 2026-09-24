@@ -5,27 +5,36 @@
 
 import Foundation
 
+/// Synchronous bridge for checks: one CommandRunner.run, awaited via runAsyncBlocking.
+func runCommand(_ path: String, _ args: [String], timeout: TimeInterval,
+                environment: [String: String] = CommandRunner.defaultEnvironment,
+                onLine: ((String, Bool) -> Void)? = nil) -> CommandOutcome {
+    runAsyncBlocking { await CommandRunner.run(path, args, timeout: timeout, environment: environment, onLine: onLine) }
+}
+
 func runCommandRunnerExitChecks() {
-    check(CommandRunner.run("/bin/sh", ["-c", "exit 0"], timeout: 5) == "",
-          "CommandRunner.run: exit 0, empty stdout ⇒ \"\" (an empty answer, not a failure)")
-    check(CommandRunner.run("/bin/sh", ["-c", "exit 3"], timeout: 5) == nil,
-          "CommandRunner.run: non-zero exit, empty stdout ⇒ nil")
-    check(CommandRunner.run("/bin/sh", ["-c", "echo x; exit 3"], timeout: 5) == "x\n",
-          "CommandRunner.run: non-zero exit WITH stdout ⇒ the stdout text (unchanged)")
-    check(CommandRunner.run("/bin/sh", ["-c", "kill -9 $$"], timeout: 5) == nil,
-          "CommandRunner.run: death by signal ⇒ nil, not \"\" (not a clean exit)")
-    check(CommandRunner.run("/no/such/binary-macdashboard", [], timeout: 5) == nil,
-          "CommandRunner.run: launch failure ⇒ nil")
+    check(runCommand("/bin/sh", ["-c", "exit 0"], timeout: 5).text == "",
+          "CommandRunner.run(...).text: exit 0, empty stdout ⇒ \"\" (an empty answer, not a failure)")
+    check(runCommand("/bin/sh", ["-c", "exit 3"], timeout: 5).text == nil,
+          "CommandRunner.run(...).text: non-zero exit, empty stdout ⇒ nil")
+    check(runCommand("/bin/sh", ["-c", "echo x; exit 3"], timeout: 5).text == "x\n",
+          "CommandRunner.run(...).text: non-zero exit WITH stdout ⇒ the stdout text (unchanged)")
+    check(runCommand("/bin/sh", ["-c", "kill -9 $$"], timeout: 5).text == nil,
+          "CommandRunner.run(...).text: death by signal ⇒ nil, not \"\" (not a clean exit)")
+    check(runCommand("/no/such/binary-macdashboard", [], timeout: 5).text == nil,
+          "CommandRunner.run(...).text: launch failure ⇒ nil")
+    check(runCommand("/no/such/binary-macdashboard", [], timeout: 5).termination == .launchFailed(ENOENT),
+          "CommandRunner.run: launch failure ⇒ .launchFailed(ENOENT)")
 
-    check(CommandRunner.runNonEmpty("/bin/sh", ["-c", "exit 0"], timeout: 5) == nil,
-          "CommandRunner.runNonEmpty: exit 0, empty stdout ⇒ nil (an empty answer supports no claim)")
-    check(CommandRunner.runNonEmpty("/bin/sh", ["-c", "printf ' \\n'"], timeout: 5) == nil,
-          "CommandRunner.runNonEmpty: whitespace-only stdout ⇒ nil")
-    check(CommandRunner.runNonEmpty("/bin/echo", ["hi"], timeout: 5) == "hi\n",
-          "CommandRunner.runNonEmpty: non-empty stdout ⇒ the stdout text")
+    check(runCommand("/bin/sh", ["-c", "exit 0"], timeout: 5).nonEmptyText == nil,
+          "CommandRunner.run(...).nonEmptyText: exit 0, empty stdout ⇒ nil (an empty answer supports no claim)")
+    check(runCommand("/bin/sh", ["-c", "printf ' \\n'"], timeout: 5).nonEmptyText == nil,
+          "CommandRunner.run(...).nonEmptyText: whitespace-only stdout ⇒ nil")
+    check(runCommand("/bin/echo", ["hi"], timeout: 5).nonEmptyText == "hi\n",
+          "CommandRunner.run(...).nonEmptyText: non-empty stdout ⇒ the stdout text")
 
-    check(CommandRunner.runStreaming("/bin/sh", ["-c", "exit 0"], timeout: 5, onLine: { _, _ in }) == "",
-          "CommandRunner.runStreaming: exit 0, empty stdout ⇒ \"\" (same rule as run)")
-    check(CommandRunner.runStreaming("/bin/sh", ["-c", "exit 1"], timeout: 5, onLine: { _, _ in }) == nil,
-          "CommandRunner.runStreaming: non-zero exit, empty stdout ⇒ nil")
+    check(runCommand("/bin/sh", ["-c", "exit 0"], timeout: 5, onLine: { _, _ in }).text == "",
+          "CommandRunner.run(onLine) .text: exit 0, empty stdout ⇒ \"\" (same rule as run)")
+    check(runCommand("/bin/sh", ["-c", "exit 1"], timeout: 5, onLine: { _, _ in }).text == nil,
+          "CommandRunner.run(onLine) .text: non-zero exit, empty stdout ⇒ nil")
 }

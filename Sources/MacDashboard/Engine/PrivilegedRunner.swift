@@ -164,7 +164,10 @@ enum PrivilegedRunner {
     }
 
     /// Single-fire gate shared between the timeout timer and the termination-handler
-    /// path, mirroring `CommandRunner`'s `KillGate` (private there, so duplicated here).
+    /// path: whichever side calls `fire()` first records itself as `winner`; every
+    /// later call (from either side) is a no-op. This class runs Foundation `Process`
+    /// (needed for the sudo/password flow), unlike `CommandRunner`'s posix_spawn-based
+    /// process-group kill, so it keeps its own single-fire gate rather than sharing one.
     private final class KillGate: @unchecked Sendable {
         enum Winner { case timeout, exited }
 

@@ -126,12 +126,13 @@ func runProcessSamplerChecks() {
     // MARK: - Real-machine smoke (R6 coverage guard)
 
     let sampler = ProcessSampler()
-    let first = sampler.sample()   // primes: two `ps` runs, 0.6 s apart
+    let first = runAsyncBlocking { await sampler.sample() }   // primes: two `ps` runs, 0.6 s apart
     // `ps` itself only takes ~10-20 ms, well under cpuPercent's 0.05 s degenerate-window
     // guard — without this gap, `second`'s elapsed since `first`'s post-priming snapshot
-    // can land under the guard and every row reads back nil.
+    // can land under the guard and every row reads back nil. Runs on the check thread,
+    // not in the runner.
     Thread.sleep(forTimeInterval: 0.1)
-    let second = sampler.sample()
+    let second = runAsyncBlocking { await sampler.sample() }
 
     check(!first.isEmpty, "ProcessSampler smoke: first sample() non-empty")
     check(!second.isEmpty, "ProcessSampler smoke: second sample() non-empty")
@@ -154,7 +155,7 @@ func runProcessSamplerChecks() {
     // [M1] one top snapshot must cover EVERY process, not just our own uid: the
     // proc_pid_rusage path this replaced refused 285 of 384 pids (WindowServer among them),
     // leaving two different metrics in one column and in one ranking.
-    let footprints = ProcessSampler.memoryFootprints()
+    let footprints = runAsyncBlocking { await ProcessSampler.memoryFootprints() }
     check(footprints.count > 50,
           "memoryFootprints: one top snapshot yields the whole process table (got \(footprints.count))")
     check((footprints[myPid] ?? 0) > 1_000_000,

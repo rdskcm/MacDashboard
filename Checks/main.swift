@@ -819,7 +819,8 @@ do {
 // spuriously failing on desktop Macs or CI runners.
 // `collect(limit:)` takes the process-table length explicitly rather than reading
 // AppSettings.shared — checks must not depend on the user's saved preferences.
-let hasBattery = LiveCollector().collect(limit: 10).battery != nil
+// Battery comes from `collectFast()`, which avoids spawning processes.
+let hasBattery = LiveCollector().collectFast().battery != nil
 
 // =====================================================================
 // MARK: - SMOKE (real machine)
@@ -827,9 +828,9 @@ let hasBattery = LiveCollector().collect(limit: 10).battery != nil
 
 do {
     let collector = LiveCollector()
-    _ = collector.collect(limit: 10)
+    _ = runAsyncBlocking { await collector.collect(limit: 10) }
     Thread.sleep(forTimeInterval: 1.3)
-    let snap2 = collector.collect(limit: 10)
+    let snap2 = runAsyncBlocking { await collector.collect(limit: 10) }
     check(snap2.cpu != nil, "smoke LiveCollector: 2nd sample cpu != nil")
     check((snap2.mem?.total ?? 0) > 4 * GIB, "smoke LiveCollector: mem.total > 4 GiB")
     check((snap2.disk?.size ?? 0) > 0, "smoke LiveCollector: disk.size > 0")
@@ -1197,7 +1198,7 @@ do {
 }
 
 do {
-    check(!hasBattery || BatteryInspector.collect() != nil,
+    check(!hasBattery || runAsyncBlocking { await BatteryInspector.collect() } != nil,
           "smoke BatteryInspector: collect() != nil (or no battery on this machine)")
 }
 
@@ -1418,12 +1419,12 @@ do {
 }
 
 // =====================================================================
-// MARK: - CommandRunner.runStreaming
+// MARK: - CommandRunner.run(onLine)
 // =====================================================================
 
-/// Thread-safe collector for lines delivered by `runStreaming`'s `onLine` callback
+/// Thread-safe collector for lines delivered by `run`'s `onLine` callback
 /// (which fires on CommandRunner's own private serial queue, not the test's thread).
-private final class LockedLines: @unchecked Sendable {
+final class LockedLines: @unchecked Sendable {
     private let lock = NSLock()
     private var _lines: [(String, Bool)] = []
     func append(_ line: String, _ isStderr: Bool) {
@@ -1438,55 +1439,58 @@ private final class LockedLines: @unchecked Sendable {
 
 do {
     let collector = LockedLines()
-    let result = CommandRunner.runStreaming(
-        "/bin/sh", ["-c", "printf 'a\\nb\\n'; printf 'e\\n' >&2"], timeout: 10
-    ) { line, isStderr in collector.append(line, isStderr) }
+    let result = runCommand(
+        "/bin/sh", ["-c", "printf 'a\\nb\\n'; printf 'e\\n' >&2"], timeout: 10,
+        onLine: { line, isStderr in collector.append(line, isStderr) }
+    ).text
 
-    check(result == "a\nb\n", "CommandRunner.runStreaming: accumulated stdout == \"a\\nb\\n\"")
+    check(result == "a\nb\n", "CommandRunner.run(onLine): accumulated stdout == \"a\\nb\\n\"")
     let lines = collector.lines
     let stdoutLines = lines.filter { !$0.1 }.map { $0.0 }
     let stderrLines = lines.filter { $0.1 }.map { $0.0 }
     // Order is only asserted per-stream; stdout/stderr interleaving isn't guaranteed.
-    check(stdoutLines == ["a", "b"], "CommandRunner.runStreaming: stdout lines delivered in order [a, b]")
-    check(stderrLines == ["e"], "CommandRunner.runStreaming: stderr lines delivered == [e]")
+    check(stdoutLines == ["a", "b"], "CommandRunner.run(onLine): stdout lines delivered in order [a, b]")
+    check(stderrLines == ["e"], "CommandRunner.run(onLine): stderr lines delivered == [e]")
 }
 
 do {
     let collector = LockedLines()
-    let result = CommandRunner.runStreaming(
-        "/bin/sh", ["-c", "printf 'no-newline'"], timeout: 10
-    ) { line, isStderr in collector.append(line, isStderr) }
+    let result = runCommand(
+        "/bin/sh", ["-c", "printf 'no-newline'"], timeout: 10,
+        onLine: { line, isStderr in collector.append(line, isStderr) }
+    ).text
 
-    check(result == "no-newline", "CommandRunner.runStreaming: partial-line flush returns \"no-newline\"")
+    check(result == "no-newline", "CommandRunner.run(onLine): partial-line flush returns \"no-newline\"")
     check(collector.lines.map(\.0) == ["no-newline"],
-          "CommandRunner.runStreaming: partial-line flush delivers exactly one line")
+          "CommandRunner.run(onLine): partial-line flush delivers exactly one line")
 }
 
 do {
     let start = Date()
-    let result = CommandRunner.runStreaming("/bin/sh", ["-c", "sleep 5"], timeout: 1) { _, _ in }
+    let outcome = runCommand("/bin/sh", ["-c", "sleep 5"], timeout: 1, onLine: { _, _ in })
     let elapsed = Date().timeIntervalSince(start)
-    check(result == nil, "CommandRunner.runStreaming: timeout returns nil")
-    check(elapsed < 4, "CommandRunner.runStreaming: timeout wall time < 4s (got \(elapsed))")
+    check(outcome.termination == .timedOut, "CommandRunner.run(onLine): timeout ⇒ termination == .timedOut")
+    check(outcome.text == nil, "CommandRunner.run(onLine): timeout ⇒ text == nil")
+    check(elapsed < 3, "CommandRunner.run(onLine): timeout wall time < 3s (got \(elapsed))")
 }
 
 do {
-    // V2-POLISH B1: runStreaming must pin the environment it is given, the way
-    // run/runCapturing do — this is what puts Homebrew's own prefix on PATH for
-    // `brew upgrade`, not just for the short `--version`/`outdated` calls.
+    // V2-POLISH B1: run(onLine) must pin the environment it is given, the way
+    // the non-streaming calls do — this is what puts Homebrew's own prefix on PATH
+    // for `brew upgrade`, not just for the short `--version`/`outdated` calls.
     let env = CommandRunner.environment(prependingPATH: ["/opt/homebrew/bin"])
-    let result = CommandRunner.runStreaming(
-        "/bin/sh", ["-c", "printf '%s\\n' \"$PATH\""], timeout: 10, environment: env
-    ) { _, _ in }
+    let result = runCommand(
+        "/bin/sh", ["-c", "printf '%s\\n' \"$PATH\""], timeout: 10, environment: env, onLine: { _, _ in }
+    ).text
     let path = result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     check(path.hasPrefix("/opt/homebrew/bin:"),
-          "CommandRunner.runStreaming: honours the environment it is passed (PATH prefix), got \(path)")
+          "CommandRunner.run(onLine): honours the environment it is passed (PATH prefix), got \(path)")
 
-    let defaulted = CommandRunner.runStreaming(
-        "/bin/sh", ["-c", "printf '%s\\n' \"$LC_ALL\""], timeout: 10
-    ) { _, _ in }
+    let defaulted = runCommand(
+        "/bin/sh", ["-c", "printf '%s\\n' \"$LC_ALL\""], timeout: 10, onLine: { _, _ in }
+    ).text
     check(defaulted?.trimmingCharacters(in: .whitespacesAndNewlines) == "C",
-          "CommandRunner.runStreaming: defaults to defaultEnvironment (LC_ALL=C)")
+          "CommandRunner.run(onLine): defaults to defaultEnvironment (LC_ALL=C)")
 }
 
 // =====================================================================
@@ -1594,21 +1598,6 @@ do {
           "reportUpdatedTimeString: older day -> date+time branch")
 }
 
-do {
-    let scope = CommandCancellationScope()
-    let start = Date()
-    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { scope.cancel() }
-    let out = CommandRunner.run("/bin/sleep", ["10"], timeout: 30, scope: scope)
-    let elapsed = Date().timeIntervalSince(start)
-    check(out == nil, "CommandCancellationScope: cancelled run returns nil")
-    check(elapsed < 5, "CommandCancellationScope: cancel kills sleep fast (elapsed \(String(format: "%.1f", elapsed))s)")
-    check(CommandRunner.run("/bin/echo", ["hi"], timeout: 5, scope: scope) == nil,
-          "CommandCancellationScope: post-cancel run short-circuits to nil")
-    check(CommandRunner.run("/bin/echo", ["hi"], timeout: 5)?
-              .trimmingCharacters(in: .whitespacesAndNewlines) == "hi",
-          "CommandRunner.run: scope-less call unaffected")
-}
-
 // =====================================================================
 // MARK: - SmartToolsAvailability (Block N8, in SmartToolsAvailabilityChecks.swift)
 // =====================================================================
@@ -1626,6 +1615,12 @@ runSudoPathSafetyChecks()
 // =====================================================================
 
 runCommandRunnerExitChecks()
+
+// =====================================================================
+// MARK: - CommandRunner core (RUNNER-CORE, in CommandRunnerCoreChecks.swift)
+// =====================================================================
+
+runCommandRunnerCoreChecks()
 
 // =====================================================================
 // MARK: - LaunchdPlistInspector (Block N6, in LaunchdPlistInspectorChecks.swift)
@@ -2005,36 +2000,35 @@ do {
 // =====================================================================
 do {
     // F3: a single invalid UTF-8 byte in stdout must not discard the whole
-    // capture — `run` uses the lossy decoder now, same as `runStreaming`.
-    let invalidUTF8 = CommandRunner.run("/bin/sh", ["-c", "printf 'a\\xffb\\n'"], timeout: 5)
-    check(invalidUTF8 != nil, "CommandRunner.run: invalid UTF-8 byte in stdout ⇒ non-nil")
+    // capture — `run` uses the lossy decoder now, same as `run(onLine:)`.
+    let invalidUTF8 = runCommand("/bin/sh", ["-c", "printf 'a\\xffb\\n'"], timeout: 5).text
+    check(invalidUTF8 != nil, "CommandRunner.run(...).text: invalid UTF-8 byte in stdout ⇒ non-nil")
     check(invalidUTF8?.contains("a") == true && invalidUTF8?.contains("b") == true,
-          "CommandRunner.run: invalid UTF-8 byte in stdout ⇒ surrounding valid text preserved")
+          "CommandRunner.run(...).text: invalid UTF-8 byte in stdout ⇒ surrounding valid text preserved")
 
     // F2: output beyond the 8 MiB cap is truncated, not lost or turned into a
     // timeout (the child must still be drained to EOF and exit normally).
-    let over = CommandRunner.runCapturing("/bin/sh", ["-c", "head -c 9000000 /dev/zero | tr '\\0' 'x'"],
-                                          timeout: 10)
-    check(over != nil, "CommandRunner.runCapturing: output over the cap ⇒ non-nil")
-    check(over?.truncated == true, "CommandRunner.runCapturing: output over the cap ⇒ truncated == true")
-    check(over?.text.utf8.count == CommandRunner.outputCap,
-          "CommandRunner.runCapturing: output over the cap ⇒ byte count == outputCap")
+    let over = runCommand("/bin/sh", ["-c", "head -c 9000000 /dev/zero | tr '\\0' 'x'"], timeout: 10)
+    check(over.text != nil, "CommandRunner.run: output over the cap ⇒ text != nil")
+    check(over.stdoutTruncated == true, "CommandRunner.run: output over the cap ⇒ stdoutTruncated == true")
+    check(over.stdout.utf8.count == CommandRunner.outputCap,
+          "CommandRunner.run: output over the cap ⇒ byte count == outputCap")
 
-    // F2: output under the cap must not have `truncated` stuck on.
-    let under = CommandRunner.runCapturing("/bin/sh", ["-c", "echo hello"], timeout: 5)
-    check(under != nil, "CommandRunner.runCapturing: output under the cap ⇒ non-nil")
-    check(under?.truncated == false, "CommandRunner.runCapturing: output under the cap ⇒ truncated == false")
+    // F2: output under the cap must not have `stdoutTruncated` stuck on.
+    let under = runCommand("/bin/sh", ["-c", "echo hello"], timeout: 5)
+    check(under.text != nil, "CommandRunner.run: output under the cap ⇒ text != nil")
+    check(under.stdoutTruncated == false, "CommandRunner.run: output under the cap ⇒ stdoutTruncated == false")
 
     // F4: the pinned default environment reaches the child, and an explicit
     // `environment:` override is actually applied (not ignored).
-    let envOutput = CommandRunner.run("/usr/bin/env", [], timeout: 5)
+    let envOutput = runCommand("/usr/bin/env", [], timeout: 5).text
     check(envOutput?.contains("LC_ALL=C") == true, "CommandRunner.run: default environment pins LC_ALL=C")
     check(envOutput?.contains("PATH=/usr/bin:/bin:/usr/sbin:/sbin") == true,
           "CommandRunner.run: default environment pins PATH")
 
     var customEnv = CommandRunner.defaultEnvironment
     customEnv["MACDASHBOARD_CHECKS_VAR"] = "b7-marker"
-    let customOutput = CommandRunner.run("/usr/bin/env", [], timeout: 5, environment: customEnv)
+    let customOutput = runCommand("/usr/bin/env", [], timeout: 5, environment: customEnv).text
     check(customOutput?.contains("MACDASHBOARD_CHECKS_VAR=b7-marker") == true,
           "CommandRunner.run: explicit environment: override is applied to the child")
 
@@ -2602,21 +2596,21 @@ do {
 
     // Block B: N5 (stdout cap at outputCap with lineBufferCap enforcement)
     let collector = LockedLines()
-    let result = CommandRunner.runStreaming("/bin/sh", ["-c", "head -c 9000000 /dev/zero | tr '\\0' 'x'"],
-                                           timeout: 30) { line, _ in
+    let result = runCommand("/bin/sh", ["-c", "head -c 9000000 /dev/zero | tr '\\0' 'x'"],
+                            timeout: 30, onLine: { line, _ in
         collector.append(line, false)
-    }
-    check(result != nil, "CommandRunner.runStreaming: 9 MB output ⇒ non-nil (not truncated to empty)")
-    check(result?.utf8.count == CommandRunner.outputCap, "CommandRunner.runStreaming: 9 MB output ⇒ byte count == outputCap")
+    }).text
+    check(result != nil, "CommandRunner.run(onLine): 9 MB output ⇒ non-nil (not truncated to empty)")
+    check(result?.utf8.count == CommandRunner.outputCap, "CommandRunner.run(onLine): 9 MB output ⇒ byte count == outputCap")
     let lineCount = collector.lines.count
-    check(lineCount >= 2, "CommandRunner.runStreaming: 9 MB newline-free stream ⇒ \(lineCount) delivered lines (>= 2, lineBufferCap flushed)")
+    check(lineCount >= 2, "CommandRunner.run(onLine): 9 MB newline-free stream ⇒ \(lineCount) delivered lines (>= 2, lineBufferCap flushed)")
     let totalDelivered = collector.lines.map { $0.0.utf8.count }.reduce(0, +)
-    check(totalDelivered > CommandRunner.outputCap, "CommandRunner.runStreaming: delivered line count (\(totalDelivered) bytes) > outputCap (proof onLine gets bytes past cap)")
+    check(totalDelivered > CommandRunner.outputCap, "CommandRunner.run(onLine): delivered line count (\(totalDelivered) bytes) > outputCap (proof onLine gets bytes past cap)")
 
     // Check the small-output path is untouched
-    let smallResult = CommandRunner.runStreaming("/bin/sh", ["-c", "printf 'a\\nb\\n'"], timeout: 10) { _, _ in
-    }
-    check(smallResult == "a\nb\n", "CommandRunner.runStreaming: small output under cap ⇒ full output preserved")
+    let smallResult = runCommand("/bin/sh", ["-c", "printf 'a\\nb\\n'"], timeout: 10, onLine: { _, _ in
+    }).text
+    check(smallResult == "a\nb\n", "CommandRunner.run(onLine): small output under cap ⇒ full output preserved")
 }
 
 // =====================================================================

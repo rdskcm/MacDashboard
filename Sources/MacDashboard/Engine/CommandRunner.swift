@@ -1,12 +1,12 @@
 // Engine/CommandRunner.swift
 // Collectors agent owns this file (SPEC §3, §5).
 //
-// Thin, defensive wrapper around Foundation.Process for running read-only system
-// binaries with a hard timeout. Mirrors the legacy `run_cmd()` helper from
-// mac_live_server.py (capture stdout+stderr, swallow any launch error) but adds a
-// real timeout with SIGKILL, which the Python version only had via
-// `subprocess.run(..., timeout=...)`, and returns nil only on launch failure,
-// timeout, or an unclean exit — not merely on empty stdout (V21-HONEST-EXITS).
+// posix_spawn-based runner: every child is spawned as the leader of its own
+// process group, so a timeout, a cancellation, or the leader's own exit can
+// kill the whole group (`killpg`) instead of racing a single pid. `run` is
+// async and reports a `CommandOutcome` (termination reason, stdout, whether it
+// was truncated, and a capped head of stderr) rather than collapsing five
+// distinct outcomes into `String?`.
 
 import Foundation
 #if canImport(Darwin)
@@ -15,7 +15,7 @@ import Darwin
 
 enum CommandRunner {
     /// Environment pinned into every child process by default (see F4 discussion
-    /// on `runCapturing`). A dev run from an interactive shell and the shipped
+    /// on `run`). A dev run from an interactive shell and the shipped
     /// `.app` under launchd otherwise see different `PATH`/locale, and locale is
     /// unpinned entirely for non-English systems without this.
     ///
@@ -38,491 +38,307 @@ enum CommandRunner {
         return env
     }
 
-    /// Cap on how many stdout bytes `runCapturing` keeps for a single command (see
-    /// F2 discussion there). 8 MiB.
+    /// Cap on how many stdout bytes a single command's `CommandOutcome.stdout`
+    /// keeps (see F2 discussion there). 8 MiB.
     static let outputCap = 8 * 1024 * 1024
 
-    /// Cap on a single un-newline-terminated line buffer in `runStreaming`. A stream
+    /// Cap on a single un-newline-terminated line buffer while streaming. A stream
     /// that never emits '\n' would otherwise grow the buffer without limit; past this
     /// many bytes the pending bytes are delivered to `onLine` as one line and the
     /// buffer is cleared. 1 MiB.
     static let lineBufferCap = 1024 * 1024
 
-    /// Runs the binary at `path` (resolved via `/usr/bin/env` when `path` has no "/",
-    /// i.e. is a bare command name rather than an absolute path) with `args`, waiting
-    /// up to `timeout` seconds. Thin wrapper over `runCapturing` — see there for the
-    /// full concurrency/safety notes and the truncation-cap behavior; this entry
-    /// point just discards the `truncated` flag (its return type is deferred to
-    /// stay `String?`).
-    ///
-    /// - Returns: captured stdout as a UTF-8 string, even if the process exited
-    ///   non-zero (legacy `run_cmd` semantics: only emptiness of stdout matters, not
-    ///   the exit code — many of these tools write useful data with a non-zero exit,
-    ///   e.g. `softwareupdate -l`). Returns `nil` when the process could not be
-    ///   launched, timed out (and was killed), died by signal, or exited non-zero
-    ///   with empty stdout. Empty stdout on a clean (status 0) exit returns `""`,
-    ///   not `nil` — an empty answer is still an answer (V21-HONEST-EXITS).
+    /// Cap on how many stderr bytes `CommandOutcome.stderrHead` keeps. 2 KiB.
+    static let stderrHeadCap = 2 * 1024
+
+    /// Runs the executable at the ABSOLUTE `path` (no PATH lookup, no /usr/bin/env) with
+    /// `args`, stdin /dev/null, the pinned `environment`, as leader of its own process group.
+    /// `onLine` (optional) receives every stdout and stderr line, on a private serial queue,
+    /// all of them before this function returns. Cancelling the awaiting Task kills the
+    /// group (or skips the spawn). Never blocks a thread waiting for the child.
     static func run(_ path: String, _ args: [String], timeout: TimeInterval,
                     environment: [String: String] = defaultEnvironment,
-                    scope: CommandCancellationScope? = nil) -> String? {
-        runCapturing(path, args, timeout: timeout, environment: environment, scope: scope)?.text
-    }
-
-    /// `run`, but with the narrow "no output means nothing was learned" rule applied
-    /// EXPLICITLY at the call site instead of hidden in `runCapturing`: for commands whose
-    /// output is a blob to parse (a version string, a diskutil block, a pmset table), an
-    /// empty answer supports no claim at all, so it is reported as a failure. Commands whose
-    /// result is a LIST must use `run` — an empty list is a real answer (V21-HONEST-EXITS).
-    static func runNonEmpty(_ path: String, _ args: [String], timeout: TimeInterval,
-                            environment: [String: String] = defaultEnvironment,
-                            scope: CommandCancellationScope? = nil) -> String? {
-        guard let text = run(path, args, timeout: timeout, environment: environment, scope: scope) else {
-            return nil
-        }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
-    }
-
-    /// Result of `runCapturing`: the captured stdout text plus whether it was
-    /// capped at `outputCap` before decoding.
-    struct CaptureResult {
-        let text: String
-        let truncated: Bool
-    }
-
-    /// Same contract as `run`, but also reports whether stdout was capped at
-    /// `outputCap`. `run` is the thin wrapper over this; the extra shape exists so
-    /// Checks can observe truncation without changing `run`'s deferred return type.
-    ///
-    /// Concurrency/safety notes:
-    /// - stdin is `/dev/null` so nothing ever blocks on a read prompt (critical for
-    ///   `sudo -n`, which must fail fast rather than hang on a password prompt).
-    /// - stdout and stderr are drained concurrently on background queues, and only
-    ///   *after* the process has successfully launched. Starting the drain before
-    ///   launch would leak the reader threads forever (the pipe's write end would
-    ///   never see a writer, so the read loop never sees EOF). Starting it after
-    ///   waiting for exit instead of concurrently with it would deadlock the moment
-    ///   a command writes more than one pipe-buffer's worth (~64 KiB) to stdout
-    ///   *and* stderr, since the child would block on write() while we block on
-    ///   wait().
-    /// - Both drains accumulate into a `DrainBox` guarded by an `NSLock` rather than
-    ///   a plain `var`, and the final read happens through that same lock after the
-    ///   bounded drain wait below. A successful `DispatchGroup.wait` establishes
-    ///   ordering with the drain closures, but the *timeout* path does not: the
-    ///   drain closure can still be blocked inside `availableData` while the
-    ///   calling thread reads the accumulated bytes, which is a data race on a
-    ///   plain `var` (the bug this class fixes; `runStreaming`'s equivalent race is
-    ///   avoided via `lineQueue.sync`). This also means a drain-wait timeout
-    ///   returns whatever partial output was captured instead of losing it.
-    /// - Exit detection uses `terminationHandler` (Foundation's own async
-    ///   exit-monitoring callback) rather than `waitUntilExit()`, and a `KillGate`
-    ///   ensures the timeout path and the natural-exit path race for a single
-    ///   "who gets to act" token: whichever observes the process state first wins,
-    ///   and the loser is a guaranteed no-op. This keeps the timer's `kill(2)` call
-    ///   from ever firing after we've already learned (via the same Foundation
-    ///   callback used for normal completion) that the child is gone — the pid
-    ///   reuse window is as tight as Foundation's own bookkeeping, which is the best
-    ///   available without dropping to a raw kqueue EVFILT_PROC watch.
-    static func runCapturing(_ path: String, _ args: [String], timeout: TimeInterval,
-                             environment: [String: String] = defaultEnvironment,
-                             scope: CommandCancellationScope? = nil) -> CaptureResult? {
-        if let scope, scope.isCancelled { return nil }
-        let process = Process()
-        if path.contains("/") {
-            process.executableURL = URL(fileURLWithPath: path)
-            process.arguments = args
-        } else {
-            // Bare command name. Callers in this codebase pass absolute paths
-            // resolved ahead of time; this branch exists for completeness/tests.
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [path] + args
-        }
-        process.standardInput = FileHandle.nullDevice
-        process.environment = environment
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        let killGate = KillGate()
-        let exitSemaphore = DispatchSemaphore(value: 0)
-        // Set BEFORE run() so an extremely fast-exiting child can't finish before
-        // we've attached the callback.
-        process.terminationHandler = { _ in
-            killGate.fire(.exited)
-            exitSemaphore.signal()
-        }
-
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-
-        let scopeID = ObjectIdentifier(process)
-        if let scope {
-            let pid = process.processIdentifier
-            let registered = scope.register(id: scopeID) {
-                // Same guarded-kill idiom as the timeout timer: whoever fires the
-                // gate first acts; reusing .timeout makes the "return nil" path
-                // below cover cancellation with no KillGate changes.
-                guard killGate.fire(.timeout) else { return }
-                kill(pid, SIGKILL)
-            }
-            if !registered {
-                // Scope cancelled between the early check and launch: kill now;
-                // terminationHandler still fires, the wait below returns, and
-                // killGate.winner == .timeout yields nil.
-                if killGate.fire(.timeout) { kill(pid, SIGKILL) }
-            }
-        }
-
-        // Drain BOTH pipes concurrently, starting immediately after a successful
-        // launch (see doc comment above for why ordering matters here).
-        let drainGroup = DispatchGroup()
-        let stdoutBox = DrainBox()
-        drainGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            let handle = stdoutPipe.fileHandleForReading
-            while true {
-                let chunk = handle.availableData
-                if chunk.isEmpty { break }
-                // Keep reading to EOF even once the cap is hit: if we stopped
-                // draining the fd here, the child would block on write() to a
-                // full pipe and never exit, so the timeout timer would SIGKILL
-                // it — turning merely-large output into `nil`
-                // (killGate.winner == .timeout), a worse bug than the unbounded
-                // buffering this cap exists to fix. So the loop always drains to
-                // EOF; only the *kept* bytes are capped.
-                stdoutBox.append(chunk, cap: outputCap)
-            }
-            drainGroup.leave()
-        }
-        drainGroup.enter()
-        DispatchQueue.global(qos: .utility).async {
-            // Content unused (legacy run_cmd only ever returns stdout) but MUST be
-            // drained or the child can deadlock writing to a full stderr pipe.
-            // Same "always read to EOF" reasoning as stdout above; nothing is kept.
-            let handle = stderrPipe.fileHandleForReading
-            while true {
-                let chunk = handle.availableData
-                if chunk.isEmpty { break }
-            }
-            drainGroup.leave()
-        }
-
-        let timeoutQueue = DispatchQueue(label: "MacDashboard.CommandRunner.timeout")
-        let timer = DispatchSource.makeTimerSource(queue: timeoutQueue)
-        timer.schedule(deadline: .now() + timeout)
-        timer.setEventHandler { [pid = process.processIdentifier] in
-            guard killGate.fire(.timeout) else { return }
-            kill(pid, SIGKILL)
-        }
-        timer.resume()
-
-        exitSemaphore.wait()
-        timer.cancel()
-        scope?.unregister(id: scopeID)
-        // Bounded, not unconditional: if the target process forked a grandchild that
-        // inherited the pipe fds (e.g. a shell wrapper running `sleep`), killing only
-        // the direct child leaves that grandchild holding the write end open — so an
-        // unconditional `drainGroup.wait()` could block us long past `timeout` even
-        // though we already know the outcome. None of this codebase's call sites
-        // shell-wrap, but this keeps the caller-facing latency bounded regardless of
-        // what a target binary does under the hood (verified empirically: a killed
-        // `sh -c "sleep 5"` otherwise stalled the return by the full remaining sleep).
-        _ = drainGroup.wait(timeout: .now() + 3)
-
-        if killGate.winner == .timeout {
-            return nil
-        }
-        let (stdoutData, truncated) = stdoutBox.snapshot()
-        if stdoutData.isEmpty && !exitedCleanly(process) {
-            return nil
-        }
-        return CaptureResult(text: String(decoding: stdoutData, as: UTF8.self), truncated: truncated)
-    }
-
-    /// True when the child exited normally with status 0 — the ONLY case in which empty
-    /// stdout is a valid answer ("nothing outdated", "no snapshots") rather than a failure.
-    /// A signalled child reports the signal number in `terminationStatus`, so the reason is
-    /// checked too. Read only after the child has exited.
-    private static func exitedCleanly(_ process: Process) -> Bool {
-        process.terminationReason == .exit && process.terminationStatus == 0
-    }
-
-    /// Like `run`, but additionally delivers each complete output line (stdout AND
-    /// stderr) to `onLine` as it arrives. `onLine` is invoked on a private serial
-    /// queue — callers must hop threads themselves. Returns accumulated stdout on
-    /// normal exit (nil on launch failure, timeout, death by signal, or a non-zero
-    /// exit with empty stdout — same semantics as `run`; V21-HONEST-EXITS).
-    ///
-    /// `environment` has the same meaning and default as in `run`/`runCapturing`:
-    /// pinned rather than inherited, so a dev run and the shipped `.app` under
-    /// launchd see the same PATH/locale. Callers running a tool that resolves
-    /// helper binaries inside its own prefix (Homebrew) pass
-    /// `environment(prependingPATH:)` here exactly as they already do for the
-    /// short-lived calls (V2-POLISH B1).
-    ///
-    /// Accumulated stdout is capped at `outputCap`, exactly like `runCapturing`: bytes past
-    /// the cap are dropped from the returned string, but BOTH pipes are still drained to EOF
-    /// and `onLine` still receives every line, so progress parsing keeps working past the cap.
-    static func runStreaming(_ path: String, _ args: [String], timeout: TimeInterval,
-                              environment: [String: String] = defaultEnvironment,
-                              onLine: @escaping (_ line: String, _ isStderr: Bool) -> Void) -> String? {
-        let process = Process()
-        if path.contains("/") {
-            process.executableURL = URL(fileURLWithPath: path)
-            process.arguments = args
-        } else {
-            // Bare command name. Callers in this codebase pass absolute paths
-            // resolved ahead of time; this branch exists for completeness/tests.
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [path] + args
-        }
-        process.standardInput = FileHandle.nullDevice
-        process.environment = environment
-
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        let killGate = KillGate()
-        let exitSemaphore = DispatchSemaphore(value: 0)
-        // Set BEFORE run() so an extremely fast-exiting child can't finish before
-        // we've attached the callback.
-        process.terminationHandler = { _ in
-            killGate.fire(.exited)
-            exitSemaphore.signal()
-        }
-
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-
-        // Serializes both readabilityHandlers' buffer mutation and onLine delivery so
-        // lines from stdout/stderr are never interleaved mid-line and there's no data
-        // race on the byte buffers below.
-        let lineQueue = DispatchQueue(label: "MacDashboard.CommandRunner.runStreaming.lines")
-        var stdoutBuffer = Data()
-        var stderrBuffer = Data()
-        var stdoutData = Data()
-
-        // Splits `buffer` on '\n', emitting each complete line (minus a trailing '\r'
-        // if present) to `onLine`, and leaves the trailing partial chunk in `buffer`.
-        func emitCompleteLines(from buffer: inout Data, isStderr: Bool) {
-            while let newlineIndex = buffer.firstIndex(of: 0x0A) {
-                var lineData = buffer[buffer.startIndex..<newlineIndex]
-                if lineData.last == 0x0D {
-                    lineData = lineData[lineData.startIndex..<lineData.index(before: lineData.endIndex)]
-                }
-                let line = String(decoding: lineData, as: UTF8.self)
-                onLine(line, isStderr)
-                buffer.removeSubrange(buffer.startIndex...newlineIndex)
-            }
-        }
-
-        // Flushes any remaining partial line (no trailing newline) to `onLine`.
-        func flushRemainder(from buffer: inout Data, isStderr: Bool) {
-            guard !buffer.isEmpty else { return }
-            let line = String(decoding: buffer, as: UTF8.self)
-            onLine(line, isStderr)
-            buffer.removeAll()
-        }
-
-        // Drain BOTH pipes concurrently via readabilityHandler, starting immediately
-        // after a successful launch (see `run`'s doc comment for why ordering matters).
-        let drainGroup = DispatchGroup()
-        drainGroup.enter()
-        drainGroup.enter()
-
-        // NOTE: `readabilityHandler` is level-triggered at EOF — if we deferred nil-ing
-        // it out to `lineQueue.async`, the underlying dispatch source can fire the
-        // closure again with more empty data before that async block runs, causing a
-        // double `drainGroup.leave()` (observed empirically: `dispatch_group_leave`
-        // over-release crash). So the handler is nil-ed out synchronously, on the
-        // calling (internal Foundation) thread, as the very first thing on the EOF
-        // path — before handing the actual flush+leave work to `lineQueue`.
-        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if data.isEmpty {
-                stdoutPipe.fileHandleForReading.readabilityHandler = nil
-            }
-            lineQueue.async {
-                if data.isEmpty {
-                    flushRemainder(from: &stdoutBuffer, isStderr: false)
-                    drainGroup.leave()
-                } else {
-                    // Same cap as runCapturing (F2): keep at most `outputCap` bytes for the
-                    // return value, but keep reading and keep emitting lines regardless.
-                    if stdoutData.count < outputCap {
-                        let remaining = outputCap - stdoutData.count
-                        stdoutData.append(data.count > remaining ? data.prefix(remaining) : data)
-                    }
-                    stdoutBuffer.append(data)
-                    emitCompleteLines(from: &stdoutBuffer, isStderr: false)
-                    if stdoutBuffer.count > lineBufferCap {
-                        flushRemainder(from: &stdoutBuffer, isStderr: false)
-                    }
+                    onLine: ((_ line: String, _ isStderr: Bool) -> Void)? = nil) async -> CommandOutcome {
+        guard path.hasPrefix("/") else { return .launchFailed(EINVAL) }   // R0(c)
+        let job = CommandJob(onLine: onLine)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<CommandOutcome, Never>) in
+                job.start(path: path, args: args, environment: environment, timeout: timeout) {
+                    cont.resume(returning: $0)
                 }
             }
+        } onCancel: {
+            job.cancel()
         }
-        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if data.isEmpty {
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
-            }
-            lineQueue.async {
-                if data.isEmpty {
-                    flushRemainder(from: &stderrBuffer, isStderr: true)
-                    drainGroup.leave()
-                } else {
-                    stderrBuffer.append(data)
-                    emitCompleteLines(from: &stderrBuffer, isStderr: true)
-                    if stderrBuffer.count > lineBufferCap {
-                        flushRemainder(from: &stderrBuffer, isStderr: true)
-                    }
-                }
-            }
-        }
+    }
 
-        let timeoutQueue = DispatchQueue(label: "MacDashboard.CommandRunner.runStreaming.timeout")
-        let timer = DispatchSource.makeTimerSource(queue: timeoutQueue)
-        timer.schedule(deadline: .now() + timeout)
-        timer.setEventHandler { [pid = process.processIdentifier] in
-            guard killGate.fire(.timeout) else { return }
-            kill(pid, SIGKILL)
-        }
-        timer.resume()
-
-        exitSemaphore.wait()
-        timer.cancel()
-        // Bounded, not unconditional — see `run`'s doc comment for the rationale.
-        let drainOutcome = drainGroup.wait(timeout: .now() + 3)
-        if drainOutcome == .timedOut {
-            // Avoid leaking the handler closures/file handles if a grandchild is still
-            // holding the write end open past the bounded wait.
-            lineQueue.sync {
-                stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
-            }
-        }
-
-        if killGate.winner == .timeout {
-            return nil
-        }
-        let finalStdout = lineQueue.sync { stdoutData }
-        if finalStdout.isEmpty && !exitedCleanly(process) {
-            return nil
-        }
-        // Lossy, like runCapturing and like the per-line decoding above: the byte-level
-        // cap can split a multi-byte character, and the strict initializer would turn that
-        // into `nil` — i.e. a large-but-successful run would look like a failure.
-        return String(decoding: finalStdout, as: UTF8.self)
+    /// posix_spawn: own process group (pgid = child pid), stdin /dev/null, stdout/stderr to
+    /// the given pipe write ends, every other fd closed in the child (CLOEXEC_DEFAULT),
+    /// signal mask empty, dispositions default. Returns 0 or an errno (posix_spawn's return).
+    fileprivate static func spawn(_ path: String, _ args: [String], _ environment: [String: String],
+                                  stdoutFD: Int32, stderrFD: Int32, pid: inout pid_t) -> Int32 {
+        var fa: posix_spawn_file_actions_t? = nil
+        posix_spawn_file_actions_init(&fa); defer { posix_spawn_file_actions_destroy(&fa) }
+        posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_adddup2(&fa, stdoutFD, 1)
+        posix_spawn_file_actions_adddup2(&fa, stderrFD, 2)
+        var attr: posix_spawnattr_t? = nil
+        posix_spawnattr_init(&attr); defer { posix_spawnattr_destroy(&attr) }
+        posix_spawnattr_setpgroup(&attr, 0)
+        var noSignals = sigset_t(); sigemptyset(&noSignals)
+        posix_spawnattr_setsigmask(&attr, &noSignals)
+        var defaults = sigset_t(); sigfillset(&defaults); sigdelset(&defaults, SIGKILL); sigdelset(&defaults, SIGSTOP)
+        posix_spawnattr_setsigdefault(&attr, &defaults)
+        posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK
+                                              | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_CLOEXEC_DEFAULT))
+        let argv: [UnsafeMutablePointer<CChar>?] = ([path] + args).map { strdup($0) } + [nil]
+        let envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer { (argv + envp).forEach { free($0) } }
+        return posix_spawn(&pid, path, &fa, &attr, argv, envp)
     }
 }
 
-/// Groups the live `Process`es spawned for one logical operation (e.g. one
-/// ReportCollector.collect() run) so structured-concurrency cancellation can
-/// actually SIGKILL them instead of just abandoning the blocking semaphore wait.
-/// Thread-safe; `cancel()` is idempotent. After `cancel()`, any subsequent
-/// `CommandRunner.run` given this scope returns nil without launching anything.
-/// Each registered kill closure routes through that run's `KillGate`, so a
-/// cancellation racing a natural exit (or the timeout timer) is a guaranteed
-/// no-op on the losing side — same single-fire discipline as the timeout path.
-final class CommandCancellationScope: @unchecked Sendable {
-    private let lock = NSLock()
-    private var cancelled = false
-    private var kills: [ObjectIdentifier: () -> Void] = [:]
+/// Result of one `CommandRunner.run`. Pure value; see `text` for the legacy String? view.
+struct CommandOutcome: Equatable, Sendable {
+    enum Termination: Equatable, Sendable {
+        case exited(Int32)        // leader exited normally with this status
+        case signaled(Int32)      // leader died by a signal WE did not send (0 = status unknown, see below)
+        case launchFailed(Int32)  // nothing ran; errno (posix_spawn/pipe), EINVAL for a non-absolute path
+        case timedOut             // we killed the group at the deadline, or output was still unread at it
+        case cancelled            // the awaiting Task was cancelled; group killed or never spawned
+    }
+    enum KillReason: Equatable, Sendable { case timedOut, cancelled }
 
-    var isCancelled: Bool {
-        lock.lock(); defer { lock.unlock() }
-        return cancelled
+    var termination: Termination
+    var stdout: String            // lossy UTF-8 of at most CommandRunner.outputCap bytes
+    var stdoutTruncated: Bool
+    var stderrHead: String        // lossy UTF-8 of at most CommandRunner.stderrHeadCap bytes
+
+    static func launchFailed(_ err: Int32) -> CommandOutcome {
+        CommandOutcome(termination: .launchFailed(err), stdout: "", stdoutTruncated: false, stderrHead: "")
     }
 
-    /// Returns false if the scope was already cancelled — the caller must then
-    /// invoke the kill closure itself (covers the check-then-launch race).
-    fileprivate func register(id: ObjectIdentifier, kill: @escaping () -> Void) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        if cancelled { return false }
-        kills[id] = kill
-        return true
+    /// Exactly the old `run` -> String? contract (V21-HONEST-EXITS): nil for launch failure,
+    /// timeout, cancellation, and for empty stdout unless the leader exited cleanly with 0.
+    var text: String? {
+        switch termination {
+        case .launchFailed, .timedOut, .cancelled: return nil
+        case .exited(let code): return (stdout.isEmpty && code != 0) ? nil : stdout
+        case .signaled: return stdout.isEmpty ? nil : stdout
+        }
     }
 
-    fileprivate func unregister(id: ObjectIdentifier) {
-        lock.lock(); defer { lock.unlock() }
-        kills[id] = nil
+    /// Exactly the old "non-empty" contract: `text`, but whitespace-only counts as nothing learned.
+    var nonEmptyText: String? {
+        guard let t = text, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return t
     }
 
-    func cancel() {
-        lock.lock()
-        cancelled = true
-        let pending = Array(kills.values)
-        kills.removeAll()
-        lock.unlock()
-        for kill in pending { kill() }   // outside the lock — kill() takes KillGate's lock
+    /// Pure (Checks-tested). A kill WE issued decides the outcome; otherwise the wait(2)
+    /// status does. WIFEXITED & co. are C macros Swift cannot import, hence the bit math.
+    /// `waitStatus == nil`: the status was unavailable (child reaped elsewhere — not
+    /// expected in this app); reported as `.signaled(0)` so only non-empty stdout counts.
+    static func termination(killReason: KillReason?, waitStatus: Int32?) -> Termination {
+        switch killReason {
+        case .timedOut?: return .timedOut
+        case .cancelled?: return .cancelled
+        case nil: break
+        }
+        guard let s = waitStatus else { return .signaled(0) }
+        let low = s & 0x7f
+        return low == 0 ? .exited((s >> 8) & 0xff) : .signaled(low)
     }
 }
 
-/// Guards `runCapturing`'s stdout accumulation across the drain queue (which
-/// writes) and the calling thread (which reads back after the bounded drain
-/// wait) — see the "Concurrency/safety notes" on `runCapturing` for why a plain
-/// `var` is unsafe here. Also owns the F2 cap: bytes beyond `cap` are dropped
-/// (not kept) while the caller keeps reading the fd to EOF regardless.
-private final class DrainBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var data = Data()
-    private var truncated = false
+/// Keeps at most `cap` bytes; later bytes are dropped and `truncated` is set. Pure.
+struct CappedBuffer {
+    let cap: Int
+    private(set) var data = Data()
+    private(set) var truncated = false
+    init(cap: Int) { self.cap = cap }
+    mutating func append(_ chunk: Data) {
+        guard !chunk.isEmpty else { return }
+        let room = cap - data.count
+        if chunk.count <= room { data.append(chunk) }
+        else { data.append(chunk.prefix(max(room, 0))); truncated = true }
+    }
+}
 
-    /// Appends `chunk`, keeping at most `cap` bytes total; anything beyond that
-    /// is discarded and `truncated` is set. The caller is still expected to keep
-    /// reading the underlying fd to EOF after this returns — see `runCapturing`.
-    func append(_ chunk: Data, cap: Int) {
-        lock.lock(); defer { lock.unlock() }
-        guard data.count < cap else {
-            truncated = true
+/// Splits a byte stream into lines for `onLine`. Pure. Same rules as the old streaming path:
+/// split on "\n", strip one trailing "\r", an empty line is delivered as "", a pending
+/// partial line longer than `cap` is delivered whole and cleared, `finish()` returns the
+/// trailing partial line at EOF. Consumed bytes are removed ONCE per feed (not per line).
+struct LineSplitter {
+    let cap: Int
+    private var pending = Data()
+    init(cap: Int = CommandRunner.lineBufferCap) { self.cap = cap }
+    mutating func feed(_ chunk: Data) -> [String] {
+        pending.append(chunk)
+        var lines: [String] = []
+        var start = pending.startIndex
+        while let nl = pending[start...].firstIndex(of: 0x0A) {
+            var end = nl
+            if end > start, pending[pending.index(before: end)] == 0x0D { end = pending.index(before: end) }
+            lines.append(String(decoding: pending[start..<end], as: UTF8.self))
+            start = pending.index(after: nl)
+        }
+        pending.removeSubrange(pending.startIndex..<start)
+        if pending.count > cap {
+            lines.append(String(decoding: pending, as: UTF8.self))
+            pending.removeAll()
+        }
+        return lines
+    }
+    mutating func finish() -> String? {
+        guard !pending.isEmpty else { return nil }
+        defer { pending.removeAll() }
+        return String(decoding: pending, as: UTF8.self)
+    }
+}
+
+/// One run's state machine. EVERY stored property is read and written only on `queue`
+/// (the exit source, both DispatchIO channels, the deadline timer and the cancel hop all
+/// target it), which is what makes `@unchecked Sendable` sound without a lock.
+/// Invariant: a signal is sent only in phase `.running`, i.e. before the leader is reaped,
+/// so the pgid (= leader pid) cannot have been reused.
+private final class CommandJob: @unchecked Sendable {
+    private enum Phase { case idle, running(pid_t), reaped(Int32?), done }
+    private let queue = DispatchQueue(label: "MacDashboard.CommandRunner.job", qos: .userInitiated)
+    private let onLine: ((String, Bool) -> Void)?
+    private var phase = Phase.idle
+    private var killReason: CommandOutcome.KillReason?
+    private var completion: ((CommandOutcome) -> Void)?
+    private var stdoutBuf = CappedBuffer(cap: CommandRunner.outputCap)
+    private var stderrBuf = CappedBuffer(cap: CommandRunner.stderrHeadCap)
+    private var stdoutLines = LineSplitter()
+    private var stderrLines = LineSplitter()
+    private var channels: [DispatchIO] = []
+    private var openStreams = 0
+    private var exitSource: DispatchSourceProcess?
+    private var timer: DispatchSourceTimer?
+
+    init(onLine: ((String, Bool) -> Void)?) { self.onLine = onLine }
+
+    func start(path: String, args: [String], environment: [String: String], timeout: TimeInterval,
+               completion: @escaping (CommandOutcome) -> Void) {
+        queue.async { self.launch(path, args, environment, timeout, completion) }
+    }
+    func cancel() { queue.async { self.requestKill(.cancelled) } }
+
+    private func launch(_ path: String, _ args: [String], _ env: [String: String],
+                        _ timeout: TimeInterval, _ completion: @escaping (CommandOutcome) -> Void) {
+        self.completion = completion
+        if killReason == .cancelled {                         // cancelled before spawn: spawn nothing
+            finish(CommandOutcome(termination: .cancelled, stdout: "", stdoutTruncated: false, stderrHead: ""))
             return
         }
-        let remaining = cap - data.count
-        if chunk.count > remaining {
-            data.append(chunk.prefix(remaining))
-            truncated = true
-        } else {
-            data.append(chunk)
+        var out: [Int32] = [-1, -1], err: [Int32] = [-1, -1]
+        guard pipe(&out) == 0 else { finish(.launchFailed(errno)); return }
+        guard pipe(&err) == 0 else {
+            let e = errno; Darwin.close(out[0]); Darwin.close(out[1]); finish(.launchFailed(e)); return
+        }
+        for fd in out + err { _ = fcntl(fd, F_SETFD, FD_CLOEXEC) }   // never leak into other spawns
+        var pid: pid_t = 0
+        let rc = CommandRunner.spawn(path, args, env, stdoutFD: out[1], stderrFD: err[1], pid: &pid)
+        Darwin.close(out[1]); Darwin.close(err[1])                 // parent keeps only the read ends
+        guard rc == 0 else { Darwin.close(out[0]); Darwin.close(err[0]); finish(.launchFailed(rc)); return }
+        phase = .running(pid)
+        channels = [makeReader(fd: out[0], isStderr: false), makeReader(fd: err[0], isStderr: true)]
+        openStreams = 2
+        let src = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: queue)
+        src.setEventHandler { self.reapIfExited() }
+        src.resume(); exitSource = src
+        reapIfExited()                                   // exit may precede the source's registration
+        let t = DispatchSource.makeTimerSource(queue: queue)
+        t.schedule(deadline: .now() + timeout)
+        t.setEventHandler { self.requestKill(.timedOut); self.reapIfExited() }  // reap also catches a missed exit event
+        t.resume(); timer = t
+    }
+
+    private func makeReader(fd: Int32, isStderr: Bool) -> DispatchIO {
+        let io = DispatchIO(type: .stream, fileDescriptor: fd, queue: queue,
+                            cleanupHandler: { _ in Darwin.close(fd) })
+        io.setLimit(lowWater: 1)                          // deliver as soon as bytes arrive (streaming)
+        io.read(offset: 0, length: Int.max, queue: queue) { done, data, _ in
+            if let data, !data.isEmpty {
+                var chunk = Data()
+                data.enumerateBytes { buf, _, _ in chunk.append(buf) }
+                self.consume(chunk, isStderr: isStderr)
+            }
+            if done { io.close(); self.streamEnded(isStderr: isStderr) }
+        }
+        return io
+    }
+
+    private func consume(_ chunk: Data, isStderr: Bool) {
+        if isStderr { stderrBuf.append(chunk) } else { stdoutBuf.append(chunk) }
+        guard let onLine else { return }
+        let lines = isStderr ? stderrLines.feed(chunk) : stdoutLines.feed(chunk)
+        for l in lines { onLine(l, isStderr) }
+    }
+
+    private func streamEnded(isStderr: Bool) {
+        if let onLine, let rest = (isStderr ? stderrLines.finish() : stdoutLines.finish()) { onLine(rest, isStderr) }
+        openStreams -= 1
+        finishIfComplete()
+    }
+
+    private func requestKill(_ reason: CommandOutcome.KillReason) {
+        switch phase {
+        case .idle:
+            if killReason == nil { killReason = reason }            // launch() will not spawn
+        case .running(let pid):
+            if killReason == nil { killReason = reason }
+            _ = killpg(pid, SIGKILL)                                // leader unreaped: pgid is ours
+        case .reaped:
+            // Leader gone, but a pipe is still open (a holder outside the group). Stop reading;
+            // the output is incomplete, so the outcome is timedOut/cancelled, not the exit status.
+            if killReason == nil { killReason = reason }
+            stopReading()
+        case .done:
+            break
         }
     }
 
-    /// Snapshots the accumulated bytes and the truncation flag under the lock.
-    func snapshot() -> (Data, truncated: Bool) {
-        lock.lock(); defer { lock.unlock() }
-        return (data, truncated)
+    private func reapIfExited() {
+        guard case .running(let pid) = phase else { return }
+        var info = siginfo_t()
+        var r: Int32
+        repeat { r = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT) } while r == -1 && errno == EINTR
+        if r == 0 && info.si_pid == 0 { return }                    // still running
+        var status: Int32? = nil
+        if r == 0 {
+            // Exited, still a zombie: its pid (= pgid) is reserved, so sweeping the group is safe.
+            _ = killpg(pid, SIGKILL)
+            var s: Int32 = 0
+            var got: pid_t
+            repeat { got = waitpid(pid, &s, 0) } while got == -1 && errno == EINTR   // zombie: returns at once
+            if got == pid { status = s }
+        }                                                           // r == -1 (ECHILD): status unknown, no sweep
+        phase = .reaped(status)
+        exitSource?.cancel(); exitSource = nil
+        if killReason != nil { stopReading() }      // we killed it: do not wait on pipe holders outside the group
+        finishIfComplete()
     }
-}
 
-/// Single-fire gate shared between the timeout timer and the termination-handler
-/// path. Whichever side calls `fire()` first records itself as `winner`; every
-/// later call (from either side) is a no-op and returns `false`.
-private final class KillGate: @unchecked Sendable {
-    enum Winner { case timeout, exited }
+    private func stopReading() { for io in channels { io.close(flags: .stop) } }
 
-    private let lock = NSLock()
-    private var _winner: Winner?
-
-    var winner: Winner? {
-        lock.lock()
-        defer { lock.unlock() }
-        return _winner
+    private func finishIfComplete() {
+        guard case .reaped(let status) = phase, openStreams == 0 else { return }
+        finish(CommandOutcome(
+            termination: CommandOutcome.termination(killReason: killReason, waitStatus: status),
+            stdout: String(decoding: stdoutBuf.data, as: UTF8.self),
+            stdoutTruncated: stdoutBuf.truncated,
+            stderrHead: String(decoding: stderrBuf.data, as: UTF8.self)))
     }
 
-    @discardableResult
-    func fire(_ who: Winner) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        if _winner != nil { return false }
-        _winner = who
-        return true
+    private func finish(_ outcome: CommandOutcome) {
+        if case .done = phase { return }
+        phase = .done
+        timer?.cancel(); timer = nil
+        exitSource?.cancel(); exitSource = nil
+        channels = []
+        let c = completion; completion = nil
+        c?(outcome)
     }
 }

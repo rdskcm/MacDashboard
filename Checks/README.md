@@ -27,7 +27,8 @@ script that copies the files in before each build instead of restructuring `Sour
 
 `SmartToolsAvailabilityChecks.swift`, `ThermalSensorsChecks.swift`,
 `ProcessSamplerChecks.swift`, `HistorySeriesChecks.swift`, `LaunchdPlistInspectorChecks.swift`,
-`AIRedactionChecks.swift`, `AIPayloadRequestChecks.swift`, and `SudoPathSafetyChecks.swift` are real
+`AIRedactionChecks.swift`, `AIPayloadRequestChecks.swift`, `SudoPathSafetyChecks.swift`,
+`CommandRunnerExitChecks.swift`, and `CommandRunnerCoreChecks.swift` are real
 (non-symlinked) files, like `main.swift`.
 Swift executable targets only permit ONE file with top-level (script-mode) statements —
 `main.swift` owns that slot — so additional check files must instead define a plain

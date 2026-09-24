@@ -6,8 +6,8 @@
 // every process (re-review 2 [M1]; see `memoryFootprints()` for why it takes both).
 // NOT thread-safe — keeps mutable per-instance state (the previous snapshot and its
 // timestamp), so use one instance per background context, the same contract
-// `LiveCollector` itself follows. `sample()` blocks (two subprocesses + a one-time
-// priming sleep) and must never be called on the main actor.
+// `LiveCollector` itself follows. `sample()` is async; one instance must not be
+// sampled by two tasks at once.
 import Foundation
 
 final class ProcessSampler {
@@ -21,9 +21,9 @@ final class ProcessSampler {
     /// One `/bin/ps` invocation, parsed. No sleep, and no per-pid work of any kind: the
     /// memory footprints come from ONE separate `/usr/bin/top` snapshot per tick
     /// (`memoryFootprints()`), never from a call per process.
-    private func snapshot() -> [Parsers.PSRow] {
-        guard let out = CommandRunner.run("/bin/ps",
-            ["-axww", "-o", "pid=,rss=,time=,comm="], timeout: 5) else { return [] }
+    private func snapshot() async -> [Parsers.PSRow] {
+        guard let out = await CommandRunner.run("/bin/ps",
+            ["-axww", "-o", "pid=,rss=,time=,comm="], timeout: 5).text else { return [] }
         return Parsers.psProcesses(out)
     }
 
@@ -61,36 +61,36 @@ final class ProcessSampler {
     /// Total: `[:]` when top cannot be launched or times out, and a pid is simply absent when
     /// its row did not parse. Either way the caller keeps that row's RSS — a failure here must
     /// never drop a row or fail a sample.
-    static func memoryFootprints() -> [Int32: Int64] {
-        guard let out = CommandRunner.run("/usr/bin/top",
-            ["-l", "1", "-stats", "pid,command,mem"], timeout: 15) else { return [:] }
+    static func memoryFootprints() async -> [Int32: Int64] {
+        guard let out = await CommandRunner.run("/usr/bin/top",
+            ["-l", "1", "-stats", "pid,command,mem"], timeout: 15).text else { return [:] }
         return Parsers.topMemoryFootprints(out)
     }
 
-    /// Blocking; call off the main actor. First call on an instance primes itself
-    /// (two `ps` runs, `primingWindow` seconds apart) so it never returns an
-    /// all-nil-CPU list, including on the one-shot manual refresh path which builds
-    /// a fresh `LiveCollector` (and therefore a fresh sampler) per press.
-    func sample() -> [ProcEntry] {
+    /// First call on an instance primes itself (two `ps` runs, `primingWindow`
+    /// seconds apart) so it never returns an all-nil-CPU list, including on the
+    /// one-shot manual refresh path which builds a fresh `LiveCollector` (and
+    /// therefore a fresh sampler) per press.
+    func sample() async -> [ProcEntry] {
         if previousAt == nil {
-            let base = snapshot()
+            let base = await snapshot()
             guard !base.isEmpty else { return [] }
             previousCPUSeconds = Dictionary(base.map { ($0.pid, $0.cpuSeconds) },
                                             uniquingKeysWith: { max($0, $1) })
             previousAt = ProcessInfo.processInfo.systemUptime
-            Thread.sleep(forTimeInterval: Self.primingWindow)
+            try? await Task.sleep(for: .seconds(Self.primingWindow))
         }
 
         let now = ProcessInfo.processInfo.systemUptime
         let elapsed = now - (previousAt ?? now)
 
-        let rows = snapshot()
+        let rows = await snapshot()
         guard !rows.isEmpty else { return [] }
 
         // AFTER the ps snapshot on purpose: `now` and `rows` are both captured before this
         // call, so top's runtime shifts neither end of the CPU-delta window. One call for the
         // whole table — the per-pid syscall this replaced could not see foreign uids at all.
-        let footprints = Self.memoryFootprints()
+        let footprints = await Self.memoryFootprints()
 
         let entries = rows.enumerated().map { index, r in
             ProcEntry(rank: index, name: r.name,
