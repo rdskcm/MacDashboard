@@ -21,8 +21,8 @@ enum CommandRunner {
     ///
     /// NOTE: `system_profiler` takes its language from `AppleLanguages` in
     /// CFPreferences, **not** from `LC_ALL`, so pinning this does not de-localize
-    /// its output. The real fix there is `-json` output and belongs to a later
-    /// block.
+    /// its output. Hardware info therefore uses `-json`, whose keys are not localised.
+    /// `SPPowerDataType` (battery) is still read as text and stays localised: known gap.
     static let defaultEnvironment: [String: String] = [
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "LC_ALL": "C", "LANG": "C", "TZ": "UTC",

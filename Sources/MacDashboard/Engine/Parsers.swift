@@ -7,6 +7,8 @@
 // on garbage or absent input rather than guessing. No I/O, no state — every function
 // here is a pure `String -> model` (or `String -> String -> model`) transform, which
 // is what makes them cheaply unit-testable from MacDashboardChecks.
+// The file also holds structured (JSON/plist) decoders: they take the raw stdout bytes as
+// `Data`, are equally pure and total, and return nil, `[]` or `.undecodable` on any decode error.
 
 import Foundation
 
@@ -257,45 +259,62 @@ enum Parsers {
         return (cycles, condition, maxCapacity)
     }
 
-    // MARK: - system (sw_vers / system_profiler SPHardwareDataType / uptime)
+    // MARK: - system (SystemVersion.plist / system_profiler -json SPHardwareDataType / uptime)
 
-    static func swVers(_ text: String) -> SystemInfo {
-        var info = SystemInfo()
-        for rawLine in text.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if let r = line.range(of: "ProductName:") {
-                info.osName = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            } else if let r = line.range(of: "ProductVersion:") {
-                info.osVersion = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            } else if let r = line.range(of: "BuildVersion:") {
-                info.osBuild = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            }
+    static func systemVersion(plist data: Data) -> SystemInfo? {
+        struct Plist: Decodable {
+            var ProductName: String?
+            var ProductVersion: String?
+            var ProductBuildVersion: String?
         }
+        guard let p = try? PropertyListDecoder().decode(Plist.self, from: data) else { return nil }
+        var info = SystemInfo()
+        info.osName = p.ProductName
+        info.osVersion = p.ProductVersion
+        info.osBuild = p.ProductBuildVersion
         return info
     }
 
-    /// Handles BOTH Apple Silicon ("Chip: Apple M3") and Intel ("Processor Name: ...")
-    /// hardware dumps, and both core-count forms ("8 (4 Performance and 4 Efficiency)"
-    /// and plain "8"). Cores are stored verbatim (Models.swift wants the raw shape,
-    /// not a reformatted "4P + 4E" — that was legacy's own HTML-tile-only rendering).
-    static func hardwareProfile(_ text: String) -> SystemInfo {
-        var info = SystemInfo()
-        for rawLine in text.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if let r = line.range(of: "Model Name:") {
-                info.modelName = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            } else if let r = line.range(of: "Model Identifier:") {
-                info.modelId = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            } else if let r = line.range(of: "Chip:") {
-                info.chip = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            } else if let r = line.range(of: "Processor Name:") {
-                info.chip = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            } else if let r = line.range(of: "Total Number of Cores:") {
-                info.cores = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            } else if let r = line.range(of: "Memory:") {
-                let memStr = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-                info.memBytes = parseWholeGBString(memStr)
+    /// Decodes `system_profiler -json SPHardwareDataType` (first item). Apple Silicon has
+    /// `chip_type`, Intel has `cpu_type`. `number_processors` is an Int (Intel) or a
+    /// "proc T:P:E" / "proc T:0:P:E" string (Apple Silicon); any other shape gives nil cores.
+    static func hardwareProfile(json data: Data) -> SystemInfo? {
+        enum CoreCount: Decodable {
+            case count(Int), tiers(String)
+            init(from decoder: Decoder) throws {
+                let c = try decoder.singleValueContainer()
+                if let n = try? c.decode(Int.self) { self = .count(n); return }
+                self = .tiers(try c.decode(String.self))
             }
+        }
+        struct Item: Decodable {
+            var machine_name: String?
+            var machine_model: String?
+            var chip_type: String?
+            var cpu_type: String?
+            var physical_memory: String?
+            var number_processors: CoreCount?
+        }
+        struct Root: Decodable { var SPHardwareDataType: [Item] }
+        guard let root = try? JSONDecoder().decode(Root.self, from: data),
+              let item = root.SPHardwareDataType.first else { return nil }
+        var info = SystemInfo()
+        info.modelName = item.machine_name
+        info.modelId = item.machine_model
+        info.chip = item.chip_type ?? item.cpu_type
+        info.memBytes = item.physical_memory.flatMap(parseWholeGBString)
+        switch item.number_processors {
+        case .count(let n)?: info.cores = "\(n)"
+        case .tiers(let s)?:
+            // exactly "proc T:P:E" or "proc T:0:P:E"; the meaning of the 0 field is unverified
+            let re = #"^proc (\d+):(?:0:)?(\d+):(\d+)$"#
+            if let m = s.range(of: re, options: .regularExpression) {
+                let nums = s[m].dropFirst(5).split(separator: ":").compactMap { Int($0) }
+                if nums.count >= 3 {
+                    info.cores = "\(nums[0]) (\(nums[nums.count - 2]) Performance and \(nums[nums.count - 1]) Efficiency)"
+                }
+            }
+        case nil: break
         }
         return info
     }
@@ -353,43 +372,35 @@ enum Parsers {
         return (h, mm)
     }
 
-    // MARK: - Time Machine (`tmutil destinationinfo`)
+    // MARK: - Time Machine (`tmutil destinationinfo -X`)
 
-    /// Multi-destination output repeats a "====...====" separator before each
-    /// block; only the first block is used (per SPEC: "first entry is fine").
-    /// "No destinations configured" (any casing) ⇒ nil.
-    static func tmDestination(_ text: String) -> TMDestination? {
-        if text.lowercased().contains("no destinations configured") { return nil }
-
-        var blocks: [[String]] = [[]]
-        for line in text.components(separatedBy: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty && trimmed.allSatisfy({ $0 == "=" }) {
-                if !blocks[blocks.count - 1].isEmpty { blocks.append([]) }
-                continue
-            }
-            blocks[blocks.count - 1].append(line)
+    /// Decodes `tmutil destinationinfo -X`; only the first destination is used.
+    static func tmDestination(plist data: Data) -> TMDestinationResult {
+        if String(decoding: data, as: UTF8.self).lowercased().contains("no destinations configured") {
+            return .notConfigured
         }
-        guard let block = blocks.first(where: { !$0.isEmpty }) else { return nil }
-
-        var name: String?, kind: String?, mountPoint: String?
-        var quotaBytes: Int64?
-        for rawLine in block {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            guard let colonIdx = line.firstIndex(of: ":") else { continue }
-            let label = line[line.startIndex..<colonIdx].trimmingCharacters(in: .whitespaces)
-            let value = String(line[line.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
-            guard !value.isEmpty else { continue }
-            switch label {
-            case "Name": name = value
-            case "Kind": kind = value
-            case "Mount Point": mountPoint = value
-            case "Quota": quotaBytes = parseDecimalQuota(value)
-            default: break
+        struct Quota: Decodable {
+            var value: Double
+            init(from decoder: Decoder) throws {
+                let c = try decoder.singleValueContainer()
+                if let i = try? c.decode(Int.self) { value = Double(i) } else { value = try c.decode(Double.self) }
             }
         }
-        guard name != nil || kind != nil || mountPoint != nil || quotaBytes != nil else { return nil }
-        return TMDestination(name: name, kind: kind, mountPoint: mountPoint, quotaBytes: quotaBytes, lastBackup: nil)
+        struct Entry: Decodable {
+            var Name: String?
+            var Kind: String?
+            var MountPoint: String?
+            var QuotaGB: Quota?
+        }
+        struct Root: Decodable { var Destinations: [Entry]? }
+        guard let root = try? PropertyListDecoder().decode(Root.self, from: data) else { return .undecodable }
+        guard let first = root.Destinations?.first else { return .notConfigured }
+        if first.Name == nil && first.Kind == nil && first.MountPoint == nil && first.QuotaGB == nil {
+            return .undecodable
+        }
+        let gb = first.QuotaGB?.value ?? 0
+        return .configured(TMDestination(name: first.Name, kind: first.Kind, mountPoint: first.MountPoint,
+                                         quotaBytes: gb > 0 ? Int64((gb * 1e9).rounded()) : nil, lastBackup: nil))
     }
 
     /// Extracts the trailing `YYYY-MM-DD-HHMMSS` timestamp from a `tmutil
@@ -416,6 +427,10 @@ enum Parsers {
     /// safety net for a genuinely failed/unavailable `diskutil` invocation — but not an
     /// unreachable one: a clean exit with empty stdout now reaches this parser as `""`
     /// (⇒ `CommandRunner.run` no longer returns nil for that case) and lands here.
+    enum TMDestinationResult: Equatable {
+        case configured(TMDestination), notConfigured, undecodable
+    }
+
     enum DiskutilBackupSnapshotResult: Equatable {
         case found(Date)
         case noBackupsFound
@@ -490,65 +505,64 @@ enum Parsers {
         return fmt.string(from: date)
     }
 
-    /// tmutil reports quota as decimal ("499 GB" = 499 * 1000^3), matching Apple's
-    /// Finder/Time-Machine-era storage convention (distinct from du/top's binary K/M/G).
-    private static func parseDecimalQuota(_ s: String) -> Int64? {
-        let parts = s.split(separator: " ")
-        guard let first = parts.first, let num = Double(first) else { return nil }
-        let unit = parts.count > 1 ? parts[1].uppercased() : ""
-        let mul: Double
-        switch unit {
-        case "TB": mul = 1_000_000_000_000
-        case "GB": mul = 1_000_000_000
-        case "MB": mul = 1_000_000
-        case "KB": mul = 1_000
-        default: mul = 1
-        }
-        return Int64((num * mul).rounded())
-    }
-
     // MARK: - disks (diskutil / smartctl)
 
-    /// `diskutil info <dev>` → SMART status text + media/model name, when present.
-    static func diskutilSmart(_ text: String) -> (status: String?, mediaName: String?) {
-        var status: String?
-        var mediaName: String?
-        for rawLine in text.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if let r = line.range(of: "SMART Status:") {
-                status = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            } else if let r = line.range(of: "Device / Media Name:") {
-                mediaName = line[r.upperBound...].trimmingCharacters(in: .whitespaces)
-            }
+    /// `diskutil info -plist <dev>` → SMART status + media/model name, when present.
+    static func diskutilSmart(plist data: Data) -> (status: String?, mediaName: String?) {
+        struct Info: Decodable {
+            var SMARTStatus: String?
+            var MediaName: String?
         }
-        return (status, mediaName)
+        guard let i = try? PropertyListDecoder().decode(Info.self, from: data) else { return (nil, nil) }
+        return (i.SMARTStatus, i.MediaName)
     }
 
-    private static let smartctlAttrLabels = [
-        "Critical Warning",
-        "Temperature",
-        "Available Spare",
-        "Percentage Used",
-        "Power Cycles",
-        "Power On Hours",
-        "Unsafe Shutdowns",
-        "Media and Data Integrity Errors",
-        "Error Information Log Entries"
-    ]
+    /// `diskutil list -plist external physical` → `/dev/diskN` for every whole disk.
+    static func externalPhysicalDisks(plist data: Data) -> [String] {
+        struct List: Decodable { var WholeDisks: [String] }
+        guard let l = try? PropertyListDecoder().decode(List.self, from: data) else { return [] }
+        return l.WholeDisks.map { "/dev/" + $0 }
+    }
 
-    /// Extracts the 9 NVMe attrs (SPEC §5.2) from raw `smartctl -A` output, in a
-    /// fixed canonical order regardless of the order they appear in the source.
-    static func smartctlAttrs(_ text: String) -> [(String, String)] {
-        var found: [String: String] = [:]
-        for rawLine in text.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            for label in smartctlAttrLabels where found[label] == nil {
-                guard line.hasPrefix(label + ":") else { continue }
-                let value = String(line.dropFirst(label.count + 1)).trimmingCharacters(in: .whitespaces)
-                if !value.isEmpty { found[label] = value }
-            }
+    /// Extracts the 9 NVMe attrs (SPEC §5.2) from `smartctl -A -j` output, in a fixed
+    /// canonical order. ATA disks, error documents and non-JSON output give `[]`.
+    static func smartctlAttrs(json data: Data) -> [(String, String)] {
+        struct Log: Decodable {
+            var critical_warning: UInt64?
+            var temperature: Int64?
+            var available_spare: UInt64?
+            var percentage_used: UInt64?
+            var power_cycles: UInt64?
+            var power_on_hours: UInt64?
+            var unsafe_shutdowns: UInt64?
+            var media_errors: UInt64?
+            var num_err_log_entries: UInt64?
         }
-        return smartctlAttrLabels.compactMap { label in found[label].map { (label, $0) } }
+        struct Root: Decodable { var nvme_smart_health_information_log: Log? }
+        guard let root = try? JSONDecoder().decode(Root.self, from: data),
+              let log = root.nvme_smart_health_information_log else { return [] }
+        var rows: [(String, String)] = []
+        if let v = log.critical_warning { rows.append(("Critical Warning", String(format: "0x%02x", v))) }
+        rows.append(("Temperature", log.temperature.map { "\($0) Celsius" } ?? "-"))
+        if let v = log.available_spare { rows.append(("Available Spare", "\(v)%")) }
+        if let v = log.percentage_used { rows.append(("Percentage Used", "\(v)%")) }
+        if let v = log.power_cycles { rows.append(("Power Cycles", groupedThousands(v))) }
+        if let v = log.power_on_hours { rows.append(("Power On Hours", groupedThousands(v))) }
+        if let v = log.unsafe_shutdowns { rows.append(("Unsafe Shutdowns", groupedThousands(v))) }
+        if let v = log.media_errors { rows.append(("Media and Data Integrity Errors", groupedThousands(v))) }
+        if let v = log.num_err_log_entries { rows.append(("Error Information Log Entries", groupedThousands(v))) }
+        return rows
+    }
+
+    /// Locale-independent "1,234,567" (smartctl's own form under LC_ALL=C).
+    private static func groupedThousands(_ v: UInt64) -> String {
+        let digits = Array(String(v))
+        var out = ""
+        for (i, ch) in digits.enumerated() {
+            if i > 0 && (digits.count - i) % 3 == 0 { out.append(",") }
+            out.append(ch)
+        }
+        return out
     }
 
     // MARK: - launchctl (`launchctl list`, non-Apple only)

@@ -388,9 +388,9 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 Each section = independent async step with its own timeout; failure ⇒ section value
 stays nil + progress marked done. Run sections concurrently (TaskGroup) EXCEPT the
 du-heavy ones which run serially after the quick ones. Commands (all read-only):
-- system: `sw_vers`, `system_profiler SPHardwareDataType` (Model Name/Identifier,
-  Chip OR "Processor Name" on Intel, Cores, Memory), `sysctl -n machdep.cpu.brand_string`
-  fallback for chip, `uptime` (parse → Russian human form).
+- system: `/System/Library/CoreServices/SystemVersion.plist` (in-process), `system_profiler -json SPHardwareDataType`
+  (`machine_name`/`machine_model`, `chip_type` OR `cpu_type` on Intel, `number_processors`, `physical_memory`),
+  `sysctlbyname("machdep.cpu.brand_string")` fallback for chip, `uptime` (parse → Russian human form).
 - snapshots: `tmutil listlocalsnapshots /`, parsed by `ReportCollector.localSnapshotNames`. The UI
   reports COUNT only — never a per-snapshot size, because snapshots share disk blocks.
 - homeDirs: `du -xk -d 1 $HOME` (120 s timeout) → top-20 by size. NOTE: first run on a
@@ -408,7 +408,7 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
 - security: `fdesetup status`, `spctl --status`, `csrutil status`,
   `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate` (fallback
   `defaults read /Library/Preferences/com.apple.alf globalstate`; 1/2 ⇒ on).
-- tmDest: `tmutil destinationinfo` (absent ⇒ .some(nil) — "не настроен", calm info);
+- tmDest: `tmutil destinationinfo -X` (plist; configured / not configured / undecodable ⇒ not checked) (absent ⇒ .some(nil) — "не настроен", calm info);
   `tmutil latestbackup` best-effort for lastBackup (may need FDA ⇒ nil).
 - spotlight: `mdutil -s /`.
 - crashes: ~/Library/Logs/DiagnosticReports via FileManager (no shell); files with mtime older than 7 days dropped, remaining ones grouped by process name (parsed off the filename) into ≤15 CrashGroup(process, count, isPanic); isPanic = at least one .panic report in the group.
@@ -421,12 +421,12 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
   `launchctl list` filtered: label NOT starting with "com.apple." (keep legacy cleanup:
   strip "application." prefix and trailing ".NNN.NNN").
 - smart (GENERIC, replaces Samsung-specific block):
-  1) Internal: `diskutil info disk0` → "SMART Status: Verified/Not Supported" ⇒
+  1) Internal: `diskutil info -plist disk0` → `SMARTStatus` "Verified/Not Supported" ⇒
      SmartDisk(device:"internal", title:"Встроенный накопитель" + model if present).
-  2) External physical disks: `diskutil list` → identifiers marked "external, physical".
-     For each: `diskutil info <dev>` for model/name + SMART status line.
+  2) External physical disks: `diskutil list -plist external physical` → `WholeDisks`.
+     For each: `diskutil info -plist <dev>` for `MediaName` + `SMARTStatus`.
   3) If smartctl exists (search /opt/homebrew/{bin,sbin}, /usr/local/{bin,sbin}) —
-     try `sudo -n smartctl -A <dev>`, then plain `smartctl -A <dev>` without sudo;
+     try `sudo -n smartctl -A -j <dev>`, then plain `smartctl -A -j <dev>` without sudo;
      on success attach NVMe attrs (Critical Warning, Temperature, Available Spare,
      Percentage Used, Power Cycles, Power On Hours, Unsafe Shutdowns,
      Media and Data Integrity Errors, Error Information Log Entries).
@@ -446,7 +446,7 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
      swap. The gate is TOCTOU by construction and is a bar-raiser, not a guarantee.
      `sudo -n` MUST use stdin </dev/null; nonzero exit ⇒ just skip attrs, status from
      diskutil stands. No smartctl ⇒ still list disks with diskutil info only.
-     Internal NVMe answers `smartctl -A disk0` unprivileged, so only external/USB/SATA
+     Internal NVMe answers `smartctl -A -j disk0` unprivileged, so only external/USB/SATA
      disks depend on this branch.
   No external disks ⇒ smart = internal only. NOTHING here may error the report.
 - energy: `pmset -g custom` (fallback `pmset -g`); parse Battery Power/AC Power buckets.
