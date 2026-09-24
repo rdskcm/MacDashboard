@@ -45,6 +45,9 @@ enum ReportWriter {
         addSection(&out, L.reportSectionUpdates, renderUpdates(report.updates))
         addSection(&out, L.reportSectionSmart, renderSmart(report.smart))
 
+        let unparsed = (report.parseFailures + live.parseFailures).sorted { $0.commandLine < $1.commandLine }
+        if !unparsed.isEmpty { addSection(&out, L.reportSectionUnparsed, renderParseFailures(unparsed)) }
+
         out += "\n===== \(L.reportDoneBanner) =====\n"
         out += "\(L.reportSavedTo(defaultReportPathForFooter()))\n"
         return out
@@ -405,6 +408,16 @@ enum ReportWriter {
                 let value = rawLabel == "Critical Warning" ? smartCriticalWarningRU(rawValue) : rawValue
                 lines.append("  " + padRight(label + ":", width + 2) + value)
             }
+        }
+        return lines
+    }
+
+    private static func renderParseFailures(_ failures: [ParseFailure]) -> [String] {
+        var lines = [L.reportUnparsedHint]
+        for f in failures {
+            lines.append("$ \(f.commandLine)")
+            lines.append(contentsOf: f.excerpt.map { "  " + $0 })
+            if f.omittedLineCount > 0 { lines.append("  " + L.reportUnparsedMoreLines(f.omittedLineCount)) }
         }
         return lines
     }

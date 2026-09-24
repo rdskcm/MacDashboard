@@ -250,25 +250,30 @@ final class ReportCollector {
 
     private func collectSystem() async -> Outcome {
         var info = SystemInfo()
+        var failures: [ParseFailure] = []
         if let data = FileManager.default.contents(atPath: "/System/Library/CoreServices/SystemVersion.plist"),
            let parsed = Parsers.systemVersion(plist: data) {
             info.osName = parsed.osName; info.osVersion = parsed.osVersion; info.osBuild = parsed.osBuild
         }
-        if let hw = await CommandRunner.run("/usr/sbin/system_profiler", ["-json", "SPHardwareDataType"], timeout: 25).text,
-           let h = Parsers.hardwareProfile(json: Data(hw.utf8)) {
-            info.modelName = h.modelName; info.modelId = h.modelId; info.chip = h.chip
-            info.cores = h.cores; info.memBytes = h.memBytes
+        if let hw = await ParsedCommand.spHardware.run().text {
+            if let h = Parsers.hardwareProfile(json: Data(hw.utf8)) {
+                info.modelName = h.modelName; info.modelId = h.modelId; info.chip = h.chip
+                info.cores = h.cores; info.memBytes = h.memBytes
+            } else if let f = ParseFailure(.spHardware, stdout: hw) {
+                failures.append(f)
+            }
         }
         if info.chip == nil, let brand = Self.sysctlString("machdep.cpu.brand_string") {
             let s = brand.trimmingCharacters(in: .whitespacesAndNewlines)
             if !s.isEmpty { info.chip = s }
         }
-        if let up = await CommandRunner.run("/usr/bin/uptime", [], timeout: 10).text {
+        if let up = await ParsedCommand.uptime.run().text {
             info.uptime = Parsers.uptimeHuman(up)
+            if info.uptime == nil, let f = ParseFailure(.uptime, stdout: up) { failures.append(f) }
         }
         info.hostName = ProcessInfo.processInfo.hostName
         let has = info.osName != nil || info.modelName != nil || info.chip != nil
-        return Outcome(section: .system) { $0.system = has ? info : nil }
+        return Outcome(section: .system) { $0.system = has ? info : nil; $0.parseFailures += failures }
     }
 
     private static func sysctlString(_ name: String) -> String? {
@@ -296,8 +301,8 @@ final class ReportCollector {
     // MARK: - security
 
     private func collectSecurity() async -> Outcome {
-        let s = await collectSecurityInfo()
-        return Outcome(section: .security) { $0.security = s }
+        let (s, failures) = await securityInfoReporting()
+        return Outcome(section: .security) { $0.security = s; $0.parseFailures += failures }
     }
 
     /// The actual security-state collection logic, factored out of `collectSecurity()`
@@ -305,26 +310,44 @@ final class ReportCollector {
     /// it directly without going through the `Outcome` plumbing, mirroring
     /// `collectSmartDisks()`/`collectBrewInfo()` above.
     func collectSecurityInfo() async -> SecurityState {
+        await securityInfoReporting().state
+    }
+
+    private func securityInfoReporting() async -> (state: SecurityState, failures: [ParseFailure]) {
         var s = SecurityState()
-        if let t = await CommandRunner.run("/usr/bin/fdesetup", ["status"], timeout: 10).text { s.fileVault = Parsers.fileVaultStatus(t) }
-        if let t = await CommandRunner.run("/usr/sbin/spctl", ["--status"], timeout: 10).text { s.gatekeeper = Parsers.gatekeeperStatus(t) }
-        if let t = await CommandRunner.run("/usr/bin/csrutil", ["status"], timeout: 10).text { s.sip = Parsers.sipStatus(t) }
-        if let t = await CommandRunner.run("/usr/libexec/ApplicationFirewall/socketfilterfw", ["--getglobalstate"], timeout: 10).text,
-           let v = Parsers.firewallStatus(t) {
-            s.firewall = v
-        } else if let t = await CommandRunner.run("/usr/bin/defaults", ["read", "/Library/Preferences/com.apple.alf", "globalstate"], timeout: 10).text {
-            s.firewall = Parsers.firewallStatus(t)
+        var failures: [ParseFailure] = []
+        if let t = await ParsedCommand.fdesetup.run().text {
+            s.fileVault = Parsers.fileVaultStatus(t)
+            if s.fileVault == nil, let f = ParseFailure(.fdesetup, stdout: t) { failures.append(f) }
         }
-        return s
+        if let t = await ParsedCommand.spctl.run().text {
+            s.gatekeeper = Parsers.gatekeeperStatus(t)
+            if s.gatekeeper == nil, let f = ParseFailure(.spctl, stdout: t) { failures.append(f) }
+        }
+        if let t = await ParsedCommand.csrutil.run().text {
+            s.sip = Parsers.sipStatus(t)
+            if s.sip == nil, let f = ParseFailure(.csrutil, stdout: t) { failures.append(f) }
+        }
+        let fwText = await ParsedCommand.socketfilterfw.run().text
+        if let fwText, let v = Parsers.firewallStatus(fwText) {
+            s.firewall = v
+        } else {
+            if let fwText, let f = ParseFailure(.socketfilterfw, stdout: fwText) { failures.append(f) }
+            if let t = await CommandRunner.run("/usr/bin/defaults", ["read", "/Library/Preferences/com.apple.alf", "globalstate"], timeout: 10).text {
+                s.firewall = Parsers.firewallStatus(t)
+            }
+        }
+        return (s, failures)
     }
 
     // MARK: - Time Machine destination
 
     private func collectTMDest() async -> Outcome {
-        guard let value = await collectTMDestInfo() else {
-            return Outcome(section: .tmDest) { _ in }   // leave .none
+        let (value, failure) = await tmDestInfoReporting()
+        guard let value else {
+            return Outcome(section: .tmDest) { if let failure { $0.parseFailures.append(failure) } }   // leave .none
         }
-        return Outcome(section: .tmDest) { $0.tmDest = .some(value) }
+        return Outcome(section: .tmDest) { $0.tmDest = .some(value); if let failure { $0.parseFailures.append(failure) } }
     }
 
     /// The actual Time Machine destination collection logic, factored out of
@@ -335,16 +358,20 @@ final class ReportCollector {
     /// Double optional: outer `nil` = command failed / not checked (leave `report.tmDest`
     /// untouched); `.some(nil)` = checked, no destination configured; `.some(x)` = configured.
     func collectTMDestInfo() async -> TMDestination?? {
+        await tmDestInfoReporting().value
+    }
+
+    private func tmDestInfoReporting() async -> (value: TMDestination??, failure: ParseFailure?) {
         // `-X` prints a plist; empty stdout is not evidence of "no destination", so it stays "not checked".
-        guard let out = await CommandRunner.run("/usr/bin/tmutil", ["destinationinfo", "-X"], timeout: 15).nonEmptyText else {
-            return nil
+        guard let out = await ParsedCommand.tmutilDestinationInfo.run().nonEmptyText else {
+            return (nil, nil)
         }
         switch Parsers.tmDestination(plist: Data(out.utf8)) {
-        case .undecodable: return nil
-        case .notConfigured: return .some(nil)
+        case .undecodable: return (nil, ParseFailure(.tmutilDestinationInfo, stdout: out))
+        case .notConfigured: return (.some(nil), nil)
         case .configured(var d):
             await applyLastBackup(to: &d)
-            return .some(d)
+            return (.some(d), nil)
         }
     }
 
@@ -520,21 +547,29 @@ final class ReportCollector {
     // MARK: - SMART / disks (generic — no hardcoded model names)
 
     private func collectSmart() async -> Outcome {
-        let disks = await collectSmartDisks()
+        let (disks, failures) = await smartDisksReporting()
         let smartctlPresent = Self.findSmartctl() != nil
-        return Outcome(section: .smart) { $0.smart = disks; $0.smartctlPresent = smartctlPresent }
+        return Outcome(section: .smart) { $0.smart = disks; $0.smartctlPresent = smartctlPresent; $0.parseFailures += failures }
     }
 
     /// The actual SMART/disks collection logic, factored out of `collectSmart()` so the
     /// live SMART refresh loop (DashboardModel) can call it directly without going through
     /// the `Outcome` plumbing (which mutates a `FullReport` rather than returning a value).
     func collectSmartDisks() async -> [SmartDisk] {
+        await smartDisksReporting().disks
+    }
+
+    private func smartDisksReporting() async -> (disks: [SmartDisk], failures: [ParseFailure]) {
         var disks: [SmartDisk] = []
+        var failures: [ParseFailure] = []
         let smartctl = Self.findSmartctl()
 
         // Internal boot disk.
-        if let info = await CommandRunner.run("/usr/sbin/diskutil", ["info", "-plist", "disk0"], timeout: 15).nonEmptyText {
+        if let info = await ParsedCommand.diskutilInfo.run(device: "disk0").nonEmptyText {
             let (status, media) = Parsers.diskutilSmart(plist: Data(info.utf8))
+            if status == nil && media == nil, let f = ParseFailure(.diskutilInfo, device: "disk0", stdout: info) {
+                failures.append(f)
+            }
             var disk = makeDiskutilDisk(device: "internal",
                                         fallbackTitle: L.reportCollectorInternalDiskFallbackTitle,
                                         media: media, status: status, external: false)
@@ -551,12 +586,14 @@ final class ReportCollector {
             if let sc = smartctl {
                 var raw: String? = nil
                 if Self.isSafeToRunViaSudo(sc) {
-                    raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "-j", "disk0"], timeout: 15).nonEmptyText
+                    raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc] + ParsedCommand.smartctl.arguments(device: "disk0"), timeout: ParsedCommand.smartctl.timeout).nonEmptyText
                 }
-                if raw == nil { raw = await CommandRunner.run(sc, ["-A", "-j", "disk0"], timeout: 15).nonEmptyText }
+                if raw == nil { raw = await ParsedCommand.smartctl.run(device: "disk0", executable: sc).nonEmptyText }
                 if let raw {
                     let attrs = Parsers.smartctlAttrs(json: Data(raw.utf8))
-                    if !attrs.isEmpty {
+                    if attrs.isEmpty {
+                        if let f = ParseFailure(.smartctl, device: "disk0", executable: sc, stdout: raw) { failures.append(f) }
+                    } else {
                         disk.attrs = attrs
                         // Real SMART data can only worsen the diskutil-derived
                         // verdict, never mask it: same wording map as makeExternalDisk.
@@ -581,9 +618,12 @@ final class ReportCollector {
             for dev in Parsers.externalPhysicalDisks(plist: Data(list.utf8)) {
                 var title = dev
                 var duStatus: String?
-                if let info = await CommandRunner.run("/usr/sbin/diskutil", ["info", "-plist", dev], timeout: 15).text {
+                if let info = await ParsedCommand.diskutilInfo.run(device: dev).text {
                     let (status, media) = Parsers.diskutilSmart(plist: Data(info.utf8))
                     duStatus = status
+                    if status == nil && media == nil, let f = ParseFailure(.diskutilInfo, device: dev, stdout: info) {
+                        failures.append(f)
+                    }
                     if let media, !media.isEmpty { title = media }
                 }
                 var attrs: [(String, String)] = []
@@ -592,18 +632,20 @@ final class ReportCollector {
                     // non-root actor cannot swap (isSafeToRunViaSudo), then plain — both
                     // fail fast, never prompt. This is the branch external/USB/SATA disks
                     // actually need: internal NVMe answers `smartctl -A` unprivileged.
+                    // Not recorded as a parse failure: ATA-shaped JSON from USB/SATA
+                    // disks is a known unsupported format, not a regression (R3-FIXTURES).
                     var raw: String? = nil
                     if Self.isSafeToRunViaSudo(sc) {
-                        raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "-j", dev], timeout: 15).nonEmptyText
+                        raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc] + ParsedCommand.smartctl.arguments(device: dev), timeout: ParsedCommand.smartctl.timeout).nonEmptyText
                     }
-                    if raw == nil { raw = await CommandRunner.run(sc, ["-A", "-j", dev], timeout: 15).nonEmptyText }
+                    if raw == nil { raw = await ParsedCommand.smartctl.run(device: dev, executable: sc).nonEmptyText }
                     if let raw { attrs = Parsers.smartctlAttrs(json: Data(raw.utf8)) }
                 }
                 disks.append(makeExternalDisk(device: dev, title: title, duStatus: duStatus,
                                               attrs: attrs, smartctlPresent: smartctl != nil))
             }
         }
-        return disks
+        return (disks, failures)
     }
 
     private func makeDiskutilDisk(device: String, fallbackTitle: String,
@@ -811,8 +853,8 @@ final class ReportCollector {
     // MARK: - energy (pmset -g custom, fallback -g)
 
     private func collectEnergy() async -> Outcome {
-        let energy = await collectEnergySettings()
-        return Outcome(section: .energy) { $0.energy = energy }
+        let (energy, failure) = await energySettingsReporting()
+        return Outcome(section: .energy) { $0.energy = energy; if let failure { $0.parseFailures.append(failure) } }
     }
 
     /// The actual pmset-custom collection logic, factored out of `collectEnergy()` so
@@ -820,25 +862,40 @@ final class ReportCollector {
     /// it directly without going through the `Outcome` plumbing (mirrors
     /// `collectSmartDisks()` above).
     func collectEnergySettings() async -> EnergySettings? {
-        var out = await CommandRunner.run("/usr/bin/pmset", ["-g", "custom"], timeout: 10).nonEmptyText
-        if out == nil { out = await CommandRunner.run("/usr/bin/pmset", ["-g"], timeout: 10).nonEmptyText }
-        return out.map { Parsers.pmsetCustom($0) }
+        await energySettingsReporting().settings
+    }
+
+    private func energySettingsReporting() async -> (settings: EnergySettings?, failure: ParseFailure?) {
+        if let custom = await ParsedCommand.pmsetCustom.run().nonEmptyText {
+            let settings = Parsers.pmsetCustom(custom)
+            let failure = (settings.battery.isEmpty && settings.ac.isEmpty)
+                ? ParseFailure(.pmsetCustom, stdout: custom) : nil
+            return (settings, failure)
+        }
+        let out = await CommandRunner.run("/usr/bin/pmset", ["-g"], timeout: 10).nonEmptyText
+        return (out.map { Parsers.pmsetCustom($0) }, nil)
     }
 
     // MARK: - battery (pmset -g batt + system_profiler SPPowerDataType)
 
     private func collectBattery() async -> Outcome {
         var b: BatteryInfo?
-        if let pm = await CommandRunner.run("/usr/bin/pmset", ["-g", "batt"], timeout: 10).nonEmptyText {
+        var failures: [ParseFailure] = []
+        if let pm = await ParsedCommand.pmsetBatt.run().nonEmptyText {
             b = Parsers.batteryPmset(pm)
+            if b == nil, let f = ParseFailure(.pmsetBatt, stdout: pm) { failures.append(f) }
         }
-        if let sp = await CommandRunner.run("/usr/sbin/system_profiler", ["SPPowerDataType"], timeout: 25).text {
+        if let sp = await ParsedCommand.spPower.run().text {
             let prof = Parsers.batteryPowerProfile(sp)
             if prof.cycles != nil || prof.condition != nil || prof.maxCapacity != nil {
                 if b == nil { b = BatteryInfo() }
                 b?.cycles = prof.cycles
                 b?.condition = prof.condition
                 b?.maxCapacity = prof.maxCapacity
+            } else if b?.charge != nil, let f = ParseFailure(.spPower, stdout: sp) {
+                // pmset reported a battery charge, so a missing profile is a parse
+                // failure, not a desktop with no battery (R3-FIXTURES edge case).
+                failures.append(f)
             }
         }
         // Portability: a desktop Mac's `pmset -g batt` prints only "Now drawing from
@@ -853,7 +910,7 @@ final class ReportCollector {
             b = nil
         }
         let value = b
-        return Outcome(section: .battery) { $0.battery = value }
+        return Outcome(section: .battery) { $0.battery = value; $0.parseFailures += failures }
     }
 
     // MARK: - home dirs (slow: du)

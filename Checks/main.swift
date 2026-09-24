@@ -22,6 +22,9 @@ L10nStore.shared.language = .ru
 // not at all if the process later hangs) instead of as each check runs.
 setbuf(stdout, nil)
 
+// R3-FIXTURES: `--live` runs only the live parser canary (Checks/LiveCanary.swift) and exits.
+if CommandLine.arguments.contains("--live") { exit(runLiveCanary()) }
+
 var failures = 0
 var total = 0
 
@@ -958,6 +961,8 @@ do {
     let internalDisk = result?.smart?.first { $0.device == "internal" }
     check(isCI || internalDisk?.attrs.isEmpty == false,
           "smoke ReportCollector: internal disk has parsed SMART attrs (smartctl -A disk0; skipped under CI)")
+    check(isCI || result?.parseFailures.isEmpty == true,
+          "smoke ReportCollector: no parse failures recorded (skipped under CI) — got \(result?.parseFailures.map(\.commandLine) ?? [])")
 }
 
 // =====================================================================
@@ -1708,6 +1713,13 @@ runThermalSensorsChecks()
 // =====================================================================
 
 runProcessSamplerChecks()
+
+// =====================================================================
+// MARK: - Parser fixtures (R3-FIXTURES, in ParserFixtureChecks.swift)
+// =====================================================================
+
+runParserFixtureChecks()
+runParseFailureChecks()
 
 // MARK: - barSegmentIndex (re-review 2 [N4]/[N6]: memory-bar hover hit test)
 do {

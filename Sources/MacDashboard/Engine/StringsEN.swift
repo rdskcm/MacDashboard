@@ -447,6 +447,9 @@ struct StringsEN: AppStrings {
     var reportSectionCrashes: String { "RECENT APP CRASHES" }
     var reportSectionUpdates: String { "macOS UPDATES" }
     var reportSectionSmart: String { "EXTERNAL AND INTERNAL DISKS: SMART" }
+    var reportSectionUnparsed: String { "UNRECOGNISED COMMAND OUTPUT (first lines)" }
+    var reportUnparsedHint: String { "MacDashboard could not read the output of these commands. Serial numbers and UUIDs are masked; attach this block to a bug report." }
+    func reportUnparsedMoreLines(_ n: Int) -> String { "(+\(n) more lines not shown)" }
     var reportDoneBanner: String { "DONE" }
     func reportSavedTo(_ path: String) -> String { "Report saved: \(path)" }
     var reportNone: String { "(none)" }

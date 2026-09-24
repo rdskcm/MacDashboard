@@ -17,14 +17,20 @@ final class ProcessSampler {
     private var previousAt: TimeInterval?
     /// Window used for the FIRST sample of an instance only (see the file header).
     static let primingWindow: TimeInterval = 0.6
+    /// Failures seen during the most recent `sample()` (R3-FIXTURES).
+    private(set) var lastParseFailures: [ParseFailure] = []
 
     /// One `/bin/ps` invocation, parsed. No sleep, and no per-pid work of any kind: the
     /// memory footprints come from ONE separate `/usr/bin/top` snapshot per tick
     /// (`memoryFootprints()`), never from a call per process.
     private func snapshot() async -> [Parsers.PSRow] {
-        guard let out = await CommandRunner.run("/bin/ps",
-            ["-axww", "-o", "pid=,rss=,time=,comm="], timeout: 5).text else { return [] }
-        return Parsers.psProcesses(out)
+        guard let out = await ParsedCommand.ps.run().text else { return [] }
+        let rows = Parsers.psProcesses(out)
+        if rows.isEmpty, !lastParseFailures.contains(where: { $0.command == .ps }),
+           let f = ParseFailure(.ps, stdout: out) {
+            lastParseFailures.append(f)
+        }
+        return rows
     }
 
     /// Pure CPU% math: percent of ONE core (the same per-core convention `top` used),
@@ -62,9 +68,15 @@ final class ProcessSampler {
     /// its row did not parse. Either way the caller keeps that row's RSS — a failure here must
     /// never drop a row or fail a sample.
     static func memoryFootprints() async -> [Int32: Int64] {
-        guard let out = await CommandRunner.run("/usr/bin/top",
-            ["-l", "1", "-stats", "pid,command,mem"], timeout: 15).text else { return [:] }
-        return Parsers.topMemoryFootprints(out)
+        await memoryFootprintsReporting().footprints
+    }
+
+    /// Same as `memoryFootprints()`, plus the parse failure (if any) for the caller to record.
+    static func memoryFootprintsReporting() async -> (footprints: [Int32: Int64], failure: ParseFailure?) {
+        guard let out = await ParsedCommand.top.run().text else { return ([:], nil) }
+        let footprints = Parsers.topMemoryFootprints(out)
+        let failure = footprints.isEmpty ? ParseFailure(.top, stdout: out) : nil
+        return (footprints, failure)
     }
 
     /// First call on an instance primes itself (two `ps` runs, `primingWindow`
@@ -72,6 +84,7 @@ final class ProcessSampler {
     /// one-shot manual refresh path which builds a fresh `LiveCollector` (and
     /// therefore a fresh sampler) per press.
     func sample() async -> [ProcEntry] {
+        lastParseFailures = []
         if previousAt == nil {
             let base = await snapshot()
             guard !base.isEmpty else { return [] }
@@ -90,7 +103,8 @@ final class ProcessSampler {
         // AFTER the ps snapshot on purpose: `now` and `rows` are both captured before this
         // call, so top's runtime shifts neither end of the CPU-delta window. One call for the
         // whole table — the per-pid syscall this replaced could not see foreign uids at all.
-        let footprints = await Self.memoryFootprints()
+        let (footprints, topFailure) = await Self.memoryFootprintsReporting()
+        if let topFailure { lastParseFailures.append(topFailure) }
 
         let entries = rows.enumerated().map { index, r in
             ProcEntry(rank: index, name: r.name,

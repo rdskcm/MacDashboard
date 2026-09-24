@@ -64,6 +64,7 @@ struct LiveSnapshot {
     var swap: SwapInfo?
     var disk: DiskInfo?
     var battery: BatteryInfo?
+    var parseFailures: [ParseFailure] = []   // ps/top output the parser rejected, last process sample (R3-FIXTURES)
 }
 
 // ---- Full report (sections nil until collected; nil ⇒ "недоступно") ----
@@ -187,6 +188,7 @@ struct FullReport {
     var battery: BatteryInfo?           // report-time merge: pmset + system_profiler (cycles/condition/capacity)
     var progress: [String: Bool] = [:]  // sectionKey -> done (for UI spinners)
     var smartctlPresent: Bool = true    // whether smartctl was found on last collectSmartDisks() run (Block N8)
+    var parseFailures: [ParseFailure] = []   // report-time command output the parser rejected (R3-FIXTURES)
 }
 
 struct Problem: Identifiable, Equatable {

@@ -1,0 +1,19 @@
+{
+  "SPHardwareDataType" : [
+    {
+      "_name" : "hardware_overview",
+      "activation_lock_status" : "activation_lock_enabled",
+      "boot_rom_version" : "20457.1.29",
+      "chip_type" : "Apple M3",
+      "machine_model" : "Mac15,12",
+      "machine_name" : "MacBook Air",
+      "model_number" : "MRXV3LL/A",
+      "number_processors" : "proc 8:0:4:4",
+      "os_loader_version" : "20457.1.29",
+      "physical_memory" : "8 GB",
+      "platform_UUID" : "00000000-0000-0000-0000-000000000000",
+      "provisioning_UDID" : "00000000-0000000000000000",
+      "serial_number" : "XXXXXXXXXX"
+    }
+  ]
+}
