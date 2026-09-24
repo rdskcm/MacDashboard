@@ -15,12 +15,12 @@ import IOKit
 // Compiled out of the default (public) build — see Package.swift/build_app.sh (AI_ENABLED).
 #if AI_ENABLED
 enum AISensitiveContext {
-    static func collect() -> RedactionContext {
+    static func collect() async -> RedactionContext {
         var context = RedactionContext()
         context.usernames = collectUsernames()
-        context.hostNames = collectHostNames()
+        context.hostNames = await collectHostNames()
         context.serials = collectSerials()
-        context.ssids = collectSSIDs()
+        context.ssids = await collectSSIDs()
         return context
     }
 
@@ -32,7 +32,7 @@ enum AISensitiveContext {
 
     // MARK: - Host names
 
-    private static func collectHostNames() -> [String] {
+    private static func collectHostNames() async -> [String] {
         var names: [String] = []
 
         let processHostName = ProcessInfo.processInfo.hostName
@@ -43,11 +43,11 @@ enum AISensitiveContext {
             }
         }
 
-        if let localHostName = CommandRunner.run("/usr/sbin/scutil", ["--get", "LocalHostName"], timeout: 2)?
+        if let localHostName = await CommandRunner.run("/usr/sbin/scutil", ["--get", "LocalHostName"], timeout: 2).text?
             .trimmingCharacters(in: .whitespacesAndNewlines), !localHostName.isEmpty {
             names.append(localHostName)
         }
-        if let computerName = CommandRunner.run("/usr/sbin/scutil", ["--get", "ComputerName"], timeout: 2)?
+        if let computerName = await CommandRunner.run("/usr/sbin/scutil", ["--get", "ComputerName"], timeout: 2).text?
             .trimmingCharacters(in: .whitespacesAndNewlines), !computerName.isEmpty {
             names.append(computerName)
         }
@@ -71,10 +71,10 @@ enum AISensitiveContext {
 
     // MARK: - SSID (best-effort; not currently part of the actual payload text)
 
-    private static func collectSSIDs() -> [String] {
+    private static func collectSSIDs() async -> [String] {
         var ssids: [String] = []
         for interface in ["en0", "en1"] {
-            guard let output = CommandRunner.run("/usr/sbin/ipconfig", ["getsummary", interface], timeout: 2) else { continue }
+            guard let output = await CommandRunner.run("/usr/sbin/ipconfig", ["getsummary", interface], timeout: 2).text else { continue }
             for line in output.split(separator: "\n") {
                 guard let range = line.range(of: "SSID :") else { continue }
                 let value = line[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)

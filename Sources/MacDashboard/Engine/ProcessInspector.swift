@@ -20,8 +20,10 @@ enum ProcessInspector {
 
     /// Fetches path + thread count for `pid`. Never throws; every field degrades
     /// to nil independently rather than failing the whole call.
-    static func detail(pid: Int32) -> ProcDetail {
-        ProcDetail(path: path(for: pid), threads: threadCount(for: pid))
+    static func detail(pid: Int32) async -> ProcDetail {
+        let p = path(for: pid)
+        let t = await threadCount(for: pid)
+        return ProcDetail(path: p, threads: t)
     }
 
     private static func path(for pid: Int32) -> String? {
@@ -31,7 +33,7 @@ enum ProcessInspector {
         return String(cString: buffer)
     }
 
-    private static func threadCount(for pid: Int32) -> Int? {
+    private static func threadCount(for pid: Int32) async -> Int? {
         var info = proc_taskinfo()
         let size = Int32(MemoryLayout<proc_taskinfo>.size)
         let n = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size)
@@ -42,14 +44,14 @@ enum ProcessInspector {
         if n == size {
             return Int(info.pti_threadnum)
         }
-        return threadCountViaPS(for: pid)
+        return await threadCountViaPS(for: pid)
     }
 
     /// Fallback for other-user processes: `/bin/ps -M -p <pid>` prints a header
     /// line plus one line per thread (verified: WindowServer → 21 lines = 20
     /// threads). Returns nil if `ps` itself fails (timeout/launch error/no output).
-    private static func threadCountViaPS(for pid: Int32) -> Int? {
-        guard let out = CommandRunner.runNonEmpty("/bin/ps", ["-M", "-p", "\(pid)"], timeout: 3) else { return nil }
+    private static func threadCountViaPS(for pid: Int32) async -> Int? {
+        guard let out = await CommandRunner.run("/bin/ps", ["-M", "-p", "\(pid)"], timeout: 3).nonEmptyText else { return nil }
         let lines = out.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         return max(lines.count - 1, 0)
     }

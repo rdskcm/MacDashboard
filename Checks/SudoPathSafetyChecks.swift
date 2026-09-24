@@ -39,4 +39,63 @@ func runSudoPathSafetyChecks() {
     check(!ReportCollector.sudoSafetyVerdict(isRegularFile: false, ownerUID: 0, mode: 0o755,
                                              isImmutable: true, ancestorsRootOwned: true),
           "sudoSafetyVerdict: not a regular file ⇒ false")
+
+    // N3: /usr/local {bin,sbin} fallback-tool ownership check.
+    check(ReportCollector.fallbackToolVerdict(isRegularFile: true, ownerUID: 501, currentUID: 501, mode: 0o755),
+          "fallbackToolVerdict: regular, owner 501, current 501, 0o755 ⇒ true")
+    check(ReportCollector.fallbackToolVerdict(isRegularFile: true, ownerUID: 0, currentUID: 501, mode: 0o755),
+          "fallbackToolVerdict: regular, owner 0, current 501, 0o755 ⇒ true")
+    check(!ReportCollector.fallbackToolVerdict(isRegularFile: true, ownerUID: 502, currentUID: 501, mode: 0o755),
+          "fallbackToolVerdict: regular, owner 502, current 501, 0o755 ⇒ false")
+    check(!ReportCollector.fallbackToolVerdict(isRegularFile: true, ownerUID: 501, currentUID: 501, mode: 0o775),
+          "fallbackToolVerdict: regular, owner 501, current 501, 0o775 (group-writable) ⇒ false")
+    check(!ReportCollector.fallbackToolVerdict(isRegularFile: true, ownerUID: 501, currentUID: 501, mode: 0o757),
+          "fallbackToolVerdict: regular, owner 501, current 501, 0o757 (world-writable) ⇒ false")
+    check(!ReportCollector.fallbackToolVerdict(isRegularFile: false, ownerUID: 0, currentUID: 501, mode: 0o755),
+          "fallbackToolVerdict: not a regular file ⇒ false")
+
+    check(ReportCollector.isTrustedFallbackTool("/usr/bin/true"),
+          "isTrustedFallbackTool: /usr/bin/true ⇒ true")
+    check(!ReportCollector.isTrustedFallbackTool("/tmp"),
+          "isTrustedFallbackTool: /tmp (world-writable) ⇒ false")
+    check(!ReportCollector.isTrustedFallbackTool("/usr/bin/macdashboard-no-such-binary"),
+          "isTrustedFallbackTool: nonexistent path ⇒ false")
+    check(!ReportCollector.isTrustedFallbackTool("usr/bin/true"),
+          "isTrustedFallbackTool: relative path ⇒ false")
+
+    do {
+        let path = NSTemporaryDirectory() + "macdashboard-fallback-tool-\(getpid())"
+        FileManager.default.createFile(atPath: path, contents: Data())
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: path)
+        check(ReportCollector.isTrustedFallbackTool(path),
+              "isTrustedFallbackTool: own temp file, mode 0o644 ⇒ true")
+        try? FileManager.default.setAttributes([.posixPermissions: 0o666], ofItemAtPath: path)
+        check(!ReportCollector.isTrustedFallbackTool(path),
+              "isTrustedFallbackTool: own temp file, mode 0o666 (world-writable) ⇒ false")
+        try? FileManager.default.setAttributes([.posixPermissions: 0o664], ofItemAtPath: path)
+        check(!ReportCollector.isTrustedFallbackTool(path),
+              "isTrustedFallbackTool: own temp file, mode 0o664 (group-writable) ⇒ false")
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
+    do {
+        let alwaysExecutable: (String) -> Bool = { _ in true }
+        let neverExecutable: (String) -> Bool = { _ in false }
+        let alwaysTrusted: (String) -> Bool = { _ in true }
+        let neverTrusted: (String) -> Bool = { _ in false }
+
+        check(ReportCollector.firstTool(primary: ["/opt/homebrew/bin/x"], fallback: ["/usr/local/bin/x"],
+                                        isExecutable: alwaysExecutable, isTrusted: alwaysTrusted) == "/opt/homebrew/bin/x",
+              "firstTool: primary executable ⇒ the primary, even when a fallback is also trusted")
+        check(ReportCollector.firstTool(primary: ["/opt/homebrew/bin/x"], fallback: ["/usr/local/bin/x"],
+                                        isExecutable: { $0 == "/usr/local/bin/x" }, isTrusted: neverTrusted) == nil,
+              "firstTool: primary absent, only fallback executable but untrusted ⇒ nil")
+        check(ReportCollector.firstTool(primary: [], fallback: ["/usr/local/sbin/x", "/usr/local/bin/x"],
+                                        isExecutable: alwaysExecutable,
+                                        isTrusted: { $0 == "/usr/local/bin/x" }) == "/usr/local/bin/x",
+              "firstTool: two fallbacks, first untrusted, second trusted ⇒ the second")
+        check(ReportCollector.firstTool(primary: ["/opt/homebrew/bin/x"], fallback: ["/usr/local/bin/x"],
+                                        isExecutable: neverExecutable, isTrusted: alwaysTrusted) == nil,
+              "firstTool: nothing executable ⇒ nil")
+    }
 }

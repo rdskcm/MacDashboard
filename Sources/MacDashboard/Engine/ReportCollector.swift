@@ -6,8 +6,8 @@
 // concurrently as a second group (they are mutually independent).
 // SPEC §5.2. Nothing here modifies the system.
 //
-// Blocking subprocess waits are dispatched to the global queue (via runOffPool) so
-// they never starve Swift's cooperative thread pool when many run at once.
+// Sections are async: subprocess waits suspend the caller's Task instead of
+// blocking a thread, so many can run at once without starving the cooperative pool.
 
 import Foundation
 
@@ -17,11 +17,6 @@ enum ReportSection: String, CaseIterable {
 }
 
 final class ReportCollector {
-
-    /// One scope per collector instance: DashboardModel creates a fresh
-    /// ReportCollector per collect()/manual-refresh call, so cancelling this scope
-    /// kills exactly this instance's live subprocesses and no one else's.
-    let cancelScope = CommandCancellationScope()
 
     /// A section's result: which section, and how to fold it into the report.
     private struct Outcome {
@@ -194,16 +189,9 @@ final class ReportCollector {
     func collect(skipSlow: Bool = false,
                  cachedBrew: (version: String??, outdated: [String]?)? = nil,
                  onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport {
-        // Bridge structured-concurrency cancellation to the live subprocesses:
-        // cancelling the awaiting Task SIGKILLs whatever this instance has spawned
-        // (and short-circuits every subsequent CommandRunner.run in this pass), so
-        // the remaining sections fall through fast with nil results and the caller's
-        // own `guard !Task.isCancelled` discards the returned report.
-        await withTaskCancellationHandler {
-            await collectBody(skipSlow: skipSlow, cachedBrew: cachedBrew, onSection: onSection)
-        } onCancel: { [scope = cancelScope] in
-            scope.cancel()
-        }
+        // Task cancellation of the caller propagates into the section task groups and
+        // from there into every `CommandRunner.run`, which kills the group or skips the spawn.
+        await collectBody(skipSlow: skipSlow, cachedBrew: cachedBrew, onSection: onSection)
     }
 
     private func collectBody(skipSlow: Bool,
@@ -216,16 +204,16 @@ final class ReportCollector {
 
         // Quick sections — concurrent. for-await serializes the merges on this task.
         let quick: [() async -> Outcome] = [
-            { await self.off { self.collectSystem() } },
-            { await self.off { self.collectSnapshots() } },
-            { await self.off { self.collectSecurity() } },
-            { await self.off { self.collectTMDest() } },
-            { await self.off { self.collectSpotlight() } },
-            { await self.off { self.collectCrashes() } },
-            { await self.off { self.collectAutostart() } },
-            { await self.off { self.collectSmart() } },
-            { await self.off { self.collectEnergy() } },
-            { await self.off { self.collectBattery() } },
+            { await self.collectSystem() },
+            { await self.collectSnapshots() },
+            { await self.collectSecurity() },
+            { await self.collectTMDest() },
+            { await self.collectSpotlight() },
+            { self.collectCrashes() },
+            { await self.collectAutostart() },
+            { await self.collectSmart() },
+            { await self.collectEnergy() },
+            { await self.collectBattery() },
         ]
         await withTaskGroup(of: Outcome.self) { group in
             for job in quick { group.addTask { await job() } }
@@ -241,10 +229,10 @@ final class ReportCollector {
         // but mutually independent: different binaries, disjoint FullReport fields).
         // for-await serializes the merges on this task, same as the quick group.
         let slow: [() async -> Outcome] = skipSlow ? [] : [
-            { await self.off { self.collectHomeDirs() } },
-            { await self.off { self.collectServiceDirs() } },
-            { await self.off { self.collectBrew(cached: cachedBrew) } },
-            { await self.off { self.collectUpdates() } },
+            { await self.collectHomeDirs() },
+            { await self.collectServiceDirs() },
+            { await self.collectBrew(cached: cachedBrew) },
+            { await self.collectUpdates() },
         ]
         await withTaskGroup(of: Outcome.self) { group in
             for job in slow { group.addTask { await job() } }
@@ -258,32 +246,24 @@ final class ReportCollector {
         return report
     }
 
-    /// Runs blocking work off the cooperative pool so concurrent sections don't
-    /// deadlock waiting on subprocesses.
-    private func off(_ work: @escaping () -> Outcome) async -> Outcome {
-        await withCheckedContinuation { cont in
-            DispatchQueue.global(qos: .userInitiated).async { cont.resume(returning: work()) }
-        }
-    }
-
     // MARK: - system
 
-    private func collectSystem() -> Outcome {
+    private func collectSystem() async -> Outcome {
         var info = SystemInfo()
-        if let sv = CommandRunner.run("/usr/bin/sw_vers", [], timeout: 10, scope: cancelScope) {
+        if let sv = await CommandRunner.run("/usr/bin/sw_vers", [], timeout: 10).text {
             let parsed = Parsers.swVers(sv)
             info.osName = parsed.osName; info.osVersion = parsed.osVersion; info.osBuild = parsed.osBuild
         }
-        if let hw = CommandRunner.run("/usr/sbin/system_profiler", ["SPHardwareDataType"], timeout: 25, scope: cancelScope) {
+        if let hw = await CommandRunner.run("/usr/sbin/system_profiler", ["SPHardwareDataType"], timeout: 25).text {
             let h = Parsers.hardwareProfile(hw)
             info.modelName = h.modelName; info.modelId = h.modelId; info.chip = h.chip
             info.cores = h.cores; info.memBytes = h.memBytes
         }
-        if info.chip == nil, let brand = CommandRunner.run("/usr/sbin/sysctl", ["-n", "machdep.cpu.brand_string"], timeout: 5, scope: cancelScope) {
+        if info.chip == nil, let brand = await CommandRunner.run("/usr/sbin/sysctl", ["-n", "machdep.cpu.brand_string"], timeout: 5).text {
             let s = brand.trimmingCharacters(in: .whitespacesAndNewlines)
             if !s.isEmpty { info.chip = s }
         }
-        if let up = CommandRunner.run("/usr/bin/uptime", [], timeout: 10, scope: cancelScope) {
+        if let up = await CommandRunner.run("/usr/bin/uptime", [], timeout: 10).text {
             info.uptime = Parsers.uptimeHuman(up)
         }
         info.hostName = ProcessInfo.processInfo.hostName
@@ -299,16 +279,16 @@ final class ReportCollector {
             .filter { $0.hasPrefix("com.apple.TimeMachine.") }
     }
 
-    private func collectSnapshots() -> Outcome {
-        let out = CommandRunner.run("/usr/bin/tmutil", ["listlocalsnapshots", "/"], timeout: 15, scope: cancelScope)
+    private func collectSnapshots() async -> Outcome {
+        let out = await CommandRunner.run("/usr/bin/tmutil", ["listlocalsnapshots", "/"], timeout: 15).text
         let names = out.map(Self.localSnapshotNames)
         return Outcome(section: .snapshots) { $0.snapshots = names }
     }
 
     // MARK: - security
 
-    private func collectSecurity() -> Outcome {
-        let s = collectSecurityInfo()
+    private func collectSecurity() async -> Outcome {
+        let s = await collectSecurityInfo()
         return Outcome(section: .security) { $0.security = s }
     }
 
@@ -316,15 +296,15 @@ final class ReportCollector {
     /// so a manual re-check (DashboardModel's `enableFirewallNow()`, AR wave 2) can call
     /// it directly without going through the `Outcome` plumbing, mirroring
     /// `collectSmartDisks()`/`collectBrewInfo()` above.
-    func collectSecurityInfo() -> SecurityState {
+    func collectSecurityInfo() async -> SecurityState {
         var s = SecurityState()
-        if let t = CommandRunner.run("/usr/bin/fdesetup", ["status"], timeout: 10, scope: cancelScope) { s.fileVault = Parsers.fileVaultStatus(t) }
-        if let t = CommandRunner.run("/usr/sbin/spctl", ["--status"], timeout: 10, scope: cancelScope) { s.gatekeeper = Parsers.gatekeeperStatus(t) }
-        if let t = CommandRunner.run("/usr/bin/csrutil", ["status"], timeout: 10, scope: cancelScope) { s.sip = Parsers.sipStatus(t) }
-        if let t = CommandRunner.run("/usr/libexec/ApplicationFirewall/socketfilterfw", ["--getglobalstate"], timeout: 10, scope: cancelScope),
+        if let t = await CommandRunner.run("/usr/bin/fdesetup", ["status"], timeout: 10).text { s.fileVault = Parsers.fileVaultStatus(t) }
+        if let t = await CommandRunner.run("/usr/sbin/spctl", ["--status"], timeout: 10).text { s.gatekeeper = Parsers.gatekeeperStatus(t) }
+        if let t = await CommandRunner.run("/usr/bin/csrutil", ["status"], timeout: 10).text { s.sip = Parsers.sipStatus(t) }
+        if let t = await CommandRunner.run("/usr/libexec/ApplicationFirewall/socketfilterfw", ["--getglobalstate"], timeout: 10).text,
            let v = Parsers.firewallStatus(t) {
             s.firewall = v
-        } else if let t = CommandRunner.run("/usr/bin/defaults", ["read", "/Library/Preferences/com.apple.alf", "globalstate"], timeout: 10, scope: cancelScope) {
+        } else if let t = await CommandRunner.run("/usr/bin/defaults", ["read", "/Library/Preferences/com.apple.alf", "globalstate"], timeout: 10).text {
             s.firewall = Parsers.firewallStatus(t)
         }
         return s
@@ -332,8 +312,8 @@ final class ReportCollector {
 
     // MARK: - Time Machine destination
 
-    private func collectTMDest() -> Outcome {
-        guard let value = collectTMDestInfo() else {
+    private func collectTMDest() async -> Outcome {
+        guard let value = await collectTMDestInfo() else {
             return Outcome(section: .tmDest) { _ in }   // leave .none
         }
         return Outcome(section: .tmDest) { $0.tmDest = .some(value) }
@@ -346,14 +326,14 @@ final class ReportCollector {
     ///
     /// Double optional: outer `nil` = command failed / not checked (leave `report.tmDest`
     /// untouched); `.some(nil)` = checked, no destination configured; `.some(x)` = configured.
-    func collectTMDestInfo() -> TMDestination?? {
+    func collectTMDestInfo() async -> TMDestination?? {
         // Empty stdout is not evidence of "no destination" — Parsers.tmDestination recognises the
         // literal "No destinations configured" text (Parsers.swift:362), which is the only thing that may map to .some(nil).
-        guard let out = CommandRunner.runNonEmpty("/usr/bin/tmutil", ["destinationinfo"], timeout: 15, scope: cancelScope) else {
+        guard let out = await CommandRunner.run("/usr/bin/tmutil", ["destinationinfo"], timeout: 15).nonEmptyText else {
             return nil
         }
         var dest = Parsers.tmDestination(out)
-        if dest != nil { applyLastBackup(to: &dest!) }
+        if var d = dest { await applyLastBackup(to: &d); dest = d }
         let value: TMDestination? = dest
         return .some(value)
     }
@@ -399,8 +379,8 @@ final class ReportCollector {
     /// card renders a separate "no connection right now" row straight off `mountPoint == nil`,
     /// so a stale-but-real date from step 3 is now shown correctly labelled as the LAST KNOWN
     /// one rather than as the current state.
-    private func applyLastBackup(to dest: inout TMDestination) {
-        if let last = CommandRunner.run("/usr/bin/tmutil", ["latestbackup"], timeout: 15, scope: cancelScope) {
+    private func applyLastBackup(to dest: inout TMDestination) async {
+        if let last = await CommandRunner.run("/usr/bin/tmutil", ["latestbackup"], timeout: 15).text {
             let s = last.trimmingCharacters(in: .whitespacesAndNewlines)
             if s.lowercased().contains("no backup") {
                 dest.lastBackupUnavailableReason = .noBackupsYet
@@ -413,7 +393,7 @@ final class ReportCollector {
         }
         var diskutilFoundZeroBackups = false
         if let mount = dest.mountPoint,
-           let out = CommandRunner.run("/usr/sbin/diskutil", ["apfs", "listSnapshots", mount], timeout: 15, scope: cancelScope) {
+           let out = await CommandRunner.run("/usr/sbin/diskutil", ["apfs", "listSnapshots", mount], timeout: 15).text {
             switch Parsers.tmDiskutilLatestBackupDate(out) {
             case .found(let date):
                 dest.lastBackup = Parsers.formatTMBackupDate(date)
@@ -454,8 +434,8 @@ final class ReportCollector {
 
     // MARK: - spotlight
 
-    private func collectSpotlight() -> Outcome {
-        let out = CommandRunner.runNonEmpty("/usr/bin/mdutil", ["-s", "/"], timeout: 10, scope: cancelScope)
+    private func collectSpotlight() async -> Outcome {
+        let out = await CommandRunner.run("/usr/bin/mdutil", ["-s", "/"], timeout: 10).nonEmptyText
         let text: String? = out.map { raw in
             if raw.lowercased().contains("indexing enabled") { return L.reportCollectorSpotlightEnabled }
             if raw.lowercased().contains("indexing disabled") { return L.reportCollectorSpotlightDisabled }
@@ -495,10 +475,10 @@ final class ReportCollector {
 
     // MARK: - autostart
 
-    private func collectAutostart() -> Outcome {
+    private func collectAutostart() async -> Outcome {
         var a = AutostartInfo()
-        if let li = CommandRunner.run("/usr/bin/osascript",
-            ["-e", "tell application \"System Events\" to get the name of every login item"], timeout: 15, scope: cancelScope) {
+        if let li = await CommandRunner.run("/usr/bin/osascript",
+            ["-e", "tell application \"System Events\" to get the name of every login item"], timeout: 15).text {
             a.loginItems = Parsers.loginItems(li)
         } else {
             a.loginItems = nil
@@ -507,7 +487,7 @@ final class ReportCollector {
         a.userAgents = inspectDir(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents"), language: lang)
         a.systemAgents = inspectDir(URL(fileURLWithPath: "/Library/LaunchAgents"), language: lang)
         a.systemDaemons = inspectDir(URL(fileURLWithPath: "/Library/LaunchDaemons"), language: lang)
-        if let ll = CommandRunner.run("/bin/launchctl", ["list"], timeout: 15, scope: cancelScope) {
+        if let ll = await CommandRunner.run("/bin/launchctl", ["list"], timeout: 15).text {
             a.background = Parsers.launchctlNonApple(ll)
         }
         return Outcome(section: .autostart) { $0.autostart = a }
@@ -529,8 +509,8 @@ final class ReportCollector {
 
     // MARK: - SMART / disks (generic — no hardcoded model names)
 
-    private func collectSmart() -> Outcome {
-        let disks = collectSmartDisks()
+    private func collectSmart() async -> Outcome {
+        let disks = await collectSmartDisks()
         let smartctlPresent = Self.findSmartctl() != nil
         return Outcome(section: .smart) { $0.smart = disks; $0.smartctlPresent = smartctlPresent }
     }
@@ -538,12 +518,12 @@ final class ReportCollector {
     /// The actual SMART/disks collection logic, factored out of `collectSmart()` so the
     /// live SMART refresh loop (DashboardModel) can call it directly without going through
     /// the `Outcome` plumbing (which mutates a `FullReport` rather than returning a value).
-    func collectSmartDisks() -> [SmartDisk] {
+    func collectSmartDisks() async -> [SmartDisk] {
         var disks: [SmartDisk] = []
         let smartctl = Self.findSmartctl()
 
         // Internal boot disk.
-        if let info = CommandRunner.runNonEmpty("/usr/sbin/diskutil", ["info", "disk0"], timeout: 15, scope: cancelScope) {
+        if let info = await CommandRunner.run("/usr/sbin/diskutil", ["info", "disk0"], timeout: 15).nonEmptyText {
             let (status, media) = Parsers.diskutilSmart(info)
             var disk = makeDiskutilDisk(device: "internal",
                                         fallbackTitle: L.reportCollectorInternalDiskFallbackTitle,
@@ -558,11 +538,11 @@ final class ReportCollector {
             // unprivileged run. Both fail fast, never prompt (same chain as the external
             // path below).
             if let sc = smartctl {
-                let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
-                    ? CommandRunner.runNonEmpty("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15, scope: cancelScope)
-                    : nil
-                let raw = sudoRaw
-                    ?? CommandRunner.runNonEmpty(sc, ["-A", "disk0"], timeout: 15, scope: cancelScope)
+                var raw: String? = nil
+                if Self.isSafeToRunViaSudo(sc) {
+                    raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", "disk0"], timeout: 15).nonEmptyText
+                }
+                if raw == nil { raw = await CommandRunner.run(sc, ["-A", "disk0"], timeout: 15).nonEmptyText }
                 if let raw {
                     let attrs = Parsers.smartctlAttrs(raw)
                     if !attrs.isEmpty {
@@ -586,11 +566,11 @@ final class ReportCollector {
         }
 
         // External physical disks.
-        if let list = CommandRunner.run("/usr/sbin/diskutil", ["list"], timeout: 15, scope: cancelScope) {
+        if let list = await CommandRunner.run("/usr/sbin/diskutil", ["list"], timeout: 15).text {
             for dev in externalPhysicalDisks(list) {
                 var title = dev
                 var duStatus: String?
-                if let info = CommandRunner.run("/usr/sbin/diskutil", ["info", dev], timeout: 15, scope: cancelScope) {
+                if let info = await CommandRunner.run("/usr/sbin/diskutil", ["info", dev], timeout: 15).text {
                     let (status, media) = Parsers.diskutilSmart(info)
                     duStatus = status
                     if let media, !media.isEmpty { title = media }
@@ -601,11 +581,11 @@ final class ReportCollector {
                     // non-root actor cannot swap (isSafeToRunViaSudo), then plain — both
                     // fail fast, never prompt. This is the branch external/USB/SATA disks
                     // actually need: internal NVMe answers `smartctl -A` unprivileged.
-                    let sudoRaw: String? = Self.isSafeToRunViaSudo(sc)
-                        ? CommandRunner.runNonEmpty("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15, scope: cancelScope)
-                        : nil
-                    let raw = sudoRaw
-                        ?? CommandRunner.runNonEmpty(sc, ["-A", dev], timeout: 15, scope: cancelScope)
+                    var raw: String? = nil
+                    if Self.isSafeToRunViaSudo(sc) {
+                        raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc, "-A", dev], timeout: 15).nonEmptyText
+                    }
+                    if raw == nil { raw = await CommandRunner.run(sc, ["-A", dev], timeout: 15).nonEmptyText }
                     if let raw { attrs = Parsers.smartctlAttrs(raw) }
                 }
                 disks.append(makeExternalDisk(device: dev, title: title, duStatus: duStatus,
@@ -678,11 +658,44 @@ final class ReportCollector {
     }
 
     static func findSmartctl() -> String? {
-        for p in ["/opt/homebrew/sbin/smartctl", "/opt/homebrew/bin/smartctl",
-                  "/usr/local/sbin/smartctl", "/usr/local/bin/smartctl"] {
-            if FileManager.default.isExecutableFile(atPath: p) { return p }
-        }
-        return nil
+        firstTool(primary: ["/opt/homebrew/sbin/smartctl", "/opt/homebrew/bin/smartctl"],
+                  fallback: ["/usr/local/sbin/smartctl", "/usr/local/bin/smartctl"])
+    }
+
+    /// Pure (Checks-tested). N3: may a tool found at a /usr/local FALLBACK location be run
+    /// (unprivileged)? Regular file, owned by root or by the user running the app, no group/
+    /// world write bit. Weaker than `sudoSafetyVerdict` on purpose: this guards an
+    /// unprivileged run, and the sudo rule would reject every user-owned Homebrew install.
+    /// On Apple Silicon /usr/local is root-owned; a user-owned /usr/local (Intel/Rosetta
+    /// Homebrew leftovers) is the classic plant location this closes to other accounts.
+    static func fallbackToolVerdict(isRegularFile: Bool, ownerUID: UInt32,
+                                    currentUID: UInt32, mode: UInt16) -> Bool {
+        guard isRegularFile else { return false }
+        guard ownerUID == 0 || ownerUID == currentUID else { return false }
+        return mode & 0o022 == 0
+    }
+
+    /// `fallbackToolVerdict` over the real file, symlinks resolved with realpath(3)
+    /// (same resolution as `isSafeToRunViaSudo`). Relative or unresolvable ⇒ false.
+    static func isTrustedFallbackTool(_ path: String) -> Bool {
+        guard path.hasPrefix("/"), let real = realpath(path, nil) else { return false }
+        defer { free(real) }
+        let resolved = String(cString: real)
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: resolved),
+              let uid = attrs[.ownerAccountID] as? NSNumber,
+              let mode = attrs[.posixPermissions] as? NSNumber else { return false }
+        return fallbackToolVerdict(isRegularFile: (attrs[.type] as? FileAttributeType) == .typeRegular,
+                                   ownerUID: uid.uint32Value, currentUID: getuid(),
+                                   mode: mode.uint16Value)
+    }
+
+    /// First executable primary candidate; otherwise the first executable AND trusted
+    /// fallback. An untrusted fallback counts as absent. Closures injectable for Checks.
+    static func firstTool(primary: [String], fallback: [String],
+                          isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
+                          isTrusted: (String) -> Bool = { ReportCollector.isTrustedFallbackTool($0) }) -> String? {
+        if let p = primary.first(where: isExecutable) { return p }
+        return fallback.first { isExecutable($0) && isTrusted($0) }
     }
 
     /// The decision rule of `isSafeToRunViaSudo`, over facts already gathered — pure, so the
@@ -801,8 +814,8 @@ final class ReportCollector {
 
     // MARK: - energy (pmset -g custom, fallback -g)
 
-    private func collectEnergy() -> Outcome {
-        let energy = collectEnergySettings()
+    private func collectEnergy() async -> Outcome {
+        let energy = await collectEnergySettings()
         return Outcome(section: .energy) { $0.energy = energy }
     }
 
@@ -810,20 +823,20 @@ final class ReportCollector {
     /// the manual energy refresh (DashboardModel, after a batched pmset apply) can call
     /// it directly without going through the `Outcome` plumbing (mirrors
     /// `collectSmartDisks()` above).
-    func collectEnergySettings() -> EnergySettings? {
-        let out = CommandRunner.runNonEmpty("/usr/bin/pmset", ["-g", "custom"], timeout: 10, scope: cancelScope)
-            ?? CommandRunner.runNonEmpty("/usr/bin/pmset", ["-g"], timeout: 10, scope: cancelScope)
+    func collectEnergySettings() async -> EnergySettings? {
+        var out = await CommandRunner.run("/usr/bin/pmset", ["-g", "custom"], timeout: 10).nonEmptyText
+        if out == nil { out = await CommandRunner.run("/usr/bin/pmset", ["-g"], timeout: 10).nonEmptyText }
         return out.map { Parsers.pmsetCustom($0) }
     }
 
     // MARK: - battery (pmset -g batt + system_profiler SPPowerDataType)
 
-    private func collectBattery() -> Outcome {
+    private func collectBattery() async -> Outcome {
         var b: BatteryInfo?
-        if let pm = CommandRunner.runNonEmpty("/usr/bin/pmset", ["-g", "batt"], timeout: 10, scope: cancelScope) {
+        if let pm = await CommandRunner.run("/usr/bin/pmset", ["-g", "batt"], timeout: 10).nonEmptyText {
             b = Parsers.batteryPmset(pm)
         }
-        if let sp = CommandRunner.run("/usr/sbin/system_profiler", ["SPPowerDataType"], timeout: 25, scope: cancelScope) {
+        if let sp = await CommandRunner.run("/usr/sbin/system_profiler", ["SPPowerDataType"], timeout: 25).text {
             let prof = Parsers.batteryPowerProfile(sp)
             if prof.cycles != nil || prof.condition != nil || prof.maxCapacity != nil {
                 if b == nil { b = BatteryInfo() }
@@ -849,9 +862,9 @@ final class ReportCollector {
 
     // MARK: - home dirs (slow: du)
 
-    private func collectHomeDirs() -> Outcome {
+    private func collectHomeDirs() async -> Outcome {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        guard let out = CommandRunner.runNonEmpty("/usr/bin/du", ["-xk", "-d", "1", "--", home], timeout: 120, scope: cancelScope) else {
+        guard let out = await CommandRunner.run("/usr/bin/du", ["-xk", "-d", "1", "--", home], timeout: 120).nonEmptyText else {
             return Outcome(section: .homeDirs) { $0.homeDirs = nil; $0.homeDirsUnreadable = [] }
         }
         let all = Parsers.duKilobyteLines(out)
@@ -874,7 +887,7 @@ final class ReportCollector {
 
     // MARK: - service dirs (slow: du -s over a fixed set)
 
-    private func collectServiceDirs() -> Outcome {
+    private func collectServiceDirs() async -> Outcome {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let paths = [
             "\(home)/Library/Caches", "\(home)/Library/Application Support",
@@ -886,7 +899,7 @@ final class ReportCollector {
         var unreadable: [String] = []
         for p in paths {
             guard FileManager.default.fileExists(atPath: p) else { continue }
-            if let out = CommandRunner.runNonEmpty("/usr/bin/du", ["-xsk", "--", p], timeout: 60, scope: cancelScope) {
+            if let out = await CommandRunner.run("/usr/bin/du", ["-xsk", "--", p], timeout: 60).nonEmptyText {
                 dirs.append(contentsOf: Parsers.duKilobyteLines(out))
             } else if DirectoryAccess.probe(p) == .denied {
                 // The service rule: du produced nothing at all for THIS path. That is
@@ -902,21 +915,21 @@ final class ReportCollector {
 
     // MARK: - homebrew (slow)
 
-    private func collectBrew(cached: (version: String??, outdated: [String]?)?) -> Outcome {
+    private func collectBrew(cached: (version: String??, outdated: [String]?)?) async -> Outcome {
         if let cached {
             // Session cache hit (Block N5): skip the ~30 s `brew outdated` re-run.
             return Outcome(section: .brew) {
                 $0.brewVersion = cached.version; $0.brewOutdated = cached.outdated
             }
         }
-        let info = collectBrewInfo()
+        let info = await collectBrewInfo()
         return Outcome(section: .brew) { $0.brewVersion = info.version; $0.brewOutdated = info.outdated }
     }
 
     /// The actual Homebrew collection logic, factored out of `collectBrew()` so the
     /// in-app upgrade flow (DashboardModel) can re-collect a fresh snapshot after
     /// `brew upgrade` without going through the `Outcome` plumbing.
-    func collectBrewInfo() -> (version: String??, outdated: [String]?) {
+    func collectBrewInfo() async -> (version: String??, outdated: [String]?) {
         guard let brew = Self.findBrew() else {
             return (.some(nil), nil)
         }
@@ -926,11 +939,11 @@ final class ReportCollector {
         // bin dir on PATH, not just `defaultEnvironment`'s bare system PATH.
         let brewEnv = CommandRunner.environment(prependingPATH: [(brew as NSString).deletingLastPathComponent])
         var version: String?
-        if let v = CommandRunner.runNonEmpty(brew, ["--version"], timeout: 20, environment: brewEnv, scope: cancelScope) {
+        if let v = await CommandRunner.run(brew, ["--version"], timeout: 20, environment: brewEnv).nonEmptyText {
             version = v.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces)
         }
         var outdated: [String] = []
-        if let o = CommandRunner.run(brew, ["outdated"], timeout: 60, environment: brewEnv, scope: cancelScope) {
+        if let o = await CommandRunner.run(brew, ["outdated"], timeout: 60, environment: brewEnv).text {
             outdated = o.components(separatedBy: "\n")
                 .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
@@ -938,16 +951,13 @@ final class ReportCollector {
     }
 
     static func findBrew() -> String? {
-        for p in ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"] {
-            if FileManager.default.isExecutableFile(atPath: p) { return p }
-        }
-        return nil
+        firstTool(primary: ["/opt/homebrew/bin/brew"], fallback: ["/usr/local/bin/brew"])
     }
 
     // MARK: - macOS updates (slow)
 
-    private func collectUpdates() -> Outcome {
-        guard let out = CommandRunner.run("/usr/sbin/softwareupdate", ["-l"], timeout: 120, scope: cancelScope) else {
+    private func collectUpdates() async -> Outcome {
+        guard let out = await CommandRunner.run("/usr/sbin/softwareupdate", ["-l"], timeout: 120).text else {
             return Outcome(section: .updates) { $0.updates = nil }   // nil = not checked (timed out)
         }
         if out.lowercased().contains("no new software available") {

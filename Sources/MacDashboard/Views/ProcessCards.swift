@@ -659,7 +659,7 @@ private struct ProcessDetailView: View {
             pendingDetail = nil
             // Off the main actor: proc_pidpath/proc_pidinfo are cheap syscalls but
             // the `ps -M` fallback shells out (up to 3s) — never block the UI on it.
-            let fetched = await Task.detached { ProcessInspector.detail(pid: pid) }.value
+            let fetched = await Task.detached { await ProcessInspector.detail(pid: pid) }.value
             // `.task(id:)` cancels the previous task the instant `isOpen`
             // flips (id includes it) — but `Task.detached` above is
             // unstructured and keeps running regardless, so without this

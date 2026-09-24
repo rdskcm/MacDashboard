@@ -103,7 +103,7 @@ struct BatteryDetailView: View {
             while !Task.isCancelled {
                 // Keep the last known-good reading on a transient collect() failure
                 // instead of flipping the popover back to the loading state.
-                let fetched = await Task.detached { BatteryInspector.collect() }.value
+                let fetched = await Task.detached { await BatteryInspector.collect() }.value
                 if let d = fetched {
                     if detail != d { detail = d }
                     updatedAt = Date()

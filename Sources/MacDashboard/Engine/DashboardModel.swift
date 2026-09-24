@@ -167,6 +167,7 @@ final class DashboardModel {
     private var slowTask: Task<Void, Never>?
     private var reportTask: Task<Void, Never>?
     private var smartTask: Task<Void, Never>?
+    private var brewUpgradeTask: Task<Void, Never>?
 
     /// Session cache for the brew section (Block N5): last collected
     /// (version, outdated) and when. Reused by refreshReport() within
@@ -305,16 +306,13 @@ final class DashboardModel {
                     continue
                 }
 
-                // sampleProcesses() shells out to `/bin/ps` and `/usr/bin/top` once each (and, on the FIRST tick
-                // only, sleeps 0.6 s to prime its CPU baseline) — hop off the main actor
-                // for it. Read the setting HERE, on the main actor, and pass it across: the
-                // collector must not touch AppSettings.shared from a background queue.
+                // sampleProcesses() is async and suspends while `/bin/ps` and `/usr/bin/top`
+                // run (and, on the FIRST tick only, while it sleeps 0.6 s to prime its CPU
+                // baseline) — it runs on the global executor, not the main thread. Read the
+                // setting HERE, on the main actor, and pass it across: the collector must not
+                // touch AppSettings.shared from a background queue.
                 let limit = AppSettings.shared.processListLimit
-                let procs = await withCheckedContinuation { continuation in
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        continuation.resume(returning: procBox.value.sampleProcesses(limit: limit))
-                    }
-                }
+                let procs = await procBox.value.sampleProcesses(limit: limit)
                 guard !Task.isCancelled else { return }
 
                 if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
@@ -342,13 +340,8 @@ final class DashboardModel {
                     continue
                 }
 
-                let (disks, tmDest): ([SmartDisk], TMDestination??) = await withCheckedContinuation { continuation in
-                    DispatchQueue.global(qos: .utility).async {
-                        let disks = smartBox.value.collectSmartDisks()
-                        let tmDest = smartBox.value.collectTMDestInfo()
-                        continuation.resume(returning: (disks, tmDest))
-                    }
-                }
+                let disks = await smartBox.value.collectSmartDisks()
+                let tmDest = await smartBox.value.collectTMDestInfo()
                 guard !Task.isCancelled else { return }
 
                 // Assessment (smartSev) is recomputed every ~2s by the fast task above,
@@ -395,6 +388,8 @@ final class DashboardModel {
         reportTask = nil
         smartTask?.cancel()
         smartTask = nil
+        brewUpgradeTask?.cancel()
+        brewUpgradeTask = nil
         for observer in activityObservers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -496,13 +491,8 @@ final class DashboardModel {
             defer { self.smartRefreshing = false }
 
             let collectorBox = UncheckedSendableBox(ReportCollector())
-            let (disks, tmDest): ([SmartDisk], TMDestination??) = await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .utility).async {
-                    let disks = collectorBox.value.collectSmartDisks()
-                    let tmDest = collectorBox.value.collectTMDestInfo()
-                    continuation.resume(returning: (disks, tmDest))
-                }
-            }
+            let disks = await collectorBox.value.collectSmartDisks()
+            let tmDest = await collectorBox.value.collectTMDestInfo()
             guard !Task.isCancelled else { return }
 
             await self.waitForReportRefreshToFinish()
@@ -527,11 +517,7 @@ final class DashboardModel {
             defer { self.energyRefreshing = false }
 
             let collectorBox = UncheckedSendableBox(ReportCollector())
-            let settings: EnergySettings? = await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .utility).async {
-                    continuation.resume(returning: collectorBox.value.collectEnergySettings())
-                }
-            }
+            let settings = await collectorBox.value.collectEnergySettings()
             guard !Task.isCancelled else { return }
 
             await self.waitForReportRefreshToFinish()
@@ -562,11 +548,7 @@ final class DashboardModel {
             let collectorBox = UncheckedSendableBox(LiveCollector())
             // Same rule as the slow task: read the setting on the main actor, pass it in.
             let limit = AppSettings.shared.processListLimit
-            let procs = await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    continuation.resume(returning: collectorBox.value.sampleProcesses(limit: limit))
-                }
-            }
+            let procs = await collectorBox.value.sampleProcesses(limit: limit)
             guard !Task.isCancelled else { return }
 
             if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
@@ -586,7 +568,7 @@ final class DashboardModel {
 
         let total = report.brewOutdated?.count ?? 0
 
-        Task { [weak self] in
+        brewUpgradeTask = Task { [weak self] in
             guard let self else { return }
             defer {
                 self.brewUpgrading = false
@@ -594,16 +576,10 @@ final class DashboardModel {
             }
 
             let collectorBox = UncheckedSendableBox(ReportCollector())
-            let (error, info): (String?, (version: String??, outdated: [String]?)) =
-                await withCheckedContinuation { continuation in
-                    DispatchQueue.global(qos: .utility).async {
-                        let err = BrewUpgrader.upgradeAll(totalOutdated: total, onProgress: { progress in
-                            DispatchQueue.main.async { [weak self] in self?.brewProgress = progress }
-                        })
-                        let fresh = collectorBox.value.collectBrewInfo()
-                        continuation.resume(returning: (err, fresh))
-                    }
-                }
+            let error = await BrewUpgrader.upgradeAll(totalOutdated: total, onProgress: { progress in
+                DispatchQueue.main.async { [weak self] in self?.brewProgress = progress }
+            })
+            let info = await collectorBox.value.collectBrewInfo()
             guard !Task.isCancelled else { return }
 
             // The collect that starts while `brew upgrade` runs captures the PRE-upgrade
@@ -648,22 +624,15 @@ final class DashboardModel {
             // BrewUpgrader.upgradeAll and collectBrewInfo() build this env
             // (V2-POLISH B1). `brew install` is the heaviest of the three and was
             // the one call site that never got it.
-            let brewEnv = CommandRunner.environment(
+            var installEnv = CommandRunner.environment(
                 prependingPATH: [(brew as NSString).deletingLastPathComponent])
-            _ = await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .utility).async {
-                    let result = CommandRunner.runStreaming(
-                        "/usr/bin/env",
-                        ["HOMEBREW_NO_AUTO_UPDATE=1", brew, "install", "smartmontools"],
-                        timeout: 600,
-                        environment: brewEnv,
-                        onLine: { line, _ in
-                            let trimmed = line.trimmingCharacters(in: .whitespaces)
-                            if !trimmed.isEmpty { lastLineBox.value = trimmed }
-                        })
-                    continuation.resume(returning: result)
-                }
-            }
+            // Formerly `/usr/bin/env HOMEBREW_NO_AUTO_UPDATE=1 brew …`; same variable, set directly (R0(c)).
+            installEnv["HOMEBREW_NO_AUTO_UPDATE"] = "1"
+            _ = await CommandRunner.run(brew, ["install", "smartmontools"], timeout: 600,
+                                        environment: installEnv, onLine: { line, _ in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty { lastLineBox.value = trimmed }
+            })
             guard !Task.isCancelled else { return }
 
             if ReportCollector.findSmartctl() != nil {
@@ -702,11 +671,7 @@ final class DashboardModel {
             switch outcome {
             case .success:
                 let collectorBox = UncheckedSendableBox(ReportCollector())
-                let s: SecurityState = await withCheckedContinuation { continuation in
-                    DispatchQueue.global(qos: .utility).async {
-                        continuation.resume(returning: collectorBox.value.collectSecurityInfo())
-                    }
-                }
+                let s = await collectorBox.value.collectSecurityInfo()
                 guard !Task.isCancelled else { return }
                 await self.waitForReportRefreshToFinish()
                 guard !Task.isCancelled else { return }
@@ -1006,10 +971,10 @@ final class DashboardModel {
     }
 
     /// Mutable counterpart to `UncheckedSendableBox`, used by
-    /// `installSmartmontoolsNow()` to capture the last non-empty `onLine` output while
-    /// `CommandRunner.runStreaming` blocks synchronously on its own utility queue —
-    /// there's no concurrent access since the mutation and the read-back both happen
-    /// serially within that one blocking call.
+    /// `installSmartmontoolsNow()` to capture the last non-empty `onLine` output.
+    /// `onLine` runs on the runner's private serial queue, and every call completes
+    /// before `CommandRunner.run` returns, so the read after the `await` is ordered
+    /// after the last write.
     private final class LastLineBox: @unchecked Sendable {
         var value: String = ""
     }

@@ -149,8 +149,8 @@ enum BatteryInspector {
     }
 
     /// App path: runs ioreg and parses. Returns nil if battery service missing.
-    static func collect() -> BatteryDetail? {
-        guard let out = CommandRunner.run("/usr/sbin/ioreg", ["-r", "-c", "AppleSmartBattery", "-a"], timeout: 5) else {
+    static func collect() async -> BatteryDetail? {
+        guard let out = await CommandRunner.run("/usr/sbin/ioreg", ["-r", "-c", "AppleSmartBattery", "-a"], timeout: 5).text else {
             return nil
         }
         guard var detail = parse(Data(out.utf8)) else { return nil }

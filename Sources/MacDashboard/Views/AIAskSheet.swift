@@ -24,6 +24,7 @@ struct AIAskSheet: View {
     @State private var options = RedactionOptions()
     @State private var phase: Phase = .composing
     @State private var context = RedactionContext()
+    @State private var contextReady = false
     @State private var rawPayload = ""
 
     private var redactedPayload: String {
@@ -88,14 +89,18 @@ struct AIAskSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(phase == .sending)
+                .disabled(phase == .sending || !contextReady)
+                .accessibilityLabel(L.aiSendButton)
             }
         }
         .padding(16)
         .frame(width: 640, height: 560)
         .onAppear {
-            context = AISensitiveContext.collect()
             rawPayload = AIPayloadBuilder.build(AIPayloadInput(reportText: model.reportText, assessment: model.assessment, live: model.currentLiveSnapshot()))
+        }
+        .task {
+            context = await AISensitiveContext.collect()
+            contextReady = true
         }
     }
 
