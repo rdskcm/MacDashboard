@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build "MacDashboard.app": Apple Silicon (arm64) release, hand-rolled bundle,
-# ad-hoc codesign. Output: dist/MacDashboard.app
+# codesign (stable local identity, ad-hoc fallback). Output: dist/MacDashboard.app
 # Usage: ./build_app.sh [--install]
 #   --install             also copies the built app to ~/Applications
 set -euo pipefail
@@ -140,7 +140,34 @@ else
   /usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$DIST/Contents/Info.plist" 2>/dev/null || true
 fi
 
-echo "== codesign (ad-hoc, hardened runtime) =="
+echo "== codesign (hardened runtime) =="
+# Signing identity. Local builds sign with the stable self-signed identity that
+# tools/signing/make-identity.sh creates once per Mac. Its designated requirement names
+# the certificate instead of the build's cdhash, so it is the same for every rebuild and
+# macOS keeps this app's Full Disk Access / Automation grants across rebuilds. Without
+# that identity (release CI, a fresh clone) the build is signed ad-hoc as before and says
+# so loudly: an ad-hoc designated requirement is the cdhash, which changes whenever the
+# code does. Release artifacts are ad-hoc by design (release.yml).
+SIGN_CN="MacDashboard Local Signing"   # keep equal to CN in tools/signing/make-identity.sh
+# Without -v: -v lists only identities with a TRUSTED certificate, and this one is
+# deliberately not trusted (signing and designated-requirement checks do not need trust).
+SIGN_HASHES="$({ security find-identity -p codesigning 2>/dev/null || true; } \
+  | awk -v cn="\"$SIGN_CN\"" 'index($0, cn) { print $2 }' | sort -u)"
+SIGN_COUNT="$(printf '%s' "$SIGN_HASHES" | grep -c . || true)"
+if [ "$SIGN_COUNT" -gt 1 ]; then
+  echo "!! $SIGN_COUNT code-signing identities named \"$SIGN_CN\" — codesign cannot pick one." >&2
+  echo "!! Keep one: delete the others in Keychain Access (login > My Certificates). SHA-1s:" >&2
+  printf '%s\n' "$SIGN_HASHES" >&2
+  exit 1
+elif [ "$SIGN_COUNT" -eq 1 ]; then
+  SIGN_ID="$SIGN_HASHES"
+  echo "signing identity: \"$SIGN_CN\" ($SIGN_ID)"
+else
+  SIGN_ID="-"
+  echo "!! WARNING: no \"$SIGN_CN\" code-signing identity in the keychain — signing AD-HOC." >&2
+  echo "!! macOS treats every ad-hoc rebuild with changed code as a new app: Full Disk Access" >&2
+  echo "!! and Automation grants are lost. Fix, once per Mac: tools/signing/make-identity.sh" >&2
+fi
 # --options runtime: without the hardened runtime DYLD_INSERT_LIBRARIES is honoured
 # and library validation is off, so any local process running as this user could
 # inject into an app the README asks users to grant Full Disk Access and inherit its
@@ -150,7 +177,10 @@ echo "== codesign (ad-hoc, hardened runtime) =="
 # No --deep: Apple documents it as a testing convenience, and combined with
 # --entitlements it would grant these entitlements to any nested code added later.
 # Nested code, if ever added, must be signed explicitly.
-codesign --force --options runtime --entitlements MacDashboard.entitlements --sign - "$DIST"
+# --timestamp=none: a self-signed signature gains nothing from a secure timestamp, and
+# asking for one would make every build depend on Apple's timestamp server; no-op for ad-hoc.
+codesign --force --options runtime --timestamp=none --entitlements MacDashboard.entitlements \
+  --sign "$SIGN_ID" "$DIST"
 
 echo "== result =="
 # Fail-loud gate (V27-TOOLCHAIN): the binary must be arm64 only and record the SDK
@@ -179,7 +209,8 @@ if [ "$(norm_version "$REC_MINOS")" != "$(norm_version "$MIN_MACOS")" ]; then
 fi
 echo "SDK check OK: arm64 binary records sdk $SDK_VERSION"
 du -sh "$DIST"
-codesign -dvv "$DIST" 2>&1 | grep -E '^(Identifier|CodeDirectory|Signature)' | head -3
+codesign -dvv "$DIST" 2>&1 | grep -E '^(Identifier|CodeDirectory|Signature|Authority)'
+codesign -d -r- "$DIST" 2>&1 | grep 'designated =>' || true
 
 if [ "$INSTALL" = "1" ]; then
   echo "== install to ~/Applications =="

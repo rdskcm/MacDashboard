@@ -573,8 +573,12 @@ Localized `en.lproj`/`ru.lproj` InfoPlist.strings are generated for the copyrigh
 Apple-events usage description.
 Icon: reuse legacy generator idea — render simple pulse-line icon via CoreGraphics
 swift script into iconset → iconutil (best-effort; skip icon on failure).
-codesign --force --options runtime --entitlements MacDashboard.entitlements --sign -
-"dist/MacDashboard.app" — ad-hoc signature plus the hardened runtime (V2-SECURITY-FIX: without
+codesign --force --options runtime --timestamp=none --entitlements MacDashboard.entitlements
+--sign <identity> "dist/MacDashboard.app". <identity> is the SHA-1 of the single keychain identity
+named "MacDashboard Local Signing" (created once per Mac by tools/signing/make-identity.sh; its
+designated requirement names the certificate, not the cdhash, so TCC grants survive rebuilds), or
+`-` (ad-hoc, with a loud warning) when none exists — release CI always takes the ad-hoc path; two
+or more such identities fail the build. The signature carries the hardened runtime (V2-SECURITY-FIX: without
 --options runtime, DYLD_INSERT_LIBRARIES is honoured and library validation is off, so any local
 process running as this user could inject into an app the README asks users to grant Full Disk
 Access). MacDashboard.entitlements grants exactly one entitlement,

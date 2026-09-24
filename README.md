@@ -170,6 +170,14 @@ cd MacDashboard
 
 An app you build yourself carries no download quarantine, so it opens with no Gatekeeper prompt at all.
 
+Optional, once per Mac: `tools/signing/make-identity.sh` creates a local
+self-signed signing certificate in your login keychain, and every later
+`./build_app.sh` signs with it. macOS then recognises each rebuild as the same
+app, so Full Disk Access and the other permissions survive rebuilds. Without it
+the build is ad-hoc signed (the build prints a warning), and macOS asks for those
+permissions again after a rebuild with changed code. The script may show one
+keychain dialog: enter your login password and click **Always Allow**.
+
 ## First launch
 
 On first launch macOS will ask for a couple of permissions (you can decline —
@@ -208,7 +216,8 @@ quarantine flag along the way, clear it exactly as in the first-launch step abov
 
 - `Sources/MacDashboard/` — the app itself (SwiftUI, no external dependencies).
 - `Checks/` — parser/assessment checks (`swift run MacDashboardChecks`).
-- `build_app.sh` — Apple Silicon (arm64) build + `.app` packaging + ad-hoc codesign.
+- `build_app.sh` — Apple Silicon (arm64) build + `.app` packaging + codesign (the local signing identity if present, otherwise ad-hoc).
+- `tools/signing/make-identity.sh` — one-time creation of that local signing identity.
 - `SPEC.md` — the original build-out brief. Part of it is still binding (data
   contracts, collectors, packaging); the rest records how v1.0 was built. Each section
   is labelled — see the status table at the top of the file.

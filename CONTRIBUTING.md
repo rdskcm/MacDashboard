@@ -18,6 +18,11 @@ Add `--install` to also copy the built app into `~/Applications`:
 ./build_app.sh --install
 ```
 
+If you rebuild often, run `tools/signing/make-identity.sh` once first. It creates a
+local self-signed signing identity in your login keychain; `build_app.sh` then signs
+with it, so macOS keeps the app's permissions (Full Disk Access, Automation) across
+rebuilds. Without it the build is signed ad-hoc and prints a warning.
+
 ## Checks
 
 ```
