@@ -1,0 +1,20 @@
+# Thresholds are printed in every report (build-info.txt and stdout/report.txt).
+# Any change to this file is a separate commit whose message states the
+# measured reason (e.g. a noise run's numbers) — never a change made just to
+# turn a failing run green.
+#
+# pixel_tolerance: per-channel (R/G/B/A) byte tolerance used by `vbtool diff`.
+# default: max allowed diff_pct for any state with no more specific line below.
+# <state> <max_pct>: per-state override.
+
+pixel_tolerance 24
+default 0.5
+
+# main-dark and main-light overrides are set from the run-to-run noise
+# measurement in Verification step 6 (rule: max(1.0, 2 x max observed main-*
+# pct), rounded up to 0.5). Measured 2026-09-24 on this bench Mac (macOS
+# 27.0, 1280x741 pt visible frame, 1150x682 pt main window): two consecutive
+# positive runs (same window size) gave main-dark 0.92 %, main-light 0.59 %.
+# max(1.0, 2 x 0.92) = 1.84, rounded up to 0.5 -> 2.0.
+main-dark 2.0
+main-light 2.0

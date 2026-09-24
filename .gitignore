@@ -13,3 +13,4 @@ dist/
 .DS_Store
 
 # Runtime data lives in ~/Library/Application Support/MacDashboard, never in repo
+tools/visual/out/
