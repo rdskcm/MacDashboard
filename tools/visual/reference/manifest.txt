@@ -1,0 +1,9 @@
+# state	blessed	macos	sdk	commit
+main-dark	2026-09-24	27.0	27	3601275-dirty
+settings-general-dark	2026-09-24	27.0	27	3601275-dirty
+settings-monitoring-dark	2026-09-24	27.0	27	3601275-dirty
+settings-titlebar-hover-dark	2026-09-24	27.0	27	3601275-dirty
+main-light	2026-09-24	27.0	27	3601275-dirty
+settings-general-light	2026-09-24	27.0	27	3601275-dirty
+settings-monitoring-light	2026-09-24	27.0	27	3601275-dirty
+settings-titlebar-hover-light	2026-09-24	27.0	27	3601275-dirty

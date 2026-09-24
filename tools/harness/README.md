@@ -50,3 +50,4 @@ MainActor.assumeIsolated {
 - `NavigationSplitView` sidebars render as an EMPTY white panel offscreen (the
   List needs a real window/appearance context) — the detail pane renders fine.
   Verify sidebars in the real app (System Events menu click + screencapture).
+- Window chrome (titlebar, translucency, traffic lights, alpha holes) is invisible here — use `tools/visual/run.sh` (real windows, reference diff).
