@@ -16,7 +16,7 @@ done
 
 APP_NAME="MacDashboard"
 DIST="dist/$APP_NAME.app"
-VERSION="2.1"
+VERSION="2.2"
 # Codename names the whole 2.x branch, not the point release — stays "Krieg" until 3.0.
 # Only a NON-empty codename is appended to CFBundleShortVersionString — an empty one must not
 # leave "2.1 ()".

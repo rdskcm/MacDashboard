@@ -55,7 +55,8 @@ enum CommandRunner {
     /// `args`, stdin /dev/null, the pinned `environment`, as leader of its own process group.
     /// `onLine` (optional) receives every stdout and stderr line, on a private serial queue,
     /// all of them before this function returns. Cancelling the awaiting Task kills the
-    /// group (or skips the spawn). Never blocks a thread waiting for the child.
+    /// group (or skips the spawn). Never blocks the caller or the Swift concurrency pool: each running child has one
+    /// dedicated waiter thread that blocks until it exits.
     static func run(_ path: String, _ args: [String], timeout: TimeInterval,
                     environment: [String: String] = defaultEnvironment,
                     onLine: ((_ line: String, _ isStderr: Bool) -> Void)? = nil) async -> CommandOutcome {
@@ -134,15 +135,18 @@ struct CommandOutcome: Equatable, Sendable {
         return t
     }
 
-    /// Pure (Checks-tested). A kill WE issued decides the outcome; otherwise the wait(2)
-    /// status does. WIFEXITED & co. are C macros Swift cannot import, hence the bit math.
+    /// Pure (Checks-tested). The wait(2) status decides the outcome, unless OUR kill is what ended
+    /// the run: a kill reason counts only when the leader died of SIGKILL, its status is unknown,
+    /// or reading was stopped with output still unread (`outputCut`). A leader that exited on its
+    /// own before our kill landed is reported by its real status (RUNNER-HANG C-M2c).
+    /// `outputCut` defaults to false: nothing was cut unless the job says so.
+    /// WIFEXITED & co. are C macros Swift cannot import, hence the bit math.
     /// `waitStatus == nil`: the status was unavailable (child reaped elsewhere — not
     /// expected in this app); reported as `.signaled(0)` so only non-empty stdout counts.
-    static func termination(killReason: KillReason?, waitStatus: Int32?) -> Termination {
-        switch killReason {
-        case .timedOut?: return .timedOut
-        case .cancelled?: return .cancelled
-        case nil: break
+    static func termination(killReason: KillReason?, waitStatus: Int32?, outputCut: Bool = false) -> Termination {
+        if let reason = killReason {
+            let killedBySIGKILL = waitStatus.map { ($0 & 0x7f) == SIGKILL } ?? true
+            if killedBySIGKILL || outputCut { return reason == .timedOut ? .timedOut : .cancelled }
         }
         guard let s = waitStatus else { return .signaled(0) }
         let low = s & 0x7f
@@ -197,8 +201,9 @@ struct LineSplitter {
 }
 
 /// One run's state machine. EVERY stored property is read and written only on `queue`
-/// (the exit source, both DispatchIO channels, the deadline timer and the cancel hop all
-/// target it), which is what makes `@unchecked Sendable` sound without a lock.
+/// (both DispatchIO channels, the deadline timer, the cancel hop and the waiter's reap hop all target it;
+/// the waiter thread itself reads no stored property except the immutable `queue`), which is what makes
+/// `@unchecked Sendable` sound without a lock.
 /// Invariant: a signal is sent only in phase `.running`, i.e. before the leader is reaped,
 /// so the pgid (= leader pid) cannot have been reused.
 private final class CommandJob: @unchecked Sendable {
@@ -214,7 +219,7 @@ private final class CommandJob: @unchecked Sendable {
     private var stderrLines = LineSplitter()
     private var channels: [DispatchIO] = []
     private var openStreams = 0
-    private var exitSource: DispatchSourceProcess?
+    private var outputCut = false          // stopReading() ran while a stream was still open
     private var timer: DispatchSourceTimer?
 
     init(onLine: ((String, Bool) -> Void)?) { self.onLine = onLine }
@@ -245,13 +250,10 @@ private final class CommandJob: @unchecked Sendable {
         phase = .running(pid)
         channels = [makeReader(fd: out[0], isStderr: false), makeReader(fd: err[0], isStderr: true)]
         openStreams = 2
-        let src = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: queue)
-        src.setEventHandler { self.reapIfExited() }
-        src.resume(); exitSource = src
-        reapIfExited()                                   // exit may precede the source's registration
+        startWaiter(pid)
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now() + timeout)
-        t.setEventHandler { self.requestKill(.timedOut); self.reapIfExited() }  // reap also catches a missed exit event
+        t.setEventHandler { self.requestKill(.timedOut) }   // the waiter reaps; the timer only kills
         t.resume(); timer = t
     }
 
@@ -300,33 +302,50 @@ private final class CommandJob: @unchecked Sendable {
         }
     }
 
-    private func reapIfExited() {
-        guard case .running(let pid) = phase else { return }
-        var info = siginfo_t()
-        var r: Int32
-        repeat { r = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT) } while r == -1 && errno == EINTR
-        if r == 0 && info.si_pid == 0 { return }                    // still running
+    /// The only reaper. A dedicated thread (never `queue`, never the Swift pool) blocks in
+    /// waitid(WEXITED|WNOWAIT) until the leader is a zombie, so its exit cannot be missed — unlike
+    /// a one-shot non-blocking probe fired by an exit event or right after a kill (RUNNER-HANG C-M2a/b/c).
+    /// WNOWAIT leaves the zombie in place: the pid (= pgid) stays reserved until `reap` collects
+    /// it on `queue`, so `requestKill` may still signal the group until then.
+    private func startWaiter(_ pid: pid_t) {
+        let t = Thread {
+            var info = siginfo_t()
+            var r: Int32
+            repeat { r = waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) } while r == -1 && errno == EINTR
+            let exited = (r == 0)                   // r == -1 (ECHILD): reaped elsewhere, status unknown
+            self.queue.async { self.reap(pid, exited: exited) }
+        }
+        t.name = "MacDashboard.CommandRunner.wait"
+        t.qualityOfService = .userInitiated
+        t.start()
+    }
+
+    /// On `queue`, once the waiter saw the leader exit. `exited`: it is a zombie right now.
+    private func reap(_ pid: pid_t, exited: Bool) {
+        guard case .running(let p) = phase, p == pid else { return }
         var status: Int32? = nil
-        if r == 0 {
-            // Exited, still a zombie: its pid (= pgid) is reserved, so sweeping the group is safe.
+        if exited {
+            // Still a zombie: its pid (= pgid) is reserved, so sweeping the group is safe.
             _ = killpg(pid, SIGKILL)
             var s: Int32 = 0
             var got: pid_t
             repeat { got = waitpid(pid, &s, 0) } while got == -1 && errno == EINTR   // zombie: returns at once
             if got == pid { status = s }
-        }                                                           // r == -1 (ECHILD): status unknown, no sweep
+        }
         phase = .reaped(status)
-        exitSource?.cancel(); exitSource = nil
         if killReason != nil { stopReading() }      // we killed it: do not wait on pipe holders outside the group
         finishIfComplete()
     }
 
-    private func stopReading() { for io in channels { io.close(flags: .stop) } }
+    private func stopReading() {
+        if openStreams > 0 { outputCut = true }     // output still unread: what we have is incomplete
+        for io in channels { io.close(flags: .stop) }
+    }
 
     private func finishIfComplete() {
         guard case .reaped(let status) = phase, openStreams == 0 else { return }
         finish(CommandOutcome(
-            termination: CommandOutcome.termination(killReason: killReason, waitStatus: status),
+            termination: CommandOutcome.termination(killReason: killReason, waitStatus: status, outputCut: outputCut),
             stdout: String(decoding: stdoutBuf.data, as: UTF8.self),
             stdoutTruncated: stdoutBuf.truncated,
             stderrHead: String(decoding: stderrBuf.data, as: UTF8.self)))
@@ -336,7 +355,6 @@ private final class CommandJob: @unchecked Sendable {
         if case .done = phase { return }
         phase = .done
         timer?.cancel(); timer = nil
-        exitSource?.cancel(); exitSource = nil
         channels = []
         let c = completion; completion = nil
         c?(outcome)

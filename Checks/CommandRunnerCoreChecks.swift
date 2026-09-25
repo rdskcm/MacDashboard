@@ -8,7 +8,7 @@ import Darwin
 #endif
 
 func runCommandRunnerCoreChecks() {
-    // MARK: - CommandOutcome.termination(killReason:waitStatus:)
+    // MARK: - CommandOutcome.termination(killReason:waitStatus:outputCut:)
 
     check(CommandOutcome.termination(killReason: nil, waitStatus: 0) == .exited(0),
           "CommandOutcome.termination: (nil, exit 0) ⇒ .exited(0)")
@@ -20,10 +20,23 @@ func runCommandRunnerCoreChecks() {
           "CommandOutcome.termination: (nil, signal 11 + core-dump bit) ⇒ .signaled(11), core-dump bit ignored")
     check(CommandOutcome.termination(killReason: nil, waitStatus: nil) == .signaled(0),
           "CommandOutcome.termination: (nil, nil status) ⇒ .signaled(0)")
-    check(CommandOutcome.termination(killReason: .timedOut, waitStatus: 0) == .timedOut,
-          "CommandOutcome.termination: (.timedOut, exit 0) ⇒ .timedOut")
-    check(CommandOutcome.termination(killReason: .cancelled, waitStatus: 3 << 8) == .cancelled,
-          "CommandOutcome.termination: (.cancelled, exit 3) ⇒ .cancelled")
+    // RUNNER-HANG C-M2c regression: a kill reason no longer overrides a clean exit whose output is complete.
+    check(CommandOutcome.termination(killReason: .timedOut, waitStatus: 0) == .exited(0),
+          "CommandOutcome.termination: (.timedOut, clean exit 0, output complete) ⇒ .exited(0) — C-M2c")
+    check(CommandOutcome.termination(killReason: .cancelled, waitStatus: 3 << 8) == .exited(3),
+          "CommandOutcome.termination: (.cancelled, exit 3, output complete) ⇒ .exited(3)")
+    check(CommandOutcome.termination(killReason: .cancelled, waitStatus: 0x80 | 11) == .signaled(11),
+          "CommandOutcome.termination: (.cancelled, its own signal 11) ⇒ .signaled(11)")
+    check(CommandOutcome.termination(killReason: .timedOut, waitStatus: 9) == .timedOut,
+          "CommandOutcome.termination: (.timedOut, SIGKILL) ⇒ .timedOut")
+    check(CommandOutcome.termination(killReason: .cancelled, waitStatus: 9) == .cancelled,
+          "CommandOutcome.termination: (.cancelled, SIGKILL) ⇒ .cancelled")
+    check(CommandOutcome.termination(killReason: .timedOut, waitStatus: nil) == .timedOut,
+          "CommandOutcome.termination: (.timedOut, status unknown) ⇒ .timedOut")
+    check(CommandOutcome.termination(killReason: .timedOut, waitStatus: 0, outputCut: true) == .timedOut,
+          "CommandOutcome.termination: (.timedOut, exit 0, output cut) ⇒ .timedOut")
+    check(CommandOutcome.termination(killReason: .cancelled, waitStatus: 3 << 8, outputCut: true) == .cancelled,
+          "CommandOutcome.termination: (.cancelled, exit 3, output cut) ⇒ .cancelled")
 
     // MARK: - CommandOutcome.text
 
@@ -207,7 +220,7 @@ func runCommandRunnerCoreChecks() {
         unlink(marker2)
     }
 
-    // Fast-exit reaping: a missed exit event would show up as .timedOut.
+    // Fast-exit reaping: a missed reap would show up as .timedOut.
     do {
         let start = Date()
         var allExited = true

@@ -91,7 +91,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
    files elsewhere but never author them), and a default build contains no networking
    at all — see §12.
 7. min deployment: **macOS 14** (needed for @Observable + Swift Charts). Build:
-   SwiftPM, Apple Silicon (arm64) binary, hand-rolled .app bundle, ad-hoc codesign.
+   SwiftPM, Apple Silicon (arm64) binary, hand-rolled .app bundle, codesign with the local signing identity if present, otherwise ad-hoc (§9).
 
 ## 2. Locations
 
@@ -412,8 +412,10 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
   `tmutil latestbackup` best-effort for lastBackup (may need FDA ⇒ nil).
 - spotlight: `mdutil -s /`.
 - crashes: ~/Library/Logs/DiagnosticReports via FileManager (no shell); files with mtime older than 7 days dropped, remaining ones grouped by process name (parsed off the filename) into ≤15 CrashGroup(process, count, isPanic); isPanic = at least one .panic report in the group.
-- brew: resolve from /opt/homebrew/bin/brew, /usr/local/bin/brew, PATH; absent ⇒
-  brewVersion = .some(nil). Else `brew --version` + `brew outdated` (60 s).
+- brew: /opt/homebrew/bin/brew; else /usr/local/bin/brew only if trusted
+  (`ReportCollector.isTrustedFallbackTool`: a regular file owned by root or the current user, no
+  group/world write bit); no PATH lookup; absent or untrusted ⇒ brewVersion = .some(nil).
+  Else `brew --version` + `brew outdated` (60 s).
 - updates: `softwareupdate -l` (120 s timeout; on timeout ⇒ nil = "не проверено").
 - autostart: `osascript -e 'tell application "System Events" to get the name of every
   login item'` (no permission ⇒ loginItems = nil, show "(нет разрешения)"); ls of
@@ -425,7 +427,7 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
      SmartDisk(device:"internal", title:"Встроенный накопитель" + model if present).
   2) External physical disks: `diskutil list -plist external physical` → `WholeDisks`.
      For each: `diskutil info -plist <dev>` for `MediaName` + `SMARTStatus`.
-  3) If smartctl exists (search /opt/homebrew/{bin,sbin}, /usr/local/{bin,sbin}) —
+  3) If smartctl exists (search /opt/homebrew/{sbin,bin}; /usr/local/{sbin,bin} only if trusted, as for brew) —
      try `sudo -n smartctl -A -j <dev>`, then plain `smartctl -A -j <dev>` without sudo;
      on success attach NVMe attrs (Critical Warning, Temperature, Available Spare,
      Percentage Used, Power Cycles, Power On Hours, Unsafe Shutdowns,
@@ -453,9 +455,17 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
 - battery full: `pmset -g batt` + `system_profiler SPPowerDataType` grep Cycle Count/
   Condition/Maximum Capacity → merged into model.live.battery AND report for assessment.
 
-CommandRunner: Process + DispatchSourceTimer kill on timeout; captures stdout+stderr;
-returns String? (nil on any failure). Absolute paths for binaries (/usr/bin/…,
-/usr/sbin/…) where knowable; PATH lookup via /usr/bin/env otherwise.
+CommandRunner (`Engine/CommandRunner.swift`): `async run(path, args, timeout:, environment:, onLine:)
+-> CommandOutcome`. `path` must be absolute — no PATH lookup, no /usr/bin/env; a relative path is
+`.launchFailed(EINVAL)` and nothing is spawned. The child is spawned with posix_spawn as the leader of
+its own process group, stdin /dev/null, a pinned environment (PATH=/usr/bin:/bin:/usr/sbin:/sbin,
+LC_ALL=C, TZ=UTC). A dedicated waiter thread blocks in waitid(WEXITED|WNOWAIT) until the leader
+exits; the job then kills what is left of the group and reaps the leader. On timeout or Task
+cancellation the whole group gets SIGKILL. CommandOutcome = termination (.exited(code) /
+.signaled(sig) / .launchFailed(errno) / .timedOut / .cancelled) + stdout (capped at 8 MiB, with a
+truncation flag) + the first 2 KiB of stderr; .timedOut/.cancelled only when our kill ended the run
+(leader died of SIGKILL, or output was still unread). `outcome.text` keeps the old String? contract:
+nil for launch failure, timeout and cancellation, and for empty stdout unless the leader exited 0.
 
 ## 6. Assessment (port of assess() — same thresholds)
 
@@ -603,8 +613,9 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
 - Headless UI screenshot harness (`tools/harness/`, dev tool, not part of the
   pass/fail Checks target): renders a SwiftUI scenario file off-screen to a PNG via
   `render.sh <scenario.swift> <out.png>` for visual verification of Views.
-- Parser fixtures (inline string-literal fixtures in Checks/main.swift): top output (both stats
-  orders, with +/- suffixes), vm.swapusage line, pmset -g batt (laptop AC/battery,
+- Parser fixtures (planned as inline string literals in Checks/main.swift; as built, real captured
+  outputs are files in Tests/Fixtures/<command>/ — see its README — alongside inline cases in Checks/):
+  top output (both stats orders, with +/- suffixes), vm.swapusage line, pmset -g batt (laptop AC/battery,
   desktop = no battery lines), system_profiler hardware (M3 Mac AND Intel with
   "Processor Name"/"Processor Speed"), tmutil destinationinfo (configured / "No
   destinations configured"), diskutil SMART lines (Verified / Not Supported), smartctl

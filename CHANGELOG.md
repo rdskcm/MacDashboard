@@ -2,7 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [2.2] (Krieg) - 2026-09-25
+
+Apple Silicon only, and a rebuilt way of running the system commands behind every
+reading: structured output instead of printed text, honest outcomes, nothing left running.
 
 - Apple Silicon only. Version 2.2 and later are built for Apple Silicon (arm64)
   alone; Intel Macs are no longer supported. On an Intel Mac, download
@@ -13,6 +16,32 @@ All notable changes to this project are documented in this file.
   continuous panel again, with no see-through area above the sidebar, and the
   close, minimize and zoom buttons are all shown. The two cards in the General
   section now have the same shadow.
+- More readings — hardware, Time Machine, disk status and SMART — now come from
+  the tools' structured output (JSON or property lists) instead of their printed
+  text, so a macOS update that rewords that text no longer breaks them.
+- When a command's output still cannot be read, the report says so in a new
+  section, "Unrecognised command output", with the first lines of that output
+  (serial numbers and UUIDs masked) to attach to a bug report, instead of the
+  reading silently going missing.
+- A command that runs past its time limit is stopped together with every process
+  it started, so no stray helper processes are left behind.
+- Fixed: a command that finished normally could, rarely, be reported as timed
+  out, so its section showed "not checked" after a delay of up to two minutes;
+  more rarely still, a command that hit its time limit could leave the report
+  collection waiting forever.
+- smartctl is now run as `smartctl -A -j <disk>`. If you allowed it in sudoers
+  with an exact argument list, add `-j` to that rule; a rule without arguments
+  needs no change.
+- Homebrew and smartctl installed under `/usr/local` are used only if the file
+  is owned by root or by you and is not writable by others; otherwise they count
+  as not installed. Installs under `/opt/homebrew` are unaffected.
+- Building from source: `tools/signing/make-identity.sh` creates a local signing
+  identity once per Mac, and builds signed with it keep the privacy permissions
+  you granted (Full Disk Access and others) across rebuilds. The release
+  download is still ad-hoc signed.
+- For contributors: parser checks run against real captured outputs in
+  `Tests/Fixtures/`, and `tools/visual/run.sh` compares the real app windows
+  against reference screenshots.
 
 ## [2.1] (Krieg) - 2026-09-07
 

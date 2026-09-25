@@ -301,22 +301,28 @@ RESTORED=0
 CURSOR0="$("$VBTOOL" cursor)"
 FRONT_BUNDLE0="$(osascript -e 'tell application "System Events" to get bundle identifier of first process whose frontmost is true' 2>/dev/null || echo "")"
 
-if defaults export "$BUNDLE_ID" "$RESTORE_DIR/defaults.plist" 2>/dev/null; then
-  : # captured
+# A snapshot that did not complete must stop the run HERE, before the restore trap exists:
+# restore() replaces live data with the snapshot (defaults delete + import, rsync --delete),
+# so restoring from a partial copy would delete the user's files. Nothing is changed yet.
+if defaults read "$BUNDLE_ID" >/dev/null 2>&1; then
+  defaults export "$BUNDLE_ID" "$RESTORE_DIR/defaults.plist" \
+    || precondition_refused "could not snapshot the app's defaults ($BUNDLE_ID) — nothing was changed"
 else
   touch "$RESTORE_DIR/defaults.absent"
 fi
 
 if [ -d "$SAVEDSTATE_DIR" ]; then
   mkdir -p "$RESTORE_DIR/savedState"
-  ditto "$SAVEDSTATE_DIR" "$RESTORE_DIR/savedState" 2>/dev/null || true
+  ditto "$SAVEDSTATE_DIR" "$RESTORE_DIR/savedState" \
+    || precondition_refused "could not snapshot $SAVEDSTATE_DIR — nothing was changed"
 else
   touch "$RESTORE_DIR/savedState.absent"
 fi
 
 if [ -d "$APPSUPPORT_DIR" ]; then
   mkdir -p "$RESTORE_DIR/appsupport"
-  ditto "$APPSUPPORT_DIR" "$RESTORE_DIR/appsupport" 2>/dev/null || true
+  ditto "$APPSUPPORT_DIR" "$RESTORE_DIR/appsupport" \
+    || precondition_refused "could not snapshot $APPSUPPORT_DIR — nothing was changed"
 else
   touch "$RESTORE_DIR/appsupport.absent"
 fi
