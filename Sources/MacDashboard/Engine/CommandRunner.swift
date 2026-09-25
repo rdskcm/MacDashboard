@@ -14,6 +14,11 @@ import Darwin
 #endif
 
 enum CommandRunner {
+    /// QoS for commands spawned by the current task (COLLECT-FASTPATH). Automatic work
+    /// wraps itself in `CommandRunner.$qos.withValue(.utility) { … }`; user actions keep
+    /// the default. Read once per `run`, in the calling task.
+    @TaskLocal static var qos: CommandQoS = .userInitiated
+
     /// Environment pinned into every child process by default (see F4 discussion
     /// on `run`). A dev run from an interactive shell and the shipped
     /// `.app` under launchd otherwise see different `PATH`/locale, and locale is
@@ -61,7 +66,7 @@ enum CommandRunner {
                     environment: [String: String] = defaultEnvironment,
                     onLine: ((_ line: String, _ isStderr: Bool) -> Void)? = nil) async -> CommandOutcome {
         guard path.hasPrefix("/") else { return .launchFailed(EINVAL) }   // R0(c)
-        let job = CommandJob(onLine: onLine)
+        let job = CommandJob(onLine: onLine, qos: CommandRunner.qos)
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (cont: CheckedContinuation<CommandOutcome, Never>) in
                 job.start(path: path, args: args, environment: environment, timeout: timeout) {
@@ -77,7 +82,8 @@ enum CommandRunner {
     /// the given pipe write ends, every other fd closed in the child (CLOEXEC_DEFAULT),
     /// signal mask empty, dispositions default. Returns 0 or an errno (posix_spawn's return).
     fileprivate static func spawn(_ path: String, _ args: [String], _ environment: [String: String],
-                                  stdoutFD: Int32, stderrFD: Int32, pid: inout pid_t) -> Int32 {
+                                  stdoutFD: Int32, stderrFD: Int32, qosClass: qos_class_t?,
+                                  pid: inout pid_t) -> Int32 {
         var fa: posix_spawn_file_actions_t? = nil
         posix_spawn_file_actions_init(&fa); defer { posix_spawn_file_actions_destroy(&fa) }
         posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0)
@@ -92,11 +98,22 @@ enum CommandRunner {
         posix_spawnattr_setsigdefault(&attr, &defaults)
         posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK
                                               | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_CLOEXEC_DEFAULT))
+        if let qosClass { let r = posix_spawnattr_set_qos_class_np(&attr, qosClass); if r != 0 { return r } }
         let argv: [UnsafeMutablePointer<CChar>?] = ([path] + args).map { strdup($0) } + [nil]
         let envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer { (argv + envp).forEach { free($0) } }
         return posix_spawn(&pid, path, &fa, &attr, argv, envp)
     }
+}
+
+/// How much CPU priority a spawned command gets. `.utility` spawns the child with
+/// QOS_CLASS_UTILITY (posix_spawnattr_set_qos_class_np); `.userInitiated` sets no spawn
+/// QoS — that API accepts only utility/background, so "no attribute" is today's behaviour.
+enum CommandQoS: Sendable, Equatable {
+    case userInitiated, utility
+    var dispatchQoS: DispatchQoS { self == .utility ? .utility : .userInitiated }
+    var threadQoS: QualityOfService { self == .utility ? .utility : .userInitiated }
+    var spawnQoSClass: qos_class_t? { self == .utility ? QOS_CLASS_UTILITY : nil }
 }
 
 /// Result of one `CommandRunner.run`. Pure value; see `text` for the legacy String? view.
@@ -202,13 +219,14 @@ struct LineSplitter {
 
 /// One run's state machine. EVERY stored property is read and written only on `queue`
 /// (both DispatchIO channels, the deadline timer, the cancel hop and the waiter's reap hop all target it;
-/// the waiter thread itself reads no stored property except the immutable `queue`), which is what makes
+/// the waiter thread itself reads no stored property except the immutable `queue`; `qos` is immutable, like `queue`), which is what makes
 /// `@unchecked Sendable` sound without a lock.
 /// Invariant: a signal is sent only in phase `.running`, i.e. before the leader is reaped,
 /// so the pgid (= leader pid) cannot have been reused.
 private final class CommandJob: @unchecked Sendable {
     private enum Phase { case idle, running(pid_t), reaped(Int32?), done }
-    private let queue = DispatchQueue(label: "MacDashboard.CommandRunner.job", qos: .userInitiated)
+    private let queue: DispatchQueue
+    private let qos: CommandQoS
     private let onLine: ((String, Bool) -> Void)?
     private var phase = Phase.idle
     private var killReason: CommandOutcome.KillReason?
@@ -222,7 +240,11 @@ private final class CommandJob: @unchecked Sendable {
     private var outputCut = false          // stopReading() ran while a stream was still open
     private var timer: DispatchSourceTimer?
 
-    init(onLine: ((String, Bool) -> Void)?) { self.onLine = onLine }
+    init(onLine: ((String, Bool) -> Void)?, qos: CommandQoS) {
+        self.onLine = onLine
+        self.qos = qos
+        self.queue = DispatchQueue(label: "MacDashboard.CommandRunner.job", qos: qos.dispatchQoS)
+    }
 
     func start(path: String, args: [String], environment: [String: String], timeout: TimeInterval,
                completion: @escaping (CommandOutcome) -> Void) {
@@ -244,7 +266,8 @@ private final class CommandJob: @unchecked Sendable {
         }
         for fd in out + err { _ = fcntl(fd, F_SETFD, FD_CLOEXEC) }   // never leak into other spawns
         var pid: pid_t = 0
-        let rc = CommandRunner.spawn(path, args, env, stdoutFD: out[1], stderrFD: err[1], pid: &pid)
+        let rc = CommandRunner.spawn(path, args, env, stdoutFD: out[1], stderrFD: err[1],
+                                   qosClass: qos.spawnQoSClass, pid: &pid)
         Darwin.close(out[1]); Darwin.close(err[1])                 // parent keeps only the read ends
         guard rc == 0 else { Darwin.close(out[0]); Darwin.close(err[0]); finish(.launchFailed(rc)); return }
         phase = .running(pid)
@@ -308,6 +331,7 @@ private final class CommandJob: @unchecked Sendable {
     /// WNOWAIT leaves the zombie in place: the pid (= pgid) stays reserved until `reap` collects
     /// it on `queue`, so `requestKill` may still signal the group until then.
     private func startWaiter(_ pid: pid_t) {
+        let threadQoS = qos.threadQoS
         let t = Thread {
             var info = siginfo_t()
             var r: Int32
@@ -316,7 +340,7 @@ private final class CommandJob: @unchecked Sendable {
             self.queue.async { self.reap(pid, exited: exited) }
         }
         t.name = "MacDashboard.CommandRunner.wait"
-        t.qualityOfService = .userInitiated
+        t.qualityOfService = threadQoS
         t.start()
     }
 

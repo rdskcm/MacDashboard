@@ -471,6 +471,13 @@ struct StringsRU: AppStrings {
     var reportTMNotConfigured: String { "(не настроен)" }
     func reportTMLastBackup(_ v: String) -> String { "Последний бэкап: \(v)" }
     var reportNotChecked: String { "(не проверено)" }
+    var reportSectionTimings: String { "ВРЕМЯ СБОРА" }
+    var reportTimingsNote: String { "Разделы собираются параллельно, поэтому их время перекрывается." }
+    func reportTimingsPass(_ v: String) -> String { "Весь проход: \(v)" }
+    func reportTimingsUpdates(_ v: String, _ at: String) -> String { "Обновления macOS (фоновая проверка в \(at)): \(v)" }
+    func reportUpdatesCheckedAt(_ at: String) -> String { "(проверено \(at))" }
+    var updatesCheckedJustNow: String { "проверено только что" }
+    func updatesCheckedAgo(_ age: String) -> String { "проверено \(age) назад" }
     var reportBrewOutdatedHeader: String { "Устаревшие пакеты:" }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
         "\(title) (\(device)) — статус: \(status)"

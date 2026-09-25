@@ -68,6 +68,8 @@ struct QuietSection: Identifiable {
     let title: String
     let status: String
     let rows: [SystemSectionRow]
+    /// Age of the macOS update result; only the Updates & crashes section sets it.
+    var checkedAt: Date? = nil
 }
 
 struct QuietStrip: View {
@@ -166,16 +168,26 @@ private struct QuietStripRow: View {
             .accessibilityLabel(section.title)
             .accessibilityAddTraits(.isButton)
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible(), spacing: 24)],
-                      alignment: .leading, spacing: 5) {
-                ForEach(section.rows) { row in
-                    HStack(spacing: 10) {
-                        Text(row.name).font(.system(size: 13)).foregroundStyle(DS.muted).lineLimit(1)
-                        Spacer(minLength: 10)
-                        Text(row.mark).font(.system(size: 13, weight: .bold)).foregroundStyle(DS.greenInk)
+            VStack(alignment: .leading, spacing: 6) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible(), spacing: 24)],
+                          alignment: .leading, spacing: 5) {
+                    ForEach(section.rows) { row in
+                        HStack(spacing: 10) {
+                            Text(row.name).font(.system(size: 13)).foregroundStyle(DS.muted).lineLimit(1)
+                            Spacer(minLength: 10)
+                            Text(row.mark).font(.system(size: 13, weight: .bold)).foregroundStyle(DS.greenInk)
+                        }
+                        .contentShape(Rectangle())
+                        .hoverTip(sectionRowTip(row.id))
                     }
-                    .contentShape(Rectangle())
-                    .hoverTip(sectionRowTip(row.id))
+                }
+                if let d = section.checkedAt {
+                    TimelineView(.everyMinute) { _ in
+                        Text(updatesAgeString(checkedAt: d, now: Date()))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(DS.muted)
+                            .lineLimit(1)
+                    }
                 }
             }
             .padding(EdgeInsets(top: 6, leading: 33, bottom: 10, trailing: 12))
@@ -288,6 +300,13 @@ struct UpdatesCrashesCard: View {
                                 AdviceActionRunner.openPane(AdvicePanes.softwareUpdate)
                             }
                             .accessibilityLabel(L.maintenanceOpenSoftwareUpdate)
+                        }
+                        if let d = model.report.updatesCheckedAt {
+                            TimelineView(.everyMinute) { _ in
+                                Text(updatesAgeString(checkedAt: d, now: Date()))
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(DS.muted)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

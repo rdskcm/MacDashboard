@@ -1659,6 +1659,119 @@ do {
           "isBrewCacheFresh: future timestamp (clock rollback) -> false")
 }
 
+// COLLECT-FASTPATH: update-check cache rules, trigger mapping, softwareupdate parsing, cache store.
+do {
+    let now = Date(timeIntervalSince1970: 1_760_000_000)
+    let h6: TimeInterval = 6 * 60 * 60
+    check(!ReportCollector.isUpdatesCacheFresh(checkedAt: nil, now: now), "isUpdatesCacheFresh: nil -> false")
+    check(ReportCollector.isUpdatesCacheFresh(checkedAt: now, now: now), "isUpdatesCacheFresh: age 0 -> true")
+    check(ReportCollector.isUpdatesCacheFresh(checkedAt: now.addingTimeInterval(-(h6 - 1)), now: now),
+          "isUpdatesCacheFresh: 6 h - 1 s -> true")
+    check(!ReportCollector.isUpdatesCacheFresh(checkedAt: now.addingTimeInterval(-h6), now: now),
+          "isUpdatesCacheFresh: exactly 6 h -> false")
+    check(!ReportCollector.isUpdatesCacheFresh(checkedAt: now.addingTimeInterval(60), now: now),
+          "isUpdatesCacheFresh: future timestamp -> false")
+
+    let fresh = now.addingTimeInterval(-60), stale = now.addingTimeInterval(-h6 - 1)
+    check(!ReportCollector.shouldStartUpdateCheck(trigger: .automatic, checkedAt: fresh, inFlight: false, now: now),
+          "shouldStartUpdateCheck: automatic + fresh -> false")
+    check(ReportCollector.shouldStartUpdateCheck(trigger: .automatic, checkedAt: stale, inFlight: false, now: now),
+          "shouldStartUpdateCheck: automatic + stale -> true")
+    check(ReportCollector.shouldStartUpdateCheck(trigger: .automatic, checkedAt: nil, inFlight: false, now: now),
+          "shouldStartUpdateCheck: automatic + no cache -> true")
+    check(ReportCollector.shouldStartUpdateCheck(trigger: .button, checkedAt: fresh, inFlight: false, now: now),
+          "shouldStartUpdateCheck: button + fresh -> true")
+    check(!ReportCollector.shouldStartUpdateCheck(trigger: .button, checkedAt: nil, inFlight: true, now: now),
+          "shouldStartUpdateCheck: in flight -> false (button)")
+    check(!ReportCollector.shouldStartUpdateCheck(trigger: .automatic, checkedAt: stale, inFlight: true, now: now),
+          "shouldStartUpdateCheck: in flight -> false (automatic)")
+
+    check(CollectTrigger.button.commandQoS == .userInitiated, "CollectTrigger.button -> userInitiated")
+    check(CollectTrigger.automatic.commandQoS == .utility, "CollectTrigger.automatic -> utility")
+    check(CollectTrigger.merged(nil, .automatic) == .automatic, "CollectTrigger.merged(nil, automatic) == automatic")
+    check(CollectTrigger.merged(.automatic, .button) == .button, "CollectTrigger.merged(automatic, button) == button")
+    check(CollectTrigger.merged(.button, .automatic) == .button, "CollectTrigger.merged(button, automatic) == button")
+
+    func outcome(_ t: CommandOutcome.Termination, out: String = "", err: String = "") -> CommandOutcome {
+        CommandOutcome(termination: t, stdout: out, stdoutTruncated: false, stderrHead: err)
+    }
+    let header = "Software Update Tool\n\nFinding available software\n"
+    let none = "No new software available.\n"
+    check(ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header, err: none)) == [],
+          "parseSoftwareUpdate: 'no new software' on stderr -> []")
+    check(ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header + none)) == [],
+          "parseSoftwareUpdate: 'no new software' on stdout -> []")
+    check(ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header + "* Label: macOS Foo 27.0.1-27A1\n\tTitle: macOS Foo, Version: 27.0.1\n"))
+            == ["macOS Foo 27.0.1-27A1"], "parseSoftwareUpdate: label extracted")
+    check(ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header)) == nil,
+          "parseSoftwareUpdate: unclassifiable output -> nil")
+    check(ReportCollector.parseSoftwareUpdate(outcome(.exited(1), out: header, err: "Can't connect")) == nil,
+          "parseSoftwareUpdate: network error -> nil")
+    check(ReportCollector.parseSoftwareUpdate(outcome(.timedOut)) == nil, "parseSoftwareUpdate: timeout -> nil")
+    check(ReportCollector.parseSoftwareUpdate(.launchFailed(2)) == nil, "parseSoftwareUpdate: launch failure -> nil")
+
+    check(ReportCollector.seconds(.milliseconds(1500)) == 1.5, "ReportCollector.seconds(1500 ms) == 1.5")
+
+    let tmp = FileManager.default.temporaryDirectory
+    let file = tmp.appendingPathComponent("updates-cache-check-\(UUID().uuidString).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let cache = UpdatesCache(items: ["macOS Foo 27.0.1-27A1"],
+                             checkedAt: Date(timeIntervalSince1970: 1_760_000_000), durationSeconds: 5.63)
+    do {
+        try UpdatesCacheStore.save(cache, to: file)
+        check(UpdatesCacheStore.load(from: file) == cache, "UpdatesCacheStore: save/load round trip")
+        let mode = (try? FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber)?.intValue
+        check(mode == 0o600, "UpdatesCacheStore: file mode 0600 (got \(String(describing: mode)))")
+    } catch {
+        check(false, "UpdatesCacheStore: save threw \(error)")
+    }
+    check(UpdatesCacheStore.load(from: tmp.appendingPathComponent("updates-cache-missing-\(UUID().uuidString).json")) == nil,
+          "UpdatesCacheStore: missing file -> nil")
+    let bad = tmp.appendingPathComponent("updates-cache-bad-\(UUID().uuidString).json")
+    defer { try? FileManager.default.removeItem(at: bad) }
+    try? "garbage".write(to: bad, atomically: true, encoding: .utf8)
+    check(UpdatesCacheStore.load(from: bad) == nil, "UpdatesCacheStore: garbage file -> nil")
+
+// COLLECT-FASTPATH Step 5: Updates age string, seconds formatting, timings section.
+do {
+    let now = Date(timeIntervalSince1970: 1_760_000_000)
+    check(updatesAgeString(checkedAt: now, now: now) == L.updatesCheckedJustNow, "updatesAgeString: now -> just now")
+    check(updatesAgeString(checkedAt: now.addingTimeInterval(120), now: now) == L.updatesCheckedJustNow,
+          "updatesAgeString: future -> just now")
+    check(updatesAgeString(checkedAt: now.addingTimeInterval(-59), now: now) == L.updatesCheckedJustNow,
+          "updatesAgeString: 59 s -> just now")
+    check(updatesAgeString(checkedAt: now.addingTimeInterval(-60), now: now) == L.updatesCheckedAgo("1 \(L.uptimeUnitMinute)"),
+          "updatesAgeString: 60 s -> 1 minute")
+    check(updatesAgeString(checkedAt: now.addingTimeInterval(-3 * 3600), now: now) == L.updatesCheckedAgo("3 \(L.uptimeUnitHour)"),
+          "updatesAgeString: 3 h -> hours")
+    check(updatesAgeString(checkedAt: now.addingTimeInterval(-2 * 86_400), now: now) == L.updatesCheckedAgo("2 \(L.uptimeUnitDay)"),
+          "updatesAgeString: 2 d -> days")
+    check(ReportWriter.fmtSeconds(5.63) == "5\(L.decimalSeparator)6 \(L.uptimeUnitSecond)", "fmtSeconds: 5.63")
+    check(ReportWriter.fmtSeconds(-1).hasPrefix("0"), "fmtSeconds: negative clamps to 0")
+
+    var unchecked = FullReport()
+    unchecked.updates = nil
+    let t1 = ReportWriter.render(report: unchecked, live: LiveSnapshot(), history: HistoryState())
+    check(t1.contains(L.reportNotChecked) && !t1.contains("No new software available."),
+          "ReportWriter: updates nil -> not checked, never 'no updates'")
+
+    var timed = FullReport()
+    timed.updates = []
+    timed.updatesCheckedAt = now
+    timed.sectionDurations = ["homeDirs": 6.4, "system": 0.2]
+    timed.passDuration = 7.0
+    let t2 = ReportWriter.render(report: timed, live: LiveSnapshot(), history: HistoryState())
+    check(t2.contains(L.reportSectionTimings), "ReportWriter: timings header present")
+    check(t2.contains(L.reportTimingsPass(ReportWriter.fmtSeconds(7.0))), "ReportWriter: whole-pass line present")
+    if let a = t2.range(of: "homeDirs:"), let b = t2.range(of: "system:", range: a.upperBound..<t2.endIndex) {
+        check(a.lowerBound < b.lowerBound, "ReportWriter: timings sorted by seconds descending")
+    } else {
+        check(false, "ReportWriter: homeDirs and system timing lines present in order")
+    }
+}
+
+}
+
 do {
     let cal = Calendar.current
     let now = cal.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!

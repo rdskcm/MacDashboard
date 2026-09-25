@@ -42,8 +42,9 @@ enum ReportWriter {
         addSection(&out, "SPOTLIGHT", renderSpotlight(report.spotlight))
         addSection(&out, L.reportSectionCrashes, renderCrashes(report.crashes))
         addSection(&out, "HOMEBREW", renderBrew(report.brewVersion, report.brewOutdated))
-        addSection(&out, L.reportSectionUpdates, renderUpdates(report.updates))
+        addSection(&out, L.reportSectionUpdates, renderUpdates(report.updates, checkedAt: report.updatesCheckedAt))
         addSection(&out, L.reportSectionSmart, renderSmart(report.smart))
+        addSection(&out, L.reportSectionTimings, renderTimings(report))
 
         let unparsed = (report.parseFailures + live.parseFailures).sorted { $0.commandLine < $1.commandLine }
         if !unparsed.isEmpty { addSection(&out, L.reportSectionUnparsed, renderParseFailures(unparsed)) }
@@ -380,10 +381,26 @@ enum ReportWriter {
 
     // MARK: - ОБНОВЛЕНИЯ macOS
 
-    private static func renderUpdates(_ updates: [String]?) -> [String] {
+    private static func renderUpdates(_ updates: [String]?, checkedAt: Date?) -> [String] {
         guard let u = updates else { return [L.reportNotChecked] }
-        if u.isEmpty { return ["No new software available."] }
-        return u
+        var lines = u.isEmpty ? ["No new software available."] : u
+        if let at = checkedAt { lines.append(L.reportUpdatesCheckedAt(reportUpdatedTimeString(at))) }
+        return lines
+    }
+
+    // MARK: - COLLECTION TIMES
+
+    private static func renderTimings(_ r: FullReport) -> [String] {
+        var lines: [String] = []
+        if let p = r.passDuration { lines.append(L.reportTimingsPass(fmtSeconds(p))) }
+        let entries = r.sectionDurations.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+        let w = (entries.map { $0.key.count }.max() ?? 0) + 2
+        for (k, v) in entries { lines.append("  " + padRight(k + ":", w) + fmtSeconds(v)) }
+        if let d = r.updatesCheckDuration, let at = r.updatesCheckedAt {
+            lines.append(L.reportTimingsUpdates(fmtSeconds(d), reportUpdatedTimeString(at)))
+        }
+        if lines.isEmpty { return [L.reportNone] }
+        return [L.reportTimingsNote] + lines
     }
 
     // MARK: - SMART
@@ -428,6 +445,11 @@ enum ReportWriter {
     /// fixed decimal once above the smallest unit. Deterministic regardless of the
     /// user's system locale — String(format:) without an explicit locale always uses
     /// "." internally, which is then replaced with ",".
+    static func fmtSeconds(_ s: TimeInterval) -> String {
+        String(format: "%.1f", max(0, s)).replacingOccurrences(of: ".", with: L.decimalSeparator)
+            + " " + L.uptimeUnitSecond
+    }
+
     static func fmtBytes(_ bytes: Int64) -> String {
         let units = [L.byteUnitB, L.byteUnitKB, L.byteUnitMB, L.byteUnitGB, L.byteUnitTB]
         let sign = bytes < 0 ? "-" : ""
@@ -526,4 +548,13 @@ func reportUpdatedTimeString(_ updatedAt: Date,
         return updatedAt.formatted(date: .omitted, time: .shortened)
     }
     return updatedAt.formatted(date: .abbreviated, time: .shortened)
+}
+
+/// Age of the cached macOS update result for the Updates card. Future or < 60 s => "just now".
+func updatesAgeString(checkedAt: Date, now: Date = Date()) -> String {
+    let age = now.timeIntervalSince(checkedAt)
+    if age < 60 { return L.updatesCheckedJustNow }
+    if age < 3600 { return L.updatesCheckedAgo("\(Int(age / 60)) \(L.uptimeUnitMinute)") }
+    if age < 86_400 { return L.updatesCheckedAgo("\(Int(age / 3600)) \(L.uptimeUnitHour)") }
+    return L.updatesCheckedAgo("\(Int(age / 86_400)) \(L.uptimeUnitDay)")
 }

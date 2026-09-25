@@ -465,6 +465,13 @@ struct StringsEN: AppStrings {
     var reportTMNotConfigured: String { "(not configured)" }
     func reportTMLastBackup(_ v: String) -> String { "Last backup: \(v)" }
     var reportNotChecked: String { "(not checked)" }
+    var reportSectionTimings: String { "COLLECTION TIMES" }
+    var reportTimingsNote: String { "Sections are collected concurrently, so their times overlap." }
+    func reportTimingsPass(_ v: String) -> String { "Whole pass: \(v)" }
+    func reportTimingsUpdates(_ v: String, _ at: String) -> String { "macOS updates (background check at \(at)): \(v)" }
+    func reportUpdatesCheckedAt(_ at: String) -> String { "(checked \(at))" }
+    var updatesCheckedJustNow: String { "checked just now" }
+    func updatesCheckedAgo(_ age: String) -> String { "checked \(age) ago" }
     var reportBrewOutdatedHeader: String { "Outdated packages:" }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
         "\(title) (\(device)) — status: \(status)"

@@ -231,4 +231,29 @@ func runCommandRunnerCoreChecks() {
         check(allExited, "fast-exit reaping: 30 sequential runs all give .exited(0)")
         check(elapsed < 15, "fast-exit reaping: total elapsed < 15 s (was \(elapsed))")
     }
+
+    // MARK: - COLLECT-FASTPATH: QoS plumbing
+    check(CommandQoS.utility.spawnQoSClass == QOS_CLASS_UTILITY, "CommandQoS.utility.spawnQoSClass == QOS_CLASS_UTILITY")
+    check(CommandQoS.userInitiated.spawnQoSClass == nil, "CommandQoS.userInitiated.spawnQoSClass == nil")
+    check(CommandQoS.utility.threadQoS == .utility, "CommandQoS.utility.threadQoS == .utility")
+    check(CommandQoS.userInitiated.threadQoS == .userInitiated, "CommandQoS.userInitiated.threadQoS == .userInitiated")
+    do {
+        // Runtime proof (R9): the child reports its own scheduling priority.
+        let u = runAsyncBlocking { await CommandRunner.$qos.withValue(.utility) {
+            await CommandRunner.run("/bin/sh", ["-c", "/bin/ps -o pri= -p $$"], timeout: 10) } }
+        let d = runAsyncBlocking {
+            await CommandRunner.run("/bin/sh", ["-c", "/bin/ps -o pri= -p $$"], timeout: 10) }
+        let uv = Int(u.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+        let dv = Int(d.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+        check(uv != nil && dv != nil, "QoS runtime: both children report a priority (u=\(String(describing: uv)), d=\(String(describing: dv)))")
+        if let uv, let dv {
+            check(uv <= 20, "QoS runtime: utility child runs in the utility band (u=\(uv), d=\(dv))")
+            // A CI runner starts this process at utility, so an unclamped child reads 20 there too and the comparison says nothing.
+            if dv > 20 {
+                check(uv < dv, "QoS runtime: unclamped child runs above the utility child (u=\(uv), d=\(dv))")
+            } else {
+                check(true, "QoS runtime: ambient QoS is already utility (d=\(dv)), comparison skipped (u=\(uv))")
+            }
+        }
+    }
 }

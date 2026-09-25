@@ -61,7 +61,7 @@ struct MainDashboardView: View {
                 case .report: ReportTab(model: model)
                 }
             }
-            .onChange(of: L10nStore.shared.language) { model.refreshReport() }
+            .onChange(of: L10nStore.shared.language) { model.refreshReport(trigger: .automatic) }
         }
         .ignoresSafeArea()
     }
@@ -274,7 +274,8 @@ struct MainDashboardView: View {
         }
         if q.updates == .quiet {
             sections.append(QuietSection(id: "maint", title: L.quietUpdatesTitle, status: L.quietStatusAllClear,
-                                          rows: updatesRows(updates: model.report.updates ?? [], crashes: model.report.crashes ?? [])))
+                                          rows: updatesRows(updates: model.report.updates ?? [], crashes: model.report.crashes ?? []),
+                                          checkedAt: model.report.updatesCheckedAt))
         }
         return sections
     }
@@ -372,7 +373,7 @@ struct HeaderChipsView: View {
 
     private var refreshButton: some View {
         RainbowCapsuleButton(title: L.headerRefreshReport, busy: model.isCollectingReport, recipe: .overview, size: .primary) {
-            model.refreshReport()
+            model.refreshReport(trigger: .button)
         }
         .accessibilityLabel(L.headerRefreshReport)
     }

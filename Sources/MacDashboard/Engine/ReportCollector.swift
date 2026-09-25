@@ -1,15 +1,55 @@
 // Engine/ReportCollector.swift
 // Full read-only system report. Each section is an independent step with its own
 // timeout; a section that fails leaves its field nil and still marks progress done,
-// so a denied permission or absent tool never blocks the rest. Quick sections run
-// concurrently; the du-heavy and update-check sections run afterwards, also
-// concurrently as a second group (they are mutually independent).
+// so a denied permission or absent tool never blocks the rest. All sections run in one
+// concurrent group; the macOS update check is not part of the pass (it lives in
+// `checkUpdates()`, which DashboardModel runs in the background).
 // SPEC §5.2. Nothing here modifies the system.
 //
 // Sections are async: subprocess waits suspend the caller's Task instead of
 // blocking a thread, so many can run at once without starving the cooperative pool.
 
 import Foundation
+
+/// Who asked for a report pass (COLLECT-FASTPATH). Only the «Обновить отчёт» button is
+/// `.button`; everything else (launch, language switch, coalesced follow-ups) is automatic.
+enum CollectTrigger: Sendable, Equatable {
+    case button, automatic
+    var commandQoS: CommandQoS { self == .button ? .userInitiated : .utility }
+    var taskPriority: TaskPriority { self == .button ? .userInitiated : .utility }
+    /// Coalescing: a pending follow-up keeps the strongest trigger that asked for it.
+    static func merged(_ pending: CollectTrigger?, _ new: CollectTrigger) -> CollectTrigger {
+        (pending == .button || new == .button) ? .button : .automatic
+    }
+}
+
+/// Persisted result of the last SUCCESSFUL `softwareupdate -l`
+/// (~/Library/Application Support/MacDashboard/updates_cache.json).
+struct UpdatesCache: Codable, Equatable {
+    var items: [String]          // [] = up to date
+    var checkedAt: Date
+    var durationSeconds: Double
+}
+
+enum UpdatesCacheStore {
+    /// Missing, unreadable or undecodable file => nil (treated as "never checked").
+    static func load(from url: URL) -> UpdatesCache? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(UpdatesCache.self, from: data)
+    }
+
+    /// Atomic write, file 0600 — same permissions rule as ReportWriter.write / HistoryStore.save.
+    static func save(_ cache: UpdatesCache, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(cache)
+        try data.write(to: url, options: [.atomic])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+}
 
 enum ReportSection: String, CaseIterable {
     case system, snapshots, homeDirs, serviceDirs, security, tmDest, spotlight
@@ -28,6 +68,22 @@ final class ReportCollector {
     /// outdated` costs ~30 s and its result only changes via brew operations, so
     /// repeat manual refreshes within this window reuse the previous result.
     static let brewCacheWindow: TimeInterval = 600
+
+    /// macOS update-check cache window (COLLECT-FASTPATH): 6 h.
+    static let updatesCacheWindow: TimeInterval = 6 * 60 * 60
+    /// Same rule as isBrewCacheFresh (future timestamp = stale).
+    static func isUpdatesCacheFresh(checkedAt: Date?, now: Date, window: TimeInterval = updatesCacheWindow) -> Bool {
+        isBrewCacheFresh(collectedAt: checkedAt, now: now, window: window)
+    }
+    /// Start a background update check? Never two at once; the button always wants one;
+    /// automatic triggers only when the cache is absent or stale.
+    static func shouldStartUpdateCheck(trigger: CollectTrigger, checkedAt: Date?, inFlight: Bool, now: Date) -> Bool {
+        !inFlight && (trigger == .button || !isUpdatesCacheFresh(checkedAt: checkedAt, now: now))
+    }
+    /// Duration -> seconds.
+    static func seconds(_ d: Duration) -> TimeInterval {
+        Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
+    }
 
     /// Pure (Checks-tested): true iff `collectedAt` exists and lies within
     /// `[now - window, now]`. A future timestamp (clock rolled back) counts as
@@ -197,13 +253,15 @@ final class ReportCollector {
     private func collectBody(skipSlow: Bool,
                              cachedBrew: (version: String??, outdated: [String]?)?,
                              onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport {
+        let clock = ContinuousClock()
+        let passStart = clock.now
         var report = FullReport()
         report.createdAt = Date()
         let initial = report
         await MainActor.run { onSection(initial) }
 
-        // Quick sections — concurrent. for-await serializes the merges on this task.
-        let quick: [() async -> Outcome] = [
+        // All sections run concurrently in one group; the merges are serialized by the for-await loop.
+        var jobs: [() async -> Outcome] = [
             { await self.collectSystem() },
             { await self.collectSnapshots() },
             { await self.collectSecurity() },
@@ -215,34 +273,30 @@ final class ReportCollector {
             { await self.collectEnergy() },
             { await self.collectBattery() },
         ]
-        await withTaskGroup(of: Outcome.self) { group in
-            for job in quick { group.addTask { await job() } }
-            for await outcome in group {
+        if !skipSlow {
+            jobs += [
+                { await self.collectHomeDirs() },
+                { await self.collectServiceDirs() },
+                { await self.collectBrew(cached: cachedBrew) },
+            ]
+        }
+        await withTaskGroup(of: (Outcome, TimeInterval).self) { group in
+            for job in jobs {
+                group.addTask {
+                    let t0 = clock.now
+                    let o = await job()
+                    return (o, Self.seconds(clock.now - t0))
+                }
+            }
+            for await (outcome, secs) in group {
                 outcome.mutate(&report)
                 report.progress[outcome.section.rawValue] = true
+                report.sectionDurations[outcome.section.rawValue] = secs
                 let snap = report
                 await MainActor.run { onSection(snap) }
             }
         }
-
-        // Slow sections — concurrent, after the quick ones (du/softwareupdate are heavy
-        // but mutually independent: different binaries, disjoint FullReport fields).
-        // for-await serializes the merges on this task, same as the quick group.
-        let slow: [() async -> Outcome] = skipSlow ? [] : [
-            { await self.collectHomeDirs() },
-            { await self.collectServiceDirs() },
-            { await self.collectBrew(cached: cachedBrew) },
-            { await self.collectUpdates() },
-        ]
-        await withTaskGroup(of: Outcome.self) { group in
-            for job in slow { group.addTask { await job() } }
-            for await outcome in group {
-                outcome.mutate(&report)
-                report.progress[outcome.section.rawValue] = true
-                let snap = report
-                await MainActor.run { onSection(snap) }
-            }
-        }
+        report.passDuration = Self.seconds(clock.now - passStart)
         return report
     }
 
@@ -949,18 +1003,28 @@ final class ReportCollector {
             "/Library/Caches", "/private/var/log", "/Applications",
         ]
         var dirs: [DirSize] = []
-        var unreadable: [String] = []
-        for p in paths {
-            guard FileManager.default.fileExists(atPath: p) else { continue }
-            if let out = await CommandRunner.run("/usr/bin/du", ["-xsk", "--", p], timeout: 60).nonEmptyText {
-                dirs.append(contentsOf: Parsers.duKilobyteLines(out))
-            } else if DirectoryAccess.probe(p) == .denied {
-                // The service rule: du produced nothing at all for THIS path. That is
-                // a timeout or a cancellation as often as it is a refusal, so the path
-                // is probed before anything is claimed.
-                unreadable.append(p)
+        var results: [(index: Int, denied: Bool, path: String)] = []
+        // The service rule: du produced nothing at all for THIS path. That is
+        // a timeout or a cancellation as often as it is a refusal, so the path
+        // is probed before anything is claimed.
+        // Paths run concurrently; each keeps its own 60 s timeout; no aggregate timeout (worst case ≈ 60 s + probes, was 9 × 60 s).
+        await withTaskGroup(of: (index: Int, lines: [DirSize]?, denied: Bool).self) { group in
+            for (i, p) in paths.enumerated() {
+                group.addTask {
+                    guard FileManager.default.fileExists(atPath: p) else { return (i, nil, false) }
+                    if let out = await CommandRunner.run("/usr/bin/du", ["-xsk", "--", p], timeout: 60).nonEmptyText {
+                        return (i, Parsers.duKilobyteLines(out), false)
+                    }
+                    return (i, nil, DirectoryAccess.probe(p) == .denied)
+                }
+            }
+            for await r in group {
+                if let lines = r.lines { dirs.append(contentsOf: lines) }
+                if r.denied { results.append((r.index, true, paths[r.index])) }
             }
         }
+        // Completion order is arbitrary: `unreadable` keeps the order of `paths`.
+        let unreadable = results.sorted { $0.index < $1.index }.map(\.path)
         let value: [DirSize]? = dirs.isEmpty ? nil : dirs.sorted { $0.bytes > $1.bytes }
         let unreadableOut = unreadable
         return Outcome(section: .serviceDirs) { $0.serviceDirs = value; $0.serviceDirsUnreadable = unreadableOut }
@@ -1007,24 +1071,27 @@ final class ReportCollector {
         firstTool(primary: ["/opt/homebrew/bin/brew"], fallback: ["/usr/local/bin/brew"])
     }
 
-    // MARK: - macOS updates (slow)
+    // MARK: - macOS updates (background check, not part of the pass)
 
-    private func collectUpdates() async -> Outcome {
-        guard let out = await CommandRunner.run("/usr/sbin/softwareupdate", ["-l"], timeout: 120).text else {
-            return Outcome(section: .updates) { $0.updates = nil }   // nil = not checked (timed out)
-        }
-        if out.lowercased().contains("no new software available") {
-            return Outcome(section: .updates) { $0.updates = [] }
-        }
-        var items: [String] = []
-        for line in out.components(separatedBy: "\n") {
-            let t = line.trimmingCharacters(in: .whitespaces)
-            // softwareupdate marks actionable items with a leading "* Label:".
-            if t.hasPrefix("* Label:") {
-                items.append(t.replacingOccurrences(of: "* Label:", with: "").trimmingCharacters(in: .whitespaces))
-            }
-        }
-        let value = items
-        return Outcome(section: .updates) { $0.updates = value }
+    /// Pure (Checks-tested). Labels found => labels; "no new software available" on stdout OR
+    /// stderr (softwareupdate prints it to stderr) => []; anything else (timeout, launch failure,
+    /// network error, unrecognised text) => nil = the check failed, never "up to date".
+    static func parseSoftwareUpdate(_ o: CommandOutcome) -> [String]? {
+        guard let out = o.text else { return nil }
+        let labels = out.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("* Label:") }
+            .map { $0.replacingOccurrences(of: "* Label:", with: "").trimmingCharacters(in: .whitespaces) }
+        if !labels.isEmpty { return labels }
+        if (out + "\n" + o.stderrHead).lowercased().contains("no new software available") { return [] }
+        return nil
+    }
+
+    /// One background macOS update check (COLLECT-FASTPATH). nil = failed; the caller keeps its cache.
+    func checkUpdates() async -> UpdatesCache? {
+        let clock = ContinuousClock(); let t0 = clock.now
+        let outcome = await CommandRunner.run("/usr/sbin/softwareupdate", ["-l"], timeout: 120)
+        guard let items = Self.parseSoftwareUpdate(outcome) else { return nil }
+        return UpdatesCache(items: items, checkedAt: Date(), durationSeconds: Self.seconds(clock.now - t0))
     }
 }
