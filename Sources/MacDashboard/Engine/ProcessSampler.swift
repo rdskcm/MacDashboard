@@ -7,7 +7,8 @@
 // NOT thread-safe — keeps mutable per-instance state (the previous snapshot and its
 // timestamp), so use one instance per background context, the same contract
 // `LiveCollector` itself follows. `sample()` is async; one instance must not be
-// sampled by two tasks at once.
+// sampled by two tasks at once. Descendants of the app's own pid (du/ps/top/brew
+// children) are excluded from the returned entries (SIZES-BACKGROUND).
 import Foundation
 
 final class ProcessSampler {
@@ -97,7 +98,9 @@ final class ProcessSampler {
         let now = ProcessInfo.processInfo.systemUptime
         let elapsed = now - (previousAt ?? now)
 
+        let ownBefore = Self.descendantPIDs(of: getpid())
         let rows = await snapshot()
+        let own = ownBefore.union(Self.descendantPIDs(of: getpid()))
         guard !rows.isEmpty else { return [] }
 
         // AFTER the ps snapshot on purpose: `now` and `rows` are both captured before this
@@ -124,6 +127,25 @@ final class ProcessSampler {
                                         uniquingKeysWith: { max($0, $1) })
         previousAt = now
 
-        return entries
+        return entries.filter { !own.contains($0.pid ?? -1) }
+    }
+
+    /// Every live descendant of `root` (children, grandchildren, …), excluding `root`
+    /// itself (SIZES-BACKGROUND): the app's own du/ps/top/brew children are not what the
+    /// user is looking for in «top processes». Breadth-first over PROC_PPID_ONLY.
+    static func descendantPIDs(of root: pid_t) -> Set<Int32> {
+        var found = Set<Int32>()
+        var queue: [pid_t] = [root]
+        var buf = [pid_t](repeating: 0, count: 2048)
+        while let parent = queue.popLast() {
+            let bytes = buf.withUnsafeMutableBytes {
+                proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(parent), $0.baseAddress, Int32($0.count))
+            }
+            guard bytes > 0 else { continue }
+            for pid in buf.prefix(Int(bytes) / MemoryLayout<pid_t>.stride) where pid > 0 && pid != root {
+                if found.insert(pid).inserted { queue.append(pid) }
+            }
+        }
+        return found
     }
 }

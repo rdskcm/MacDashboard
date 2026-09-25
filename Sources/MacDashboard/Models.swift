@@ -77,7 +77,7 @@ struct SystemInfo: Equatable {
     var uptime: String?         // human, Russian ("2 дня 3 мин")
     var hostName: String?
 }
-struct DirSize: Identifiable, Equatable { var id: String { path }; var path: String; var bytes: Int64 }
+struct DirSize: Identifiable, Equatable, Codable { var id: String { path }; var path: String; var bytes: Int64 }
 struct SecurityState: Equatable {
     // nil = unknown/no permission; true = enabled
     var fileVault: Bool?; var gatekeeper: Bool?; var sip: Bool?; var firewall: Bool?
@@ -166,7 +166,7 @@ struct FullReport {
     var createdAt: Date?
     var system: SystemInfo?
     var snapshots: [String]?            // TM local snapshot names
-    var homeDirs: [DirSize]?            // top-20 of $HOME (depth 1)
+    var homeDirs: [DirSize]?            // top-20 of $HOME (depth 1), from the background size count
     var serviceDirs: [DirSize]?         // caches etc.
     // Absolute paths of directories the collector could see but not read (no Full
     // Disk Access) — the same idea as TMDestination.lastBackupUnavailableReason:
@@ -184,6 +184,8 @@ struct FullReport {
     var updates: [String]?              // pending macOS updates ([] = up to date)
     var updatesCheckedAt: Date?          // when the shown `updates` value was obtained (cache); nil = never checked
     var updatesCheckDuration: TimeInterval?  // wall time of the background check that produced it
+    var folderSizesCountedAt: Date?            // when the shown homeDirs/serviceDirs were counted (cache); nil = never
+    var folderSizesCountDuration: TimeInterval? // wall time of the background count that produced them
     var sectionDurations: [String: TimeInterval] = [:]  // ReportSection.rawValue -> wall seconds, this pass
     var passDuration: TimeInterval?      // wall seconds of the whole collectBody, this pass
     var smart: [SmartDisk]?

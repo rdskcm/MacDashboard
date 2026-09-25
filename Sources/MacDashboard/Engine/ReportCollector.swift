@@ -3,7 +3,9 @@
 // timeout; a section that fails leaves its field nil and still marks progress done,
 // so a denied permission or absent tool never blocks the rest. All sections run in one
 // concurrent group; the macOS update check is not part of the pass (it lives in
-// `checkUpdates()`, which DashboardModel runs in the background).
+// `checkUpdates()`, which DashboardModel runs in the background). Folder sizes are also
+// not part of the pass (SIZES-BACKGROUND): `countFolderSizes()`, run by DashboardModel
+// in the background.
 // SPEC §5.2. Nothing here modifies the system.
 //
 // Sections are async: subprocess waits suspend the caller's Task instead of
@@ -31,24 +33,55 @@ struct UpdatesCache: Codable, Equatable {
     var durationSeconds: Double
 }
 
-enum UpdatesCacheStore {
-    /// Missing, unreadable or undecodable file => nil (treated as "never checked").
-    static func load(from url: URL) -> UpdatesCache? {
+/// JSON cache files in App Support: ISO-8601 dates, atomic write, 0600.
+enum JSONCacheFile {
+    static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(UpdatesCache.self, from: data)
+        return try? decoder.decode(T.self, from: data)
+    }
+    static func save<T: Encodable>(_ value: T, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(value).write(to: url, options: [.atomic])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+}
+
+enum UpdatesCacheStore {
+    /// Missing, unreadable or undecodable file => nil (treated as "never checked").
+    static func load(from url: URL) -> UpdatesCache? {
+        JSONCacheFile.load(UpdatesCache.self, from: url)
     }
 
     /// Atomic write, file 0600 — same permissions rule as ReportWriter.write / HistoryStore.save.
     static func save(_ cache: UpdatesCache, to url: URL) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(cache)
-        try data.write(to: url, options: [.atomic])
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        try JSONCacheFile.save(cache, to: url)
     }
+}
+
+/// Persisted result of the last background folder-size count (SIZES-BACKGROUND),
+/// ~/Library/Application Support/MacDashboard/folder_sizes_cache.json.
+struct FolderSizes: Codable, Equatable {
+    static let currentSchema = 1
+    var schema: Int = FolderSizes.currentSchema
+    var homeDirs: [DirSize]              // top-20 children of $HOME, largest first
+    var homeDirsUnreadable: [String]
+    var serviceDirs: [DirSize]?          // nil = no service path produced a size
+    var serviceDirsUnreadable: [String]
+    var countedAt: Date
+    var durationSeconds: Double
+}
+enum FolderSizesCacheStore {
+    /// Missing, undecodable or other-schema file => nil ("never counted").
+    static func load(from url: URL) -> FolderSizes? {
+        guard let c = JSONCacheFile.load(FolderSizes.self, from: url),
+              c.schema == FolderSizes.currentSchema else { return nil }
+        return c
+    }
+    static func save(_ sizes: FolderSizes, to url: URL) throws { try JSONCacheFile.save(sizes, to: url) }
 }
 
 enum ReportSection: String, CaseIterable {
@@ -80,6 +113,22 @@ final class ReportCollector {
     static func shouldStartUpdateCheck(trigger: CollectTrigger, checkedAt: Date?, inFlight: Bool, now: Date) -> Bool {
         !inFlight && (trigger == .button || !isUpdatesCacheFresh(checkedAt: checkedAt, now: now))
     }
+    /// Folder-size cache window (SIZES-BACKGROUND): 1 h.
+    static let folderSizesCacheWindow: TimeInterval = 60 * 60
+    static func isFolderSizesCacheFresh(countedAt: Date?, now: Date, window: TimeInterval = folderSizesCacheWindow) -> Bool {
+        isBrewCacheFresh(collectedAt: countedAt, now: now, window: window)
+    }
+    /// Same rule as shouldStartUpdateCheck, with the 1 h window.
+    static func shouldStartSizeCount(trigger: CollectTrigger, countedAt: Date?, inFlight: Bool, now: Date) -> Bool {
+        !inFlight && (trigger == .button || !isFolderSizesCacheFresh(countedAt: countedAt, now: now))
+    }
+    /// The six service paths that live under $HOME, in display/unreadable order.
+    static func homeServicePaths(home: String) -> [String] {
+        ["\(home)/Library/Caches", "\(home)/Library/Application Support",
+         "\(home)/Library/Containers", "\(home)/Library/Group Containers",
+         "\(home)/Library/Developer", "\(home)/.Trash"]
+    }
+    static let outsideServicePaths = ["/Library/Caches", "/private/var/log", "/Applications"]
     /// Duration -> seconds.
     static func seconds(_ d: Duration) -> TimeInterval {
         Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
@@ -275,8 +324,6 @@ final class ReportCollector {
         ]
         if !skipSlow {
             jobs += [
-                { await self.collectHomeDirs() },
-                { await self.collectServiceDirs() },
                 { await self.collectBrew(cached: cachedBrew) },
             ]
         }
@@ -967,67 +1014,70 @@ final class ReportCollector {
         return Outcome(section: .battery) { $0.battery = value; $0.parseFailures += failures }
     }
 
-    // MARK: - home dirs (slow: du)
+    // MARK: - folder sizes (background job, SIZES-BACKGROUND)
 
-    private func collectHomeDirs() async -> Outcome {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        guard let out = await CommandRunner.run("/usr/bin/du", ["-xk", "-d", "1", "--", home], timeout: 120).nonEmptyText else {
-            return Outcome(section: .homeDirs) { $0.homeDirs = nil; $0.homeDirsUnreadable = [] }
-        }
-        let all = Parsers.duKilobyteLines(out)
-        // Drop the $HOME total line itself; keep children, largest first, top 20.
-        let dirs = all
-            .filter { $0.path != home }
-            .sorted { $0.bytes > $1.bytes }
-            .prefix(20)
-        // The home rule: a child $HOME actually has but du never reported is either
-        // on another filesystem (du -x stops at mount points — readable, nothing to
-        // say) or a directory du was refused. Only the refused ones are reported.
-        // Computed against the FULL du list, not the top-20 slice.
-        let unreadable = DirectoryAccess
-            .missingHomeChildren(home: home,
-                                 duPaths: Set(all.map(\.path)),
-                                 childNames: DirectoryAccess.childNames(of: home))
-            .filter { DirectoryAccess.probe($0) == .denied }
-        return Outcome(section: .homeDirs) { $0.homeDirs = Array(dirs); $0.homeDirsUnreadable = unreadable }
+    /// Pure (Checks-tested). Splits ONE `du -xk -d 2 -- home` output into the depth<=1 list
+    /// (home total + its children: today's homeDirs input) and the entries for `servicePaths`
+    /// (exact path match; a service path du did not print is returned in `missing`).
+    static func splitHomeWalk(home: String, lines: [DirSize], servicePaths: [String])
+        -> (depth1: [DirSize], service: [DirSize], missing: [String]) {
+        let depth1 = lines.filter { $0.path == home || ($0.path as NSString).deletingLastPathComponent == home }
+        let byPath = Dictionary(lines.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
+        var service: [DirSize] = [], missing: [String] = []
+        for p in servicePaths { if let d = byPath[p] { service.append(d) } else { missing.append(p) } }
+        return (depth1, service, missing)
     }
 
-    // MARK: - service dirs (slow: du -s over a fixed set)
-
-    private func collectServiceDirs() async -> Outcome {
+    /// Background folder-size count. nil only when the home walk produced no output
+    /// (timeout, cancellation, du missing): the caller then keeps its previous cache.
+    func countFolderSizes() async -> FolderSizes? {
+        let clock = ContinuousClock()
+        let start = clock.now
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let paths = [
-            "\(home)/Library/Caches", "\(home)/Library/Application Support",
-            "\(home)/Library/Containers", "\(home)/Library/Group Containers",
-            "\(home)/Library/Developer", "\(home)/.Trash",
-            "/Library/Caches", "/private/var/log", "/Applications",
-        ]
-        var dirs: [DirSize] = []
-        var results: [(index: Int, denied: Bool, path: String)] = []
-        // The service rule: du produced nothing at all for THIS path. That is
-        // a timeout or a cancellation as often as it is a refusal, so the path
-        // is probed before anything is claimed.
-        // Paths run concurrently; each keeps its own 60 s timeout; no aggregate timeout (worst case ≈ 60 s + probes, was 9 × 60 s).
-        await withTaskGroup(of: (index: Int, lines: [DirSize]?, denied: Bool).self) { group in
-            for (i, p) in paths.enumerated() {
-                group.addTask {
-                    guard FileManager.default.fileExists(atPath: p) else { return (i, nil, false) }
-                    if let out = await CommandRunner.run("/usr/bin/du", ["-xsk", "--", p], timeout: 60).nonEmptyText {
-                        return (i, Parsers.duKilobyteLines(out), false)
+        let homeService = Self.homeServicePaths(home: home)
+        let outside = Self.outsideServicePaths
+
+        // One walk of $HOME; the three outside paths in parallel with it.
+        async let homeOut = CommandRunner.run("/usr/bin/du", ["-xk", "-d", "2", "--", home], timeout: 120).nonEmptyText
+        let outsideResults: [(index: Int, lines: [DirSize]?, denied: Bool)] =
+            await withTaskGroup(of: (index: Int, lines: [DirSize]?, denied: Bool).self) { group in
+                for (i, p) in outside.enumerated() {
+                    group.addTask {
+                        guard FileManager.default.fileExists(atPath: p) else { return (i, nil, false) }
+                        if let out = await CommandRunner.run("/usr/bin/du", ["-xsk", "--", p], timeout: 60).nonEmptyText {
+                            return (i, Parsers.duKilobyteLines(out), false)
+                        }
+                        return (i, nil, DirectoryAccess.probe(p) == .denied)
                     }
-                    return (i, nil, DirectoryAccess.probe(p) == .denied)
                 }
+                var acc: [(index: Int, lines: [DirSize]?, denied: Bool)] = []
+                for await r in group { acc.append(r) }
+                return acc
             }
-            for await r in group {
-                if let lines = r.lines { dirs.append(contentsOf: lines) }
-                if r.denied { results.append((r.index, true, paths[r.index])) }
-            }
+        guard let out = await homeOut else { return nil }
+
+        let split = Self.splitHomeWalk(home: home, lines: Parsers.duKilobyteLines(out), servicePaths: homeService)
+        // Home: identical to yesterday's depth-1 walk over the depth<=1 lines.
+        let homeTop = Array(split.depth1.filter { $0.path != home }.sorted { $0.bytes > $1.bytes }.prefix(20))
+        let homeUnreadable = DirectoryAccess
+            .missingHomeChildren(home: home, duPaths: Set(split.depth1.map(\.path)),
+                                 childNames: DirectoryAccess.childNames(of: home))
+            .filter { DirectoryAccess.probe($0) == .denied }
+        // Service: a home service path du did not print is either absent, on another
+        // device (-x), or refused — only an existing, refused one is reported.
+        let homeServiceDenied = split.missing.filter {
+            FileManager.default.fileExists(atPath: $0) && DirectoryAccess.probe($0) == .denied
         }
-        // Completion order is arbitrary: `unreadable` keeps the order of `paths`.
-        let unreadable = results.sorted { $0.index < $1.index }.map(\.path)
-        let value: [DirSize]? = dirs.isEmpty ? nil : dirs.sorted { $0.bytes > $1.bytes }
-        let unreadableOut = unreadable
-        return Outcome(section: .serviceDirs) { $0.serviceDirs = value; $0.serviceDirsUnreadable = unreadableOut }
+        var dirs = split.service
+        for r in outsideResults { if let l = r.lines { dirs.append(contentsOf: l) } }
+        let outsideDenied = outsideResults.filter(\.denied).sorted { $0.index < $1.index }.map { outside[$0.index] }
+        // Keep today's order: home service paths first (in homeServicePaths order), then outside ones.
+        let serviceUnreadable = homeService.filter(homeServiceDenied.contains) + outsideDenied
+
+        return FolderSizes(homeDirs: homeTop, homeDirsUnreadable: homeUnreadable,
+                           serviceDirs: dirs.isEmpty ? nil : dirs.sorted { $0.bytes > $1.bytes },
+                           serviceDirsUnreadable: serviceUnreadable,
+                           countedAt: Date(), durationSeconds: Self.seconds(clock.now - start))
     }
 
     // MARK: - homebrew (slow)

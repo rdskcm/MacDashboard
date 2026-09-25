@@ -478,6 +478,10 @@ struct StringsRU: AppStrings {
     func reportUpdatesCheckedAt(_ at: String) -> String { "(проверено \(at))" }
     var updatesCheckedJustNow: String { "проверено только что" }
     func updatesCheckedAgo(_ age: String) -> String { "проверено \(age) назад" }
+    func reportTimingsFolderSizes(_ v: String, _ at: String) -> String { "Размеры папок (фоновый подсчёт в \(at)): \(v)" }
+    func reportFoldersCountedAt(_ at: String) -> String { "(подсчитано \(at))" }
+    func foldersCountedAgo(_ age: String) -> String { "подсчитано \(age) назад" }
+    var foldersCountedJustNow: String { "подсчитано только что" }
     var reportBrewOutdatedHeader: String { "Устаревшие пакеты:" }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
         "\(title) (\(device)) — статус: \(status)"

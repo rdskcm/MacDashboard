@@ -472,6 +472,10 @@ struct StringsEN: AppStrings {
     func reportUpdatesCheckedAt(_ at: String) -> String { "(checked \(at))" }
     var updatesCheckedJustNow: String { "checked just now" }
     func updatesCheckedAgo(_ age: String) -> String { "checked \(age) ago" }
+    func reportTimingsFolderSizes(_ v: String, _ at: String) -> String { "Folder sizes (background count at \(at)): \(v)" }
+    func reportFoldersCountedAt(_ at: String) -> String { "(counted \(at))" }
+    func foldersCountedAgo(_ age: String) -> String { "counted \(age) ago" }
+    var foldersCountedJustNow: String { "counted just now" }
     var reportBrewOutdatedHeader: String { "Outdated packages:" }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
         "\(title) (\(device)) — status: \(status)"

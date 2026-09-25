@@ -496,6 +496,10 @@ protocol AppStrings {
     func reportUpdatesCheckedAt(_ at: String) -> String
     var updatesCheckedJustNow: String { get }
     func updatesCheckedAgo(_ age: String) -> String
+    func reportTimingsFolderSizes(_ v: String, _ at: String) -> String
+    func reportFoldersCountedAt(_ at: String) -> String
+    func foldersCountedAgo(_ age: String) -> String
+    var foldersCountedJustNow: String { get }
     var reportBrewOutdatedHeader: String { get }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String
     var reportSmartWarningNone: String { get }
