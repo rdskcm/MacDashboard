@@ -248,7 +248,12 @@ func runCommandRunnerCoreChecks() {
         check(uv != nil && dv != nil, "QoS runtime: both children report a priority (u=\(String(describing: uv)), d=\(String(describing: dv)))")
         if let uv, let dv {
             check(uv <= 20, "QoS runtime: utility child runs in the utility band (u=\(uv), d=\(dv))")
-            check(uv < dv, "QoS runtime: unclamped child runs above the utility child (u=\(uv), d=\(dv))")
+            // A CI runner starts this process at utility, so an unclamped child reads 20 there too and the comparison says nothing.
+            if dv > 20 {
+                check(uv < dv, "QoS runtime: unclamped child runs above the utility child (u=\(uv), d=\(dv))")
+            } else {
+                check(true, "QoS runtime: ambient QoS is already utility (d=\(dv)), comparison skipped (u=\(uv))")
+            }
         }
     }
 }
