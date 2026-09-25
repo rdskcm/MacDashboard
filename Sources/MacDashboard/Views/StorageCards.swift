@@ -217,6 +217,15 @@ struct FoldersCard: View {
                     }
                 }
             }
+            if let at = model.report.folderSizesCountedAt,
+               model.report.homeDirs != nil || model.report.serviceDirs != nil {
+                TimelineView(.everyMinute) { _ in
+                    Text(folderSizesAgeString(countedAt: at, now: Date()))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(DS.muted)
+                        .lineLimit(1)
+                }
+            }
             // Rendered in all sub-branches on purpose, including the nil/"unavailable"
             // one: if every service `du` was refused, serviceDirs stays nil and the
             // notice is the only thing that explains why.

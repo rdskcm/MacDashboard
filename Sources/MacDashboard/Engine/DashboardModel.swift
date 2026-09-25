@@ -192,6 +192,15 @@ final class DashboardModel {
     private let updatesCacheURL: URL
     private var updateCheckTask: Task<Void, Never>?
     private var isCheckingUpdates = false
+    private var updateCheckGeneration = 0
+    /// Last successful background folder-size count (SIZES-BACKGROUND). Source of truth for
+    /// report.homeDirs/serviceDirs/…Unreadable/folderSizesCountedAt — applied by applyFolderSizes(to:).
+    private var folderSizes: FolderSizes?
+    private let folderSizesURL: URL
+    private var sizeCountTask: Task<Void, Never>?
+    private var sizeScheduleTask: Task<Void, Never>?
+    private var isCountingSizes = false
+    private var sizeCountGeneration = 0
 
     /// SMART re-check cadence (SPEC Block H): SMART attrs change slowly (wear level,
     /// reallocated sectors), so this is far slower than the fast (~2s) / slow (~6s)
@@ -234,6 +243,8 @@ final class DashboardModel {
         history = historyStore.load()
         updatesCacheURL = url.deletingLastPathComponent().appendingPathComponent("updates_cache.json")
         updatesCache = UpdatesCacheStore.load(from: updatesCacheURL)
+        folderSizesURL = url.deletingLastPathComponent().appendingPathComponent("folder_sizes_cache.json")
+        folderSizes = FolderSizesCacheStore.load(from: folderSizesURL)
         smartToolsState = Self.recomputeSmartToolsState()
     }
 
@@ -376,6 +387,16 @@ final class DashboardModel {
 
         loadCachedReportFromDisk()
         refreshReport(trigger: .automatic)
+
+        // Hourly folder-size count (SIZES-BACKGROUND): a cheap poll; the 1 h freshness rule
+        // inside startSizeCountIfNeeded decides. Skipped while paused (SPEC §1.4 energy rule).
+        sizeScheduleTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard let self, !Task.isCancelled else { return }
+                if !self.isPaused { self.startSizeCountIfNeeded(trigger: .automatic) }
+            }
+        }
     }
 
     /// Cold-launch disk cache (Block N5): if a report from a previous run exists on
@@ -409,6 +430,10 @@ final class DashboardModel {
         brewUpgradeTask = nil
         updateCheckTask?.cancel()
         updateCheckTask = nil
+        updateCheckGeneration += 1; isCheckingUpdates = false   // a cancelled check no longer counts as in flight
+        sizeCountTask?.cancel(); sizeCountTask = nil
+        sizeScheduleTask?.cancel(); sizeScheduleTask = nil
+        sizeCountGeneration += 1; isCountingSizes = false
         for observer in activityObservers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -418,6 +443,7 @@ final class DashboardModel {
     /// Public entry. `.button` only from the «Обновить отчёт» button.
     func refreshReport(trigger: CollectTrigger) {
         startUpdateCheckIfNeeded(trigger: trigger)      // before the in-flight guard: a press mid-pass still gets a check
+        startSizeCountIfNeeded(trigger: trigger)        // before the in-flight guard
         guard !isCollectingReport else {
             reportRefreshPending = CollectTrigger.merged(reportRefreshPending, trigger); return
         }
@@ -456,7 +482,7 @@ final class DashboardModel {
                         self.smartUpdatedAt = Date()
                     }
                     var shown = partial
-                    self.applyUpdates(to: &shown)
+                    self.applyBackground(to: &shown)
                     self.report = shown
                     if let sys = partial.system { self.lastKnownSystem = sys }
                     // Deliberately NOT recomputed here: `partial` has most sections nil during
@@ -468,7 +494,7 @@ final class DashboardModel {
             }
             guard !Task.isCancelled else { return }
             var final = collected
-            self.applyUpdates(to: &final)
+            self.applyBackground(to: &final)
 
             if cachedBrew == nil {
                 // brew actually ran this pass — refill the session cache.
@@ -500,6 +526,12 @@ final class DashboardModel {
         }
     }
 
+    /// Both background overlays; every report the model shows or commits goes through here.
+    private func applyBackground(to r: inout FullReport) {
+        applyUpdates(to: &r)
+        applyFolderSizes(to: &r)
+    }
+
     /// Single overlay point for the update-check result: every report the model shows or
     /// commits goes through here, so a check finishing mid-pass cannot be lost.
     private func applyUpdates(to r: inout FullReport) {
@@ -509,33 +541,68 @@ final class DashboardModel {
         r.progress[ReportSection.updates.rawValue] = (updatesCache != nil) || !isCheckingUpdates
     }
 
+    /// Single overlay point for the folder-size result (SIZES-BACKGROUND). No cache => nil
+    /// sizes (assessment skips them) and progress false while a count is running.
+    private func applyFolderSizes(to r: inout FullReport) {
+        r.homeDirs = folderSizes?.homeDirs
+        r.homeDirsUnreadable = folderSizes?.homeDirsUnreadable ?? []
+        r.serviceDirs = folderSizes?.serviceDirs
+        r.serviceDirsUnreadable = folderSizes?.serviceDirsUnreadable ?? []
+        r.folderSizesCountedAt = folderSizes?.countedAt
+        r.folderSizesCountDuration = folderSizes?.durationSeconds
+        let done = (folderSizes != nil) || !isCountingSizes
+        r.progress[ReportSection.homeDirs.rawValue] = done
+        r.progress[ReportSection.serviceDirs.rawValue] = done
+    }
+
     private func startUpdateCheckIfNeeded(trigger: CollectTrigger) {
         guard ReportCollector.shouldStartUpdateCheck(trigger: trigger, checkedAt: updatesCache?.checkedAt,
                                                      inFlight: isCheckingUpdates, now: Date()) else { return }
         isCheckingUpdates = true
+        updateCheckGeneration += 1; let gen = updateCheckGeneration
         applyUpdates(to: &report)                       // display only: spinner if no cache yet
         updateCheckTask = Task(priority: .utility) { [weak self] in
             let result = await CommandRunner.$qos.withValue(.utility) { await ReportCollector().checkUpdates() }
-            guard let self else { return }
+            guard let self, gen == self.updateCheckGeneration else { return }   // superseded by stop(): touch nothing
             self.isCheckingUpdates = false
             guard !Task.isCancelled else { return }
             if let result {
                 self.updatesCache = result
                 try? UpdatesCacheStore.save(result, to: self.updatesCacheURL)   // a failed write costs one re-check next launch; not surfaced
             }
-            self.mergeUpdatesIntoCommitted()            // also on failure: spinner -> "unavailable"
+            self.mergeBackgroundIntoCommitted()         // also on failure: spinner -> "unavailable"
+        }
+    }
+
+    private func startSizeCountIfNeeded(trigger: CollectTrigger) {
+        guard ReportCollector.shouldStartSizeCount(trigger: trigger, countedAt: folderSizes?.countedAt,
+                                                   inFlight: isCountingSizes, now: Date()) else { return }
+        isCountingSizes = true
+        sizeCountGeneration += 1
+        let gen = sizeCountGeneration
+        applyFolderSizes(to: &report)                   // display only: spinner if no cache yet
+        sizeCountTask = Task(priority: trigger.taskPriority) { [weak self] in
+            let result = await CommandRunner.$qos.withValue(trigger.commandQoS) { await ReportCollector().countFolderSizes() }
+            guard let self, gen == self.sizeCountGeneration else { return }
+            self.isCountingSizes = false
+            guard !Task.isCancelled else { return }
+            if let result {
+                self.folderSizes = result
+                try? FolderSizesCacheStore.save(result, to: self.folderSizesURL)   // a failed write costs one recount next launch
+            }
+            self.mergeBackgroundIntoCommitted()         // also on failure: spinner -> "unavailable" when no cache
         }
     }
 
     /// V2-HEADER-CHURN: assess only a committed report.
-    private func mergeUpdatesIntoCommitted() {
+    private func mergeBackgroundIntoCommitted() {
         if isCollectingReport {
-            applyUpdates(to: &lastCommittedReport)      // what the fast tick assesses mid-pass
-            applyUpdates(to: &report)                   // display of the partial; NOT assessed
+            applyBackground(to: &lastCommittedReport)   // what the fast tick assesses mid-pass
+            applyBackground(to: &report)                // display of the partial; NOT assessed
             setAssessment(Assess.assess(report: lastCommittedReport, live: live))
-            // The pass commit calls applyUpdates on `final`, so it picks this result up too.
+            // The pass commit calls applyBackground on `final`, so it picks this result up too.
         } else {
-            applyUpdates(to: &report)
+            applyBackground(to: &report)
             let text = ReportWriter.render(report: report, live: live, history: historyStore.state)
             do { try ReportWriter.write(text: text, to: reportURL) }
             catch { lastError = L.errorReportWriteFailed(error.localizedDescription) }

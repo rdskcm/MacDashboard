@@ -27,8 +27,8 @@ enum ReportWriter {
         addSection(&out, L.reportSectionSystem, renderSystem(report.system))
         addSection(&out, L.reportSectionDisk, renderDisk(live.disk))
         addSection(&out, L.reportSectionSnapshots, renderSnapshots(report.snapshots))
-        addSection(&out, L.reportSectionHomeDirs, renderDirs(report.homeDirs, cap: 20, unreadable: report.homeDirsUnreadable))
-        addSection(&out, L.reportSectionServiceDirs, renderDirs(report.serviceDirs, cap: nil, unreadable: report.serviceDirsUnreadable))
+        addSection(&out, L.reportSectionHomeDirs, renderDirs(report.homeDirs, cap: 20, unreadable: report.homeDirsUnreadable, countedAt: report.folderSizesCountedAt))
+        addSection(&out, L.reportSectionServiceDirs, renderDirs(report.serviceDirs, cap: nil, unreadable: report.serviceDirsUnreadable, countedAt: report.folderSizesCountedAt))
         addSection(&out, L.reportSectionMemory, renderMemory(live.mem, live.swap))
         addSection(&out, L.reportSectionTopMem, renderProcTable(live.topMem, primary: .mem))
         addSection(&out, L.reportSectionTopCPU, renderProcTable(live.topCPU, primary: .cpu))
@@ -176,7 +176,7 @@ enum ReportWriter {
     // The exported text report is the one artefact the user shares; an FDA-truncated
     // folder list must not read as complete (V2-FDA-DEGRADE honesty, same statement
     // the UI already makes).
-    private static func renderDirs(_ dirs: [DirSize]?, cap: Int?, unreadable: [String] = []) -> [String] {
+    private static func renderDirs(_ dirs: [DirSize]?, cap: Int?, unreadable: [String] = [], countedAt: Date? = nil) -> [String] {
         var lines: [String]
         if let d = dirs {
             lines = d.isEmpty ? [L.reportNone] : {
@@ -188,6 +188,9 @@ enum ReportWriter {
         }
         if !unreadable.isEmpty {
             lines.append(L.storageFoldersNoFDA(unreadable.joined(separator: ", ")))
+        }
+        if dirs != nil, let at = countedAt {
+            lines.append(L.reportFoldersCountedAt(reportUpdatedTimeString(at)))
         }
         return lines
     }
@@ -399,6 +402,9 @@ enum ReportWriter {
         if let d = r.updatesCheckDuration, let at = r.updatesCheckedAt {
             lines.append(L.reportTimingsUpdates(fmtSeconds(d), reportUpdatedTimeString(at)))
         }
+        if let d = r.folderSizesCountDuration, let at = r.folderSizesCountedAt {
+            lines.append(L.reportTimingsFolderSizes(fmtSeconds(d), reportUpdatedTimeString(at)))
+        }
         if lines.isEmpty { return [L.reportNone] }
         return [L.reportTimingsNote] + lines
     }
@@ -557,4 +563,13 @@ func updatesAgeString(checkedAt: Date, now: Date = Date()) -> String {
     if age < 3600 { return L.updatesCheckedAgo("\(Int(age / 60)) \(L.uptimeUnitMinute)") }
     if age < 86_400 { return L.updatesCheckedAgo("\(Int(age / 3600)) \(L.uptimeUnitHour)") }
     return L.updatesCheckedAgo("\(Int(age / 86_400)) \(L.uptimeUnitDay)")
+}
+
+/// Age of the cached folder sizes for the Folders card. Future or < 60 s => "just now".
+func folderSizesAgeString(countedAt: Date, now: Date = Date()) -> String {
+    let age = now.timeIntervalSince(countedAt)
+    if age < 60 { return L.foldersCountedJustNow }
+    if age < 3600 { return L.foldersCountedAgo("\(Int(age / 60)) \(L.uptimeUnitMinute)") }
+    if age < 86_400 { return L.foldersCountedAgo("\(Int(age / 3600)) \(L.uptimeUnitHour)") }
+    return L.foldersCountedAgo("\(Int(age / 86_400)) \(L.uptimeUnitDay)")
 }

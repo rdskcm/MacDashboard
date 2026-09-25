@@ -1758,16 +1758,19 @@ do {
     var timed = FullReport()
     timed.updates = []
     timed.updatesCheckedAt = now
-    timed.sectionDurations = ["homeDirs": 6.4, "system": 0.2]
+    timed.sectionDurations = ["system": 0.2]
     timed.passDuration = 7.0
+    timed.folderSizesCountedAt = now
+    timed.folderSizesCountDuration = 6.4
+    timed.homeDirs = [DirSize(path: "/Users/u/Documents", bytes: 1024)]
     let t2 = ReportWriter.render(report: timed, live: LiveSnapshot(), history: HistoryState())
     check(t2.contains(L.reportSectionTimings), "ReportWriter: timings header present")
     check(t2.contains(L.reportTimingsPass(ReportWriter.fmtSeconds(7.0))), "ReportWriter: whole-pass line present")
-    if let a = t2.range(of: "homeDirs:"), let b = t2.range(of: "system:", range: a.upperBound..<t2.endIndex) {
-        check(a.lowerBound < b.lowerBound, "ReportWriter: timings sorted by seconds descending")
-    } else {
-        check(false, "ReportWriter: homeDirs and system timing lines present in order")
-    }
+    check(t2.contains(L.reportTimingsFolderSizes(ReportWriter.fmtSeconds(6.4), reportUpdatedTimeString(now))),
+          "ReportWriter: EN folder-sizes timing line present (SIZES-BACKGROUND)")
+    check(t2.contains(L.reportFoldersCountedAt(reportUpdatedTimeString(now))),
+          "ReportWriter: '(counted …)' line present (SIZES-BACKGROUND)")
+    check(!t2.contains("homeDirs:"), "ReportWriter: COLLECTION TIMES has no homeDirs: row (SIZES-BACKGROUND)")
 }
 
 }
@@ -1826,6 +1829,12 @@ runThermalSensorsChecks()
 // =====================================================================
 
 runProcessSamplerChecks()
+
+// =====================================================================
+// MARK: - Folder sizes (Block SIZES-BACKGROUND, in FolderSizesChecks.swift)
+// =====================================================================
+
+runFolderSizesChecks()
 
 // =====================================================================
 // MARK: - Parser fixtures (R3-FIXTURES, in ParserFixtureChecks.swift)
