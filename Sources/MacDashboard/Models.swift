@@ -182,6 +182,10 @@ struct FullReport {
     var brewVersion: String??           // .some(nil) = brew not installed
     var brewOutdated: [String]?
     var updates: [String]?              // pending macOS updates ([] = up to date)
+    var updatesCheckedAt: Date?          // when the shown `updates` value was obtained (cache); nil = never checked
+    var updatesCheckDuration: TimeInterval?  // wall time of the background check that produced it
+    var sectionDurations: [String: TimeInterval] = [:]  // ReportSection.rawValue -> wall seconds, this pass
+    var passDuration: TimeInterval?      // wall seconds of the whole collectBody, this pass
     var smart: [SmartDisk]?
     var autostart: AutostartInfo?
     var energy: EnergySettings?

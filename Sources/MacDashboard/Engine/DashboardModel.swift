@@ -182,8 +182,16 @@ final class DashboardModel {
     /// Set when refreshReport() is requested while a collect is already in flight
     /// (e.g. a language switch during the launch collect). The in-flight pass kicks
     /// off exactly one follow-up refresh on completion instead of silently dropping
-    /// the request. Bool, not a counter: N coalesced requests → one follow-up.
-    private var reportRefreshPending = false
+    /// the request. Not a counter: N coalesced requests → one follow-up. nil = none;
+    /// `.button` wins when merged (CollectTrigger.merged).
+    private var reportRefreshPending: CollectTrigger? = nil
+
+    /// Last successful macOS update check, persisted (COLLECT-FASTPATH). Source of truth for
+    /// report.updates/updatesCheckedAt/updatesCheckDuration — applied by applyUpdates(to:).
+    private var updatesCache: UpdatesCache?
+    private let updatesCacheURL: URL
+    private var updateCheckTask: Task<Void, Never>?
+    private var isCheckingUpdates = false
 
     /// SMART re-check cadence (SPEC Block H): SMART attrs change slowly (wear level,
     /// reallocated sectors), so this is far slower than the fast (~2s) / slow (~6s)
@@ -224,6 +232,8 @@ final class DashboardModel {
         // never throws).
         historyStore = HistoryStore(url: historyURL)
         history = historyStore.load()
+        updatesCacheURL = url.deletingLastPathComponent().appendingPathComponent("updates_cache.json")
+        updatesCache = UpdatesCacheStore.load(from: updatesCacheURL)
         smartToolsState = Self.recomputeSmartToolsState()
     }
 
@@ -300,7 +310,7 @@ final class DashboardModel {
 
         // Slow task (~6s): the process tables only (via `ps` + `top`). No setAssessment here — the
         // assessment depends only on disk/swap, which the fast task owns.
-        slowTask = Task { [weak self] in
+        slowTask = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
 
@@ -315,7 +325,7 @@ final class DashboardModel {
                 // setting HERE, on the main actor, and pass it across: the collector must not
                 // touch AppSettings.shared from a background queue.
                 let limit = AppSettings.shared.processListLimit
-                let procs = await procBox.value.sampleProcesses(limit: limit)
+                let procs = await CommandRunner.$qos.withValue(.utility) { await procBox.value.sampleProcesses(limit: limit) }
                 guard !Task.isCancelled else { return }
 
                 if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
@@ -330,7 +340,7 @@ final class DashboardModel {
         // report/fast/slow cadences. Own ReportCollector instance — collectors aren't
         // shared across tasks (see fastBox/procBox comment above).
         let smartBox = UncheckedSendableBox(ReportCollector())
-        smartTask = Task { [weak self] in
+        smartTask = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
 
@@ -344,8 +354,11 @@ final class DashboardModel {
                     continue
                 }
 
-                let disks = await smartBox.value.collectSmartDisks()
-                let tmDest = await smartBox.value.collectTMDestInfo()
+                let (disks, tmDest) = await CommandRunner.$qos.withValue(.utility) {
+                    let disks = await smartBox.value.collectSmartDisks()
+                    let tmDest = await smartBox.value.collectTMDestInfo()
+                    return (disks, tmDest)
+                }
                 guard !Task.isCancelled else { return }
 
                 // Assessment (smartSev) is recomputed every ~2s by the fast task above,
@@ -362,7 +375,7 @@ final class DashboardModel {
         }
 
         loadCachedReportFromDisk()
-        refreshReport()
+        refreshReport(trigger: .automatic)
     }
 
     /// Cold-launch disk cache (Block N5): if a report from a previous run exists on
@@ -394,51 +407,68 @@ final class DashboardModel {
         smartTask = nil
         brewUpgradeTask?.cancel()
         brewUpgradeTask = nil
+        updateCheckTask?.cancel()
+        updateCheckTask = nil
         for observer in activityObservers {
             NotificationCenter.default.removeObserver(observer)
         }
         activityObservers.removeAll()
     }
 
-    func refreshReport() {
-        guard !isCollectingReport else { reportRefreshPending = true; return }
+    /// Public entry. `.button` only from the «Обновить отчёт» button.
+    func refreshReport(trigger: CollectTrigger) {
+        startUpdateCheckIfNeeded(trigger: trigger)      // before the in-flight guard: a press mid-pass still gets a check
+        guard !isCollectingReport else {
+            reportRefreshPending = CollectTrigger.merged(reportRefreshPending, trigger); return
+        }
+        beginPass(trigger: trigger)
+    }
+
+    private func beginPass(trigger: CollectTrigger) {
         reportTask?.cancel()
         // Snapshot BEFORE the collect wipes `report` section by section: this is what the
         // fast tick assesses for the duration of the pass (V2-HONEST-READINGS).
         lastCommittedReport = report
         isCollectingReport = true
 
-        reportTask = Task { [weak self] in
+        reportTask = Task(priority: trigger.taskPriority) { [weak self] in
             guard let self else { return }
             defer {
                 self.isCollectingReport = false   // always clear, incl. cancellation
-                if self.reportRefreshPending {
-                    self.reportRefreshPending = false
-                    // Don't relaunch from a cancelled task (stop() during shutdown).
-                    if !Task.isCancelled { self.refreshReport() }
+                if let pending = self.reportRefreshPending {
+                    self.reportRefreshPending = nil
+                    // Don't relaunch from a cancelled task (stop() during shutdown). beginPass, not
+                    // refreshReport: the update check for that request was decided when it was requested.
+                    if !Task.isCancelled { self.beginPass(trigger: pending) }
                 }
             }
 
             let cachedBrew: (version: String??, outdated: [String]?)? =
                 ReportCollector.isBrewCacheFresh(collectedAt: self.lastBrewCollectedAt, now: Date())
                     ? self.lastBrewInfo : nil
-            let final = await ReportCollector().collect(skipSlow: false, cachedBrew: cachedBrew) { partial in
-                // onSection is @MainActor; we're already isolated here. Detect the
-                // .smart section's arrival by its progress-flag transition (false/absent
-                // -> true) BEFORE overwriting self.report, so smartUpdatedAt reflects the
-                // launch/manual report too, not only the periodic sampler.
-                if partial.progress["smart"] == true, self.report.progress["smart"] != true {
-                    self.smartUpdatedAt = Date()
+            let collected = await CommandRunner.$qos.withValue(trigger.commandQoS) {
+                await ReportCollector().collect(skipSlow: false, cachedBrew: cachedBrew) { partial in
+                    // onSection is @MainActor; we're already isolated here. Detect the
+                    // .smart section's arrival by its progress-flag transition (false/absent
+                    // -> true) BEFORE overwriting self.report, so smartUpdatedAt reflects the
+                    // launch/manual report too, not only the periodic sampler.
+                    if partial.progress["smart"] == true, self.report.progress["smart"] != true {
+                        self.smartUpdatedAt = Date()
+                    }
+                    var shown = partial
+                    self.applyUpdates(to: &shown)
+                    self.report = shown
+                    if let sys = partial.system { self.lastKnownSystem = sys }
+                    // Deliberately NOT recomputed here: `partial` has most sections nil during
+                    // a collect, so assessing it makes "not collected yet" and "nothing is
+                    // wrong" the same value and the header thrashes between them. The verdict
+                    // updates once the pass completes, at the `final` assessment below.
+                    self.smartToolsState = Self.recomputeSmartToolsState()
                 }
-                self.report = partial
-                if let sys = partial.system { self.lastKnownSystem = sys }
-                // Deliberately NOT recomputed here: `partial` has most sections nil during
-                // a collect, so assessing it makes "not collected yet" and "nothing is
-                // wrong" the same value and the header thrashes between them. The verdict
-                // updates once the pass completes, at the `final` assessment below.
-                self.smartToolsState = Self.recomputeSmartToolsState()
             }
             guard !Task.isCancelled else { return }
+            var final = collected
+            self.applyUpdates(to: &final)
 
             if cachedBrew == nil {
                 // brew actually ran this pass — refill the session cache.
@@ -467,6 +497,50 @@ final class DashboardModel {
             if let sys = final.system { self.lastKnownSystem = sys }
             self.setAssessment(Assess.assess(report: final, live: self.live))
             self.smartToolsState = Self.recomputeSmartToolsState()
+        }
+    }
+
+    /// Single overlay point for the update-check result: every report the model shows or
+    /// commits goes through here, so a check finishing mid-pass cannot be lost.
+    private func applyUpdates(to r: inout FullReport) {
+        r.updates = updatesCache?.items
+        r.updatesCheckedAt = updatesCache?.checkedAt
+        r.updatesCheckDuration = updatesCache?.durationSeconds
+        r.progress[ReportSection.updates.rawValue] = (updatesCache != nil) || !isCheckingUpdates
+    }
+
+    private func startUpdateCheckIfNeeded(trigger: CollectTrigger) {
+        guard ReportCollector.shouldStartUpdateCheck(trigger: trigger, checkedAt: updatesCache?.checkedAt,
+                                                     inFlight: isCheckingUpdates, now: Date()) else { return }
+        isCheckingUpdates = true
+        applyUpdates(to: &report)                       // display only: spinner if no cache yet
+        updateCheckTask = Task(priority: .utility) { [weak self] in
+            let result = await CommandRunner.$qos.withValue(.utility) { await ReportCollector().checkUpdates() }
+            guard let self else { return }
+            self.isCheckingUpdates = false
+            guard !Task.isCancelled else { return }
+            if let result {
+                self.updatesCache = result
+                try? UpdatesCacheStore.save(result, to: self.updatesCacheURL)   // a failed write costs one re-check next launch; not surfaced
+            }
+            self.mergeUpdatesIntoCommitted()            // also on failure: spinner -> "unavailable"
+        }
+    }
+
+    /// V2-HEADER-CHURN: assess only a committed report.
+    private func mergeUpdatesIntoCommitted() {
+        if isCollectingReport {
+            applyUpdates(to: &lastCommittedReport)      // what the fast tick assesses mid-pass
+            applyUpdates(to: &report)                   // display of the partial; NOT assessed
+            setAssessment(Assess.assess(report: lastCommittedReport, live: live))
+            // The pass commit calls applyUpdates on `final`, so it picks this result up too.
+        } else {
+            applyUpdates(to: &report)
+            let text = ReportWriter.render(report: report, live: live, history: historyStore.state)
+            do { try ReportWriter.write(text: text, to: reportURL) }
+            catch { lastError = L.errorReportWriteFailed(error.localizedDescription) }
+            reportText = text                           // reportUpdatedAt unchanged: it is the pass time
+            setAssessment(Assess.assess(report: report, live: live))
         }
     }
 

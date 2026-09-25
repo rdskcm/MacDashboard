@@ -489,6 +489,13 @@ protocol AppStrings {
     var reportTMNotConfigured: String { get }
     func reportTMLastBackup(_ v: String) -> String
     var reportNotChecked: String { get }
+    var reportSectionTimings: String { get }
+    var reportTimingsNote: String { get }
+    func reportTimingsPass(_ v: String) -> String
+    func reportTimingsUpdates(_ v: String, _ at: String) -> String
+    func reportUpdatesCheckedAt(_ at: String) -> String
+    var updatesCheckedJustNow: String { get }
+    func updatesCheckedAgo(_ age: String) -> String
     var reportBrewOutdatedHeader: String { get }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String
     var reportSmartWarningNone: String { get }
