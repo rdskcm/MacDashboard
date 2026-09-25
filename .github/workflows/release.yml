@@ -96,6 +96,19 @@ jobs:
       - name: Build .app
         run: ./build_app.sh
 
+      - name: Assert the bundle version matches the release tag
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist/MacDashboard.app/Contents/Info.plist)"
+          echo "release tag: $TAG; CFBundleVersion: $ver"
+          if [ "v$ver" != "$TAG" ]; then
+            echo "::error::the app is version $ver but the release tag is $TAG — set VERSION in build_app.sh to match before tagging"
+            exit 1
+          fi
+          echo "version OK"
+
       - name: Assert arm64-only binary
         run: |
           set -euo pipefail

@@ -49,8 +49,7 @@ feedback and comments. Hope you like it!
   (compatible with the old file format).
 - Detects recent crash logs (7-day window), grouped and collapsed, and flags
   own-app crashes vs. system panics.
-- SOC and internal-disk temperatures, read via Apple Silicon's private HID
-  sensor API (Intel Macs simply don't show this tile — no error, just absent).
+- SOC and internal-disk temperatures, read via Apple Silicon's private HID sensor API.
 - A handful of one-click maintenance actions, each explicit and confirmed
   (see "What it can change" below): cleaning up orphaned autostart entries,
   installing `smartmontools` for SMART data on external drives, refreshing
@@ -216,6 +215,8 @@ quarantine flag along the way, clear it exactly as in the first-launch step abov
 
 - `Sources/MacDashboard/` — the app itself (SwiftUI, no external dependencies).
 - `Checks/` — parser/assessment checks (`swift run MacDashboardChecks`).
+- `Tests/Fixtures/` — captured command outputs the parser checks run against (see its README).
+- `tools/visual/run.sh` — visual baseline: captures the real app windows and compares them with reference screenshots (dev tool).
 - `build_app.sh` — Apple Silicon (arm64) build + `.app` packaging + codesign (the local signing identity if present, otherwise ad-hoc).
 - `tools/signing/make-identity.sh` — one-time creation of that local signing identity.
 - `SPEC.md` — the original build-out brief. Part of it is still binding (data
