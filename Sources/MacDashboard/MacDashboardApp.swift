@@ -19,7 +19,11 @@ struct MacDashboardApp: App {
             MainDashboardView(model: model)
                 .frame(minWidth: 900, minHeight: 620)
                 .onAppear {
-                    model.start()
+                    if VisualFixture.isRequested {
+                        model.applyVisualFixture()
+                    } else {
+                        model.start()
+                    }
                 }
         }
         .defaultSize(width: 1150, height: 780)

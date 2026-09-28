@@ -33,7 +33,7 @@ usage_error() { echo "usage error: $1" >&2; echo "$HELP" >&2; exit 64; }
 precondition_refused() { echo "REFUSED: $1" >&2; exit 65; }
 runtime_error() { echo "RUNTIME ERROR: $1" >&2; exit 70; }
 
-STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light"
+STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark main-report-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light main-report-light content-processes-cpu-dark content-processes-mem-dark content-folders-home-dark content-folders-service-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-processes-cpu-light content-processes-mem-light content-folders-home-light content-folders-service-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light"
 
 # edge_inset_px is 0 by default (see README §5); only changed with measured
 # evidence, in a separate documented commit.
@@ -130,9 +130,10 @@ if [ "$MODE" = "bless" ]; then
       exit 1
     fi
     alpha_v="$(printf '%s' "$line" | awk -F'\t' '{print $2}')"
-    if [ "$alpha_v" != "ok" ]; then
-      FAILED_STATES="$FAILED_STATES $st(alpha=$alpha_v)"
-    fi
+    case "$st" in
+      content-*) [ "$alpha_v" = "ok" ] || [ "$alpha_v" = "n/a" ] || FAILED_STATES="$FAILED_STATES $st(alpha=$alpha_v)" ;;
+      *) [ "$alpha_v" = "ok" ] || FAILED_STATES="$FAILED_STATES $st(alpha=$alpha_v)" ;;
+    esac
   done
   if [ -n "$FAILED_STATES" ]; then
     echo "REFUSED: bless: states with alpha != ok:$FAILED_STATES" >&2
@@ -180,8 +181,6 @@ if [ ! -x "$APP_BIN" ]; then
   usage_error "--app binary is not executable: $APP_BIN"
 fi
 
-mkdir -p "$OUT/raw" "$OUT/norm" "$OUT/diff" "$OUT/.bin" "$OUT/.restore"
-
 PIXEL_TOLERANCE="$(awk '$1=="pixel_tolerance"{print $2}' "$ROOT/tools/visual/thresholds.txt")"
 
 # Precondition 2: no running instance
@@ -205,7 +204,12 @@ if [ "$SDK_MAJOR" -lt "$OS_MAJOR" ]; then
 fi
 
 # Compile the helper (also needed for preflight / accessibility checks below).
-VBTOOL="$OUT/.bin/vbtool"
+# Built into a scratch dir first — R7: no run directory exists yet, so a
+# precondition refusal below leaves nothing behind. Moved into $OUT/.bin once
+# every precondition has passed (after precondition 7).
+TMPBIN="$(mktemp -d /tmp/vbtool-run.XXXXXX)"
+trap 'rm -rf "$TMPBIN"' EXIT
+VBTOOL="$TMPBIN/vbtool"
 if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit; then
   runtime_error "vbtool compile failed"
 fi
@@ -237,6 +241,13 @@ if [ "$APP" = "$ROOT/dist/MacDashboard.app" ]; then
     echo "WARNING: dist build is older than Sources/ — run ./build_app.sh"
   fi
 fi
+
+# Every precondition passed: now it is safe to create the run directory and
+# hand vbtool over to it (R7).
+mkdir -p "$OUT/raw" "$OUT/norm" "$OUT/diff" "$OUT/.bin" "$OUT/.restore"
+mv "$TMPBIN/vbtool" "$OUT/.bin/vbtool"
+VBTOOL="$OUT/.bin/vbtool"
+rm -rf "$TMPBIN"
 
 # ---------------------------------------------------------------------------
 # build-info.txt
@@ -280,6 +291,8 @@ THRESHOLDS_CONTENTS="$(cat "$ROOT/tools/visual/thresholds.txt")"
   echo "increase_contrast: $INCREASE_CONTRAST"
   echo "accent_color: $ACCENT_COLOR"
   echo "language: en (pinned via argument domain)"
+  echo "fixture: visualFixture"
+  echo "app_defaults: cleared for run"
   echo "alpha_params: corner_pt=32 edge_inset_px=0"
   echo "--- thresholds.txt ---"
   echo "$THRESHOLDS_CONTENTS"
@@ -374,7 +387,13 @@ restore() {
   esac
   if [ "$appsupport_status" = "ok" ]; then
     if [ -d "$RESTORE_DIR/appsupport" ]; then
-      rsync -a --delete "$RESTORE_DIR/appsupport/" "$APPSUPPORT_DIR/" 2>/dev/null || appsupport_status="partial"
+      local rsync_rc=0
+      rsync -a --delete "$RESTORE_DIR/appsupport/" "$APPSUPPORT_DIR/" 2>"$OUT/restore-rsync.err" || rsync_rc=$?
+      if [ "$rsync_rc" -ne 0 ]; then
+        appsupport_status="partial(rsync_rc=$rsync_rc)"
+      else
+        rm -f "$OUT/restore-rsync.err"
+      fi
     else
       rm -rf "$APPSUPPORT_DIR" 2>/dev/null || appsupport_status="partial"
     fi
@@ -416,10 +435,15 @@ trap 'restore' EXIT
 trap 'echo "INTERRUPTED"; restore; exit 130' INT
 trap 'restore; exit 143' TERM
 
+# R3: clear the app's defaults domain for this run (snapshot already taken
+# above; restore() re-imports it on exit) so main-* no longer depends on the
+# user's live settings.
+defaults delete "$BUNDLE_ID" >/dev/null 2>&1 || true
+
 # ---------------------------------------------------------------------------
 # Launch
 # ---------------------------------------------------------------------------
-open -F "$APP" --args -appLanguage en -AppleLanguages "(en)"
+open -F "$APP" --args -appLanguage en -AppleLanguages "(en)" -visualFixture 1
 
 waited=0
 PID=""
@@ -493,9 +517,11 @@ within() {
 
 assert_key() {
   local wid="$1"
+  local context="$2"
   osascript -e "tell application id \"$BUNDLE_ID\" to activate" >/dev/null 2>&1 || true
   local waited_ms=0
   local printed=0
+  local last_reason="no window bounds yet"
   while true; do
     local wb
     wb="$(window_bounds "$wid")"
@@ -504,11 +530,11 @@ assert_key() {
       out="$(osascript <<OSA
 tell application "System Events"
   set procs to (processes whose unix id is $PID)
-  if (count of procs) = 0 then return "no"
+  if (count of procs) = 0 then return "notfront"
   set proc to item 1 of procs
-  if not (frontmost of proc) then return "no"
+  if not (frontmost of proc) then return "notfront"
   tell proc
-    if not (value of attribute "AXMain" of window 1) then return "no"
+    if not (value of attribute "AXMain" of window 1) then return "notmain"
     set p to position of window 1
     set sz to size of window 1
     return ((item 1 of p) as string) & " " & ((item 2 of p) as string) & " " & ((item 1 of sz) as string) & " " & ((item 2 of sz) as string)
@@ -516,14 +542,19 @@ tell application "System Events"
 end tell
 OSA
 )"
-      if [ "$out" != "no" ]; then
+      if [ "$out" = "notfront" ] || [ "$out" = "notmain" ]; then
+        last_reason="$out"
+      else
         local px py pw ph bx by bw bh
         read -r px py pw ph <<< "$out"
         read -r bx by bw bh <<< "$wb"
         if within "$px" "$bx" && within "$py" "$by" && within "$pw" "$bw" && within "$ph" "$bh"; then
           return 0
         fi
+        last_reason="bounds AX=$px $py $pw $ph CG=$bx $by $bw $bh"
       fi
+    else
+      last_reason="no window bounds for wid=$wid"
     fi
     if [ "$printed" -eq 0 ]; then
       local fname
@@ -536,7 +567,7 @@ OSA
     if [ "$waited_ms" -ge 30000 ]; then
       local fname2
       fname2="$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || echo "?")"
-      runtime_error "assert_key timeout waiting for MacDashboard to become key (front app: $fname2)"
+      runtime_error "assert_key timeout: wid=$wid context=$context reason=$last_reason front app: $fname2"
     fi
   done
 }
@@ -580,6 +611,61 @@ press_section() {
   cx="$(awk -v x="$setx" 'BEGIN{printf "%d", x+98}')"
   cy="$(awk -v y="$sety" -v t="$t" -v o="$off" 'BEGIN{printf "%d", y+t+o}')"
   "$CLICLICK" "c:$cx,$cy" >/dev/null 2>&1 || runtime_error "press_section: cliclick failed for $label"
+}
+
+# Switch the main window's Overview/Report tab via an AX press on the tab
+# button (VISUAL-COVERAGE, R4; Amendment 1) — never a coordinate click or
+# keystroke. `.accessibilityLabel` lands in AXAttributedDescription, which
+# System Events cannot read (-10000); `AXIdentifier` (`main-tab-overview` /
+# `main-tab-report`, set via `.accessibilityIdentifier`) is the
+# language-independent, script-readable handle instead. Searches
+# `entire contents of window 1` for the first button whose AXIdentifier
+# equals $1; presses it, or reports the identifiers it saw.
+press_main_tab() {
+  local axid="$1"
+  local out
+  out="$(osascript - "$PID" "$axid" <<'EOF'
+on run argv
+  set thePID to (item 1 of argv) as integer
+  set theAXID to (item 2 of argv)
+  tell application "System Events"
+    tell (first process whose unix id is thePID)
+      set allElements to entire contents of window 1
+      set target to missing value
+      set idsStr to ""
+      repeat with el in allElements
+        try
+          if (class of el) is button then
+            set elID to ""
+            try
+              set elID to (value of attribute "AXIdentifier" of el)
+            end try
+            if idsStr is "" then
+              set idsStr to elID
+            else
+              set idsStr to idsStr & "|" & elID
+            end if
+            if target is missing value and elID is theAXID then
+              set target to el
+            end if
+          end if
+        end try
+      end repeat
+      if target is missing value then
+        return "NOTFOUND:" & idsStr
+      end if
+      perform action "AXPress" of target
+      return "OK"
+    end tell
+  end tell
+end run
+EOF
+)" || runtime_error "press_main_tab: osascript failed"
+  case "$out" in
+    OK) ;;
+    NOTFOUND:*) runtime_error "press_main_tab: AXIdentifier '$axid' not found; identifiers seen: ${out#NOTFOUND:}" ;;
+    *) runtime_error "press_main_tab: unexpected osascript output: $out" ;;
+  esac
 }
 
 # Open Settings via an AX press on the app-menu item (block spec, Design
@@ -731,12 +817,21 @@ for mode in dark light; do
   osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $DARK_BOOL" >/dev/null 2>&1 || true
   sleep 2
 
-  assert_key "$MAIN_ID"
+  assert_key "$MAIN_ID" "main-$mode"
   park_cursor
   sleep 1.5
   capture_state "main-$mode" "$MAIN_ID"
 
-  assert_key "$MAIN_ID"
+  assert_key "$MAIN_ID" "main-report-$mode"
+  press_main_tab main-tab-report
+  park_cursor
+  sleep 1.5
+  assert_key "$MAIN_ID" "main-report-$mode"
+  capture_state "main-report-$mode" "$MAIN_ID"
+  press_main_tab main-tab-overview
+  sleep 1
+
+  assert_key "$MAIN_ID" "open-settings-$mode"
   open_settings
 
   waited=0
@@ -765,13 +860,13 @@ for mode in dark light; do
   press_section "General" "$SETX" "$SETY" "$T"
   park_cursor
   sleep 1.5
-  assert_key "$SET_ID"
+  assert_key "$SET_ID" "settings-general-$mode"
   capture_state "settings-general-$mode" "$SET_ID"
 
   press_section "Monitoring" "$SETX" "$SETY" "$T"
   park_cursor
   sleep 1.5
-  assert_key "$SET_ID"
+  assert_key "$SET_ID" "settings-monitoring-$mode"
   capture_state "settings-monitoring-$mode" "$SET_ID"
 
   THALF="$(awk -v t="$T" 'BEGIN{v=t/2; if(v<8)v=8; printf "%.2f", v}')"
@@ -779,11 +874,11 @@ for mode in dark light; do
   HOVER_Y="$(awk -v y="$SETY" -v th="$THALF" 'BEGIN{printf "%d", y+th}')"
   "$CLICLICK" "m:$HOVER_X,$HOVER_Y" >/dev/null 2>&1 || runtime_error "cliclick hover failed"
   sleep 1.5
-  assert_key "$SET_ID"
+  assert_key "$SET_ID" "settings-titlebar-hover-$mode"
   capture_state "settings-titlebar-hover-$mode" "$SET_ID"
   park_cursor
 
-  assert_key "$SET_ID"
+  assert_key "$SET_ID" "close-settings-$mode"
   close_settings "$SET_ID"
   waited=0
   while [ "$waited" -lt 5 ]; do
@@ -792,7 +887,38 @@ for mode in dark light; do
     sleep 1
     waited=$((waited + 1))
   done
+  if printf '%s\n' "$wl" | awk '{print $1}' | grep -qx "$SET_ID"; then
+    runtime_error "Settings window $SET_ID still open 5 s after close_settings"
+  fi
 done
+
+# ---------------------------------------------------------------------------
+# Content stage: below-the-fold cards rendered offscreen from the same
+# fixture, dark+light (R5).
+# ---------------------------------------------------------------------------
+"$ROOT/tools/harness/render.sh" "$ROOT/tools/visual/content_states.swift" "$OUT/raw" > "$OUT/content-render.log" 2>&1 \
+  || runtime_error "content render failed (see content-render.log)"
+
+CONTENT_COUNT=0
+while IFS= read -r line; do
+  case "$line" in
+    "Wrote "*)
+      rest="${line#Wrote }"
+      p="${rest%% — *}"
+      wh="${rest##* — }"
+      base="$(basename "$p")"
+      name="${base%.png}"
+      w="${wh%x*}"
+      h="${wh#*x}"
+      STATE_NAMES+=("$name")
+      STATE_BOUNDS+=("0 0 $w $h")
+      CONTENT_COUNT=$((CONTENT_COUNT + 1))
+      ;;
+  esac
+done < "$OUT/content-render.log"
+if [ "$CONTENT_COUNT" -lt 22 ]; then
+  runtime_error "content render produced only $CONTENT_COUNT states (expected 22, see content-render.log)"
+fi
 
 # ---------------------------------------------------------------------------
 # Per-state processing
@@ -810,12 +936,23 @@ while [ "$i" -lt "${#STATE_NAMES[@]}" ]; do
   i=$((i + 1))
   read -r bx by bw bh <<< "$wb"
 
-  ALPHA_LINE="$("$VBTOOL" alpha-check "$OUT/raw/$st.png" --points "${bw}x${bh}" --corner-pt 32 --edge-inset-px "$EDGE_INSET_PX" || true)"
-  ALPHA_OK="ok"
-  if ! printf '%s\n' "$ALPHA_LINE" | grep -q '^ALPHA ok'; then ALPHA_OK="FAIL"; ANY_ALPHA_FAIL=1; fi
-  HOLE_PX="$(printf '%s\n' "$ALPHA_LINE" | grep '^ALPHA' | sed -n 's/.*hole_px=\([0-9]*\).*/\1/p')"
-  BBOX_PT="$(printf '%s\n' "$ALPHA_LINE" | grep '^ALPHA' | sed -n 's/.*bbox_pt=\([^ ]*\).*/\1/p')"
-  REGIONS="$(printf '%s\n' "$ALPHA_LINE" | grep '^ALPHA' | sed -n 's/.*regions=\([^ ]*\).*/\1/p')"
+  case "$st" in
+    content-*)
+      # Offscreen renders have no window shape — alpha holes are meaningless there.
+      ALPHA_OK="n/a"
+      HOLE_PX="0"
+      BBOX_PT="-"
+      REGIONS="-"
+      ;;
+    *)
+      ALPHA_LINE="$("$VBTOOL" alpha-check "$OUT/raw/$st.png" --points "${bw}x${bh}" --corner-pt 32 --edge-inset-px "$EDGE_INSET_PX" || true)"
+      ALPHA_OK="ok"
+      if ! printf '%s\n' "$ALPHA_LINE" | grep -q '^ALPHA ok'; then ALPHA_OK="FAIL"; ANY_ALPHA_FAIL=1; fi
+      HOLE_PX="$(printf '%s\n' "$ALPHA_LINE" | grep '^ALPHA' | sed -n 's/.*hole_px=\([0-9]*\).*/\1/p')"
+      BBOX_PT="$(printf '%s\n' "$ALPHA_LINE" | grep '^ALPHA' | sed -n 's/.*bbox_pt=\([^ ]*\).*/\1/p')"
+      REGIONS="$(printf '%s\n' "$ALPHA_LINE" | grep '^ALPHA' | sed -n 's/.*regions=\([^ ]*\).*/\1/p')"
+      ;;
+  esac
 
   "$VBTOOL" downscale "$OUT/raw/$st.png" "$OUT/norm/$st.png" --size "${bw}x${bh}" || runtime_error "downscale failed for $st"
 
@@ -864,6 +1001,20 @@ if [ -n "$MM_PCT" ] && awk -v p="$MM_PCT" 'BEGIN{exit !(p<=5.0)}'; then
   runtime_error "sanity: appearance switch had no effect (diff ${MM_PCT}%)"
 fi
 
+RD_LINE="$("$VBTOOL" diff "$OUT/norm/main-report-dark.png" "$OUT/norm/main-dark.png" --tol "$PIXEL_TOLERANCE" --mask "$OUT/diff/.sanity-tab.png" 2>&1 || true)"
+RD_PCT="$(printf '%s\n' "$RD_LINE" | sed -n 's/.*pct=\([0-9.]*\).*/\1/p')"
+rm -f "$OUT/diff/.sanity-tab.png"
+if [ -n "$RD_PCT" ] && awk -v p="$RD_PCT" 'BEGIN{exit !(p<=1.0)}'; then
+  runtime_error "sanity: tab switch had no visible effect (diff ${RD_PCT}%)"
+fi
+
+CH_LINE="$("$VBTOOL" diff "$OUT/norm/content-history-disk-dark.png" "$OUT/norm/content-history-disk-light.png" --tol "$PIXEL_TOLERANCE" --mask "$OUT/diff/.sanity-content-appearance.png" 2>&1 || true)"
+CH_PCT="$(printf '%s\n' "$CH_LINE" | sed -n 's/.*pct=\([0-9.]*\).*/\1/p')"
+rm -f "$OUT/diff/.sanity-content-appearance.png"
+if [ -n "$CH_PCT" ] && awk -v p="$CH_PCT" 'BEGIN{exit !(p<=5.0)}'; then
+  runtime_error "sanity: content appearance had no effect (diff ${CH_PCT}%)"
+fi
+
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
@@ -873,11 +1024,29 @@ fi
   cat "$RESULTS" | column -t -s "$(printf '\t')"
   echo
   echo "reference provenance (manifest vs. current):"
-  if [ -f "$REFERENCE/manifest.txt" ]; then
-    cat "$REFERENCE/manifest.txt"
-  else
-    echo "(no manifest at $REFERENCE)"
-  fi
+  CUR_MACOS="$(sw_vers -productVersion)"
+  CUR_MACOS_MAJOR="${CUR_MACOS%%.*}"
+  awk -F'\t' -v ref="$REFERENCE/manifest.txt" -v cur_macos="$CUR_MACOS" \
+      -v cur_macos_major="$CUR_MACOS_MAJOR" -v cur_sdk="$SDK_MAJOR" '
+    BEGIN {
+      while ((getline line < ref) > 0) {
+        if (line ~ /^#/ || line == "") continue
+        split(line, f, "\t")
+        blessed[f[1]] = f[2]; refmacos[f[1]] = f[3]; refsdk[f[1]] = f[4]
+        seen[f[1]] = 1
+      }
+      close(ref)
+    }
+    NR == 1 { next }  # header row
+    {
+      st = $1
+      if (!(st in seen)) { print st"  (no manifest entry)"; next }
+      rm = refmacos[st]; rs = refsdk[st]
+      rmajor = rm; sub(/\..*/, "", rmajor)
+      same = (rmajor == cur_macos_major && rs == cur_sdk) ? "same" : "DIFFERS"
+      print st"  blessed="blessed[st]"  ref="rm"/"rs"  current="cur_macos"/"cur_sdk"  "same
+    }
+  ' "$RESULTS"
 } | tee "$OUT/report.txt"
 
 TITLE="current: macOS $(sw_vers -productVersion) / SDK $SDK_MAJOR / commit $GIT_COMMIT — reference: $REFERENCE"
