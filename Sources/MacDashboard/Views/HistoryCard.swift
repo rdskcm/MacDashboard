@@ -33,6 +33,20 @@ struct HistoryCard: View {
     // Which series the chart above the table currently plots.
     @State private var metric: HistoryMetric = .disk
 
+    // Table collapse — the Disk card's home-folder pattern verbatim (FoldersCard in
+    // StorageCards.swift: `homeShowAll` + `prefix(10)` + `MoreLessToggle`), same
+    // threshold, same strings, and no animation: the row count changes the table's
+    // height, so the toggle is a plain state flip.
+    @State private var tableShowAll = false
+    private static let tableCollapsedRows = 10
+
+    /// Newest day first, so the collapsed table shows the most recent days and the
+    /// "N more" toggle under it reveals the older days below them.
+    private var tableEntries: [MacHistoryEntry] {
+        let newestFirst = Array(entries.reversed())
+        return tableShowAll ? newestFirst : Array(newestFirst.prefix(Self.tableCollapsedRows))
+    }
+
     var body: some View {
         if entries.count >= 2 {
             ChartOrTableCard(
@@ -70,7 +84,7 @@ struct HistoryCard: View {
 
     /// `HistorySeries.series` points for `metric`, parsed to `Date` and
     /// filtered to the 30-day window `HistorySeries.last30Range` reports (the
-    /// 60-day-capped history can hold points OUTSIDE that window — those must
+    /// full, uncapped history can hold points OUTSIDE that window — those must
     /// not render compressed into the visible axis). Falls back to all parsed
     /// points, unfiltered, if `last30Range` can't compute one (defensive only:
     /// `body` already guards `entries.count >= 2`, so entries is never empty
@@ -127,7 +141,7 @@ struct HistoryCard: View {
             }
             SimpleTable(
                 headers: [L.historyColDate, L.historyColDiskUsed, L.historyColFree, L.kpiBatteryLabel, L.historyColCycles, "Swap", "macOS"],
-                rows: entries.map { e in
+                rows: tableEntries.map { e in
                     [
                         e.date,
                         e.disk_used_gb.map { L.historyGbValue($0) } ?? "—",
@@ -140,6 +154,13 @@ struct HistoryCard: View {
                 },
                 numericColumns: [1, 2, 3, 4, 5]
             )
+            if entries.count > Self.tableCollapsedRows {
+                MoreLessToggle(
+                    expanded: tableShowAll,
+                    collapsedLabel: L.sharedMoreN(entries.count - Self.tableCollapsedRows),
+                    expandedLabel: L.sharedCollapse
+                ) { tableShowAll.toggle() }
+            }
         }
     }
 
