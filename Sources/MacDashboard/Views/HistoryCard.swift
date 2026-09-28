@@ -14,7 +14,7 @@ struct HistoryCard: View {
     // the current calendar, so a UTC-midnight Date would shift a day backward
     // on the axis for anyone west of UTC. Parsing in the local zone keeps the
     // "YYYY-MM-DD" string and its displayed axis label the same calendar day.
-    // Same semantics as HistorySeries.last30Range's own private dayFormatter —
+    // Same semantics as HistorySeries.dateRange's own private dayFormatter —
     // deliberately duplicated (not shared) since that one is private there.
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -32,6 +32,10 @@ struct HistoryCard: View {
 
     // Which series the chart above the table currently plots.
     @State private var metric: HistoryMetric = .disk
+
+    // Chart range (Месяц · 3 мес · Год · Всё). Not persisted, like every other
+    // card segment; default Месяц = the 30-day window this chart always had.
+    @State private var range: HistoryRange = .month
 
     // Table collapse — the Disk card's home-folder pattern verbatim (FoldersCard in
     // StorageCards.swift: `homeShowAll` + `prefix(10)` + `MoreLessToggle`), same
@@ -73,6 +77,19 @@ struct HistoryCard: View {
         .accessibilityLabel(L.historyMetricA11y)
     }
 
+    // The range switch sits ABOVE the `points.count < 2` branch in `chart`
+    // (not inside it), so its identity survives a range change that flips that
+    // branch and its thumb slides (rule control-identity-branch). It lives in
+    // the chart side of ChartOrTableCard, not the header, because the range
+    // applies to the chart only; `range` itself is card state, so it survives
+    // a trip to the table and back.
+    private var rangeControl: some View {
+        DSSlidingSegmented(options: HistoryRange.allCases, selection: $range) { r in
+            rangeLabel(for: r)
+        }
+        .accessibilityLabel(L.historyRangeA11y)
+    }
+
     private var metricYLabel: String {
         switch metric {
         case .disk: return L.historyMetricYLabelDisk
@@ -82,20 +99,19 @@ struct HistoryCard: View {
         }
     }
 
-    /// `HistorySeries.series` points for `metric`, parsed to `Date` and
-    /// filtered to the 30-day window `HistorySeries.last30Range` reports (the
-    /// full, uncapped history can hold points OUTSIDE that window — those must
-    /// not render compressed into the visible axis). Falls back to all parsed
-    /// points, unfiltered, if `last30Range` can't compute one (defensive only:
-    /// `body` already guards `entries.count >= 2`, so entries is never empty
-    /// here).
-    private func chartPoints(for metric: HistoryMetric) -> [HistoryChartPoint] {
+    /// `HistorySeries.series` points for `metric`, parsed to `Date`, filtered to
+    /// `range`'s window (`HistorySeries.dateRange`; nil = Всё or no computable
+    /// window ⇒ all parsed points), then capped at `HistorySeries.maxChartPoints`
+    /// by even-stride thinning (only Всё can exceed it).
+    private func chartPoints(for metric: HistoryMetric, range: HistoryRange) -> [HistoryChartPoint] {
         let parsed: [HistoryChartPoint] = HistorySeries.series(entries, metric: metric).compactMap { p in
             guard let date = Self.dateFormatter.date(from: p.date) else { return nil }
             return HistoryChartPoint(id: p.date, date: date, value: p.value)
         }
-        guard let range = HistorySeries.last30Range(entries) else { return parsed }
-        return parsed.filter { range.contains($0.date) }
+        let windowed = HistorySeries.dateRange(entries, range).map { window in
+            parsed.filter { window.contains($0.date) }
+        } ?? parsed
+        return HistorySeries.thinned(windowed, maxCount: HistorySeries.maxChartPoints)
     }
 
     // The metric picker moved to `ChartOrTableCard`'s header slot (see
@@ -103,7 +119,8 @@ struct HistoryCard: View {
     // text vs. the real chart — varies with `metric` here.
     private var chart: some View {
         VStack(alignment: .leading, spacing: 8) {
-            let points = chartPoints(for: metric)
+            rangeControl
+            let points = chartPoints(for: metric, range: range)
             if points.count < 2 {
                 Text(L.historyMetricInsufficientData)
                     .font(.caption)
@@ -121,6 +138,15 @@ struct HistoryCard: View {
         case .battery: return L.historyMetricPickerBattery
         case .cycles: return L.historyMetricPickerCycles
         case .swap: return L.historyMetricPickerSwap
+        }
+    }
+
+    private func rangeLabel(for r: HistoryRange) -> String {
+        switch r {
+        case .month: return L.historyRangeMonth
+        case .quarter: return L.historyRangeQuarter
+        case .year: return L.historyRangeYear
+        case .all: return L.historyRangeAll
         }
     }
 
@@ -202,11 +228,11 @@ private struct HistoryChartPoint: Identifiable, Equatable {
 ///
 /// X is plotted by ORDINAL INDEX into `points`, not by calendar `Date` (spec
 /// correction: prototype's `xAt(i) = i/(n-1)*300`, Overview Screen.dc.html:
-/// 1489). `points` is still date-filtered to the last-30-day window upstream
-/// (`HistoryCard.chartPoints`/`HistorySeries.last30Range`) — that selection
+/// 1489). `points` is still date-filtered to the selected range's window upstream
+/// (`HistoryCard.chartPoints`/`HistorySeries.dateRange`) — that selection
 /// step is correct and stays — but the plotted x-axis itself is an index over
 /// exactly those (already-filtered) points, so it always fills the full plot
-/// width regardless of how many of the 30 days actually have data. A `Date`-
+/// width regardless of how many days of the window actually have data. A `Date`-
 /// domain x-scale left blank space before the line when fewer than 30 days
 /// existed.
 private struct HistoryTrendChart: View {

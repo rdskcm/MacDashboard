@@ -3,6 +3,7 @@
 // (Диск / Батарея / Циклы / Swap). Also the single source of truth for
 // swap-string parsing, shared by the chart series path and HistoryCard's
 // table formatting — no duplicated parsing logic between the two.
+// HISTORY-RANGE: also the chart's range window (HistoryRange) and point cap.
 //
 // Pure Foundation-only, no SwiftUI/Charts import, so it's symlinked into
 // MacDashboardChecks unchanged.
@@ -11,6 +12,22 @@ import Foundation
 
 enum HistoryMetric: CaseIterable {
     case disk, battery, cycles, swap
+}
+
+/// The История chart's range switch (Месяц · 3 мес · Год · Всё). Case order
+/// IS the segment order. Pure — symlinked into MacDashboardChecks.
+enum HistoryRange: CaseIterable {
+    case month, quarter, year, all
+
+    /// Calendar days in the window, counting the end day; nil = no window (Всё).
+    var days: Int? {
+        switch self {
+        case .month: return 30
+        case .quarter: return 90
+        case .year: return 365
+        case .all: return nil
+        }
+    }
 }
 
 enum HistorySeries {
@@ -73,15 +90,31 @@ enum HistorySeries {
         return df
     }()
 
-    /// 30-consecutive-calendar-day range ending on the last entry's date.
-    /// Entries are already chronological — `entries.last` is the most recent.
-    /// nil if `entries` is empty or the last entry's date string fails to parse.
-    static func last30Range(_ entries: [MacHistoryEntry]) -> ClosedRange<Date>? {
-        guard let last = entries.last,
-              let endDate = dayFormatter.date(from: last.date)
-        else { return nil }
-        guard let startDate = Calendar.current.date(byAdding: .day, value: -29, to: endDate)
+    /// `range.days` consecutive calendar days ending on the last entry's date
+    /// (entries are chronological — `entries.last` is the most recent).
+    /// nil for `.all` (no window: plot everything), for empty `entries`, or if
+    /// the last entry's date string fails to parse.
+    static func dateRange(_ entries: [MacHistoryEntry], _ range: HistoryRange) -> ClosedRange<Date>? {
+        guard let days = range.days,
+              let last = entries.last,
+              let endDate = dayFormatter.date(from: last.date),
+              let startDate = Calendar.current.date(byAdding: .day, value: -(days - 1), to: endDate)
         else { return nil }
         return startDate...endDate
+    }
+
+    /// Most points the chart plots. ≥ the most a Год window can hold (one entry
+    /// per day, 365 days), so only Всё is ever thinned.
+    static let maxChartPoints = 365
+
+    /// Even-stride subsample to at most `maxCount` items, order preserved, first
+    /// and last always kept, every item a real element of `items` (no averaging).
+    /// Unchanged when `items.count <= maxCount`, or when `maxCount < 2` (not a
+    /// meaningful cap). Strictly increasing indices: the stride is > 1 whenever
+    /// thinning happens, so no element is picked twice.
+    static func thinned<T>(_ items: [T], maxCount: Int) -> [T] {
+        guard maxCount >= 2, items.count > maxCount else { return items }
+        let step = Double(items.count - 1) / Double(maxCount - 1)
+        return (0..<maxCount).map { items[Int((Double($0) * step).rounded())] }
     }
 }
