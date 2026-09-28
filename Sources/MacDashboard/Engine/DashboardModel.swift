@@ -110,7 +110,7 @@ final class DashboardModel {
         s.t = lastSampleAt; s.load = load; s.ncpu = ncpu; s.cpu = cpu
         s.topCPU = topCPU; s.topMem = topMem; s.mem = mem; s.swap = swap
         s.disk = disk; s.battery = battery
-        s.parseFailures = procParseFailures
+        s.parseFailures = procParseFailures + wakeParseFailures
         return s
     }
 
@@ -147,6 +147,11 @@ final class DashboardModel {
     private var memPressure: MemoryPressureLevel? = nil
     /// Top apps by memory footprint, from the most recent process sample (TIPS-MEMORY).
     private var topApps: [AppMemory] = []
+    /// Non-system programs holding a sleep assertion ≥ 5 min, from the slow task (WAKE-HOLDERS).
+    private var wakeHolders: [WakeHolder] = []
+    /// pmset-assertions output the parser rejected on the last slow tick. Separate from
+    /// procParseFailures so refreshProcessesNow() (which overwrites that) cannot drop it.
+    private var wakeParseFailures: [ParseFailure] = []
 
     var assessment: Assessment
     var history: HistoryState
@@ -319,13 +324,13 @@ final class DashboardModel {
                 // as they were when the pass started, live-derived ones keep moving
                 // (V2-HONEST-READINGS, A11).
                 let assessedReport = self.isCollectingReport ? self.lastCommittedReport : self.report
-                self.setAssessment(Assess.assess(report: assessedReport, live: self.live, memPressure: self.memPressure, topApps: self.topApps))
+                self.setAssessment(Assess.assess(report: assessedReport, live: self.live, memPressure: self.memPressure, topApps: self.topApps, wakeHolders: self.wakeHolders))
 
                 try? await Task.sleep(for: .seconds(AppSettings.shared.fastIntervalSeconds))
             }
         }
 
-        // Slow task (~6s): the process tables only (via `ps` + `top`).
+        // Slow task (~6s): the process tables and wake holders (via `ps` + `top` + `pmset`).
         // No setAssessment here — the next fast tick assesses with the new topApps.
         slowTask = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
@@ -344,11 +349,16 @@ final class DashboardModel {
                 let limit = AppSettings.shared.processListLimit
                 let procs = await CommandRunner.$qos.withValue(.utility) { await procBox.value.sampleProcesses(limit: limit) }
                 guard !Task.isCancelled else { return }
+                let wake = await CommandRunner.$qos.withValue(.utility) { await WakeHolders.sample() }
+                guard !Task.isCancelled else { return }
 
                 if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
                 if self.topMem != procs.topMem { self.topMem = procs.topMem }
                 if self.topApps != procs.topApps { self.topApps = procs.topApps }
                 if self.procParseFailures != procs.parseFailures { self.procParseFailures = procs.parseFailures }
+                if self.wakeHolders != wake.holders { self.wakeHolders = wake.holders }
+                let wakeFailures = wake.failure.map { [$0] } ?? []
+                if self.wakeParseFailures != wakeFailures { self.wakeParseFailures = wakeFailures }
 
                 try? await Task.sleep(for: .seconds(6))
             }
@@ -528,7 +538,7 @@ final class DashboardModel {
 
             self.report = final
             if let sys = final.system { self.lastKnownSystem = sys }
-            self.setAssessment(Assess.assess(report: final, live: self.live, memPressure: self.memPressure, topApps: self.topApps))
+            self.setAssessment(Assess.assess(report: final, live: self.live, memPressure: self.memPressure, topApps: self.topApps, wakeHolders: self.wakeHolders))
             self.smartToolsState = Self.recomputeSmartToolsState()
         }
     }
@@ -606,7 +616,7 @@ final class DashboardModel {
         if isCollectingReport {
             applyBackground(to: &lastCommittedReport)   // what the fast tick assesses mid-pass
             applyBackground(to: &report)                // display of the partial; NOT assessed
-            setAssessment(Assess.assess(report: lastCommittedReport, live: live, memPressure: memPressure, topApps: topApps))
+            setAssessment(Assess.assess(report: lastCommittedReport, live: live, memPressure: memPressure, topApps: topApps, wakeHolders: wakeHolders))
             // The pass commit calls applyBackground on `final`, so it picks this result up too.
         } else {
             applyBackground(to: &report)
@@ -614,7 +624,7 @@ final class DashboardModel {
             do { try ReportWriter.write(text: text, to: reportURL) }
             catch { lastError = L.errorReportWriteFailed(error.localizedDescription) }
             reportText = text                           // reportUpdatedAt unchanged: it is the pass time
-            setAssessment(Assess.assess(report: report, live: live, memPressure: memPressure, topApps: topApps))
+            setAssessment(Assess.assess(report: report, live: live, memPressure: memPressure, topApps: topApps, wakeHolders: wakeHolders))
         }
     }
 
@@ -830,7 +840,7 @@ final class DashboardModel {
                 await self.waitForReportRefreshToFinish()
                 guard !Task.isCancelled else { return }
                 self.report.security = s
-                self.setAssessment(Assess.assess(report: self.report, live: self.live, memPressure: self.memPressure, topApps: self.topApps))
+                self.setAssessment(Assess.assess(report: self.report, live: self.live, memPressure: self.memPressure, topApps: self.topApps, wakeHolders: self.wakeHolders))
             case .cancelled:
                 break
             case .failed:

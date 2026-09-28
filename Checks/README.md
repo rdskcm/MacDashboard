@@ -15,7 +15,7 @@ Every other file in this directory (`Models.swift`, `AppInfo.swift`, `AttentionM
 `LaunchdPlistInspector.swift`, `Formatting.swift`, `BarHitTest.swift`, `BatteryInspector.swift`,
 `Advice.swift`, `HistorySeries.swift`, `AIRedaction.swift`, `AIPayload.swift`,
 `AIRequest.swift`, `DirectoryAccess.swift`, `AppleScriptResult.swift`, `PrivilegedRunner.swift`,
-`ParsedCommands.swift`) is a **symlink** back into
+`ParsedCommands.swift`, `WakeHolders.swift`) is a **symlink** back into
 `../Sources/MacDashboard/...`. SwiftPM compiles whatever source files it finds under a
 target's `path`, following symlinks, so this target builds and tests the exact same pure
 engine source files the app itself ships — no copy-paste drift, no separate module to
@@ -30,7 +30,7 @@ script that copies the files in before each build instead of restructuring `Sour
 `ProcessSamplerChecks.swift`, `HistorySeriesChecks.swift`, `LaunchdPlistInspectorChecks.swift`,
 `AIRedactionChecks.swift`, `AIPayloadRequestChecks.swift`, `SudoPathSafetyChecks.swift`,
 `CommandRunnerExitChecks.swift`, `CommandRunnerCoreChecks.swift`, `ParserFixtureChecks.swift`,
-and `LiveCanary.swift` are real (non-symlinked) files, like `main.swift`.
+`WakeHoldersChecks.swift`, and `LiveCanary.swift` are real (non-symlinked) files, like `main.swift`.
 Swift executable targets only permit ONE file with top-level (script-mode) statements —
 `main.swift` owns that slot — so additional check files must instead define a plain
 function (`runSmartToolsAvailabilityChecks()`) that `main.swift` calls explicitly. Any

@@ -403,6 +403,7 @@ protocol AppStrings {
     func assessDiskFull(_ pct: String) -> String
     func assessDiskFullSoon(_ pct: String) -> String
     func assessMemPressure(critical: Bool, apps: [String]) -> String
+    func assessWakeHolders(_ entries: [String]) -> String
     func assessBatteryCapacityLow(_ cap: Int) -> String
     func assessBatteryCapacityWarn(_ cap: Int) -> String
     func assessBatteryConditionBad(_ cond: String) -> String
@@ -602,6 +603,10 @@ protocol AppStrings {
     func attnDetailCrashes(_ n: Int) -> String
     var attnLabelTimeMachine: String { get }
     var attnDetailTimeMachine: String { get }
+    var attnLabelWakeHolders: String { get }
+    func attnDetailWakeHolders(_ first: String, more: Int) -> String
+    func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String
+    func wakeHolderEntry(_ holder: String, _ age: String) -> String
     func attnLabelSmartErrors(_ title: String) -> String
     var attnDetailSmartErrors: String { get }
     func attnLabelSmartWear(_ title: String) -> String

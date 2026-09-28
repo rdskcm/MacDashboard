@@ -387,6 +387,10 @@ struct StringsEN: AppStrings {
         default: return head + " \(apps.dropLast().joined(separator: ", ")) and \(apps[apps.count - 1]) use the most memory — close what you are not using right now."
         }
     }
+    func assessWakeHolders(_ entries: [String]) -> String {
+        let head = entries.count == 1 ? "1 program is keeping the Mac awake" : "\(entries.count) programs are keeping the Mac awake"
+        return "\(head): \(entries.joined(separator: "; "))."
+    }
     func assessBatteryCapacityLow(_ cap: Int) -> String { "Battery capacity is \(cap)% of new — consider a replacement." }
     func assessBatteryCapacityWarn(_ cap: Int) -> String { "Battery capacity is \(cap)% — nearing the service threshold (80%)." }
     func assessBatteryConditionBad(_ cond: String) -> String { "Battery condition: \(cond) — worth a service check." }
@@ -584,6 +588,10 @@ struct StringsEN: AppStrings {
     func attnDetailCrashes(_ n: Int) -> String { "\(n) reports" }
     var attnLabelTimeMachine: String { "Time Machine" }
     var attnDetailTimeMachine: String { "not set up" }
+    var attnLabelWakeHolders: String { "Sleep" }
+    func attnDetailWakeHolders(_ first: String, more: Int) -> String { more > 0 ? "\(first), +\(more) more" : first }
+    func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String { "\(owner) (for \(requester))" }
+    func wakeHolderEntry(_ holder: String, _ age: String) -> String { "\(holder) — \(age)" }
     func attnLabelSmartErrors(_ title: String) -> String { title }
     var attnDetailSmartErrors: String { "SMART errors" }
     func attnLabelSmartWear(_ title: String) -> String { title }

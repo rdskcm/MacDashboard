@@ -37,6 +37,7 @@ Run the exact command for the directory you're adding to (from `ParsedCommand`):
 - `top`: `/usr/bin/top -l 1 -stats pid,command,mem`
 - `pmset-batt`: `/usr/bin/pmset -g batt`
 - `pmset-custom`: `/usr/bin/pmset -g custom`
+- `pmset-assertions`: `/usr/bin/pmset -g assertions`
 - `sp-power`: `/usr/sbin/system_profiler SPPowerDataType`
 - `sp-hardware`: `/usr/sbin/system_profiler -json SPHardwareDataType`
 - `uptime`: `/usr/bin/uptime`

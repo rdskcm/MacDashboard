@@ -394,6 +394,10 @@ struct StringsRU: AppStrings {
         default: return head + " Больше всего памяти занимают \(apps.dropLast().joined(separator: ", ")) и \(apps[apps.count - 1])" + tail
         }
     }
+    func assessWakeHolders(_ entries: [String]) -> String {
+        let n = entries.count
+        return "\(n) \(ruPlural(n, "программа не даёт", "программы не дают", "программ не дают")) Mac уснуть: \(entries.joined(separator: "; "))."
+    }
     func assessBatteryCapacityLow(_ cap: Int) -> String { "Ёмкость батареи \(cap)% от новой — думайте о замене." }
     func assessBatteryCapacityWarn(_ cap: Int) -> String { "Ёмкость батареи \(cap)% — ресурс подходит к сервисному порогу (80%)." }
     func assessBatteryConditionBad(_ cond: String) -> String { "Состояние батареи: \(cond) — загляните в сервис." }
@@ -591,6 +595,10 @@ struct StringsRU: AppStrings {
     func attnDetailCrashes(_ n: Int) -> String { "\(n) \(ruPlural(n, "отчёт", "отчёта", "отчётов"))" }
     var attnLabelTimeMachine: String { "Time Machine" }
     var attnDetailTimeMachine: String { "не настроена" }
+    var attnLabelWakeHolders: String { "Сон" }
+    func attnDetailWakeHolders(_ first: String, more: Int) -> String { more > 0 ? "\(first), ещё \(more)" : first }
+    func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String { "\(owner) (от \(requester))" }
+    func wakeHolderEntry(_ holder: String, _ age: String) -> String { "\(holder) — \(age)" }
     func attnLabelSmartErrors(_ title: String) -> String { title }
     var attnDetailSmartErrors: String { "ошибки SMART" }
     func attnLabelSmartWear(_ title: String) -> String { title }

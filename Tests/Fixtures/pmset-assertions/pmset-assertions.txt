@@ -1,0 +1,27 @@
+2026-09-28 14:51:02 +0300 
+Assertion status system-wide:
+   BackgroundTask                 0
+   ApplePushServiceTask           0
+   UserIsActive                   1
+   PreventUserIdleDisplaySleep    0
+   SoftwareUpdateTask             0
+   PreventSystemSleep             0
+   PreventSystemSleepSecurityIndicator 0
+   ExternalMedia                  0
+   PreventUserIdleSystemSleep     1
+   NetworkClientActive            0
+Listed by owning process:
+   pid 349(powerd): [0x000263b7000188b9] 00:29:43 PreventUserIdleSystemSleep named: "Powerd - Prevent sleep while display is on"  
+   pid 685(sharingd): [0x000268df00018945] 00:07:43 PreventUserIdleSystemSleep named: "Handoff"  
+   pid 94316(caffeinate): [0x00026a5200018973] 00:01:32 PreventUserIdleSystemSleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting for 300 secs
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+	Timeout will fire in 208 secs Action=TimeoutActionRelease
+   pid 67867(caffeinate): [0x00025789000185a4] 01:21:42 PreventUserIdleSystemSleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting on behalf of Process ID 67807
+	Created for PID: 67807. 
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+   pid 405(WindowServer): [0x000263b7000988b7] 00:00:31 UserIsActive named: "com.apple.iohideventsystem.queue.tickle serviceID:100000a06 service:AppleHIDKeyboardEventDriverV2 product:Apple Internal Keyboard / Trackpad eventType:3"  
+	Timeout will fire in 569 secs Action=TimeoutActionRelease
+Kernel Assertions: 0x100=MAGICWAKE
+   id=541  level=255 0x100=MAGICWAKE creat=  mod= description=en0 owner=IOSkywalkNetworkBSDClient
