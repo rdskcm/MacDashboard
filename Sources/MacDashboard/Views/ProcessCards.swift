@@ -505,7 +505,7 @@ private struct ProcessDetailView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .help(detail?.path ?? "")
+                            .hoverTip(detail?.path ?? "")
                     }
                 }
 

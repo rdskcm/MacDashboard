@@ -402,8 +402,7 @@ protocol AppStrings {
     // MARK: Assessment
     func assessDiskFull(_ pct: String) -> String
     func assessDiskFullSoon(_ pct: String) -> String
-    func assessSwapHighSerious(_ swap: String, _ compressed: String) -> String
-    func assessSwapHighWarn(_ swap: String, _ compressed: String) -> String
+    func assessMemPressure(critical: Bool, apps: [String]) -> String
     func assessBatteryCapacityLow(_ cap: Int) -> String
     func assessBatteryCapacityWarn(_ cap: Int) -> String
     func assessBatteryConditionBad(_ cond: String) -> String
@@ -583,7 +582,8 @@ protocol AppStrings {
     var attnLabelDiskFullSoon: String { get }
     func attnDetailDiskFullSoon(_ pct: String) -> String
     var attnLabelSwapHigh: String { get }
-    func attnDetailSwapHigh(_ swap: String, _ compressed: String) -> String
+    var attnDetailMemPressureWarn: String { get }
+    var attnDetailMemPressureCritical: String { get }
     var attnLabelBatteryCapacity: String { get }
     func attnDetailBatteryCapacity(_ cap: Int) -> String
     var attnLabelBatteryCondition: String { get }
@@ -618,7 +618,6 @@ protocol AppStrings {
     var attnVerbOpen: String { get }
 
     // Capsule objects + values + explanations.
-    var attnCapSwap: String { get }
     var attnCapBattery: String { get }
     func attnCapBatteryValue(_ p: Int) -> String
     var attnCapBrew: String { get }
@@ -627,7 +626,6 @@ protocol AppStrings {
     var attnCapDownloads: String { get }
     var attnCapTrash: String { get }
     var attnCapCaches: String { get }
-    var attnExplainSwap: String { get }
     var attnExplainBattery: String { get }
     var attnExplainBrew: String { get }
     var attnExplainSmart: String { get }

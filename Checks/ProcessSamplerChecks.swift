@@ -66,6 +66,39 @@ func runProcessSamplerChecks() {
         check(false, "psProcesses: pid 4321 (Google Chrome Helper) row present")
     }
 
+    // MARK: - Parsers.appBundleName / ProcessSampler.rankApps (TIPS-MEMORY)
+
+    if let chromeHelper = rows.first(where: { $0.pid == 4321 }) {
+        check(chromeHelper.appName == "Google Chrome", "psProcesses: pid 4321 appName == \"Google Chrome\"")
+    } else {
+        check(false, "psProcesses: pid 4321 (Google Chrome Helper) row present")
+    }
+    if let windowServer = rows.first(where: { $0.pid == 602 }) {
+        check(windowServer.appName == nil, "psProcesses: pid 602 (WindowServer) appName == nil")
+    } else {
+        check(false, "psProcesses: pid 602 (WindowServer) row present")
+    }
+    if let bash = rows.first(where: { $0.pid == 99999 }) {
+        check(bash.appName == nil, "psProcesses: pid 99999 (bash) appName == nil")
+    } else {
+        check(false, "psProcesses: pid 99999 (bash) row present")
+    }
+
+    check(Parsers.appBundleName(fromCommandPath: "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)") == "Google Chrome",
+          "appBundleName: outermost .app bundle wins, deep Chrome helper path")
+    check(Parsers.appBundleName(fromCommandPath: "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder") == nil,
+          "appBundleName: /System/Library/ path excluded (Finder)")
+    check(Parsers.appBundleName(fromCommandPath: "/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari") == "Safari",
+          "appBundleName: Safari cryptex path resolves to \"Safari\"")
+    check(Parsers.appBundleName(fromCommandPath: "/usr/libexec/foo") == nil,
+          "appBundleName: no .app component ⇒ nil")
+
+    check(ProcessSampler.rankApps([("B", 1), ("A", 5), ("B", 6), ("C", 1)], limit: 2) ==
+          [AppMemory(name: "B", bytes: 7), AppMemory(name: "A", bytes: 5)],
+          "rankApps: sums per app, largest first, tie ordered by name")
+    check(ProcessSampler.rankApps([("B", 1), ("A", 5), ("B", 6), ("C", 1)], limit: 10).count == 3,
+          "rankApps: limit larger than group count returns all groups")
+
     // [M1] regression guard: a basename far over the old 16-char threshold must come
     // through whole. `ps -o comm=` does not truncate, so nothing may mark it as if it did.
     let longNameRows = Parsers.psProcesses("  777      2048   0:00.10 /usr/libexec/AppleCredentialManagerDaemon")

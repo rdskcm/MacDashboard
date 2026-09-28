@@ -143,6 +143,10 @@ final class DashboardModel {
     private var lastCommittedReport = FullReport()
     /// ps/top output the parser rejected on the most recent process sample (R3-FIXTURES).
     private var procParseFailures: [ParseFailure] = []
+    /// The system's own memory-pressure verdict (TIPS-MEMORY), read on the fast tick.
+    private var memPressure: MemoryPressureLevel? = nil
+    /// Top apps by memory footprint, from the most recent process sample (TIPS-MEMORY).
+    private var topApps: [AppMemory] = []
 
     var assessment: Assessment
     var history: HistoryState
@@ -277,13 +281,14 @@ final class DashboardModel {
                 // collectFast() blocks briefly on syscalls — hop off the main actor for
                 // it, then resume back on the main actor (this Task inherited MainActor
                 // isolation from start(), so resuming the continuation lands here).
-                let (snap, socTempC): (LiveSnapshot, Int?) = await withCheckedContinuation { continuation in
+                let (snap, socTempC, pressure): (LiveSnapshot, Int?, MemoryPressureLevel?) = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .userInitiated).async {
                         let s = fastBox.value.collectFast()
                         // Block N7: same background hop — one HID pass costs ~50 ms.
                         let soc = ThermalSensors.socTemperature(
                             from: ThermalHIDReader.readTemperatureSensors())
-                        continuation.resume(returning: (s, soc.map { Int($0.rounded()) }))
+                        let pressure = LiveCollector.readMemoryPressure()
+                        continuation.resume(returning: (s, soc.map { Int($0.rounded()) }, pressure))
                     }
                 }
                 guard !Task.isCancelled else { return }
@@ -298,6 +303,7 @@ final class DashboardModel {
                 if self.disk    != snap.disk    { self.disk    = snap.disk }
                 if self.battery != snap.battery { self.battery = snap.battery }
                 if self.socTempC != socTempC { self.socTempC = socTempC }
+                if self.memPressure != pressure { self.memPressure = pressure }
                 self.lastSampleAt = snap.t
                 if let cpu = snap.cpu {
                     self.cpuHistory.append((snap.t, cpu.user + cpu.sys))
@@ -313,14 +319,14 @@ final class DashboardModel {
                 // as they were when the pass started, live-derived ones keep moving
                 // (V2-HONEST-READINGS, A11).
                 let assessedReport = self.isCollectingReport ? self.lastCommittedReport : self.report
-                self.setAssessment(Assess.assess(report: assessedReport, live: self.live))
+                self.setAssessment(Assess.assess(report: assessedReport, live: self.live, memPressure: self.memPressure, topApps: self.topApps))
 
                 try? await Task.sleep(for: .seconds(AppSettings.shared.fastIntervalSeconds))
             }
         }
 
-        // Slow task (~6s): the process tables only (via `ps` + `top`). No setAssessment here — the
-        // assessment depends only on disk/swap, which the fast task owns.
+        // Slow task (~6s): the process tables only (via `ps` + `top`).
+        // No setAssessment here — the next fast tick assesses with the new topApps.
         slowTask = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -341,6 +347,7 @@ final class DashboardModel {
 
                 if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
                 if self.topMem != procs.topMem { self.topMem = procs.topMem }
+                if self.topApps != procs.topApps { self.topApps = procs.topApps }
                 if self.procParseFailures != procs.parseFailures { self.procParseFailures = procs.parseFailures }
 
                 try? await Task.sleep(for: .seconds(6))
@@ -521,7 +528,7 @@ final class DashboardModel {
 
             self.report = final
             if let sys = final.system { self.lastKnownSystem = sys }
-            self.setAssessment(Assess.assess(report: final, live: self.live))
+            self.setAssessment(Assess.assess(report: final, live: self.live, memPressure: self.memPressure, topApps: self.topApps))
             self.smartToolsState = Self.recomputeSmartToolsState()
         }
     }
@@ -599,7 +606,7 @@ final class DashboardModel {
         if isCollectingReport {
             applyBackground(to: &lastCommittedReport)   // what the fast tick assesses mid-pass
             applyBackground(to: &report)                // display of the partial; NOT assessed
-            setAssessment(Assess.assess(report: lastCommittedReport, live: live))
+            setAssessment(Assess.assess(report: lastCommittedReport, live: live, memPressure: memPressure, topApps: topApps))
             // The pass commit calls applyBackground on `final`, so it picks this result up too.
         } else {
             applyBackground(to: &report)
@@ -607,7 +614,7 @@ final class DashboardModel {
             do { try ReportWriter.write(text: text, to: reportURL) }
             catch { lastError = L.errorReportWriteFailed(error.localizedDescription) }
             reportText = text                           // reportUpdatedAt unchanged: it is the pass time
-            setAssessment(Assess.assess(report: report, live: live))
+            setAssessment(Assess.assess(report: report, live: live, memPressure: memPressure, topApps: topApps))
         }
     }
 
@@ -698,6 +705,7 @@ final class DashboardModel {
 
             if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
             if self.topMem != procs.topMem { self.topMem = procs.topMem }
+            if self.topApps != procs.topApps { self.topApps = procs.topApps }
             if self.procParseFailures != procs.parseFailures { self.procParseFailures = procs.parseFailures }
         }
     }
@@ -822,7 +830,7 @@ final class DashboardModel {
                 await self.waitForReportRefreshToFinish()
                 guard !Task.isCancelled else { return }
                 self.report.security = s
-                self.setAssessment(Assess.assess(report: self.report, live: self.live))
+                self.setAssessment(Assess.assess(report: self.report, live: self.live, memPressure: self.memPressure, topApps: self.topApps))
             case .cancelled:
                 break
             case .failed:

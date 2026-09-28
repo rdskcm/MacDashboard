@@ -11,6 +11,8 @@
 // children) are excluded from the returned entries (SIZES-BACKGROUND).
 import Foundation
 
+struct AppMemory: Equatable { var name: String; var bytes: Int64 }
+
 final class ProcessSampler {
     /// pid -> cumulative CPU seconds at the previous snapshot.
     private var previousCPUSeconds: [Int32: Double] = [:]
@@ -20,6 +22,8 @@ final class ProcessSampler {
     static let primingWindow: TimeInterval = 0.6
     /// Failures seen during the most recent `sample()` (R3-FIXTURES).
     private(set) var lastParseFailures: [ParseFailure] = []
+    /// Top apps by summed footprint, from the most recent `sample()` (TIPS-MEMORY).
+    private(set) var lastTopApps: [AppMemory] = []
 
     /// One `/bin/ps` invocation, parsed. No sleep, and no per-pid work of any kind: the
     /// memory footprints come from ONE separate `/usr/bin/top` snapshot per tick
@@ -86,6 +90,7 @@ final class ProcessSampler {
     /// therefore a fresh sampler) per press.
     func sample() async -> [ProcEntry] {
         lastParseFailures = []
+        lastTopApps = []
         if previousAt == nil {
             let base = await snapshot()
             guard !base.isEmpty else { return [] }
@@ -119,6 +124,12 @@ final class ProcessSampler {
                       pid: r.pid)
         }
 
+        let excluded = own.union([getpid()])   // our own app is not advice material
+        lastTopApps = Self.rankApps(rows.compactMap { r in
+            guard !excluded.contains(r.pid), let app = r.appName else { return nil }
+            return (app: app, bytes: footprints[r.pid] ?? r.memBytes)
+        }, limit: 3)
+
         // Freshly built, not mutated in place — exited pids evaporate here instead
         // of leaking forever. `uniquingKeysWith` rather than `uniqueKeysWithValues`:
         // a duplicate pid in one snapshot must degrade, not trap the app
@@ -147,5 +158,14 @@ final class ProcessSampler {
             }
         }
         return found
+    }
+
+    /// Sums footprints per app, largest first (ties by name), first `limit`.
+    static func rankApps(_ samples: [(app: String, bytes: Int64)], limit: Int) -> [AppMemory] {
+        var totals: [String: Int64] = [:]
+        for s in samples { totals[s.app, default: 0] += s.bytes }
+        return Array(totals.map { AppMemory(name: $0.key, bytes: $0.value) }
+            .sorted { $0.bytes != $1.bytes ? $0.bytes > $1.bytes : $0.name < $1.name }
+            .prefix(limit))
     }
 }

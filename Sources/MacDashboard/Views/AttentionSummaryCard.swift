@@ -272,7 +272,8 @@ private struct ItemPlate: View {
             }
         }
         .contentShape(Rectangle())
-        .help(item.fullText)
+        .attentionTip(item.fullText)
+        .accessibilityHint(item.fullText)
         .pointingHandOnHover(isEnabled: interactive, hovering: $hovering)
         .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover, value: hovering)
         .onTapGesture {

@@ -384,8 +384,16 @@ struct StringsRU: AppStrings {
     // MARK: Assessment
     func assessDiskFull(_ pct: String) -> String { "Диск заполнен на \(pct)% — срочно освободите место." }
     func assessDiskFullSoon(_ pct: String) -> String { "Диск заполнен на \(pct)% — пора освобождать место." }
-    func assessSwapHighSerious(_ swap: String, _ compressed: String) -> String { "Нагрузка на память: \(swap) в Swap плюс \(compressed) сжато — памяти явно не хватает." }
-    func assessSwapHighWarn(_ swap: String, _ compressed: String) -> String { "Нагрузка на память: \(swap) в Swap плюс \(compressed) сжато — память впритык, закрывайте тяжёлые приложения." }
+    func assessMemPressure(critical: Bool, apps: [String]) -> String {
+        let head = critical ? "macOS сообщает, что оперативной памяти не хватает — Mac может замедляться."
+                            : "macOS сообщает, что свободной оперативной памяти мало."
+        let tail = " — закройте то, чем сейчас не пользуетесь."
+        switch apps.count {
+        case 0: return head + " Закройте приложения, которыми сейчас не пользуетесь."
+        case 1: return head + " Больше всего памяти занимает \(apps[0])" + tail
+        default: return head + " Больше всего памяти занимают \(apps.dropLast().joined(separator: ", ")) и \(apps[apps.count - 1])" + tail
+        }
+    }
     func assessBatteryCapacityLow(_ cap: Int) -> String { "Ёмкость батареи \(cap)% от новой — думайте о замене." }
     func assessBatteryCapacityWarn(_ cap: Int) -> String { "Ёмкость батареи \(cap)% — ресурс подходит к сервисному порогу (80%)." }
     func assessBatteryConditionBad(_ cond: String) -> String { "Состояние батареи: \(cond) — загляните в сервис." }
@@ -563,7 +571,8 @@ struct StringsRU: AppStrings {
     var attnLabelDiskFullSoon: String { "Диск" }
     func attnDetailDiskFullSoon(_ pct: String) -> String { "заполнен на \(pct) %" }
     var attnLabelSwapHigh: String { "Память" }
-    func attnDetailSwapHigh(_ swap: String, _ compressed: String) -> String { "\(swap) в Swap + \(compressed) сжато" }
+    var attnDetailMemPressureWarn: String { "памяти мало" }
+    var attnDetailMemPressureCritical: String { "памяти не хватает" }
     var attnLabelBatteryCapacity: String { "Батарея" }
     func attnDetailBatteryCapacity(_ cap: Int) -> String { "ёмкость \(cap) %" }
     var attnLabelBatteryCondition: String { "Батарея" }
@@ -596,7 +605,6 @@ struct StringsRU: AppStrings {
     var attnVerbUpgrade: String { "Обновить" }
     var attnVerbOpen: String { "Открыть" }
 
-    var attnCapSwap: String { "Память" }
     var attnCapBattery: String { "Батарея" }
     func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
     var attnCapBrew: String { "Homebrew" }
@@ -605,7 +613,6 @@ struct StringsRU: AppStrings {
     var attnCapDownloads: String { "Загрузки" }
     var attnCapTrash: String { "Корзина" }
     var attnCapCaches: String { "Кэши" }
-    var attnExplainSwap: String { "Система сжимает память и выгружает её на диск. Откроется «Мониторинг системы» — вкладка «Память» покажет, какие процессы её занимают." }
     var attnExplainBattery: String { "Ёмкость снижается естественным образом со временем. Откроются системные настройки батареи; ничего не изменится без вашего подтверждения." }
     var attnExplainBrew: String { "Запустит `brew upgrade` в фоне — прогресс виден в карточке Homebrew. Установленные пакеты заменяются на свежие версии." }
     var attnExplainSmart: String { "Откроет «Дисковую утилиту». У внешних дисков SMART-атрибуты часто недоступны через USB — это не признак поломки." }

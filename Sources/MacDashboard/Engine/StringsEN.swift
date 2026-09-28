@@ -378,8 +378,15 @@ struct StringsEN: AppStrings {
     // MARK: Assessment
     func assessDiskFull(_ pct: String) -> String { "Disk is \(pct)% full — free up space now." }
     func assessDiskFullSoon(_ pct: String) -> String { "Disk is \(pct)% full — time to free up some space." }
-    func assessSwapHighSerious(_ swap: String, _ compressed: String) -> String { "Memory pressure: \(swap) in swap plus \(compressed) compressed — memory is clearly insufficient." }
-    func assessSwapHighWarn(_ swap: String, _ compressed: String) -> String { "Memory pressure: \(swap) in swap plus \(compressed) compressed — memory is tight, close heavy apps." }
+    func assessMemPressure(critical: Bool, apps: [String]) -> String {
+        let head = critical ? "macOS reports that memory is running out — the Mac may slow down."
+                            : "macOS reports that free memory is running low."
+        switch apps.count {
+        case 0: return head + " Close apps you are not using right now."
+        case 1: return head + " \(apps[0]) uses the most memory — close what you are not using right now."
+        default: return head + " \(apps.dropLast().joined(separator: ", ")) and \(apps[apps.count - 1]) use the most memory — close what you are not using right now."
+        }
+    }
     func assessBatteryCapacityLow(_ cap: Int) -> String { "Battery capacity is \(cap)% of new — consider a replacement." }
     func assessBatteryCapacityWarn(_ cap: Int) -> String { "Battery capacity is \(cap)% — nearing the service threshold (80%)." }
     func assessBatteryConditionBad(_ cond: String) -> String { "Battery condition: \(cond) — worth a service check." }
@@ -557,7 +564,8 @@ struct StringsEN: AppStrings {
     var attnLabelDiskFullSoon: String { "Disk" }
     func attnDetailDiskFullSoon(_ pct: String) -> String { "\(pct) % full" }
     var attnLabelSwapHigh: String { "Memory" }
-    func attnDetailSwapHigh(_ swap: String, _ compressed: String) -> String { "\(swap) swap + \(compressed) compressed" }
+    var attnDetailMemPressureWarn: String { "running low" }
+    var attnDetailMemPressureCritical: String { "running out" }
     var attnLabelBatteryCapacity: String { "Battery" }
     func attnDetailBatteryCapacity(_ cap: Int) -> String { "capacity \(cap) %" }
     var attnLabelBatteryCondition: String { "Battery" }
@@ -590,7 +598,6 @@ struct StringsEN: AppStrings {
     var attnVerbUpgrade: String { "Upgrade" }
     var attnVerbOpen: String { "Open" }
 
-    var attnCapSwap: String { "Memory" }
     var attnCapBattery: String { "Battery" }
     func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
     var attnCapBrew: String { "Homebrew" }
@@ -599,7 +606,6 @@ struct StringsEN: AppStrings {
     var attnCapDownloads: String { "Downloads" }
     var attnCapTrash: String { "Trash" }
     var attnCapCaches: String { "Caches" }
-    var attnExplainSwap: String { "The system is compressing memory and paging it to disk. Opens Activity Monitor — the Memory tab shows which processes are using it." }
     var attnExplainBattery: String { "Capacity drops naturally over time. Opens the system Battery settings; nothing changes without your confirmation." }
     var attnExplainBrew: String { "Runs `brew upgrade` in the background — progress shows in the Homebrew card. Installed packages are replaced with newer versions." }
     var attnExplainSmart: String { "Opens Disk Utility. External drives often can't expose SMART attributes over USB — that is not a sign of failure." }

@@ -5,6 +5,21 @@
 
 import Foundation
 
+/// macOS memory-pressure level as `kern.memorystatus_vm_pressure_level` reports it
+/// (the DISPATCH_MEMORYPRESSURE_* values; the signal behind Activity Monitor's graph).
+enum MemoryPressureLevel: Equatable {
+    case normal, warn, critical
+    /// 1 → normal, 2 → warn, 4 → critical; any other value → nil (unknown, never guessed).
+    init?(sysctlValue: Int32) {
+        switch sysctlValue {
+        case 1: self = .normal
+        case 2: self = .warn
+        case 4: self = .critical
+        default: return nil
+        }
+    }
+}
+
 enum Assess {
     private static let GIB: Int64 = 1 << 30
 
@@ -27,7 +42,15 @@ enum Assess {
     /// 80 % on modern Mac notebooks); 800 is 80 % of that life.
     private static let batteryEarlyWearCycles = 800
 
-    static func assess(report: FullReport, live: LiveSnapshot) -> Assessment {
+    static func memoryPressureSeverity(_ level: MemoryPressureLevel?) -> Severity? {
+        switch level {
+        case .warn: return .warn
+        case .critical: return .serious
+        case .normal, nil: return nil
+        }
+    }
+
+    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = []) -> Assessment {
         var a = Assessment()
         // Paired with its `Problem` so the final sort keeps `items` in lockstep
         // with `problems` (see §3 of the v2 attention spec — parity is structural,
@@ -59,24 +82,17 @@ enum Assess {
             }
         }
 
-        // --- memory pressure (swap + compressed pages, relative to installed RAM) ---
-        if let swap = live.swap, let mem = live.mem, mem.total > 0, swap.used > 0 {
-            let reclaimed = swap.used + mem.compressor
-            if reclaimed >= mem.total / 4 {
-                a.swapSev = .serious
-                let action = AdviceAction.openApp(AdviceApps.activityMonitor)
-                let text = L.assessSwapHighSerious(fmt(swap.used), fmt(mem.compressor))
-                pairs.append((Problem(sev: .serious, text: text, action: action),
-                               AttentionItem(kind: .swapHigh, sev: .serious, label: L.attnLabelSwapHigh,
-                                             detail: L.attnDetailSwapHigh(fmt(swap.used), fmt(mem.compressor)), fullText: text,
-                                             verb: verb(action), action: action)))
-            } else if reclaimed >= mem.total / 8 {
-                a.swapSev = .warn
-                let action = AdviceAction.openApp(AdviceApps.activityMonitor)
-                tips.append(Tip(text: L.assessSwapHighWarn(fmt(swap.used), fmt(mem.compressor)), action: action))
-                capsules.append(TipCapsule(object: L.attnCapSwap, value: fmt(reclaimed), verb: verb(action),
-                                            explanation: L.attnExplainSwap, action: action))
-            }
+        // --- memory pressure (TIPS-MEMORY): the SYSTEM's verdict only. Swap/compressed
+        // size is not a shortage signal on modern macOS; an unreadable level stays silent.
+        if let sev = memoryPressureSeverity(memPressure) {
+            a.swapSev = sev
+            let action = AdviceAction.openApp(AdviceApps.activityMonitor)
+            let text = L.assessMemPressure(critical: sev == .serious,
+                                           apps: topApps.map { "\($0.name) (\(fmt($0.bytes)))" })
+            pairs.append((Problem(sev: sev, text: text, action: action),
+                          AttentionItem(kind: .swapHigh, sev: sev, label: L.attnLabelSwapHigh,
+                                        detail: sev == .serious ? L.attnDetailMemPressureCritical : L.attnDetailMemPressureWarn,
+                                        fullText: text, verb: verb(action), action: action)))
         }
 
         // --- battery (report merge wins; falls back to live) ---
