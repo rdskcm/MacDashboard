@@ -53,11 +53,11 @@ final class LiveCollector {
     // background read mutates shared bookkeeping. The caller now reads the setting on
     // the main actor and passes the value in, which also stops the collector reaching
     // into global UI state at all.
-    func sampleProcesses(limit: Int) async -> (topCPU: [ProcEntry], topMem: [ProcEntry], parseFailures: [ParseFailure]) {
+    func sampleProcesses(limit: Int) async -> (topCPU: [ProcEntry], topMem: [ProcEntry], topApps: [AppMemory], parseFailures: [ParseFailure]) {
         let procs = await procSampler.sample()
         let topCPU = Array(procs.rankedByCPU().prefix(limit)).reranked()
         let topMem = Array(procs.rankedByMem().prefix(limit)).reranked()
-        return (topCPU, topMem, procSampler.lastParseFailures)
+        return (topCPU, topMem, procSampler.lastTopApps, procSampler.lastParseFailures)
     }
 
     // Full snapshot: composed from the two halves above so existing callers (and the
@@ -157,6 +157,15 @@ final class LiveCollector {
         return SwapInfo(total: Int64(xsw.xsu_total),
                         used: Int64(xsw.xsu_used),
                         free: Int64(xsw.xsu_avail))
+    }
+
+    // MARK: - memory pressure (sysctl kern.memorystatus_vm_pressure_level)
+
+    static func readMemoryPressure() -> MemoryPressureLevel? {
+        var level: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0) == 0 else { return nil }
+        return MemoryPressureLevel(sysctlValue: level)
     }
 
     // MARK: - disk (volume resource values; Data volume, fall back to root)

@@ -577,57 +577,54 @@ func swapLive(usedBytes: Int64, ramTotal: Int64 = 16 * GIB, compressor: Int64 = 
     live.mem = memFixture(total: ramTotal, compressor: compressor)
     return live
 }
+func memItem(_ a: Assessment) -> AttentionItem? { a.items.first { $0.kind == .swapHigh } }
 
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 5 * GIB))
-    check(a.problems.contains { $0.sev == .serious && $0.text.contains("Swap") }, "assess swap 5GiB@16GiB RAM: serious problem")
+    check(MemoryPressureLevel(sysctlValue: 1) == .normal, "MemoryPressureLevel: 1 -> normal")
+    check(MemoryPressureLevel(sysctlValue: 2) == .warn, "MemoryPressureLevel: 2 -> warn")
+    check(MemoryPressureLevel(sysctlValue: 4) == .critical, "MemoryPressureLevel: 4 -> critical")
+    check(MemoryPressureLevel(sysctlValue: 0) == nil, "MemoryPressureLevel: 0 -> nil")
+    check(MemoryPressureLevel(sysctlValue: 3) == nil, "MemoryPressureLevel: 3 -> nil")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: Int64(2.5 * Double(GIB))))
-    check(a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
-          "assess swap 2.5GiB@16GiB RAM: tip, not a problem")
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 5 * GIB, ramTotal: 8 * GIB, compressor: 2 * GIB))
+    check(memItem(a) == nil && a.swapSev == .good && !a.capsules.contains { $0.object == "Память" },
+          "assess with no memPressure: no item, swapSev good, no capsule (R5)")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 100 * MIB))
-    check(!a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
-          "assess swap 100MiB: nothing")
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 5 * GIB, ramTotal: 8 * GIB, compressor: 2 * GIB), memPressure: .normal)
+    check(memItem(a) == nil && a.swapSev == .good, "assess with .normal pressure: no item, swapSev good (R4)")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 3 * GIB, ramTotal: 8 * GIB))
-    check(a.problems.contains { $0.sev == .serious && $0.text.contains("Swap") },
-          "assess swap 3GiB@8GiB RAM: serious problem (R6)")
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .warn)
+    check(memItem(a)?.sev == .warn && a.swapSev == .warn, "assess with .warn pressure, no swap: warn item (R4)")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 3 * GIB, ramTotal: 16 * GIB))
-    check(a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
-          "assess swap 3GiB@16GiB RAM: tip, no problem (R6)")
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .critical)
+    check(memItem(a)?.sev == .serious && a.swapSev == .serious, "assess with .critical pressure: serious item")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 3 * GIB, ramTotal: 64 * GIB))
-    check(!a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
-          "assess swap 3GiB@64GiB RAM: silent (R6)")
+    let apps = [AppMemory(name: "Google Chrome", bytes: 3 * GIB), AppMemory(name: "Telegram", bytes: GIB)]
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .critical, topApps: apps)
+    let expected = "Google Chrome (\(ReportWriter.fmtBytes(3 * GIB))) и Telegram (\(ReportWriter.fmtBytes(GIB)))"
+    check(memItem(a)?.fullText.contains(expected) == true, "assess mem pressure text names top apps with sizes (R6)")
+    let id1 = memItem(a)?.id
+    let apps2 = [AppMemory(name: "Google Chrome", bytes: 3 * GIB), AppMemory(name: "Telegram", bytes: 2 * GIB)]
+    let a2 = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .critical, topApps: apps2)
+    check(memItem(a2)?.id == id1, "assess mem pressure item id stable across size changes (R7)")
+    check(memItem(a)?.detail.contains("Swap") != true && memItem(a)?.detail.contains("сжат") != true,
+          "assess mem pressure detail has no swap/compressed mention (R7)")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 960 * MIB, ramTotal: 16 * GIB, compressor: Int64(1.3 * Double(GIB))))
-    check(a.tips.contains { $0.text.contains("Swap") },
-          "assess swap 960MiB + 1.3GiB compressed@16GiB RAM: tip (R4, observed case)")
+    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .warn, topApps: [])
+    check(memItem(a)?.fullText.contains("Закройте приложения") == true, "assess mem pressure, 0 apps: generic instruction")
+    let a1 = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .warn,
+                            topApps: [AppMemory(name: "Google Chrome", bytes: GIB)])
+    check(a1.items.first { $0.kind == .swapHigh }?.fullText.contains("занимает ") == true,
+          "assess mem pressure, 1 app: singular sentence")
 }
 do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 960 * MIB, ramTotal: 16 * GIB, compressor: 0))
-    check(!a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
-          "assess swap 960MiB, no compressor@16GiB RAM: nothing (R4, compressed input load-bearing)")
-}
-do {
-    let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0, ramTotal: 16 * GIB, compressor: 8 * GIB))
-    check(!a.tips.contains { $0.text.contains("Swap") } && !a.problems.contains { $0.text.contains("Swap") },
-          "assess swap 0 used, 8GiB compressed: nothing (R5, no swap gate)")
-}
-do {
-    var live = LiveSnapshot()
-    live.swap = SwapInfo(total: 8 * GIB, used: 5 * GIB, free: 3 * GIB)
-    let a = Assess.assess(report: FullReport(), live: live)
-    check(!a.problems.contains { $0.text.contains("Swap") } && !a.tips.contains { $0.text.contains("Swap") },
-          "assess swap 5GiB, mem == nil: nothing (R7)")
+    check(LiveCollector.readMemoryPressure() != nil, "readMemoryPressure: sysctl readable on this Mac")
 }
 
 func batteryReport(maxCapacity: Int?, condition: String? = nil, cycles: Int? = nil) -> FullReport {
@@ -2114,8 +2111,8 @@ do {
         L10nStore.shared.language = lang
         let (reportFull, liveFull) = attnFullBadFixture(diskPct: 0.94)   // -> diskFull
         let (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.80)   // -> diskFullSoon
-        let itemsFull = Assess.assess(report: reportFull, live: liveFull).items
-        let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon).items
+        let itemsFull = Assess.assess(report: reportFull, live: liveFull, memPressure: .critical).items
+        let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon, memPressure: .critical).items
         let allItems = itemsFull + itemsSoon
         let kinds = Set(allItems.map(\.kind))
         check(kinds.count == AttentionKind.allCases.count, "AttentionModel coverage (\(lang)): all \(AttentionKind.allCases.count) AttentionKind cases produced (got \(kinds.count))")
@@ -2151,7 +2148,7 @@ do {
     L10nStore.shared.language = .ru
 
     let (report, live) = attnMegaBadFixture()
-    let a = Assess.assess(report: report, live: live)
+    let a = Assess.assess(report: report, live: live, memPressure: .critical)
 
     // 6. Verb rule.
     for item in a.items {

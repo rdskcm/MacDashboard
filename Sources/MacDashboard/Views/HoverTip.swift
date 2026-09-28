@@ -102,9 +102,11 @@ private let attnTipEnterDuration: Double = 0.14
 /// including the unspecified-width query `fittingSize` uses — so `Text` is forced to
 /// really wrap at that width during the very same measurement pass that computes the
 /// height. `contentWidth` below is that fixed width, precomputed once per `show()` as
-/// `min(natural single-line width, attnTipContentMaxWidth)` so short texts still hug
-/// their content instead of always rendering a full max-width bubble.
-private struct AttentionTipBubble: View {
+/// the width of the text as wrapped at `attnTipContentMaxWidth` (see `attnTipContentWidth(for:)`)
+/// so short texts still hug their content instead of always rendering a full max-width bubble.
+///
+/// Internal only so tools/harness can render it.
+struct AttentionTipBubble: View {
     let text: String
     let contentWidth: CGFloat
     let reduceMotion: Bool
@@ -137,19 +139,22 @@ private struct AttentionTipBubble: View {
     }
 }
 
-/// The natural (unwrapped, single-line) width of `text` at the bubble's font/padding,
-/// clamped to `attnTipContentMaxWidth`. Feeding this in as `AttentionTipBubble.contentWidth`
-/// is what makes short texts hug their content instead of always spanning the full max
-/// width — see the doc comment on `AttentionTipBubble` for why a *measured fixed* width
-/// is required at all.
-private func attnTipContentWidth(for text: String) -> CGFloat {
-    let probe = NSHostingView(rootView:
+/// Width of the bubble content: the text laid out by SwiftUI at a width-CONSTRAINED
+/// proposal (`attnTipContentMaxWidth`, padding included), so a wrapping text reports the
+/// width of its longest wrapped line, not the max width — the bubble hugs the text on
+/// both sides (TIPS-MEMORY). Same font, lineSpacing and padding as `AttentionTipBubble`.
+/// Measured on a detached probe; the result only sizes a separate NSPanel, so no view's
+/// own size is fed back into its container (`no-measured-size-feedback`).
+/// Internal (not private) so the render harness can call it.
+func attnTipContentWidth(for text: String) -> CGFloat {
+    let probe = NSHostingController(rootView:
         Text(text)
             .font(.system(size: 12))
+            .lineSpacing(12 * 0.4)
             .padding(.horizontal, attnTipHorizontalPadding).padding(.vertical, attnTipVerticalPadding)
-            .fixedSize()
     )
-    return min(probe.fittingSize.width, attnTipContentMaxWidth)
+    let size = probe.sizeThatFits(in: CGSize(width: attnTipContentMaxWidth, height: .greatestFiniteMagnitude))
+    return min(ceil(size.width), attnTipContentMaxWidth)
 }
 
 /// Owns the floating NSPanel and its lifecycle. Created once per HoverTipModifier

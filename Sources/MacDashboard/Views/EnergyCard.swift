@@ -303,7 +303,8 @@ struct EnergyCard: View {
             reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.rainbowHover,
             value: resetHovering
         )
-        .help(L.energyResetHelp)
+        .hoverTip(L.energyResetHelp)
+        .accessibilityHint(L.energyResetHelp)
         .accessibilityLabel(L.energyResetToDefaults)
     }
 

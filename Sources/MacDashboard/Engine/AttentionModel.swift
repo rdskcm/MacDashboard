@@ -9,7 +9,9 @@ import Foundation
 /// The 14 attention conditions the v2 model recognizes, in the fixed order the
 /// spec assigns them (also the order `Assess.assess` evaluates their branches).
 enum AttentionKind: String, CaseIterable {
-    case diskFull, diskFullSoon, swapHigh, batteryCapacity, batteryCondition, fileVaultOff,
+    case diskFull, diskFullSoon,
+         swapHigh, // memory pressure (name kept for id stability)
+         batteryCapacity, batteryCondition, fileVaultOff,
          gatekeeperOff, sipOff, firewallOff, updates, crashes, timeMachine, smartErrors, smartWear
 }
 

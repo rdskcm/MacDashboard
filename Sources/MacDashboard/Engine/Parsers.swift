@@ -24,6 +24,7 @@ enum Parsers {
         var memBytes: Int64     // RSS as `ps` printed it — NOT the footprint the UI shows;
                                 // ProcessSampler substitutes `top`'s MEM column (all pids)
                                 // and keeps this only for a row `top` didn't report
+        var appName: String? = nil   // outermost user-closable .app bundle (appBundleName)
     }
 
     /// Parses `/bin/ps -axww -o pid=,rss=,time=,comm=` output (no header line — the
@@ -39,7 +40,7 @@ enum Parsers {
                   let secs = psCPUSeconds(fields[2]) else { continue }
             let name = psCommandName(fields[3])
             guard !name.isEmpty else { continue }
-            rows.append(PSRow(pid: pid, name: name, cpuSeconds: secs, memBytes: rssKB * 1024))
+            rows.append(PSRow(pid: pid, name: name, cpuSeconds: secs, memBytes: rssKB * 1024, appName: appBundleName(fromCommandPath: fields[3])))
         }
         return rows
     }
@@ -104,6 +105,20 @@ enum Parsers {
     /// which hard-truncated COMMAND at 16 characters and needed a trailing "…" to say
     /// so. Visual overflow is the row's job — `.lineLimit(1).truncationMode(.tail)`,
     /// `ProcessCards.swift:344-348` (V2-RELEASE re-review [M1]).
+    /// Name of the OUTERMOST `.app` bundle in a `ps -o comm=` path, without ".app" —
+    /// "Google Chrome" for every Chrome helper — or nil when the path is not absolute, has no
+    /// `.app` component, or lives under /System/Library/ (Finder, Dock, loginwindow: OS parts,
+    /// not apps the user decides to close). /System/Applications (Mail) and the Safari
+    /// cryptex path stay in.
+    static func appBundleName(fromCommandPath raw: String) -> String? {
+        let path = raw.trimmingCharacters(in: .whitespaces)
+        guard path.hasPrefix("/"), !path.hasPrefix("/System/Library/") else { return nil }
+        for component in path.split(separator: "/") where component.hasSuffix(".app") && component.count > 4 {
+            return String(component.dropLast(4))
+        }
+        return nil
+    }
+
     private static func psCommandName(_ raw: String) -> String {
         var trimmed = raw.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("(") && trimmed.hasSuffix(")") && trimmed.count >= 2 {
