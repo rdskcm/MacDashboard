@@ -11,10 +11,11 @@ pixel_tolerance 24
 default 0.5
 
 # main-dark and main-light overrides are set from the run-to-run noise
-# measurement in Verification step 6 (rule: max(1.0, 2 x max observed main-*
-# pct), rounded up to 0.5). Measured 2026-09-24 on this bench Mac (macOS
-# 27.0, 1280x741 pt visible frame, 1150x682 pt main window): two consecutive
-# positive runs (same window size) gave main-dark 0.92 %, main-light 0.59 %.
-# max(1.0, 2 x 0.92) = 1.84, rounded up to 0.5 -> 2.0.
-main-dark 2.0
-main-light 2.0
+# measurement (rule: max(1.0, 2 x max observed main-* pct), rounded up to 0.5).
+# Since VISUAL-COVERAGE the main window runs on the fixed dataset
+# (-visualFixture 1), so live numbers no longer enter the capture. Measured
+# 2026-09-28 on this bench Mac (macOS 27.0): the second run right after bless
+# (out/20260928-191418) gave 0.00 % for every state, main-* and main-report-*
+# included. max(1.0, 2 x 0.00) = 1.0. main-report-* stay on the default 0.5.
+main-dark 1.0
+main-light 1.0
