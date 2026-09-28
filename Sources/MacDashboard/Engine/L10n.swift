@@ -295,6 +295,11 @@ protocol AppStrings {
     var historyMetricYLabelCycles: String { get }
     var historyMetricYLabelSwap: String { get }
     var historyMetricInsufficientData: String { get }
+    var historyRangeMonth: String { get }
+    var historyRangeQuarter: String { get }
+    var historyRangeYear: String { get }
+    var historyRangeAll: String { get }
+    var historyRangeA11y: String { get }
     func historyGbValue(_ n: Int) -> String
     var historyInfoDate: String { get }
     var historyInfoDiskFree: String { get }

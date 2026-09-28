@@ -275,6 +275,11 @@ struct StringsRU: AppStrings {
     var historyMetricYLabelCycles: String { "циклы" }
     var historyMetricYLabelSwap: String { "ГБ" }
     var historyMetricInsufficientData: String { "Недостаточно данных для графика по этому показателю" }
+    var historyRangeMonth: String { "Месяц" }
+    var historyRangeQuarter: String { "3 мес" }
+    var historyRangeYear: String { "Год" }
+    var historyRangeAll: String { "Всё" }
+    var historyRangeA11y: String { "Период графика истории" }
     func historyGbValue(_ n: Int) -> String { "\(n) ГБ" }
     var historyInfoDate: String { "Дата — один снимок в день (хранятся все дни)" }
     var historyInfoDiskFree: String { "Диск занято / Свободно — данные и свободное место на системном томе" }

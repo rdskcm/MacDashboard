@@ -271,6 +271,11 @@ struct StringsEN: AppStrings {
     var historyMetricYLabelCycles: String { "cycles" }
     var historyMetricYLabelSwap: String { "GB" }
     var historyMetricInsufficientData: String { "Not enough data for this metric's chart" }
+    var historyRangeMonth: String { "Month" }
+    var historyRangeQuarter: String { "3 mo" }
+    var historyRangeYear: String { "Year" }
+    var historyRangeAll: String { "All" }
+    var historyRangeA11y: String { "History chart period" }
     func historyGbValue(_ n: Int) -> String { "\(n) GB" }
     var historyInfoDate: String { "Date — one snapshot per day (every day is kept)" }
     var historyInfoDiskFree: String { "Disk used / Free — data and free space on the system volume" }

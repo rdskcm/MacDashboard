@@ -2,7 +2,7 @@
 // Block H: pure-logic checks for HistorySeries (metric series extraction, swap
 // string parsing/formatting). Real file (not a symlink) — main.swift owns the
 // single top-level-statements slot, so this exposes a plain function it calls
-// (see README.md).
+// (see README.md). HISTORY-RANGE: range windows + chart point cap.
 
 import Foundation
 
@@ -62,7 +62,7 @@ func runHistorySeriesChecks() {
     check(HistorySeries.formattedSwap(nil) == "—", "formattedSwap: nil ⇒ em dash")
     check(HistorySeries.formattedSwap("garbage") == "—", "formattedSwap: unparseable ⇒ em dash")
 
-    // MARK: last30Range
+    // MARK: dateRange (HistoryRange windows)
 
     let dayFmt: DateFormatter = {
         let df = DateFormatter()
@@ -84,40 +84,65 @@ func runHistorySeriesChecks() {
         thirtyDays.append(makeEntry(dayFmt.string(from: cursor)))
         cursor = Calendar.current.date(byAdding: .day, value: 1, to: cursor)!
     }
-    if let range = HistorySeries.last30Range(thirtyDays) {
-        let lastDate = dayFmt.date(from: thirtyDays.last!.date)!
-        let expectedStart = Calendar.current.date(byAdding: .day, value: -29, to: lastDate)!
-        check(range.upperBound == lastDate, "last30Range: ≥30 entries, no gaps ⇒ end == last entry date")
-        check(range.lowerBound == expectedStart, "last30Range: ≥30 entries, no gaps ⇒ start == last date − 29 days")
-    } else {
-        check(false, "last30Range: ≥30 entries, no gaps ⇒ non-nil")
-    }
 
-    // Fewer than 30 entries (existing 3-entry `fixture`) ⇒ still computed, not nil.
-    if let range = HistorySeries.last30Range(fixture) {
-        let lastDate = dayFmt.date(from: fixture.last!.date)!
-        let expectedStart = Calendar.current.date(byAdding: .day, value: -29, to: lastDate)!
-        check(range.upperBound == lastDate, "last30Range: <30 entries ⇒ end == last entry date")
-        check(range.lowerBound == expectedStart, "last30Range: <30 entries ⇒ start == last date − 29 days (calendar-based, not entry-count-based)")
-    } else {
-        check(false, "last30Range: <30 entries ⇒ non-nil")
-    }
-
-    // Empty entries array ⇒ nil.
-    check(HistorySeries.last30Range([]) == nil, "last30Range: empty entries ⇒ nil")
-
-    // Gap in dates ⇒ range still spans exactly 30 calendar days ending on last entry's date.
+    // Gap in dates ⇒ range still spans exactly N calendar days ending on last entry's date.
     let gapFixture: [MacHistoryEntry] = [
         makeEntry("2026-07-01"),
         makeEntry("2026-07-03"),   // gap: 07-02 skipped
         makeEntry("2026-07-10"),
     ]
-    if let range = HistorySeries.last30Range(gapFixture) {
-        let lastDate = dayFmt.date(from: "2026-07-10")!
-        let expectedStart = Calendar.current.date(byAdding: .day, value: -29, to: lastDate)!
-        check(range.upperBound == lastDate, "last30Range: gap in dates ⇒ end == last entry date")
-        check(range.lowerBound == expectedStart, "last30Range: gap in dates ⇒ start == last date − 29 days")
-    } else {
-        check(false, "last30Range: gap in dates ⇒ non-nil")
+
+    // .month reproduces the former last30Range exactly; .quarter/.year use the
+    // same calendar-day arithmetic. Anchor is always the last entry's date.
+    let windows: [(HistoryRange, Int)] = [(.month, 30), (.quarter, 90), (.year, 365)]
+    for (range, days) in windows {
+        for (name, entries) in [("≥30 entries, no gaps", thirtyDays), ("<30 entries", fixture), ("gap in dates", gapFixture)] {
+            if let window = HistorySeries.dateRange(entries, range) {
+                let lastDate = dayFmt.date(from: entries.last!.date)!
+                let expectedStart = Calendar.current.date(byAdding: .day, value: -(days - 1), to: lastDate)!
+                check(window.upperBound == lastDate, "dateRange(.\(range)): \(name) ⇒ end == last entry date")
+                check(window.lowerBound == expectedStart, "dateRange(.\(range)): \(name) ⇒ start == last date − \(days - 1) days")
+            } else {
+                check(false, "dateRange(.\(range)): \(name) ⇒ non-nil")
+            }
+        }
     }
+    check(HistorySeries.dateRange(thirtyDays, .all) == nil, "dateRange(.all): no window ⇒ nil")
+    for r in HistoryRange.allCases {
+        check(HistorySeries.dateRange([], r) == nil, "dateRange([], .\(r)): empty entries ⇒ nil")
+    }
+    check(HistorySeries.dateRange([makeEntry("not-a-date")], .month) == nil,
+          "dateRange: unparseable last date ⇒ nil")
+    check(HistoryRange.allCases == [.month, .quarter, .year, .all],
+          "HistoryRange: case order == segment order Месяц · 3 мес · Год · Всё")
+
+    // Window membership over a 400-day unbroken run: each window holds exactly
+    // its day count, Всё holds everything.
+    let runStart = dayFmt.date(from: "2025-01-01")!
+    let longRun: [MacHistoryEntry] = (0..<400).map { i in
+        makeEntry(dayFmt.string(from: Calendar.current.date(byAdding: .day, value: i, to: runStart)!))
+    }
+    let memberships: [(HistoryRange, Int)] = [(.month, 30), (.quarter, 90), (.year, 365), (.all, 400)]
+    for (range, expected) in memberships {
+        let inWindow = HistorySeries.dateRange(longRun, range).map { w in
+            longRun.filter { w.contains(dayFmt.date(from: $0.date)!) }.count
+        } ?? longRun.count
+        check(inWindow == expected, "dateRange(.\(range)): 400-day run ⇒ \(expected) entries in window, got \(inWindow)")
+    }
+
+    // MARK: thinned / maxChartPoints
+
+    check(HistorySeries.maxChartPoints >= 365, "maxChartPoints ≥ a full Год window, so only Всё is ever thinned")
+    let big = Array(0..<1000)
+    let thin = HistorySeries.thinned(big, maxCount: 365)
+    check(thin.count == 365, "thinned: 1000 → exactly maxCount")
+    check(thin.first == 0 && thin.last == 999, "thinned: first and last kept")
+    check(zip(thin, thin.dropFirst()).allSatisfy { $0 < $1 }, "thinned: strictly increasing — order kept, no duplicates")
+    check(HistorySeries.thinned(Array(0..<365), maxCount: 365) == Array(0..<365), "thinned: count == maxCount ⇒ unchanged")
+    let justOver = HistorySeries.thinned(Array(0..<366), maxCount: 365)
+    check(justOver.count == 365 && justOver.first == 0 && justOver.last == 365
+          && zip(justOver, justOver.dropFirst()).allSatisfy { $0 < $1 },
+          "thinned: maxCount + 1 ⇒ maxCount, ends kept, no duplicates")
+    check(HistorySeries.thinned([Int](), maxCount: 365).isEmpty, "thinned: empty ⇒ empty")
+    check(HistorySeries.thinned([1, 2, 3], maxCount: 1) == [1, 2, 3], "thinned: maxCount < 2 ⇒ unchanged")
 }
