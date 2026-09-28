@@ -38,7 +38,8 @@ final class HistoryStore {
     }
 
     /// Upsert TODAY's MacHistoryEntry from report+live (replace same-date entry),
-    /// cap 60 (drop oldest), set last_run. Pure in-memory mutation — call save()
+    /// keep every other day (no cap — the history runs from the first day the app ran),
+    /// keep entries sorted by date, set last_run. Pure in-memory mutation — call save()
     /// afterward to persist.
     func upsertToday(from report: FullReport, live: LiveSnapshot) {
         let today = Self.dayFormatter.string(from: Date())
@@ -78,7 +79,7 @@ final class HistoryStore {
 
         state.mac_history.removeAll { $0.date == today }
         state.mac_history.append(entry)
-        Self.sortAndCap(&state.mac_history)
+        state.mac_history.sort { $0.date < $1.date }   // "yyyy-MM-dd" sorts chronologically as text
         state.last_run = today
     }
 
@@ -98,7 +99,7 @@ final class HistoryStore {
         let outData = try JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys])
 
         let dir = url.deletingLastPathComponent()
-        // 0700/0600, same reasoning as ReportWriter.write: this file is a 60-day series of
+        // 0700/0600, same reasoning as ReportWriter.write: this file is a day-by-day series of
         // the machine's disk/battery/memory state and sits next to the report.
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
@@ -110,13 +111,6 @@ final class HistoryStore {
     }
 
     // MARK: - Helpers
-
-    private static func sortAndCap(_ entries: inout [MacHistoryEntry]) {
-        entries.sort { $0.date < $1.date }   // "yyyy-MM-dd" sorts chronologically as text
-        if entries.count > 60 {
-            entries.removeFirst(entries.count - 60)
-        }
-    }
 
     private static func roundedGiB(_ bytes: Int64) -> Int {
         Int((Double(bytes) / 1_073_741_824.0).rounded())   // ÷ 2^30

@@ -276,7 +276,7 @@ struct StringsRU: AppStrings {
     var historyMetricYLabelSwap: String { "ГБ" }
     var historyMetricInsufficientData: String { "Недостаточно данных для графика по этому показателю" }
     func historyGbValue(_ n: Int) -> String { "\(n) ГБ" }
-    var historyInfoDate: String { "Дата — один снимок в день (хранится до 60 дней)" }
+    var historyInfoDate: String { "Дата — один снимок в день (хранятся все дни)" }
     var historyInfoDiskFree: String { "Диск занято / Свободно — данные и свободное место на системном томе" }
     var historyInfoBattery: String { "Батарея — максимальная ёмкость в % от новой (здоровье батареи), не текущий заряд" }
     var historyInfoCycles: String { "Циклы — счётчик циклов перезарядки" }

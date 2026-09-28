@@ -2913,6 +2913,47 @@ do {
         check(v21PosixMode(dir.path) == 0o700, "HistoryStore.save: directory remains 0700")
     }
 
+    // Case 4: HistoryStore keeps every day — no entry cap (HISTORY-UNCAP)
+    do {
+        let dir = root.appendingPathComponent("uncap/MacDashboard", isDirectory: true)
+        let file = dir.appendingPathComponent("mac_check_state.json")
+        var utcCal = Calendar(identifier: .gregorian)
+        utcCal.timeZone = TimeZone(identifier: "UTC")!
+        let dayFmt = DateFormatter()
+        dayFmt.dateFormat = "yyyy-MM-dd"
+        dayFmt.locale = Locale(identifier: "en_US_POSIX")
+        dayFmt.timeZone = utcCal.timeZone
+        let start = utcCal.date(from: DateComponents(year: 2020, month: 1, day: 1))!
+        // 70 past days, 2020-01-01 ... 2020-03-10, written newest-first to exercise the sort.
+        let seeded: [[String: Any]] = (0..<70).reversed().map { i in
+            ["date": dayFmt.string(from: utcCal.date(byAdding: .day, value: i, to: start)!), "cycles": i]
+        }
+        let legacy: [String: Any] = ["last_run": "2020-03-10", "mac_history": seeded, "nvme_history": [1, 2, 3]]
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: legacy).write(to: file)
+
+            let store = HistoryStore(url: file)
+            check(store.load().mac_history.count == 70, "HistoryStore.load: 70 seeded entries decoded")
+            store.upsertToday(from: FullReport(), live: LiveSnapshot())
+            store.upsertToday(from: FullReport(), live: LiveSnapshot())   // same day again ⇒ replace, not append
+            let h = store.state.mac_history
+            check(h.count == 71, "HistoryStore.upsertToday: 70 past days + today ⇒ 71 entries kept (no cap), got \(h.count)")
+            check(h.first?.date == "2020-01-01", "HistoryStore.upsertToday: oldest day survives")
+            check(h.map(\.date) == h.map(\.date).sorted(), "HistoryStore.upsertToday: entries sorted by date")
+            check(h.last?.date == store.state.last_run, "HistoryStore.upsertToday: today is the last entry")
+
+            try store.save()
+            let reloaded = HistoryStore(url: file).load()
+            check(reloaded.mac_history.count == 71, "HistoryStore.save→load: all 71 entries persisted")
+            check(reloaded.mac_history.first?.date == "2020-01-01", "HistoryStore.save→load: oldest day persisted")
+            let rawObj = (try? JSONSerialization.jsonObject(with: Data(contentsOf: file))) as? [String: Any]
+            check((rawObj?["nvme_history"] as? [Int]) == [1, 2, 3], "HistoryStore.save: unknown legacy key nvme_history passes through")
+        } catch {
+            check(false, "HistoryStore uncap check: temp file setup/save failed (\(error))")
+        }
+    }
+
     // Block B: N5 (stdout cap at outputCap with lineBufferCap enforcement)
     let collector = LockedLines()
     let result = runCommand("/bin/sh", ["-c", "head -c 9000000 /dev/zero | tr '\\0' 'x'"],
