@@ -1,6 +1,8 @@
 // Engine/BatteryInspector.swift
-// Parses `ioreg -rc AppleSmartBattery -a` (the AppleSmartBattery IOKit service, as
-// XML plist) into a typed BatteryDetail. Foundation only — this file is also
+// Parses `ioreg -r -c AppleSmartBattery -a -l` (the AppleSmartBattery IOKit service and
+// its child entries, as XML plist) into a typed BatteryDetail. `-l` is required: macOS 27
+// moved several keys off the AppleSmartBattery entry into child entries, whose
+// properties ioreg prints only with -l. Foundation only — this file is also
 // compiled into the Checks target.
 import Foundation
 
@@ -78,7 +80,7 @@ enum BatteryInspector {
     /// for "unknown" (not a real 1092-hour estimate).
     private static let unknownTimeMinutes = 65535
 
-    /// Pure parser: plist data from `ioreg -rc AppleSmartBattery -a` → BatteryDetail.
+    /// Pure parser: plist data from `ioreg -r -c AppleSmartBattery -a -l` → BatteryDetail.
     /// Returns nil if the data isn't a plist array whose first element is a dict.
     static func parse(_ plistData: Data) -> BatteryDetail? {
         guard let raw = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil),
@@ -95,13 +97,23 @@ enum BatteryInspector {
             powerW = nil
         }
 
-        let temperatureC = (dict["Temperature"] as? Int).map { Double($0) / 100 }
+        // macOS 27 keeps these keys on child entries (printed only with `ioreg -l`):
+        // AppleSmartBatteryPack's BatteryData has the capacities, Temperature and
+        // LifetimeData; each AppleSmartBatteryBank has one CellVoltage; AppleChargerData
+        // has the full ChargerData. Every field reads the pre-27 top-level location first.
+        let children = dict["IORegistryEntryChildren"] as? [[String: Any]] ?? []
+        let pack = child(children, ofClass: "AppleSmartBatteryPack")
+        let packData = pack?["BatteryData"] as? [String: Any]
+        let childChargerData = child(children, ofClass: "AppleChargerData")?["ChargerData"] as? [String: Any]
+
+        let temperatureC = ((dict["Temperature"] as? Int) ?? (packData?["Temperature"] as? Int))
+            .map { Double($0) / 100 }
 
         let batteryData = dict["BatteryData"] as? [String: Any]
-        let cellVoltagesMV = (batteryData?["CellVoltage"] as? [Int]) ?? []
+        let cellVoltagesMV = (batteryData?["CellVoltage"] as? [Int]) ?? bankCellVoltages(pack)
 
-        let maxCapacityMAh = dict["AppleRawMaxCapacity"] as? Int
-        let designCapacityMAh = dict["DesignCapacity"] as? Int
+        let maxCapacityMAh = (dict["AppleRawMaxCapacity"] as? Int) ?? (packData?["AppleRawMaxCapacity"] as? Int)
+        let designCapacityMAh = (dict["DesignCapacity"] as? Int) ?? (packData?["DesignCapacity"] as? Int)
         let healthPercent: Int?
         if let maxCap = maxCapacityMAh, let designCap = designCapacityMAh, designCap != 0 {
             healthPercent = Int((Double(maxCap) / Double(designCap) * 100).rounded())
@@ -121,15 +133,15 @@ enum BatteryInspector {
             fullyCharged: dict["FullyCharged"] as? Bool ?? false,
             timeToEmptyMin: unknownTimeFiltered(dict["AvgTimeToEmpty"] as? Int),
             timeToFullMin: unknownTimeFiltered(dict["AvgTimeToFull"] as? Int),
-            currentCapacityMAh: dict["AppleRawCurrentCapacity"] as? Int,
+            currentCapacityMAh: (dict["AppleRawCurrentCapacity"] as? Int) ?? (packData?["AppleRawCurrentCapacity"] as? Int),
             maxCapacityMAh: maxCapacityMAh,
             designCapacityMAh: designCapacityMAh,
             cycleCount: dict["CycleCount"] as? Int,
             designCycleCount: dict["DesignCycleCount9C"] as? Int,
             healthPercent: healthPercent,
             adapter: adapterInfo(from: dict["AdapterDetails"] as? [String: Any]),
-            charger: chargerInfo(from: dict["ChargerData"] as? [String: Any]),
-            lifetime: lifetimeInfo(from: batteryData?["LifetimeData"] as? [String: Any])
+            charger: chargerInfo(from: dict["ChargerData"] as? [String: Any], fallback: childChargerData),
+            lifetime: lifetimeInfo(from: (batteryData?["LifetimeData"] as? [String: Any]) ?? (packData?["LifetimeData"] as? [String: Any]))
         )
 
         detail.serial = dict["Serial"] as? String
@@ -150,7 +162,7 @@ enum BatteryInspector {
 
     /// App path: runs ioreg and parses. Returns nil if battery service missing.
     static func collect() async -> BatteryDetail? {
-        guard let out = await CommandRunner.run("/usr/sbin/ioreg", ["-r", "-c", "AppleSmartBattery", "-a"], timeout: 5).text else {
+        guard let out = await CommandRunner.run("/usr/sbin/ioreg", ["-r", "-c", "AppleSmartBattery", "-a", "-l"], timeout: 5).text else {
             return nil
         }
         guard var detail = parse(Data(out.utf8)) else { return nil }
@@ -212,15 +224,33 @@ enum BatteryInspector {
         )
     }
 
-    private static func chargerInfo(from dict: [String: Any]?) -> BatteryChargerInfo? {
-        guard let dict else { return nil }
+    /// `primary` is the top-level ChargerData; `fallback` is the AppleChargerData child's
+    /// ChargerData (macOS 27 keeps only some keys at the top level). Per key, primary wins.
+    /// nil only when both are absent.
+    private static func chargerInfo(from primary: [String: Any]?, fallback: [String: Any]?) -> BatteryChargerInfo? {
+        guard primary != nil || fallback != nil else { return nil }
+        func int(_ key: String) -> Int? { (primary?[key] as? Int) ?? (fallback?[key] as? Int) }
         return BatteryChargerInfo(
-            chargingVoltageMV: dict["ChargingVoltage"] as? Int,
-            chargingCurrentMA: dict["ChargingCurrent"] as? Int,
-            notChargingReason: dict["NotChargingReason"] as? Int,
-            slowChargingReason: dict["SlowChargingReason"] as? Int,
-            timeChargingThermallyLimited: dict["TimeChargingThermallyLimited"] as? Int
+            chargingVoltageMV: int("ChargingVoltage"),
+            chargingCurrentMA: int("ChargingCurrent"),
+            notChargingReason: int("NotChargingReason"),
+            slowChargingReason: int("SlowChargingReason"),
+            timeChargingThermallyLimited: int("TimeChargingThermallyLimited")
         )
+    }
+
+    /// First entry of an `IORegistryEntryChildren` array whose `IOObjectClass` is `cls`.
+    private static func child(_ children: [[String: Any]], ofClass cls: String) -> [String: Any]? {
+        children.first { $0["IOObjectClass"] as? String == cls }
+    }
+
+    /// macOS 27: `BatteryData.CellVoltage` of every AppleSmartBatteryBank under the Pack,
+    /// in registry order. All-or-nothing: [] if there are no banks or any bank lacks one.
+    private static func bankCellVoltages(_ pack: [String: Any]?) -> [Int] {
+        let banks = (pack?["IORegistryEntryChildren"] as? [[String: Any]] ?? [])
+            .filter { $0["IOObjectClass"] as? String == "AppleSmartBatteryBank" }
+        let volts = banks.compactMap { ($0["BatteryData"] as? [String: Any])?["CellVoltage"] as? Int }
+        return volts.count == banks.count ? volts : []
     }
 
     private static func lifetimeInfo(from dict: [String: Any]?) -> BatteryLifetimeInfo? {

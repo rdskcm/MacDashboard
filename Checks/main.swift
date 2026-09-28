@@ -1277,6 +1277,125 @@ do {
 }
 
 // =====================================================================
+// MARK: - BatteryInspector (macOS 27 layout: keys on child entries, V27-BATTERY)
+// =====================================================================
+
+// Trimmed from a real `ioreg -r -c AppleSmartBattery -a -l` capture on macOS 27
+// (charging, 45W adapter). Serial is a placeholder; binary blobs are synthetic.
+// On macOS 27 the top-level entry has no Temperature / AppleRawMaxCapacity /
+// AppleRawCurrentCapacity / DesignCapacity, its BatteryData has no CellVoltage or
+// LifetimeData, and its ChargerData has no ChargingCurrent / ChargingVoltage.
+func battery27Bank(_ bankID: Int, _ cellMV: Int?) -> [String: Any] {
+    var data: [String: Any] = ["LifetimeData": ["TimeAtHighSoc": Data([0, 0, 0, 0])]]
+    if let cellMV { data["CellVoltage"] = cellMV }
+    return ["IOObjectClass": "AppleSmartBatteryBank", "BankID": bankID, "BatteryData": data]
+}
+
+func battery27Fixture(banks: [[String: Any]]) -> [String: Any] {
+    let pack: [String: Any] = [
+        "IOObjectClass": "AppleSmartBatteryPack",
+        "BatteryData": [
+            "AppleRawCurrentCapacity": 2106,
+            "AppleRawMaxCapacity": 3899,
+            "DesignCapacity": 4563,
+            "Temperature": 2789,
+            "VirtualTemperature": 2789,
+            "LifetimeData": [
+                "AverageTemperature": 259,
+                "CycleCountLastQmax": 364,
+                "MaximumChargeCurrent": 5345,
+                "MaximumDischargeCurrent": -3001,
+                "MaximumPackVoltage": 13321,
+                "MaximumTemperature": 44,
+                "MinimumPackVoltage": 9335,
+                "MinimumTemperature": 10,
+                "Raw": Data([0, 0, 0, 0, 0, 0, 0, 0]),
+                "TotalOperatingTime": 21969,
+                "UpdateTime": 1790591672
+            ] as [String: Any]
+        ] as [String: Any],
+        "IORegistryEntryChildren": banks
+    ]
+    let chargerChild: [String: Any] = [
+        "IOObjectClass": "AppleChargerData",
+        "ChargerData": ["ChargingCurrent": 4055, "ChargingVoltage": 4216, "NotChargingReason": 0,
+                        "SlowChargingReason": 0, "TimeChargingThermallyLimited": 0]
+    ]
+    return [
+        "IOObjectClass": "AppleSmartBattery",
+        "Amperage": 2889,
+        "Voltage": 12294,
+        "CurrentCapacity": 55,
+        "CycleCount": 364,
+        "DesignCycleCount9C": 1000,
+        "ExternalConnected": true,
+        "IsCharging": true,
+        "FullyCharged": false,
+        "AvgTimeToEmpty": 65535,
+        "AvgTimeToFull": 84,
+        "Serial": "X0X00000ABC00XXXX",
+        "BatteryData": ["CurrentCapacity": 55, "DesignCapacity": 4563, "FullChargeCapacity": 3899,
+                        "RemainingCapacity": 2106],
+        "ChargerData": ["IsCharging": 1, "NotChargingReason": 0, "SlowChargingReason": 0,
+                        "TimeChargingThermallyLimited": 0],
+        "IORegistryEntryChildren": [pack, chargerChild]
+    ]
+}
+
+func battery27Plist(_ entry: [String: Any]) -> Data {
+    try! PropertyListSerialization.data(fromPropertyList: [entry], format: .xml, options: 0)
+}
+
+do {
+    let banks = [battery27Bank(0, 4093), battery27Bank(1, 4097), battery27Bank(2, 4103)]
+    let d27 = BatteryInspector.parse(battery27Plist(battery27Fixture(banks: banks)))
+    check(d27 != nil, "BatteryInspector macOS 27: fixture parses")
+    let d = d27!
+    check(d.voltageMV == 12294 && d.amperageMA == 2889 && d.percent == 55 && d.cycleCount == 364 && d.isCharging,
+          "BatteryInspector macOS 27: top-level fields unchanged")
+    check(d.temperatureC == 27.89, "BatteryInspector macOS 27: temperatureC from Pack == 27.89")
+    check(d.maxCapacityMAh == 3899 && d.designCapacityMAh == 4563 && d.currentCapacityMAh == 2106
+          && d.healthPercent == 85,
+          "BatteryInspector macOS 27: capacity/health from Pack")
+    check(d.cellVoltagesMV == [4093, 4097, 4103], "BatteryInspector macOS 27: cellVoltagesMV from Banks")
+    check(d.lifetime == BatteryLifetimeInfo(maxTemperatureC: 44, minTemperatureC: 10, avgTemperatureC: 25.9,
+                                            maxChargeCurrentMA: 5345, maxDischargeCurrentMA: -3001,
+                                            maxPackVoltageMV: 13321, minPackVoltageMV: 9335,
+                                            totalOperatingTimeH: 21969),
+          "BatteryInspector macOS 27: lifetime from Pack")
+    check(d.charger?.chargingCurrentMA == 4055 && d.charger?.chargingVoltageMV == 4216
+          && d.charger?.notChargingReason == 0,
+          "BatteryInspector macOS 27: charger from AppleChargerData child")
+
+    // Lookup order: a pre-27 top-level value wins over the child value.
+    var both = battery27Fixture(banks: banks)
+    both["Temperature"] = 3044
+    both["AppleRawMaxCapacity"] = 3977
+    both["ChargerData"] = ["ChargingCurrent": 570, "NotChargingReason": 128]
+    let dBoth = BatteryInspector.parse(battery27Plist(both))
+    check(dBoth?.temperatureC == 30.44 && dBoth?.maxCapacityMAh == 3977 && dBoth?.designCapacityMAh == 4563,
+          "BatteryInspector macOS 27: top-level value wins over Pack, missing top-level key falls through")
+    check(dBoth?.charger?.chargingCurrentMA == 570 && dBoth?.charger?.notChargingReason == 128
+          && dBoth?.charger?.chargingVoltageMV == 4216,
+          "BatteryInspector macOS 27: ChargerData per key — top-level wins, missing key from child")
+
+    // All-or-nothing cells: one bank without CellVoltage ⇒ [].
+    let partial = [battery27Bank(0, 4093), battery27Bank(1, nil), battery27Bank(2, 4103)]
+    check(BatteryInspector.parse(battery27Plist(battery27Fixture(banks: partial))).map { $0.cellVoltagesMV == [] } ?? false,
+          "BatteryInspector macOS 27: a bank without CellVoltage ⇒ cellVoltagesMV == []")
+}
+
+do {
+    // Live: on a Mac with a battery, the real ioreg output must yield the fields macOS 27
+    // moved into child entries. Skipped on battery-less machines (CI runners).
+    let live = hasBattery ? runAsyncBlocking { await BatteryInspector.collect() } : nil
+    check(!hasBattery || (live?.maxCapacityMAh != nil && live?.designCapacityMAh != nil
+                          && live?.temperatureC != nil && live?.lifetime != nil
+                          && live?.cellVoltagesMV.isEmpty == false),
+          "smoke BatteryInspector: live collect() has capacity/temperature/lifetime/cells (or no battery on this machine)")
+}
+
+// =====================================================================
 // MARK: - BatteryInspector (battery passport: serial / manufacturer / mfg date)
 // =====================================================================
 
