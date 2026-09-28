@@ -31,11 +31,20 @@ struct HistoryCard: View {
     @State private var histInfo = false
 
     // Which series the chart above the table currently plots.
-    @State private var metric: HistoryMetric = .disk
+    @State private var metric: HistoryMetric
 
     // Chart range (Месяц · 3 мес · Год · Всё). Not persisted, like every other
     // card segment; default Месяц = the 30-day window this chart always had.
-    @State private var range: HistoryRange = .month
+    @State private var range: HistoryRange
+
+    /// `initialMetric`/`initialRange` are default-valued only for the visual
+    /// baseline's offscreen content render (VISUAL-COVERAGE): every real call
+    /// site keeps using the implicit `.disk`/`.month` defaults.
+    init(model: DashboardModel, initialMetric: HistoryMetric = .disk, initialRange: HistoryRange = .month) {
+        self.model = model
+        _metric = State(initialValue: initialMetric)
+        _range = State(initialValue: initialRange)
+    }
 
     // Table collapse — the Disk card's home-folder pattern verbatim (FoldersCard in
     // StorageCards.swift: `homeShowAll` + `prefix(10)` + `MoreLessToggle`), same

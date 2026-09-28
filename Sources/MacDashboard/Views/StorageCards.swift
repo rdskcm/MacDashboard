@@ -119,13 +119,21 @@ private struct DirBarList: View {
     }
 }
 
-private enum FolderTab: Hashable { case home, service }
+enum FolderTab: Hashable { case home, service }
 
 @MainActor
 struct FoldersCard: View {
     let model: DashboardModel
-    @State private var folderTab: FolderTab = .home
+    @State private var folderTab: FolderTab
     @State private var homeShowAll = false
+
+    /// `initialTab` is default-valued only for the visual baseline's offscreen
+    /// content render (VISUAL-COVERAGE): every real call site keeps using the
+    /// implicit `.home` default.
+    init(model: DashboardModel, initialTab: FolderTab = .home) {
+        self.model = model
+        _folderTab = State(initialValue: initialTab)
+    }
     private var home: String { NSHomeDirectory() }
 
     private var homeDirs: [DirSize] { model.report.homeDirs ?? [] }

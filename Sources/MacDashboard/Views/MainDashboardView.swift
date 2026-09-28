@@ -84,7 +84,12 @@ struct MainDashboardView: View {
             // Anchored immediately after the title at a fixed gap (spacing: 16 above) —
             // this control's x position must never depend on window width. All slack
             // and all shrink pressure live to its right, past the flexible Spacer below.
-            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab, size: .tabs) { t in
+            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab, size: .tabs, identifier: { t in
+                switch t {
+                case .overview: return "main-tab-overview"
+                case .report: return "main-tab-report"
+                }
+            }) { t in
                 switch t {
                 case .overview: return L.mainTabOverview
                 case .report: return L.mainTabReport

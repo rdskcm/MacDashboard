@@ -1990,6 +1990,12 @@ do {
 runHistorySeriesChecks()
 
 // =====================================================================
+// MARK: - VisualFixture (Block VISUAL-COVERAGE, in VisualFixtureChecks.swift)
+// =====================================================================
+
+runVisualFixtureChecks()
+
+// =====================================================================
 // MARK: - AI assistant redaction (Block AI, in AIRedactionChecks.swift)
 // =====================================================================
 

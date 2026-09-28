@@ -55,10 +55,19 @@ func harnessRender<Content: View>(width: CGFloat = 460, to path: String? = nil,
         .padding(20)
         .frame(width: width)
         .background(Color(nsColor: .windowBackgroundColor))
+        .transaction { $0.disablesAnimations = true }
 
     let hosting = NSHostingView(rootView: rootView)
     let fitting = hosting.fittingSize
     hosting.frame = NSRect(x: 0, y: 0, width: max(fitting.width, width), height: max(fitting.height, 100))
+    hosting.layoutSubtreeIfNeeded()
+
+    // Settle before capture: let a measured-thumb control (DSSlidingSegmented's
+    // `onGeometryChange`) and Charts finish their layout pass before we re-measure
+    // and cache — otherwise an offscreen render can catch the thumb/chart mid-layout.
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0))
+    let settledFitting = hosting.fittingSize
+    hosting.frame = NSRect(x: 0, y: 0, width: max(settledFitting.width, width), height: max(settledFitting.height, 100))
     hosting.layoutSubtreeIfNeeded()
 
     guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {

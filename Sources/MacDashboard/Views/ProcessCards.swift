@@ -71,7 +71,16 @@ private func cpuGaugeColor(_ fraction: Double) -> Color {
 struct ProcessListCard: View {
     let model: DashboardModel
 
-    @State private var procMetric: Metric = .cpu
+    @State private var procMetric: Metric
+
+    /// `initialMetric` is default-valued only for the visual baseline's offscreen
+    /// content render (VISUAL-COVERAGE): every real call site keeps using the
+    /// implicit `.cpu` default.
+    init(model: DashboardModel, initialMetric: Metric = .cpu) {
+        self.model = model
+        _procMetric = State(initialValue: initialMetric)
+    }
+
     // Single-expansion accordion: expanding one row collapses any other.
     // Switching metric also collapses it — the accordion never carries a PID
     // from the other list.
