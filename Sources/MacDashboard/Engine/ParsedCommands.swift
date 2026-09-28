@@ -12,6 +12,7 @@ enum ParsedCommand: String, CaseIterable {
     case top
     case pmsetBatt = "pmset-batt"
     case pmsetCustom = "pmset-custom"
+    case pmsetAssertions = "pmset-assertions"
     case spPower = "sp-power"
     case spHardware = "sp-hardware"
     case uptime
@@ -29,7 +30,7 @@ enum ParsedCommand: String, CaseIterable {
         switch self {
         case .ps: return "/bin/ps"
         case .top: return "/usr/bin/top"
-        case .pmsetBatt, .pmsetCustom: return "/usr/bin/pmset"
+        case .pmsetBatt, .pmsetCustom, .pmsetAssertions: return "/usr/bin/pmset"
         case .spPower, .spHardware: return "/usr/sbin/system_profiler"
         case .uptime: return "/usr/bin/uptime"
         case .tmutilDestinationInfo: return "/usr/bin/tmutil"
@@ -49,6 +50,7 @@ enum ParsedCommand: String, CaseIterable {
         case .top: return ["-l", "1", "-stats", "pid,command,mem"]
         case .pmsetBatt: return ["-g", "batt"]
         case .pmsetCustom: return ["-g", "custom"]
+        case .pmsetAssertions: return ["-g", "assertions"]
         case .spPower: return ["SPPowerDataType"]
         case .spHardware: return ["-json", "SPHardwareDataType"]
         case .uptime: return []
@@ -66,7 +68,7 @@ enum ParsedCommand: String, CaseIterable {
         case .ps: return 5
         case .spPower, .spHardware: return 25
         case .top, .tmutilDestinationInfo, .diskutilInfo, .smartctl: return 15
-        case .pmsetBatt, .pmsetCustom, .uptime, .fdesetup, .spctl, .csrutil, .socketfilterfw: return 10
+        case .pmsetBatt, .pmsetCustom, .pmsetAssertions, .uptime, .fdesetup, .spctl, .csrutil, .socketfilterfw: return 10
         }
     }
 
@@ -104,6 +106,7 @@ enum ParsedCommand: String, CaseIterable {
         case .spctl: return Parsers.gatekeeperStatus(stdout) != nil
         case .csrutil: return Parsers.sipStatus(stdout) != nil
         case .socketfilterfw: return Parsers.firewallStatus(stdout) != nil
+        case .pmsetAssertions: return WakeHolders.parseAssertions(stdout) != nil
         }
     }
 
