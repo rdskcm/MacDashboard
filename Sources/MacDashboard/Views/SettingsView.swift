@@ -470,9 +470,9 @@ struct SettingsView: View {
             DSSlidingSegmented(
                 options: AppSettings.allowedIntervals,
                 selection: $settings.fastIntervalSeconds,
-                size: .settingsInterval
+                size: .settingsInterval,
+                groupLabel: L.settingsIntervalLabel
             ) { s in L.settingsIntervalOption(s) }
-            .accessibilityLabel(L.settingsIntervalLabel)
 
             HStack(alignment: .center, spacing: 8) {
                 Circle()
@@ -505,9 +505,9 @@ struct SettingsView: View {
                 DSSlidingSegmented(
                     options: AppSettings.allowedProcessLimits,
                     selection: $settings.processListLimit,
-                    size: .settingsInterval
+                    size: .settingsInterval,
+                    groupLabel: L.settingsProcessLimitLabel
                 ) { n in L.settingsProcessLimitOption(n) }
-                .accessibilityLabel(L.settingsProcessLimitLabel)
 
                 Spacer(minLength: 0)
 

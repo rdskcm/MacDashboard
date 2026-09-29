@@ -80,10 +80,10 @@ struct HistoryCard: View {
     // (fresh instance mounts pre-selected instead of sliding; see FoldersCard's
     // segmentedControl note in StorageCards.swift for the reference precedent).
     private var metricControl: some View {
-        DSSlidingSegmented(options: HistoryMetric.allCases, selection: $metric) { m in
+        DSSlidingSegmented(options: HistoryMetric.allCases, selection: $metric,
+                           groupLabel: L.historyMetricA11y) { m in
             label(for: m)
         }
-        .accessibilityLabel(L.historyMetricA11y)
     }
 
     // The range switch sits ABOVE the `points.count < 2` branch in `chart`
@@ -93,10 +93,10 @@ struct HistoryCard: View {
     // applies to the chart only; `range` itself is card state, so it survives
     // a trip to the table and back.
     private var rangeControl: some View {
-        DSSlidingSegmented(options: HistoryRange.allCases, selection: $range) { r in
+        DSSlidingSegmented(options: HistoryRange.allCases, selection: $range,
+                           groupLabel: L.historyRangeA11y) { r in
             rangeLabel(for: r)
         }
-        .accessibilityLabel(L.historyRangeA11y)
     }
 
     private var metricYLabel: String {

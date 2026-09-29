@@ -364,11 +364,36 @@ private struct DSOptionalAXIdentifier: ViewModifier {
     }
 }
 
+/// Makes the control one AX container labelled `label` (the group name
+/// VoiceOver announces on entry) while each segment keeps its own label.
+/// Without `.contain`, a label applied to the control from outside is passed
+/// down to every segment and replaces its name (A11Y-SEGMENTS). `nil` leaves
+/// the control exactly as before (no container element). The branch depends
+/// only on whether the call site passed a label, never on runtime state, so it
+/// does not break the control's identity (rule control-identity-branch).
+private struct DSOptionalAXGroupLabel: ViewModifier {
+    let label: String?
+    func body(content: Content) -> some View {
+        if let label {
+            content
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(label)
+        } else {
+            content
+        }
+    }
+}
+
 struct DSSlidingSegmented<T: Hashable>: View {
     let options: [T]
     @Binding var selection: T
     let label: (T) -> String
     let size: DSSegmentedSize
+    /// Group name for the whole control (e.g. «Период графика истории»), set on
+    /// an `.accessibilityElement(children: .contain)` container. Pass it here,
+    /// never as `.accessibilityLabel` on the control from outside: that label
+    /// would replace every segment's own name. `nil` = no container element.
+    let groupLabel: String?
     /// Optional stable AX identifier per segment (VISUAL-COVERAGE Amendment 1):
     /// `.accessibilityLabel` below lands in AXAttributedDescription, which
     /// System Events (osascript UI automation) cannot read — `AXIdentifier` is
@@ -402,10 +427,12 @@ struct DSSlidingSegmented<T: Hashable>: View {
     @State private var rowHeight: CGFloat = 0
 
     init(options: [T], selection: Binding<T>, size: DSSegmentedSize = .card,
+         groupLabel: String? = nil,
          identifier: @escaping (T) -> String? = { _ in nil }, label: @escaping (T) -> String) {
         self.options = options
         self._selection = selection
         self.size = size
+        self.groupLabel = groupLabel
         self.identifier = identifier
         self.label = label
     }
@@ -440,6 +467,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(label(option))
+                .accessibilityAddTraits(option == selection ? .isSelected : [])
                 .modifier(DSOptionalAXIdentifier(id: identifier(option)))
                 .animation(
                     reduceMotion ? .easeInOut(duration: DSMotion.reduceMotionFallback) : .easeInOut(duration: 0.18),
@@ -465,6 +493,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
                     .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.68), value: selection)
             }
         }
+        .modifier(DSOptionalAXGroupLabel(label: groupLabel))
     }
 
     // Local reimplementation of `dsRecessedTrack` (never edit that shared helper —
