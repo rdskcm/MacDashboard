@@ -270,10 +270,10 @@ struct ProcessListCard: View {
     }
 
     private var metricControl: some View {
-        DSSlidingSegmented(options: [Metric.cpu, .mem], selection: $procMetric) { m in
+        DSSlidingSegmented(options: [Metric.cpu, .mem], selection: $procMetric,
+                           groupLabel: L.processesMetricA11y) { m in
             m == .cpu ? L.processSegCPU : L.processSegMem
         }
-        .accessibilityLabel(L.processesMetricA11y)
     }
 }
 
