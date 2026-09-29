@@ -130,7 +130,6 @@ enum PrivilegedRunner {
         return .failed("unknown error")
     }
 
-
     /// Runs `invocation`, waiting up to its timeout, and returns the
     /// exit code plus captured stdout/stderr (unlike `CommandRunner`, which discards
     /// exit codes — we need them here to distinguish success/cancel/failure).

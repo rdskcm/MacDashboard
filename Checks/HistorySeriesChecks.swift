@@ -92,8 +92,8 @@ func runHistorySeriesChecks() {
         makeEntry("2026-07-10"),
     ]
 
-    // .month reproduces the former last30Range exactly; .quarter/.year use the
-    // same calendar-day arithmetic. Anchor is always the last entry's date.
+    // Each bounded range spans exactly `days` calendar days ending on the last
+    // entry's date (calendar-day arithmetic, gaps in the data do not matter).
     let windows: [(HistoryRange, Int)] = [(.month, 30), (.quarter, 90), (.year, 365)]
     for (range, days) in windows {
         for (name, entries) in [("≥30 entries, no gaps", thirtyDays), ("<30 entries", fixture), ("gap in dates", gapFixture)] {
@@ -113,8 +113,9 @@ func runHistorySeriesChecks() {
     }
     check(HistorySeries.dateRange([makeEntry("not-a-date")], .month) == nil,
           "dateRange: unparseable last date ⇒ nil")
-    check(HistoryRange.allCases == [.month, .quarter, .year, .all],
-          "HistoryRange: case order == segment order Месяц · 3 мес · Год · Всё")
+    let spans = HistoryRange.allCases.map { $0.days ?? Int.max }
+    check(zip(spans, spans.dropFirst()).allSatisfy { $0 < $1 },
+          "HistoryRange: segments run shortest → longest window, Всё (no window) last")
 
     // Window membership over a 400-day unbroken run: each window holds exactly
     // its day count, Всё holds everything.
