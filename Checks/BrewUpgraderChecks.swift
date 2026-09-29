@@ -77,12 +77,15 @@ func runBrewUpgraderChecks() {
     }
     flow("BU3 clean with output", .exited(0), stdout: "Already up-to-date.\n", expect: nil)
     flow("BU4 exit 1, no output", .exited(1), expect: fail)
-    flow("BU5 exit 1 with output (current behavior, finding F1)", .exited(1), stdout: "==> Upgrading foo\n", expect: nil)
+    flow("BU5 exit 1 with output", .exited(1), stdout: "==> Upgrading foo\n", expect: fail)
     flow("BU6 timed out", .timedOut, expect: fail)
     flow("BU7 cancelled", .cancelled, expect: fail)
     flow("BU8 launch failed", .launchFailed(ENOENT), expect: fail)
     flow("BU9 signaled, no output", .signaled(9), expect: fail)
-    flow("BU10 signaled with output (current behavior, finding F1)", .signaled(9), stdout: "x", expect: nil)
+    flow("BU10 signaled with output", .signaled(9), stdout: "x", expect: fail)
+    flow("BU15 signal status unknown with output", .signaled(0), stdout: "==> Upgrading foo\n", expect: fail)
+    flow("BU16 timed out with output", .timedOut, stdout: "==> Upgrading foo\n", expect: fail)
+    flow("BU17 cancelled with output", .cancelled, stdout: "==> Upgrading foo\n", expect: fail)
 
     // --- Progress forwarding ---
     let OK = "\u{2714}\u{FE0E} "
