@@ -167,6 +167,7 @@ struct StringsRU: AppStrings {
     var maintenanceBrewNotInstalled: String { "не установлен" }
     var maintenanceBrewAllFresh: String { "Все пакеты свежие \u{2713}" }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Устаревших пакетов: \(n)" }
+    var maintenanceBrewOutdatedCheckFailed: String { "Не удалось проверить устаревшие пакеты — запустите brew outdated в Терминале" }
     var maintenanceUpdatesSection: String { "Обновления" }
     var maintenanceUpdatesAllUpdated: String { "\u{2713}" }
     var maintenanceCrashesSection: String { "Краши" }

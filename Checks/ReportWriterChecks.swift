@@ -245,7 +245,7 @@ func runReportWriterChecks() {
         }, L.reportSectionCrashes) ?? []
         check(c18.count == 15 && c18.last == L.maintenanceCrashRow("c15", 1), "ReportWriter: C18 crashes cap 15 (count \(c18.count))")
         eq(render { r, _ in r.brewVersion = .some(nil) }, "HOMEBREW", [L.maintenanceBrewNotInstalled], "C19 brew not installed")
-        eq(render { r, _ in r.brewVersion = "Homebrew 4.6.0"; r.brewOutdated = nil }, "HOMEBREW", ["Homebrew 4.6.0"], "C20 brew without outdated")
+        eq(render { r, _ in r.brewVersion = "Homebrew 4.6.0"; r.brewOutdated = nil }, "HOMEBREW", ["Homebrew 4.6.0", L.maintenanceBrewOutdatedCheckFailed], "C20 brew outdated check failed")
         eq(render { r, _ in r.updates = [] }, L.reportSectionUpdates, ["No new software available."], "C21 no updates")
         eq(render { r, _ in r.updatesCheckDuration = 30; r.updatesCheckedAt = nil; r.passDuration = 1 }, L.reportSectionTimings,
            [L.reportTimingsNote, L.reportTimingsPass("1,0 с")], "C22 duration without timestamp")

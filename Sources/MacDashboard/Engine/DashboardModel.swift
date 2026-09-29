@@ -514,9 +514,12 @@ final class DashboardModel {
             self.applyBackground(to: &final)
 
             if cachedBrew == nil {
-                // brew actually ran this pass — refill the session cache.
-                self.lastBrewInfo = (final.brewVersion, final.brewOutdated)
-                self.lastBrewCollectedAt = Date()
+                // brew actually ran this pass — refill the session cache, but never with a failed
+                // `brew outdated` (BREW-OUTDATED-FAIL): the next refresh must retry it.
+                let failed = ReportCollector.brewOutdatedCheckFailed(version: final.brewVersion,
+                                                                      outdated: final.brewOutdated)
+                self.lastBrewInfo = failed ? nil : (final.brewVersion, final.brewOutdated)
+                self.lastBrewCollectedAt = failed ? nil : Date()
             }
 
             self.historyStore.upsertToday(from: final, live: self.live)
@@ -756,8 +759,9 @@ final class DashboardModel {
             self.brewUpgradeError = error
             self.report.brewVersion = info.version
             self.report.brewOutdated = info.outdated
-            self.lastBrewInfo = info
-            self.lastBrewCollectedAt = Date()
+            let failed = ReportCollector.brewOutdatedCheckFailed(version: info.version, outdated: info.outdated)
+            self.lastBrewInfo = failed ? nil : info
+            self.lastBrewCollectedAt = failed ? nil : Date()
         }
     }
 

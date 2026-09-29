@@ -862,6 +862,14 @@ do {
 }
 do {
     var report = FullReport()
+    report.brewVersion = "Homebrew 4.6.0"
+    report.brewOutdated = nil
+    let a = Assess.assess(report: report, live: LiveSnapshot())
+    check(!a.tips.contains { $0.action == .brewUpgrade } && !a.capsules.contains { $0.action == .brewUpgrade },
+          "assess advice: brew outdated check failed ⇒ no brew tip or capsule")
+}
+do {
+    var report = FullReport()
     report.updates = ["u1", "u2"]
     let a = Assess.assess(report: report, live: LiveSnapshot())
     check(a.problems.first { $0.text.contains("2 шт.") }?.action == .settingsPane(AdvicePanes.softwareUpdate),
@@ -1825,6 +1833,31 @@ do {
           "parseSoftwareUpdate: network error -> nil")
     check(ReportCollector.parseSoftwareUpdate(outcome(.timedOut)) == nil, "parseSoftwareUpdate: timeout -> nil")
     check(ReportCollector.parseSoftwareUpdate(.launchFailed(2)) == nil, "parseSoftwareUpdate: launch failure -> nil")
+
+    check(ReportCollector.parseBrewOutdated(outcome(.exited(0), out: "git\n  node \n\n")) == ["git", "node"],
+          "parseBrewOutdated: exit 0 with list -> names")
+    check(ReportCollector.parseBrewOutdated(outcome(.exited(0))) == [], "parseBrewOutdated: exit 0, empty -> []")
+    check(ReportCollector.parseBrewOutdated(outcome(.exited(0), out: " \n\n")) == [], "parseBrewOutdated: exit 0, blank -> []")
+    check(ReportCollector.parseBrewOutdated(outcome(.exited(1))) == nil, "parseBrewOutdated: exit 1, empty -> nil")
+    check(ReportCollector.parseBrewOutdated(outcome(.exited(1), out: "git\n", err: "Error: x")) == nil,
+          "parseBrewOutdated: exit 1 with output -> nil")
+    check(ReportCollector.parseBrewOutdated(outcome(.timedOut)) == nil, "parseBrewOutdated: timeout -> nil")
+    check(ReportCollector.parseBrewOutdated(outcome(.timedOut, out: "git\n")) == nil, "parseBrewOutdated: timeout with output -> nil")
+    check(ReportCollector.parseBrewOutdated(outcome(.cancelled)) == nil, "parseBrewOutdated: cancelled -> nil")
+    check(ReportCollector.parseBrewOutdated(.launchFailed(2)) == nil, "parseBrewOutdated: launch failure -> nil")
+    check(ReportCollector.parseBrewOutdated(outcome(.signaled(9), out: "git\n")) == nil, "parseBrewOutdated: signaled -> nil")
+    check(ReportCollector.parseBrewOutdated(outcome(.signaled(0), out: "git\n")) == nil, "parseBrewOutdated: status unknown -> nil")
+    check(ReportCollector.parseBrewOutdated(CommandOutcome(termination: .exited(0), stdout: "git\n",
+                                                           stdoutTruncated: true, stderrHead: "")) == nil,
+          "parseBrewOutdated: truncated stdout -> nil")
+    check(ReportCollector.brewOutdatedCheckFailed(version: "Homebrew 4.6.0", outdated: nil),
+          "brewOutdatedCheckFailed: installed + nil -> true")
+    check(!ReportCollector.brewOutdatedCheckFailed(version: "Homebrew 4.6.0", outdated: []),
+          "brewOutdatedCheckFailed: installed + [] -> false")
+    check(!ReportCollector.brewOutdatedCheckFailed(version: .some(nil), outdated: nil),
+          "brewOutdatedCheckFailed: not installed -> false")
+    check(!ReportCollector.brewOutdatedCheckFailed(version: nil, outdated: nil),
+          "brewOutdatedCheckFailed: not collected -> false")
 
     check(ReportCollector.seconds(.milliseconds(1500)) == 1.5, "ReportCollector.seconds(1500 ms) == 1.5")
 

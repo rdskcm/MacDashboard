@@ -377,6 +377,8 @@ enum ReportWriter {
             if let out = outdated {
                 lines.append(L.reportBrewOutdatedHeader)
                 lines.append(contentsOf: out)
+            } else {
+                lines.append(L.maintenanceBrewOutdatedCheckFailed)
             }
             return lines
         }

@@ -1109,12 +1109,26 @@ final class ReportCollector {
         if let v = await CommandRunner.run(brew, ["--version"], timeout: 20, environment: brewEnv).nonEmptyText {
             version = v.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces)
         }
-        var outdated: [String] = []
-        if let o = await CommandRunner.run(brew, ["outdated"], timeout: 60, environment: brewEnv).text {
-            outdated = o.components(separatedBy: "\n")
-                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        }
-        return (.some(version), outdated)
+        let outdatedRun = await CommandRunner.run(brew, ["outdated"], timeout: 60, environment: brewEnv)
+        return (.some(version), Self.parseBrewOutdated(outdatedRun))
+    }
+
+    /// Pure (Checks-tested). `brew outdated` without named args exits 0 whether or not anything is
+    /// outdated, so `.exited(0)` with complete stdout => the package list ([] = nothing outdated);
+    /// anything else (non-zero exit, signal, timeout, cancellation, launch failure, truncated
+    /// stdout) => nil = the check failed, never "all up to date". Same rule as BrewUpgrader
+    /// (BREW-PARTIAL-FAIL): the exit status decides, not the presence of output.
+    static func parseBrewOutdated(_ o: CommandOutcome) -> [String]? {
+        guard o.termination == .exited(0), !o.stdoutTruncated else { return nil }
+        return o.stdout.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// Pure (Checks-tested). True iff brew answered `--version` but `brew outdated` failed:
+    /// collectBrewInfo sets both fields together, so an installed brew with no list = failed check.
+    static func brewOutdatedCheckFailed(version: String??, outdated: [String]?) -> Bool {
+        if case .some(.some) = version { return outdated == nil }
+        return false
     }
 
     static func findBrew() -> String? {

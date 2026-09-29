@@ -63,9 +63,14 @@ struct MaintenanceCard: View {
                             brewUpgradeButton
                         }
                     }
-                    if let err = model.brewUpgradeError {
-                        Text(err).font(.caption2).foregroundStyle(.red)
-                    }
+                } else {
+                    // BREW-OUTDATED-FAIL: `brew outdated` failed — never claim "all fresh".
+                    Text(L.maintenanceBrewOutdatedCheckFailed)
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(DS.amberInk)
+                }
+                if let err = model.brewUpgradeError {
+                    Text(err).font(.caption2).foregroundStyle(.red)
                 }
             }
         }
