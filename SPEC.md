@@ -506,9 +506,11 @@ accumulation. Menu/button «Показать в Finder» ("Show in Finder")
 (NSWorkspace.activateFileViewerSelecting).
 
 HistoryStore: load legacy-compatible JSON; after each completed report upsert TODAY's
-MacHistoryEntry (replace same-date), keep all entries sorted by date (no cap), save atomically. Preserve unknown
-JSON keys (decode into [String: JSONValue] passthrough or merge on save) so the legacy
-file schema (nvme_history etc.) survives round-tripping.
+MacHistoryEntry (replace every stored same-date element), keep all entries sorted by date (no cap), save atomically. Preserve unknown
+JSON keys — top-level keys and fields inside each entry — so the legacy file schema (nvme_history etc.) survives round-tripping:
+save() writes the mac_history array as parsed; an element that does not decode is skipped in memory and saved back unchanged.
+A file that exists but cannot be read as a history object is never overwritten: the next save renames it to
+`mac_check_state.json.unreadable-<yyyyMMdd-HHmmss>` and starts a new file (HISTORY-DECODE-LOSS).
 
 ## 8. UI (bilingual EN/RU; tone = old dashboard)
 

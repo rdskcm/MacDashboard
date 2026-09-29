@@ -3,6 +3,8 @@
 // corrupt files, format changes after an update, every field-mapping branch of upsertToday,
 // and the atomic-replace / failed-write paths of save(). Every write goes to a fresh temp
 // directory that is removed afterwards; nothing here touches the user's App Support.
+// HISTORY-DECODE-LOSS: Section E — tolerant per-entry load, save() writes every stored element
+// as parsed, and an unreadable file is renamed aside instead of overwritten.
 
 import Foundation
 
@@ -48,6 +50,17 @@ fileprivate func hsSaveThrows(_ store: HistoryStore) -> Bool {
     do { try store.save(); return false } catch { return true }
 }
 
+/// Names of the unreadable-file backups save() left in `dir`.
+fileprivate func hsBackups(_ dir: URL) -> [String] {
+    ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [])
+        .filter { $0.hasPrefix("mac_check_state.json.unreadable-") }
+}
+
+/// The saved mac_history array as parsed, or [] if absent.
+fileprivate func hsHistory(_ url: URL) -> [Any] {
+    (hsObject(url)?["mac_history"] as? [Any]) ?? []
+}
+
 func runHistoryStoreChecks() {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("macdashboard-historystore-\(UUID().uuidString)", isDirectory: true)
@@ -82,10 +95,7 @@ func runHistoryStoreChecks() {
             ("top-level array", Data("[1,2,3]".utf8)),
             ("top-level string", Data("\"x\"".utf8)),
             ("top-level null", Data("null".utf8)),
-            ("last_run wrong type", Data("{\"last_run\":5,\"mac_history\":[{\"date\":\"2024-01-01\"}]}".utf8)),
             ("mac_history is an object", Data("{\"last_run\":\"2024-01-01\",\"mac_history\":{}}".utf8)),
-            ("entry field wrong type", Data("{\"last_run\":\"2024-01-02\",\"mac_history\":[{\"date\":\"2024-01-01\",\"cycles\":\"12\"},{\"date\":\"2024-01-02\"}]}".utf8)),
-            ("entry missing date", Data("{\"last_run\":\"2024-01-02\",\"mac_history\":[{\"cycles\":1},{\"date\":\"2024-01-02\"}]}".utf8)),
         ]
         for (n, (label, bytes)) in fixtures.enumerated() {
             let url = root.appendingPathComponent("a2/\(n).json")
@@ -340,5 +350,175 @@ func runHistoryStoreChecks() {
         s.upsertToday(from: FullReport(), live: LiveSnapshot())
         check(hsSaveThrows(s), "HistoryStore.save: throws when the destination is a non-empty directory")
         check(hsBytes(target.appendingPathComponent("inner.txt")) == Data("keep".utf8), "HistoryStore.save: directory content unchanged after a failed save")
+    }
+
+    // ---- Section E: load/save safety (HISTORY-DECODE-LOSS) ----
+    // E1: the confirmed loss case — 3 good days + 1 wrong-typed entry.
+    do {
+        let dir = root.appendingPathComponent("e1", isDirectory: true)
+        let url = dir.appendingPathComponent("mac_check_state.json")
+        hsWrite("{\"last_run\":\"2024-01-04\",\"mac_history\":[{\"date\":\"2024-01-01\",\"cycles\":1},{\"date\":\"2024-01-02\",\"cycles\":\"12\"},{\"date\":\"2024-01-03\",\"cycles\":3},{\"date\":\"2024-01-04\",\"cycles\":4}]}", to: url)
+        let s = HistoryStore(url: url)
+        s.load()
+        check(s.state.mac_history.map(\.date) == ["2024-01-01", "2024-01-03", "2024-01-04"] && s.state.last_run == "2024-01-04",
+              "HistoryStore.load: one wrong-typed entry is skipped, the other days load")
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        do { try s.save() } catch { check(false, "HistoryStore.save: E1 save threw \(error)") }
+        let saved = hsHistory(url)
+        check(saved.count == 5, "HistoryStore.save: 4 stored elements + today are saved, got \(saved.count)")
+        check(saved.contains { ($0 as? [String: Any])?["date"] as? String == "2024-01-02" && ($0 as? [String: Any])?["cycles"] as? String == "12" },
+              "HistoryStore.save: the entry that did not decode is saved back unchanged")
+        check(hsBackups(dir).isEmpty, "HistoryStore.save: a file with one bad entry is not treated as unreadable")
+        check(HistoryStore(url: url).load().mac_history.count == 4, "HistoryStore.save→load: 3 good days + today")
+    }
+
+    // E2: wrong-typed last_run.
+    do {
+        let url = root.appendingPathComponent("e2/s.json")
+        hsWrite("{\"last_run\":5,\"mac_history\":[{\"date\":\"2024-01-01\",\"cycles\":1}]}", to: url)
+        let st = HistoryStore(url: url).load()
+        check(st.last_run == nil && st.mac_history.map(\.date) == ["2024-01-01"],
+              "HistoryStore.load: wrong-typed last_run ⇒ nil, entries still load")
+    }
+
+    // E3: elements without a date or not objects at all.
+    do {
+        let url = root.appendingPathComponent("e3/s.json")
+        hsWrite("{\"mac_history\":[{\"cycles\":1},7,\"x\",null,{\"date\":\"2024-01-02\"}]}", to: url)
+        let s = HistoryStore(url: url)
+        check(s.load().mac_history.map(\.date) == ["2024-01-02"], "HistoryStore.load: elements without a date or not objects are skipped")
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        do { try s.save() } catch { check(false, "HistoryStore.save: E3 save threw \(error)") }
+        let saved = NSArray(array: hsHistory(url))
+        check(saved.count == 6 && saved.contains(NSDictionary(dictionary: ["cycles": 1])) && saved.contains(7)
+              && saved.contains("x") && saved.contains(NSNull()),
+              "HistoryStore.save: elements that are not entries are saved back unchanged")
+        let dates = s.state.mac_history.map(\.date)
+        check(dates.count == 2 && dates == dates.sorted(), "HistoryStore.upsertToday: decodable entries sorted, today added")
+    }
+
+    // E4: unknown fields inside past entries survive upsert + save.
+    do {
+        let url = root.appendingPathComponent("e4/s.json")
+        hsWrite("{\"last_run\":\"2024-01-02\",\"mac_history\":[{\"date\":\"2024-01-01\",\"gpu_temp_c\":41,\"future\":{\"a\":[1,2]}},{\"date\":\"2024-01-02\",\"cycles\":7,\"note\":\"é\"}]}", to: url)
+        let before = hsHistory(url)
+        let s = HistoryStore(url: url)
+        s.load()
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        do { try s.save() } catch { check(false, "HistoryStore.save: E4 save threw \(error)") }
+        let after = hsHistory(url)
+        check(before.count == 2 && after.count == 3 && NSArray(array: Array(after.prefix(2))).isEqual(to: before),
+              "HistoryStore.save: unknown fields inside past entries survive upsert + save")
+    }
+
+    // E5: a stored today element that does not decode is replaced, not duplicated.
+    do {
+        var done = false
+        for attempt in 0..<2 where !done {
+            let probe = HistoryStore(url: root.appendingPathComponent("e5/probe.json"))
+            probe.upsertToday(from: FullReport(), live: LiveSnapshot())
+            guard let t = probe.state.last_run else { break }
+            let url = root.appendingPathComponent("e5/\(attempt).json")
+            hsWrite("{\"mac_history\":[{\"date\":\"2020-01-01\"},{\"date\":\"\(t)\",\"cycles\":\"bad\"}]}", to: url)
+            let s = HistoryStore(url: url)
+            s.load()
+            var live = LiveSnapshot()
+            live.battery = BatteryInfo(cycles: 7)
+            s.upsertToday(from: FullReport(), live: live)
+            guard s.state.last_run == t else { continue }
+            done = true
+            do { try s.save() } catch { check(false, "HistoryStore.save: E5 save threw \(error)") }
+            let todays = hsHistory(url).filter { ($0 as? [String: Any])?["date"] as? String == t }
+            check(todays.count == 1 && (todays.first as? [String: Any])?["cycles"] as? Int == 7,
+                  "HistoryStore.upsertToday: a stored today element that did not decode is replaced, not duplicated")
+        }
+        check(done, "HistoryStore.upsertToday: E5 day stable within two attempts")
+    }
+
+    // E6: load → save with no change leaves the JSON content equal.
+    do {
+        let url = root.appendingPathComponent("e6/s.json")
+        hsWrite("{\"last_run\":\"2024-01-03\",\"mac_history\":[{\"date\":\"2024-01-03\",\"cycles\":3,\"gpu\":1},{\"date\":\"2024-01-01\",\"cycles\":\"bad\"},5,{\"date\":\"2024-01-02\",\"extra\":{\"a\":[1,2]}}],\"k\":true}", to: url)
+        let before = hsObject(url) ?? [:]
+        let s = HistoryStore(url: url)
+        s.load()
+        do { try s.save() } catch { check(false, "HistoryStore.save: E6 save threw \(error)") }
+        check(!before.isEmpty && NSDictionary(dictionary: hsObject(url) ?? [:]).isEqual(to: before),
+              "HistoryStore.save: load→save without changes keeps order, bad entries and unknown fields")
+    }
+
+    // E7: unreadable files are renamed aside byte-identical, never overwritten.
+    do {
+        let three = "{\"last_run\":\"2024-01-03\",\"mac_history\":[{\"date\":\"2024-01-01\"},{\"date\":\"2024-01-02\"},{\"date\":\"2024-01-03\"}]}"
+        let fixtures: [(String, Data)] = [
+            ("truncated JSON", Data(three.utf8).prefix(three.utf8.count / 2)),
+            ("non-JSON garbage", Data("not json at all\u{0}\u{7f}".utf8)),
+            ("empty file", Data()),
+            ("top-level array", Data("[{\"date\":\"2024-01-01\"}]".utf8)),
+            ("mac_history is an object", Data("{\"last_run\":\"2024-01-01\",\"mac_history\":{\"2024-01-01\":{\"cycles\":1}},\"nvme_history\":[1]}".utf8)),
+        ]
+        for (n, (label, bytes)) in fixtures.enumerated() {
+            let dir = root.appendingPathComponent("e7/\(n)", isDirectory: true)
+            let url = dir.appendingPathComponent("mac_check_state.json")
+            hsWriteData(bytes, to: url)
+            let s = HistoryStore(url: url)
+            check(s.load().mac_history.isEmpty, "HistoryStore.load: \(label) ⇒ empty state")
+            s.upsertToday(from: FullReport(), live: LiveSnapshot())
+            check(!hsSaveThrows(s), "HistoryStore.save: \(label) ⇒ save succeeds")
+            let backups = hsBackups(dir)
+            check(backups.count == 1 && hsBytes(dir.appendingPathComponent(backups.first ?? "-")) == bytes,
+                  "HistoryStore.save: \(label) ⇒ the unreadable file is renamed aside byte-identical, not overwritten")
+            check(hsHistory(url).count == 1, "HistoryStore.save: \(label) ⇒ the new file starts with today")
+            check(!hsSaveThrows(s) && hsBackups(dir).count == 1, "HistoryStore.save: \(label) ⇒ a second save makes no second backup")
+        }
+        check((hsObject(root.appendingPathComponent("e7/4/mac_check_state.json"))?["nvme_history"] as? [Int]) == [1],
+              "HistoryStore.save: other top-level keys of an object whose mac_history is not an array pass through")
+    }
+
+    // E8: a file that exists but cannot be read (mode 000) is not treated as missing.
+    do {
+        let dir = root.appendingPathComponent("e8", isDirectory: true)
+        let url = dir.appendingPathComponent("mac_check_state.json")
+        let good = Data("{\"last_run\":\"2024-01-02\",\"mac_history\":[{\"date\":\"2024-01-01\"},{\"date\":\"2024-01-02\"}]}".utf8)
+        hsWriteData(good, to: url)
+        try? fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+        let s = HistoryStore(url: url)
+        check(s.load().mac_history.isEmpty, "HistoryStore.load: existing file that cannot be read ⇒ empty state")
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        check(!hsSaveThrows(s), "HistoryStore.save: save succeeds after loading a file that cannot be read")
+        let backups = hsBackups(dir)
+        if let b = backups.first { try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dir.appendingPathComponent(b).path) }
+        check(backups.count == 1 && hsBytes(dir.appendingPathComponent(backups.first ?? "-")) == good,
+              "HistoryStore.save: a file that could not be read is renamed aside, not overwritten")
+    }
+
+    // E9: the rename fails (immutable file) ⇒ save throws, file stays; the retry still renames first.
+    do {
+        let dir = root.appendingPathComponent("e9", isDirectory: true)
+        let url = dir.appendingPathComponent("mac_check_state.json")
+        let junk = Data("not json".utf8)
+        hsWriteData(junk, to: url)
+        let s = HistoryStore(url: url)
+        s.load()
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        immutablePaths.append(url.path)
+        try? fm.setAttributes([.immutable: true], ofItemAtPath: url.path)
+        check(hsSaveThrows(s), "HistoryStore.save: throws when the unreadable file cannot be renamed aside (immutable)")
+        check(hsBytes(url) == junk && hsBackups(dir).isEmpty, "HistoryStore.save: a failed rename leaves the unreadable file in place, byte-identical")
+        try? fm.setAttributes([.immutable: false], ofItemAtPath: url.path)
+        check(!hsSaveThrows(s), "HistoryStore.save: retry succeeds once the obstacle is gone")
+        let backups = hsBackups(dir)
+        check(backups.count == 1 && hsBytes(dir.appendingPathComponent(backups.first ?? "-")) == junk,
+              "HistoryStore.save: the retry still renames the unreadable file aside first")
+    }
+
+    // E10: a missing file is created without a backup.
+    do {
+        let dir = root.appendingPathComponent("e10", isDirectory: true)
+        let s = HistoryStore(url: dir.appendingPathComponent("mac_check_state.json"))
+        s.load()
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        check(!hsSaveThrows(s) && (try? fm.contentsOfDirectory(atPath: dir.path)) == ["mac_check_state.json"],
+              "HistoryStore.save: a missing file is created without any backup")
     }
 }
