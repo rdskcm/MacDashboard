@@ -6,6 +6,10 @@
 // separately keeping the full raw JSON object, so unknown legacy keys the current
 // Models.swift doesn't model (nvme_history, nvme_skip_streak, nvme_rate_baseline, and
 // any future additions) survive a load→mutate→save round-trip untouched.
+// The mac_history array is also kept exactly as parsed (rawEntries): save() writes that
+// array, so entries this version cannot decode and unknown fields inside an entry survive.
+// A file that exists but cannot be parsed as a history object is never overwritten: the
+// next save() renames it to <name>.unreadable-<yyyyMMdd-HHmmss> first (HISTORY-DECODE-LOSS).
 
 import Foundation
 
@@ -18,26 +22,50 @@ final class HistoryStore {
     /// HistoryState itself encodes and passes everything else through unchanged.
     private var raw: [String: Any] = [:]
 
+    /// Every element of the file's mac_history array exactly as parsed — decodable or not,
+    /// every field known or not. save() writes this array; `state.mac_history` is its
+    /// decodable subset in the same order.
+    private var rawEntries: [Any] = []
+
+    /// true when load() found a file it could not read as a history object. The next
+    /// save() renames that file aside before writing, so its bytes are never overwritten.
+    private var loadedUnreadableFile = false
+
     private(set) var state: HistoryState = HistoryState()
 
     init(url: URL) {
         self.url = url
     }
 
-    /// Missing/corrupt file ⇒ empty state, never throws.
+    /// Missing file ⇒ empty state. A file that exists but cannot be read as a history
+    /// object (bytes unreadable, not JSON, top level not an object, mac_history present
+    /// but not an array) ⇒ empty state, and the next save() renames it aside first.
+    /// Inside a valid mac_history, an element that does not decode is left out of `state`
+    /// but kept in rawEntries, so save() writes it back unchanged. Never writes, never throws.
     @discardableResult
     func load() -> HistoryState {
-        guard let data = try? Data(contentsOf: url) else {
-            raw = [:]
-            state = HistoryState()
+        raw = [:]
+        rawEntries = []
+        state = HistoryState()
+        loadedUnreadableFile = false
+        guard FileManager.default.fileExists(atPath: url.path) else { return state }
+        guard let data = try? Data(contentsOf: url),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            loadedUnreadableFile = true
             return state
         }
-        raw = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-        state = (try? JSONDecoder().decode(HistoryState.self, from: data)) ?? HistoryState()
+        raw = obj
+        if let history = obj["mac_history"], !(history is [Any]) {
+            loadedUnreadableFile = true
+            return state
+        }
+        rawEntries = obj["mac_history"] as? [Any] ?? []
+        state.last_run = obj["last_run"] as? String
+        state.mac_history = Self.decodeEntries(rawEntries)
         return state
     }
 
-    /// Upsert TODAY's MacHistoryEntry from report+live (replace same-date entry),
+    /// Upsert TODAY's MacHistoryEntry from report+live (replace every stored same-date element, decodable or not),
     /// keep every other day (no cap — the history runs from the first day the app ran),
     /// keep entries sorted by date, set last_run. Pure in-memory mutation — call save()
     /// afterward to persist.
@@ -77,14 +105,18 @@ final class HistoryStore {
             }
         }
 
-        state.mac_history.removeAll { $0.date == today }
-        state.mac_history.append(entry)
-        state.mac_history.sort { $0.date < $1.date }   // "yyyy-MM-dd" sorts chronologically as text
+        let freshData = (try? JSONEncoder().encode(entry)) ?? Data()
+        let fresh = (try? JSONSerialization.jsonObject(with: freshData)) as? [String: Any] ?? ["date": today]
+        rawEntries.removeAll { Self.dateKey($0) == today }
+        rawEntries.append(fresh)
+        rawEntries.sort { Self.dateKey($0) < Self.dateKey($1) }   // "yyyy-MM-dd" sorts chronologically as text
+        state.mac_history = Self.decodeEntries(rawEntries)
         state.last_run = today
     }
 
-    /// Atomic; PRESERVES unknown legacy JSON keys (raw ← known-encoded keys overwrite,
-    /// everything else passes through untouched).
+    /// Atomic; PRESERVES unknown top-level keys and every stored mac_history element as
+    /// parsed (raw ← known-encoded keys overwrite, mac_history ← rawEntries). If load() found
+    /// an unreadable file, renames it aside first; a failed rename throws before any write.
     func save() throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -95,6 +127,7 @@ final class HistoryStore {
         for (key, value) in knownObj {
             merged[key] = value
         }
+        merged["mac_history"] = rawEntries   // every stored element, not only the decodable ones
 
         let outData = try JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys])
 
@@ -104,6 +137,12 @@ final class HistoryStore {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
         try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        if loadedUnreadableFile {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.moveItem(at: url, to: unreadableBackupURL())
+            }
+            loadedUnreadableFile = false   // only after a successful rename (or nothing left to rename)
+        }
         try outData.write(to: url, options: [.atomic])
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
 
@@ -111,6 +150,28 @@ final class HistoryStore {
     }
 
     // MARK: - Helpers
+
+    /// The elements of `items` that decode as MacHistoryEntry, in order. Everything else
+    /// stays only in rawEntries and is saved unchanged.
+    private static func decodeEntries(_ items: [Any]) -> [MacHistoryEntry] {
+        let decoder = JSONDecoder()
+        return items.compactMap { item in
+            guard let dict = item as? [String: Any],
+                  let data = try? JSONSerialization.data(withJSONObject: dict) else { return nil }
+            return try? decoder.decode(MacHistoryEntry.self, from: data)
+        }
+    }
+
+    /// The element's "date" string, or "" when it has none (such elements sort first).
+    private static func dateKey(_ item: Any) -> String {
+        ((item as? [String: Any])?["date"] as? String) ?? ""
+    }
+
+    /// `<file name>.unreadable-<yyyyMMdd-HHmmss>` next to the history file.
+    private func unreadableBackupURL() -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(
+            url.lastPathComponent + ".unreadable-" + Self.backupStampFormatter.string(from: Date()))
+    }
 
     private static func roundedGiB(_ bytes: Int64) -> Int {
         Int((Double(bytes) / 1_073_741_824.0).rounded())   // ÷ 2^30
@@ -125,6 +186,14 @@ final class HistoryStore {
         df.locale = Locale(identifier: "en_US_POSIX")
         df.timeZone = .current
         df.dateFormat = "yyyy-MM-dd"
+        return df
+    }()
+
+    private static var backupStampFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = .current
+        df.dateFormat = "yyyyMMdd-HHmmss"
         return df
     }()
 }
