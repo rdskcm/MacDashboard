@@ -165,6 +165,7 @@ struct StringsRU: AppStrings {
     // MARK: Maintenance card
     var maintenanceTitle: String { "Обслуживание системы" }
     var maintenanceBrewNotInstalled: String { "не установлен" }
+    var maintenanceBrewVersionUnknown: String { "Homebrew установлен, но версию определить не удалось" }
     var maintenanceBrewAllFresh: String { "Все пакеты свежие \u{2713}" }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Устаревших пакетов: \(n)" }
     var maintenanceBrewOutdatedCheckFailed: String { "Не удалось проверить устаревшие пакеты — запустите brew outdated в Терминале" }

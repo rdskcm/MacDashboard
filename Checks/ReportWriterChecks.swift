@@ -100,7 +100,7 @@ func runReportWriterChecks() {
         r.tmDest = TMDestination(name: "Backup", kind: "Local", mountPoint: "/Volumes/Backup", quotaBytes: 2 * tib, lastBackup: "2026-07-03-120000")
         r.spotlight = "Indexing enabled."
         r.crashes = [CrashGroup(process: "diffscore", count: 3, directory: "/x"), CrashGroup(process: "Finder", count: 1, directory: "/x")]
-        r.brewVersion = "Homebrew 4.6.0"
+        r.brewStatus = .installed(version: "Homebrew 4.6.0")
         r.brewOutdated = ["git", "node"]
         r.updates = ["macOS Tahoe 26.0.1"]
         r.updatesCheckedAt = t
@@ -244,8 +244,12 @@ func runReportWriterChecks() {
             r.crashes = (1...17).map { CrashGroup(process: "c" + String(format: "%02d", $0), count: 1, directory: "/x") }
         }, L.reportSectionCrashes) ?? []
         check(c18.count == 15 && c18.last == L.maintenanceCrashRow("c15", 1), "ReportWriter: C18 crashes cap 15 (count \(c18.count))")
-        eq(render { r, _ in r.brewVersion = .some(nil) }, "HOMEBREW", [L.maintenanceBrewNotInstalled], "C19 brew not installed")
-        eq(render { r, _ in r.brewVersion = "Homebrew 4.6.0"; r.brewOutdated = nil }, "HOMEBREW", ["Homebrew 4.6.0", L.maintenanceBrewOutdatedCheckFailed], "C20 brew outdated check failed")
+        eq(render { r, _ in r.brewStatus = .notInstalled }, "HOMEBREW", [L.maintenanceBrewNotInstalled], "C19 brew not installed")
+        eq(render { r, _ in r.brewStatus = .installed(version: "Homebrew 4.6.0"); r.brewOutdated = nil }, "HOMEBREW", ["Homebrew 4.6.0", L.maintenanceBrewOutdatedCheckFailed], "C20 brew outdated check failed")
+        eq(render { r, _ in r.brewStatus = .installed(version: nil); r.brewOutdated = ["git"] }, "HOMEBREW",
+           [L.maintenanceBrewVersionUnknown, L.reportBrewOutdatedHeader, "git"], "C20b brew version unknown, list ok")
+        eq(render { r, _ in r.brewStatus = .installed(version: nil); r.brewOutdated = nil }, "HOMEBREW",
+           [L.maintenanceBrewVersionUnknown, L.maintenanceBrewOutdatedCheckFailed], "C20c brew version unknown, outdated failed")
         eq(render { r, _ in r.updates = [] }, L.reportSectionUpdates, ["No new software available."], "C21 no updates")
         eq(render { r, _ in r.updatesCheckDuration = 30; r.updatesCheckedAt = nil; r.passDuration = 1 }, L.reportSectionTimings,
            [L.reportTimingsNote, L.reportTimingsPass("1,0 с")], "C22 duration without timestamp")

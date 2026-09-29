@@ -862,7 +862,7 @@ do {
 }
 do {
     var report = FullReport()
-    report.brewVersion = "Homebrew 4.6.0"
+    report.brewStatus = .installed(version: "Homebrew 4.6.0")
     report.brewOutdated = nil
     let a = Assess.assess(report: report, live: LiveSnapshot())
     check(!a.tips.contains { $0.action == .brewUpgrade } && !a.capsules.contains { $0.action == .brewUpgrade },
@@ -1850,14 +1850,30 @@ do {
     check(ReportCollector.parseBrewOutdated(CommandOutcome(termination: .exited(0), stdout: "git\n",
                                                            stdoutTruncated: true, stderrHead: "")) == nil,
           "parseBrewOutdated: truncated stdout -> nil")
-    check(ReportCollector.brewOutdatedCheckFailed(version: "Homebrew 4.6.0", outdated: nil),
-          "brewOutdatedCheckFailed: installed + nil -> true")
-    check(!ReportCollector.brewOutdatedCheckFailed(version: "Homebrew 4.6.0", outdated: []),
-          "brewOutdatedCheckFailed: installed + [] -> false")
-    check(!ReportCollector.brewOutdatedCheckFailed(version: .some(nil), outdated: nil),
-          "brewOutdatedCheckFailed: not installed -> false")
-    check(!ReportCollector.brewOutdatedCheckFailed(version: nil, outdated: nil),
-          "brewOutdatedCheckFailed: not collected -> false")
+    check(ReportCollector.brewCheckFailed(status: .installed(version: "Homebrew 4.6.0"), outdated: nil),
+          "brewCheckFailed: version ok + outdated nil -> true")
+    check(!ReportCollector.brewCheckFailed(status: .installed(version: "Homebrew 4.6.0"), outdated: []),
+          "brewCheckFailed: version ok + [] -> false")
+    check(ReportCollector.brewCheckFailed(status: .installed(version: nil), outdated: []),
+          "brewCheckFailed: version unknown + [] -> true")
+    check(ReportCollector.brewCheckFailed(status: .installed(version: nil), outdated: nil),
+          "brewCheckFailed: version unknown + nil -> true")
+    check(!ReportCollector.brewCheckFailed(status: .notInstalled, outdated: nil),
+          "brewCheckFailed: not installed -> false")
+    check(!ReportCollector.brewCheckFailed(status: nil, outdated: nil),
+          "brewCheckFailed: not collected -> false")
+    check(ReportCollector.parseBrewVersion(outcome(.exited(0), out: "Homebrew 4.6.0\nHomebrew/homebrew-core (git revision abc)\n"))
+            == "Homebrew 4.6.0", "parseBrewVersion: exit 0 -> first line")
+    check(ReportCollector.parseBrewVersion(outcome(.exited(0), out: "\n  Homebrew 4.6.0  \n")) == "Homebrew 4.6.0",
+          "parseBrewVersion: leading blank line + spaces -> trimmed first non-empty line")
+    check(ReportCollector.parseBrewVersion(outcome(.exited(0))) == nil, "parseBrewVersion: exit 0, empty -> nil")
+    check(ReportCollector.parseBrewVersion(outcome(.exited(0), out: " \n\n")) == nil, "parseBrewVersion: exit 0, blank -> nil")
+    check(ReportCollector.parseBrewVersion(outcome(.exited(1), out: "Homebrew 4.6.0\n", err: "Error: x")) == nil,
+          "parseBrewVersion: exit 1 with output -> nil")
+    check(ReportCollector.parseBrewVersion(outcome(.timedOut, out: "Homebrew 4.6.0\n")) == nil, "parseBrewVersion: timeout -> nil")
+    check(ReportCollector.parseBrewVersion(outcome(.cancelled)) == nil, "parseBrewVersion: cancelled -> nil")
+    check(ReportCollector.parseBrewVersion(.launchFailed(2)) == nil, "parseBrewVersion: launch failure -> nil")
+    check(ReportCollector.parseBrewVersion(outcome(.signaled(9), out: "Homebrew 4.6.0\n")) == nil, "parseBrewVersion: signaled -> nil")
 
     check(ReportCollector.seconds(.milliseconds(1500)) == 1.5, "ReportCollector.seconds(1500 ms) == 1.5")
 

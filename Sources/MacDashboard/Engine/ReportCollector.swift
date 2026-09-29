@@ -292,7 +292,7 @@ final class ReportCollector {
     }
 
     func collect(skipSlow: Bool = false,
-                 cachedBrew: (version: String??, outdated: [String]?)? = nil,
+                 cachedBrew: (status: BrewStatus, outdated: [String]?)? = nil,
                  onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport {
         // Task cancellation of the caller propagates into the section task groups and
         // from there into every `CommandRunner.run`, which kills the group or skips the spawn.
@@ -300,7 +300,7 @@ final class ReportCollector {
     }
 
     private func collectBody(skipSlow: Bool,
-                             cachedBrew: (version: String??, outdated: [String]?)?,
+                             cachedBrew: (status: BrewStatus, outdated: [String]?)?,
                              onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport {
         let clock = ContinuousClock()
         let passStart = clock.now
@@ -1082,35 +1082,42 @@ final class ReportCollector {
 
     // MARK: - homebrew (slow)
 
-    private func collectBrew(cached: (version: String??, outdated: [String]?)?) async -> Outcome {
+    private func collectBrew(cached: (status: BrewStatus, outdated: [String]?)?) async -> Outcome {
         if let cached {
             // Session cache hit (Block N5): skip the ~30 s `brew outdated` re-run.
             return Outcome(section: .brew) {
-                $0.brewVersion = cached.version; $0.brewOutdated = cached.outdated
+                $0.brewStatus = cached.status; $0.brewOutdated = cached.outdated
             }
         }
         let info = await collectBrewInfo()
-        return Outcome(section: .brew) { $0.brewVersion = info.version; $0.brewOutdated = info.outdated }
+        return Outcome(section: .brew) { $0.brewStatus = info.status; $0.brewOutdated = info.outdated }
     }
 
     /// The actual Homebrew collection logic, factored out of `collectBrew()` so the
     /// in-app upgrade flow (DashboardModel) can re-collect a fresh snapshot after
     /// `brew upgrade` without going through the `Outcome` plumbing.
-    func collectBrewInfo() async -> (version: String??, outdated: [String]?) {
+    func collectBrewInfo() async -> (status: BrewStatus, outdated: [String]?) {
         guard let brew = Self.findBrew() else {
-            return (.some(nil), nil)
+            return (.notInstalled, nil)
         }
         // brew is a Homebrew-prefix script that shells out to its own helper
         // binaries (ruby, git, curl, …) inside that prefix — unlike the rest of
         // this file's call sites (absolute-path Apple binaries), it needs its own
         // bin dir on PATH, not just `defaultEnvironment`'s bare system PATH.
         let brewEnv = CommandRunner.environment(prependingPATH: [(brew as NSString).deletingLastPathComponent])
-        var version: String?
-        if let v = await CommandRunner.run(brew, ["--version"], timeout: 20, environment: brewEnv).nonEmptyText {
-            version = v.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces)
-        }
+        let version = Self.parseBrewVersion(await CommandRunner.run(brew, ["--version"], timeout: 20, environment: brewEnv))
         let outdatedRun = await CommandRunner.run(brew, ["outdated"], timeout: 60, environment: brewEnv)
-        return (.some(version), Self.parseBrewOutdated(outdatedRun))
+        return (.installed(version: version), Self.parseBrewOutdated(outdatedRun))
+    }
+
+    /// Pure (Checks-tested). `.exited(0)` => the first non-empty trimmed stdout line (brew prints
+    /// "Homebrew X.Y.Z" first); any other outcome, or no non-blank line => nil = version unknown.
+    /// Brew is still installed in that case (BREW-VERSION-FAIL): the caller never maps nil to
+    /// "not installed". Same exit-status rule as parseBrewOutdated.
+    static func parseBrewVersion(_ o: CommandOutcome) -> String? {
+        guard o.termination == .exited(0) else { return nil }
+        return o.stdout.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
     }
 
     /// Pure (Checks-tested). `brew outdated` without named args exits 0 whether or not anything is
@@ -1124,11 +1131,12 @@ final class ReportCollector {
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
-    /// Pure (Checks-tested). True iff brew answered `--version` but `brew outdated` failed:
-    /// collectBrewInfo sets both fields together, so an installed brew with no list = failed check.
-    static func brewOutdatedCheckFailed(version: String??, outdated: [String]?) -> Bool {
-        if case .some(.some) = version { return outdated == nil }
-        return false
+    /// Pure (Checks-tested). True iff brew is installed but one of its checks failed — `--version`
+    /// (BREW-VERSION-FAIL) or `outdated` (BREW-OUTDATED-FAIL). Such a snapshot is shown but never
+    /// session-cached, so the next pass retries both.
+    static func brewCheckFailed(status: BrewStatus?, outdated: [String]?) -> Bool {
+        guard case .installed(let version)? = status else { return false }
+        return version == nil || outdated == nil
     }
 
     static func findBrew() -> String? {

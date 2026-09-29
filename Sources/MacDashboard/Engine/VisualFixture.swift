@@ -118,7 +118,7 @@ enum VisualFixture {
         report.updatesCheckedAt = nil
         report.folderSizesCountedAt = nil
         report.crashes = []
-        report.brewVersion = .some("Homebrew 4.6.0")
+        report.brewStatus = .installed(version: "Homebrew 4.6.0")
         report.brewOutdated = ["git", "node", "python@3.13"]
         report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED")]
         report.progress = ["homeDirs": true, "serviceDirs": true]
