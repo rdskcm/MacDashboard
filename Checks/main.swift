@@ -2014,6 +2014,18 @@ runAIPayloadRequestChecks()
 runReportWriterChecks()
 
 // =====================================================================
+// MARK: - PrivilegedRunner builders/flow/executor (COVERAGE-EXEC, in PrivilegedRunnerChecks.swift)
+// =====================================================================
+
+runPrivilegedRunnerChecks()
+
+// =====================================================================
+// MARK: - BrewUpgrader invocation/flow/progress (COVERAGE-EXEC, in BrewUpgraderChecks.swift)
+// =====================================================================
+
+runBrewUpgraderChecks()
+
+// =====================================================================
 // MARK: - AttentionModel
 // =====================================================================
 
