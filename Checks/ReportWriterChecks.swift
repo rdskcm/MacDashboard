@@ -54,8 +54,7 @@ private func rwCheckOrder(_ out: String, _ tag: String) {
     let allPresent = !idx.contains { $0 == nil }
     check(allPresent, "ReportWriter: \(tag) every section header present")
     let ints = idx.compactMap { $0 }
-    var increasing = true
-    for i in 1..<max(1, ints.count) where ints[i] <= ints[i - 1] { increasing = false }
+    let increasing = zip(ints, ints.dropFirst()).allSatisfy { $0 < $1 }
     check(allPresent && increasing, "ReportWriter: \(tag) section headers in fixed order")
     let headerCount = lines.filter { $0.hasPrefix("===== ") }.count
     check(headerCount == names.count + 1, "ReportWriter: \(tag) each header exactly once + done banner (got \(headerCount))")
@@ -127,7 +126,8 @@ func runReportWriterChecks() {
     do {
         func sec(_ name: String, _ body: [String], _ label: String) {
             let got = rwSection(out, name)
-            check(got == body, "ReportWriter: \(label) populated body" + (got == body ? "" : " (got \(String(describing: got)))"))
+            let ok = got == body
+            check(ok, "ReportWriter: \(label) populated body" + (ok ? "" : " (got \(String(describing: got)))"))
         }
         sec(L.reportSectionSystem, ["ProductName:\tmacOS", "ProductVersion:\t26.0", "BuildVersion:\t25A354", "      Model Name: MacBook Air", "      Model Identifier: Mac15,12", "      Chip: Apple M3", "      Total Number of Cores: 8 (4 performance and 4 efficiency)", "      Memory: 16,0 ГБ", L.reportUptime("2 дня 3 мин")], "SYSTEM")
         sec(L.reportSectionDisk, [diskHeader(),
@@ -200,7 +200,8 @@ func runReportWriterChecks() {
         }
         func eq(_ o: String, _ name: String, _ body: [String], _ label: String) {
             let got = rwSection(o, name)
-            check(got == body, "ReportWriter: \(label)" + (got == body ? "" : " (got \(String(describing: got)))"))
+            let ok = got == body
+            check(ok, "ReportWriter: \(label)" + (ok ? "" : " (got \(String(describing: got)))"))
         }
         let dataRow = { (s: String, us: String, a: String, p: String) in diskRow("/System/Volumes/Data", s, us, a, p, "/System/Volumes/Data") }
 

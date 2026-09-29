@@ -38,12 +38,13 @@ func runBrewUpgraderChecks() {
 
     // --- Invocation ---
     let inv = BrewUpgrader.invocation(brewPath: homebrew)
-    check(inv == BrewUpgrader.Invocation(path: homebrew, args: ["upgrade"], timeout: 900,
-                                         environment: CommandRunner.environment(prependingPATH: ["/opt/homebrew/bin"])),
+    let expectedEnv = ["PATH": "/opt/homebrew/bin:" + sysPATH, "LC_ALL": "C", "LANG": "C", "TZ": "UTC",
+                       "HOME": NSHomeDirectory()]
+    check(inv == BrewUpgrader.Invocation(path: homebrew, args: ["upgrade"], timeout: 900, environment: expectedEnv),
           "BrewUpgrader: [invocation] BI1 full value")
     check(inv.environment["PATH"] == "/opt/homebrew/bin:" + sysPATH, "BrewUpgrader: [invocation] BI2 PATH")
     check(inv.environment["HOMEBREW_NO_AUTO_UPDATE"] == nil, "BrewUpgrader: [invocation] BI3 auto-update not disabled")
-    check(Set(inv.environment.keys) == Set(CommandRunner.defaultEnvironment.keys),
+    check(Set(inv.environment.keys) == ["PATH", "LC_ALL", "LANG", "TZ", "HOME"],
           "BrewUpgrader: [invocation] BI4 nothing inherited")
     let intel = BrewUpgrader.invocation(brewPath: "/usr/local/bin/brew")
     check(intel.path == "/usr/local/bin/brew", "BrewUpgrader: [invocation] BI5 path")

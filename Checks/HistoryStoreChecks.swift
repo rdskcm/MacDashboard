@@ -70,6 +70,10 @@ func runHistoryStoreChecks() {
     defer {
         for p in immutablePaths { try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: p) }
         for p in readOnlyDirs { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: p) }
+        let fix = Process()
+        fix.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        fix.arguments = ["-R", "u+rwx", root.path]
+        try? fix.run(); fix.waitUntilExit()
         try? FileManager.default.removeItem(at: root)
     }
     let fm = FileManager.default
@@ -335,7 +339,7 @@ func runHistoryStoreChecks() {
         check(hsBytes(url) == good, "HistoryStore.save: failed save leaves the previous file byte-identical")
         check(s.state.mac_history.count == 4, "HistoryStore.save: in-memory state kept after a failed save")
         let listing = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
-        if listing != ["mac_check_state.json"] { print("FINDING: HistoryStore D5: directory after a failed save holds \(listing)") }
+        check(listing == ["mac_check_state.json"], "HistoryStore: D5 directory after a failed save: no extra files left in the directory")
         try? fm.setAttributes([.immutable: false], ofItemAtPath: url.path)
         check(!hsSaveThrows(s), "HistoryStore.save: retry succeeds once the obstacle is gone")
         check(HistoryStore(url: url).load().mac_history.count == 4, "HistoryStore.save: retry persists all entries")

@@ -342,10 +342,10 @@ do {
     dest.lastBackupUnavailableReason = .dateUnavailableNoFDA
     let ruText = dest.lastBackupUnavailableReason?.localizedText
     L10nStore.shared.language = .en
-    check(dest.lastBackupUnavailableReason == .dateUnavailableNoFDA,
-          "TMBackupUnavailableReason: case survives a language switch")
-    check(dest.lastBackupUnavailableReason?.localizedText != ruText,
-          "TMBackupUnavailableReason: localizedText follows the CURRENT language")
+    check(ruText == StringsRU().reportCollectorDateUnavailableNoFDA,
+          "TMBackupUnavailableReason: stored case renders the RU sentence under .ru")
+    check(dest.lastBackupUnavailableReason?.localizedText == StringsEN().reportCollectorDateUnavailableNoFDA,
+          "TMBackupUnavailableReason: the same stored case renders the EN sentence after a switch to .en")
 }
 
 // =====================================================================
@@ -927,8 +927,11 @@ do {
 }
 
 do {
-    check(AppSettings.allowedProcessLimits == [5, 10, 15],
-          "AppSettings.allowedProcessLimits == [5, 10, 15]")
+    check(AppSettings.allowedProcessLimits.allSatisfy { AppSettings.resolveProcessLimit(raw: $0) == $0 },
+          "AppSettings: every offered process limit resolves to itself")
+    check(AppSettings.allowedProcessLimits.contains(AppSettings.resolveProcessLimit(raw: 0)),
+          "AppSettings: the fallback process limit is one of the offered values")
+    check(AppSettings.resolveProcessLimit(raw: 12) == 10, "AppSettings: the retired hard-coded 12 migrates to 10")
     // Re-check of the resolution formula via the real product function (AppSettings.init()
     // calls the same one — see AppSettings.resolveProcessLimit).
     check(AppSettings.resolveProcessLimit(raw: 0) == 10, "AppSettings: fresh default (unset) resolves to 10")
@@ -2278,7 +2281,7 @@ do {
     }
     let sevRanks = a.problems.map { rankFor($0.sev) }
     check(sevRanks == sevRanks.sorted(by: >), "AttentionModel regression guard: problems.map(sev) non-increasing (crit -> serious -> warn)")
-    check(a.summaryText == L.assessSummaryCount(a.problems.count), "AttentionModel regression guard: summaryText form unchanged")
+    check(a.summaryText == "Замечаний: \(a.problems.count)", "AttentionModel regression guard: summaryText form unchanged")
 }
 
 // 9. QuietState three-state SectionStatus (.collecting / .quiet / .loud)
