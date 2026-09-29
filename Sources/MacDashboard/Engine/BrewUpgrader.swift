@@ -20,7 +20,7 @@ enum BrewUpgrader {
 
     /// Cancelling the awaiting Task kills brew's process group. Streams progress via
     /// `onProgress` (invoked on CommandRunner's private serial queue — caller hops to
-    /// main). Returns nil on success, else a short localized failure string.
+    /// main). Returns nil only when brew exited with status 0, else a short localized failure string.
     static func upgradeAll(totalOutdated: Int, onProgress: @escaping (BrewProgress) -> Void) async -> String? {
         await upgradeAll(totalOutdated: totalOutdated, brewPath: ReportCollector.findBrew(),
                          onProgress: onProgress, run: { invocation, onLine in
@@ -40,7 +40,9 @@ enum BrewUpgrader {
                 onProgress(p)
             }
         })
-        return outcome.text == nil ? L.maintenanceBrewUpgradeFailed : nil
+        // Success is brew's exit status, never the presence of output: a partial failure
+        // prints `==> Upgrading …` before exiting non-zero (BREW-PARTIAL-FAIL).
+        return outcome.termination == .exited(0) ? nil : L.maintenanceBrewUpgradeFailed
     }
 
     static func invocation(brewPath: String) -> Invocation {
