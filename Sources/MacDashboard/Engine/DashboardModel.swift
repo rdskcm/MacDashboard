@@ -926,8 +926,7 @@ final class DashboardModel {
             let outcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
                     if isSystemLevel {
-                        let quoted = "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
-                        switch PrivilegedRunner.run("/bin/rm -f \(quoted)") {
+                        switch PrivilegedRunner.run(PrivilegedRunner.removeCommand(paths: [path])) {
                         case .success: continuation.resume(returning: .success)
                         case .cancelled: continuation.resume(returning: .cancelled)
                         case .failed(let msg): continuation.resume(returning: .failed(msg))
@@ -1033,9 +1032,7 @@ final class DashboardModel {
             }
 
             if !systemPaths.isEmpty {
-                let command = "/bin/rm -f " + systemPaths.map { path in
-                    "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
-                }.joined(separator: " ")
+                let command = PrivilegedRunner.removeCommand(paths: systemPaths)
 
                 let systemOutcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .utility).async {
