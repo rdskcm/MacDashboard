@@ -2008,6 +2008,12 @@ runAIRedactionChecks()
 runAIPayloadRequestChecks()
 
 // =====================================================================
+// MARK: - ReportWriter render/write (COVERAGE-REPORT, in ReportWriterChecks.swift)
+// =====================================================================
+
+runReportWriterChecks()
+
+// =====================================================================
 // MARK: - AttentionModel
 // =====================================================================
 
