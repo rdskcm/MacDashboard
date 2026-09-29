@@ -56,7 +56,8 @@ final class DashboardModel {
     var brewUpgrading = false
 
     /// Set when the last `upgradeBrewNow()` run failed; cleared at the start of the
-    /// next run. Shown as an inline error under the Homebrew sub-section.
+    /// next run. Shown as an inline error under the Homebrew sub-section of the
+    /// Обслуживание card and in the Рекомендации (Advice) card's error area.
     var brewUpgradeError: String? = nil
 
     /// Live `brew upgrade` progress while `brewUpgrading` is true; nil otherwise.

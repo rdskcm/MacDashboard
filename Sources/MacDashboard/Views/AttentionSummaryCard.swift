@@ -64,8 +64,9 @@ struct AttentionSummaryCard: View {
             if !capsules.isEmpty {
                 recommendationsSection
             }
-            // Both must still surface — trashError is UI-local (this card owns
-            // the confirmation), adviceActionError is model-owned (firewall).
+            // All three must still surface — trashError is UI-local (this card owns
+            // the confirmation), adviceActionError (firewall) and brewUpgradeError
+            // (Homebrew capsule; also shown on the Maintenance card) are model-owned.
             if let trashError = dispatch.trashError {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(trashError).font(.system(size: 11)).foregroundStyle(.red)
@@ -79,6 +80,9 @@ struct AttentionSummaryCard: View {
             }
             if let adviceActionError = model.adviceActionError {
                 Text(adviceActionError).font(.system(size: 11)).foregroundStyle(.red)
+            }
+            if let brewUpgradeError = model.brewUpgradeError {
+                Text(brewUpgradeError).font(.system(size: 11)).foregroundStyle(.red)
             }
         }
         .padding(.top, 13)
