@@ -93,7 +93,12 @@ live machine state (wake holders, battery, history); the app's `defaults`
 domain is cleared for the run (snapshotted first, restored after).
 
 Also snapshotted/restored: saved application state, App Support dir,
-appearance, cursor, frontmost app. Last line of every run: `RESTORE: app=…
+appearance, cursor, frontmost app. The App Support snapshot is taken with
+a `ditto` copy with its ACLs stripped; the restore (`rsync -a --delete`) excludes every file whose
+content is unchanged since the snapshot, so an unchanged file with a
+protective ACL (the Time Machine history copy
+`mac_check_state.timemachine-*.json` has `everyone deny write,delete`) is
+never touched. Last line of every run: `RESTORE: app=…
 defaults=… savedstate=… appsupport=…|partial(rsync_rc=N)
 appearance=…|partial cursor=… front=…`; an `rsync` failure on the appsupport
 restore keeps `<run-dir>/restore-rsync.err`. A Settings window still open 5 s
@@ -103,7 +108,8 @@ after `close_settings` aborts the run loudly.
 app bundle. If SIGKILLed (no trap runs), the pre-run backup stays in
 `<run-dir>/.restore/` — restore by hand (`defaults import` the plist, `rsync
 -a --delete` `appsupport/` back over the App Support dir), skipping any step
-marked absent.
+marked absent. A by-hand `rsync -a --delete` reports `Permission denied` for an ACL-protected
+file; that is harmless when `cmp` shows the file equal to its backup copy.
 
 ## 8. Driving routes
 
