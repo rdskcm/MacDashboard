@@ -182,10 +182,10 @@ final class DashboardModel {
     private var brewUpgradeTask: Task<Void, Never>?
 
     /// Session cache for the brew section (Block N5): last collected
-    /// (version, outdated) and when. Reused by refreshReport() within
+    /// (status, outdated) and when. Reused by refreshReport() within
     /// ReportCollector.brewCacheWindow so a manual «Обновить отчёт» doesn't pay
     /// the ~30 s `brew outdated` cost every time. In-memory only.
-    private var lastBrewInfo: (version: String??, outdated: [String]?)?
+    private var lastBrewInfo: (status: BrewStatus, outdated: [String]?)?
     private var lastBrewCollectedAt: Date?
 
     /// Set when refreshReport() is requested while a collect is already in flight
@@ -486,7 +486,7 @@ final class DashboardModel {
                 }
             }
 
-            let cachedBrew: (version: String??, outdated: [String]?)? =
+            let cachedBrew: (status: BrewStatus, outdated: [String]?)? =
                 ReportCollector.isBrewCacheFresh(collectedAt: self.lastBrewCollectedAt, now: Date())
                     ? self.lastBrewInfo : nil
             let collected = await CommandRunner.$qos.withValue(trigger.commandQoS) {
@@ -514,12 +514,16 @@ final class DashboardModel {
             self.applyBackground(to: &final)
 
             if cachedBrew == nil {
-                // brew actually ran this pass — refill the session cache, but never with a failed
-                // `brew outdated` (BREW-OUTDATED-FAIL): the next refresh must retry it.
-                let failed = ReportCollector.brewOutdatedCheckFailed(version: final.brewVersion,
-                                                                      outdated: final.brewOutdated)
-                self.lastBrewInfo = failed ? nil : (final.brewVersion, final.brewOutdated)
-                self.lastBrewCollectedAt = failed ? nil : Date()
+                // brew actually ran this pass — refill the session cache, but never with a failed brew
+                // check (BREW-OUTDATED-FAIL, BREW-VERSION-FAIL): the next refresh must retry it.
+                let failed = ReportCollector.brewCheckFailed(status: final.brewStatus, outdated: final.brewOutdated)
+                if !failed, let status = final.brewStatus {
+                    self.lastBrewInfo = (status, final.brewOutdated)
+                    self.lastBrewCollectedAt = Date()
+                } else {
+                    self.lastBrewInfo = nil
+                    self.lastBrewCollectedAt = nil
+                }
             }
 
             self.historyStore.upsertToday(from: final, live: self.live)
@@ -757,9 +761,9 @@ final class DashboardModel {
             guard !Task.isCancelled else { return }
 
             self.brewUpgradeError = error
-            self.report.brewVersion = info.version
+            self.report.brewStatus = info.status
             self.report.brewOutdated = info.outdated
-            let failed = ReportCollector.brewOutdatedCheckFailed(version: info.version, outdated: info.outdated)
+            let failed = ReportCollector.brewCheckFailed(status: info.status, outdated: info.outdated)
             self.lastBrewInfo = failed ? nil : info
             self.lastBrewCollectedAt = failed ? nil : Date()
         }

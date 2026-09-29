@@ -163,6 +163,7 @@ struct StringsEN: AppStrings {
     // MARK: Maintenance card
     var maintenanceTitle: String { "System maintenance" }
     var maintenanceBrewNotInstalled: String { "not installed" }
+    var maintenanceBrewVersionUnknown: String { "Homebrew is installed, but its version couldn't be determined" }
     var maintenanceBrewAllFresh: String { "All packages up to date \u{2713}" }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Outdated packages: \(n)" }
     var maintenanceBrewOutdatedCheckFailed: String { "Couldn't check for outdated packages — run brew outdated in Terminal" }

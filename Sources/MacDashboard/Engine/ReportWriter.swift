@@ -41,7 +41,7 @@ enum ReportWriter {
         addSection(&out, L.reportSectionTMDest, renderTMDest(report.tmDest))
         addSection(&out, "SPOTLIGHT", renderSpotlight(report.spotlight))
         addSection(&out, L.reportSectionCrashes, renderCrashes(report.crashes))
-        addSection(&out, "HOMEBREW", renderBrew(report.brewVersion, report.brewOutdated))
+        addSection(&out, "HOMEBREW", renderBrew(report.brewStatus, report.brewOutdated))
         addSection(&out, L.reportSectionUpdates, renderUpdates(report.updates, checkedAt: report.updatesCheckedAt))
         addSection(&out, L.reportSectionSmart, renderSmart(report.smart))
         addSection(&out, L.reportSectionTimings, renderTimings(report))
@@ -366,14 +366,14 @@ enum ReportWriter {
 
     // MARK: - HOMEBREW
 
-    private static func renderBrew(_ version: String??, _ outdated: [String]?) -> [String] {
-        switch version {
+    private static func renderBrew(_ status: BrewStatus?, _ outdated: [String]?) -> [String] {
+        switch status {
         case .none:
             return [L.reportNotChecked]
-        case .some(.none):
+        case .some(.notInstalled):
             return [L.maintenanceBrewNotInstalled]
-        case .some(.some(let v)):
-            var lines = [v]
+        case .some(.installed(let v)):
+            var lines = [v ?? L.maintenanceBrewVersionUnknown]
             if let out = outdated {
                 lines.append(L.reportBrewOutdatedHeader)
                 lines.append(contentsOf: out)

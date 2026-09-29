@@ -19,7 +19,7 @@ MainActor.assumeIsolated {
     L10nStore.shared.language = .ru          // pin language FIRST
 
     let m = DashboardModel()                  // init is side-effect-free; NEVER call start()
-    m.report.brewVersion = .some(.some("Homebrew 4.x"))
+    m.report.brewStatus = .installed(version: "Homebrew 4.x")
     m.brewUpgrading = true                    // inject any state directly
 
     harnessRender(width: 460) {               // width per card column; omit `to:` —

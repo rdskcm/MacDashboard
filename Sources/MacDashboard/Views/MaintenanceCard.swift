@@ -27,18 +27,25 @@ struct MaintenanceCard: View {
 
     @ViewBuilder
     private var homebrewSection: some View {
-        switch model.report.brewVersion {
+        switch model.report.brewStatus {
         case .none:
             SectionStateView(done: model.report.progress["brew"] ?? false)
-        case .some(.none):
+        case .some(.notInstalled):
             Text(L.maintenanceBrewNotInstalled)
                 .font(.system(size: 13))
                 .foregroundStyle(DS.muted)
-        case .some(.some(let version)):
+        case .some(.installed(let version)):
             VStack(alignment: .leading, spacing: 6) {
-                Text(version)
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(DS.inkSoft)
+                if let version {
+                    Text(version)
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(DS.inkSoft)
+                } else {
+                    // BREW-VERSION-FAIL: brew is present, `--version` failed — never "not installed".
+                    Text(L.maintenanceBrewVersionUnknown)
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(DS.amberInk)
+                }
                 if let outdated = model.report.brewOutdated {
                     if outdated.isEmpty {
                         Text(L.maintenanceBrewAllFresh)

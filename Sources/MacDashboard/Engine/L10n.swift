@@ -183,6 +183,7 @@ protocol AppStrings {
     // MARK: Maintenance card
     var maintenanceTitle: String { get }
     var maintenanceBrewNotInstalled: String { get }
+    var maintenanceBrewVersionUnknown: String { get }
     var maintenanceBrewAllFresh: String { get }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String
     var maintenanceBrewOutdatedCheckFailed: String { get }
