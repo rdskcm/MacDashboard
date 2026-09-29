@@ -2075,6 +2075,12 @@ runPrivilegedRunnerChecks()
 runBrewUpgraderChecks()
 
 // =====================================================================
+// MARK: - HistoryStore load/save/upsert (COVERAGE-HISTORY, in HistoryStoreChecks.swift)
+// =====================================================================
+
+runHistoryStoreChecks()
+
+// =====================================================================
 // MARK: - AttentionModel
 // =====================================================================
 
