@@ -185,6 +185,7 @@ protocol AppStrings {
     var maintenanceBrewNotInstalled: String { get }
     var maintenanceBrewAllFresh: String { get }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String
+    var maintenanceBrewOutdatedCheckFailed: String { get }
     var maintenanceUpdatesSection: String { get }
     var maintenanceUpdatesAllUpdated: String { get }
     var maintenanceCrashesSection: String { get }

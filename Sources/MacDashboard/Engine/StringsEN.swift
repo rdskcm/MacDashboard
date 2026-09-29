@@ -165,6 +165,7 @@ struct StringsEN: AppStrings {
     var maintenanceBrewNotInstalled: String { "not installed" }
     var maintenanceBrewAllFresh: String { "All packages up to date \u{2713}" }
     func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Outdated packages: \(n)" }
+    var maintenanceBrewOutdatedCheckFailed: String { "Couldn't check for outdated packages — run brew outdated in Terminal" }
     var maintenanceUpdatesSection: String { "macOS updates" }
     var maintenanceUpdatesAllUpdated: String { "\u{2713}" }
     var maintenanceCrashesSection: String { "Recent crashes" }

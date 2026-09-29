@@ -289,7 +289,7 @@ struct FullReport {
     var spotlight: String?
     var crashes: [CrashGroup]?          // grouped by process, ≤7 days old
     var brewVersion: String??           // .some(nil) = brew not installed
-    var brewOutdated: [String]?
+    var brewOutdated: [String]?           // [] = none outdated; nil with brewVersion .some(.some) = `brew outdated` failed (BREW-OUTDATED-FAIL)
     var updates: [String]?              // pending macOS updates ([] = up to date)
     var smart: [SmartDisk]?
     var autostart: AutostartInfo?
@@ -416,6 +416,7 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
   (`ReportCollector.isTrustedFallbackTool`: a regular file owned by root or the current user, no
   group/world write bit); no PATH lookup; absent or untrusted ⇒ brewVersion = .some(nil).
   Else `brew --version` + `brew outdated` (60 s).
+  Outdated list only on exit 0 with complete stdout; any other outcome ⇒ brewOutdated = nil = check failed (card and report say so; not cached).
 - updates: `softwareupdate -l` (120 s timeout; on timeout ⇒ nil = "не проверено").
 - autostart: `osascript -e 'tell application "System Events" to get the name of every
   login item'` (no permission ⇒ loginItems = nil, show "(нет разрешения)"); ls of

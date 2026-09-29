@@ -180,7 +180,7 @@ struct FullReport {
     var spotlight: String?
     var crashes: [CrashGroup]?          // grouped, ≤7 days old (V2-CRASH-SIGNAL)
     var brewVersion: String??           // .some(nil) = brew not installed
-    var brewOutdated: [String]?
+    var brewOutdated: [String]?           // [] = none outdated; nil with brewVersion .some(.some) = `brew outdated` failed (BREW-OUTDATED-FAIL)
     var updates: [String]?              // pending macOS updates ([] = up to date)
     var updatesCheckedAt: Date?          // when the shown `updates` value was obtained (cache); nil = never checked
     var updatesCheckDuration: TimeInterval?  // wall time of the background check that produced it
