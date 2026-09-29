@@ -336,6 +336,9 @@ if [ -d "$APPSUPPORT_DIR" ]; then
   mkdir -p "$RESTORE_DIR/appsupport"
   ditto "$APPSUPPORT_DIR" "$RESTORE_DIR/appsupport" \
     || precondition_refused "could not snapshot $APPSUPPORT_DIR — nothing was changed"
+  # ditto keeps ACLs even with --noacl (macOS 27); strip them from the COPY so the backup stays removable
+  chmod -R -N "$RESTORE_DIR/appsupport" \
+    || precondition_refused "could not strip ACLs from the snapshot of $APPSUPPORT_DIR — nothing was changed"
 else
   touch "$RESTORE_DIR/appsupport.absent"
 fi
@@ -386,9 +389,29 @@ restore() {
     *) appsupport_status="partial" ;;
   esac
   if [ "$appsupport_status" = "ok" ]; then
+    # >>> appsupport-restore (extracted by the restore scenario test; keep both markers)
     if [ -d "$RESTORE_DIR/appsupport" ]; then
+      # Exclude every file whose content is unchanged since the snapshot, so rsync never
+      # touches it. An unchanged file may carry a protective ACL (the Time Machine history
+      # copy mac_check_state.timemachine-*.json has "everyone deny write,delete"), and
+      # rsync -a fails on it with rc 23 (utimensat/unlinkat: Permission denied). Excluded
+      # files are also protected from --delete. Names containing rsync pattern characters
+      # or a newline are not excluded: rsync handles them as before, and any failure on
+      # them still surfaces as partial.
+      local unchanged="$OUT/restore-unchanged.txt"
+      local snap_file rel
+      : > "$unchanged"
+      while IFS= read -r -d '' snap_file; do
+        rel="${snap_file#"$RESTORE_DIR/appsupport/"}"
+        case "$rel" in *'['*|*']'*|*'*'*|*'?'*|*'\'*|*$'\n'*) continue ;; esac
+        if [ -f "$APPSUPPORT_DIR/$rel" ] && [ ! -L "$APPSUPPORT_DIR/$rel" ] \
+           && cmp -s "$snap_file" "$APPSUPPORT_DIR/$rel"; then
+          printf '/%s\n' "$rel" >> "$unchanged"
+        fi
+      done < <(find "$RESTORE_DIR/appsupport" -type f -print0)
       local rsync_rc=0
-      rsync -a --delete "$RESTORE_DIR/appsupport/" "$APPSUPPORT_DIR/" 2>"$OUT/restore-rsync.err" || rsync_rc=$?
+      rsync -a --delete --exclude-from="$unchanged" "$RESTORE_DIR/appsupport/" "$APPSUPPORT_DIR/" 2>"$OUT/restore-rsync.err" || rsync_rc=$?
+      rm -f "$unchanged"
       if [ "$rsync_rc" -ne 0 ]; then
         appsupport_status="partial(rsync_rc=$rsync_rc)"
       else
@@ -397,6 +420,7 @@ restore() {
     else
       rm -rf "$APPSUPPORT_DIR" 2>/dev/null || appsupport_status="partial"
     fi
+    # <<< appsupport-restore
   fi
 
   local appearance_status="ok"
@@ -425,7 +449,7 @@ EOF_CUR
   if [ "$app_status" = "ok" ] && [ "$defaults_status" = "ok" ] && [ "$savedstate_status" = "ok" ] \
      && [ "$appsupport_status" = "ok" ] && { [ "$appearance_status" = "ok" ] || [ "$appearance_status" = "partial" ]; } \
      && [ "$cursor_status" = "ok" ] && [ "$front_status" = "ok" ]; then
-    rm -rf "$RESTORE_DIR"
+    rm -rf "$RESTORE_DIR" 2>/dev/null || echo "RESTORE: could not remove backup $RESTORE_DIR"
   else
     echo "RESTORE: kept backup at $RESTORE_DIR"
   fi
