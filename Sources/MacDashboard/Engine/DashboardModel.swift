@@ -63,6 +63,17 @@ final class DashboardModel {
     /// Live `brew upgrade` progress while `brewUpgrading` is true; nil otherwise.
     var brewProgress: BrewProgress? = nil
 
+    /// True only while the `brew upgrade` process itself runs (BREW-CANCEL): the one window in
+    /// which Stop can act. False during the re-check that follows.
+    var brewUpgradeStoppable = false
+
+    /// Set by `stopBrewUpgrade()`; cleared when the run ends.
+    var brewStopRequested = false
+
+    /// Neutral outcome line of the last run the user stopped (BREW-CANCEL); cleared at the next
+    /// run's start. Not an error: shown in muted ink under the Homebrew section.
+    var brewUpgradeNotice: String? = nil
+
     /// Whether the SMART CLI toolchain (`smartctl`) is installed, installable via
     /// Homebrew, or blocked on Homebrew itself missing (Block N8). Recomputed
     /// whenever a fresh report lands and again after `installSmartmontoolsNow()`.
@@ -181,6 +192,7 @@ final class DashboardModel {
     private var reportTask: Task<Void, Never>?
     private var smartTask: Task<Void, Never>?
     private var brewUpgradeTask: Task<Void, Never>?
+    private var brewUpgradeRun: Task<String?, Never>?   // the `brew upgrade` step only; user Stop cancels this
 
     /// Session cache for the brew section (Block N5): last collected
     /// (status, outdated) and when. Reused by refreshReport() within
@@ -732,25 +744,44 @@ final class DashboardModel {
     /// on the Обслуживание системы card. Runs `brew upgrade` off-main, then
     /// re-collects a fresh Homebrew snapshot so the card reflects the outcome
     /// regardless of success or failure. Mirrors `refreshSmartNow()`.
+    /// The `brew upgrade` step runs in its own Task so Stop (`stopBrewUpgrade()`) can end just that process; the re-check still runs.
     func upgradeBrewNow() {
         guard !brewUpgrading else { return }
         brewUpgrading = true
         brewUpgradeError = nil
+        brewUpgradeNotice = nil
+        brewStopRequested = false
         brewProgress = nil
 
-        let total = report.brewOutdated?.count ?? 0
+        let before = report.brewOutdated ?? []
+        let total = before.count
+
+        let run = Task {
+            await BrewUpgrader.upgradeAll(totalOutdated: total, onProgress: { progress in
+                DispatchQueue.main.async { [weak self] in self?.brewProgress = progress }
+            })
+        }
+        brewUpgradeRun = run
+        brewUpgradeStoppable = true
 
         brewUpgradeTask = Task { [weak self] in
-            guard let self else { return }
+            guard let self else { run.cancel(); return }
             defer {
                 self.brewUpgrading = false
                 self.brewProgress = nil
+                self.brewStopRequested = false
+                self.brewUpgradeStoppable = false
+                self.brewUpgradeRun = nil
             }
 
+            // stop() cancels this task; forward that to the brew step (the user's Stop cancels only `run`).
+            let error = await withTaskCancellationHandler { await run.value } onCancel: { run.cancel() }
+            self.brewUpgradeStoppable = false
+            // A Stop counts only if brew had not already exited 0 before the signal landed.
+            let stoppedByUser = self.brewStopRequested && error != nil
+            guard !Task.isCancelled else { return }        // global teardown: no re-check, no write-back
+
             let collectorBox = UncheckedSendableBox(ReportCollector())
-            let error = await BrewUpgrader.upgradeAll(totalOutdated: total, onProgress: { progress in
-                DispatchQueue.main.async { [weak self] in self?.brewProgress = progress }
-            })
             let info = await collectorBox.value.collectBrewInfo()
             guard !Task.isCancelled else { return }
 
@@ -761,13 +792,24 @@ final class DashboardModel {
             await self.waitForReportRefreshToFinish()
             guard !Task.isCancelled else { return }
 
-            self.brewUpgradeError = error
+            self.brewUpgradeError = stoppedByUser ? nil : error
+            self.brewUpgradeNotice = stoppedByUser
+                ? BrewUpgrader.stoppedNotice(before: before, after: info.outdated) : nil
             self.report.brewStatus = info.status
             self.report.brewOutdated = info.outdated
             let failed = ReportCollector.brewCheckFailed(status: info.status, outdated: info.outdated)
             self.lastBrewInfo = failed ? nil : info
             self.lastBrewCollectedAt = failed ? nil : Date()
         }
+    }
+
+    /// User Stop (BREW-CANCEL). Interrupts only the running `brew upgrade`: SIGINT to its process
+    /// group, SIGKILL after BrewUpgrader's grace. `upgradeBrewNow()`'s flow then re-checks brew so
+    /// the card shows what really changed. No-op outside the brew step or after a first press.
+    func stopBrewUpgrade() {
+        guard brewUpgradeStoppable, !brewStopRequested, let run = brewUpgradeRun else { return }
+        brewStopRequested = true
+        run.cancel()
     }
 
     /// In-app `smartmontools` install, triggered by the install button on the Диски

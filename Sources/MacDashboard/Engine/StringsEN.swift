@@ -188,6 +188,14 @@ struct StringsEN: AppStrings {
     }
     func maintenanceBrewProgressUpgradingBare(_ name: String) -> String { "Upgrading \(name)…" }
     var maintenanceBrewUpgradeFailed: String { "Package upgrade failed — run brew upgrade in Terminal" }
+    var maintenanceBrewStopButton: String { "Stop" }
+    var maintenanceBrewStopA11y: String { "Stop package upgrade" }
+    var maintenanceBrewStopping: String { "Stopping the upgrade…" }
+    var maintenanceBrewRechecking: String { "Checking what was upgraded…" }
+    func maintenanceBrewStopped(_ upgraded: Int, _ total: Int) -> String {
+        "Upgrade stopped: \(upgraded) of \(total) \(total == 1 ? "package" : "packages") upgraded"
+    }
+    var maintenanceBrewStoppedUnknown: String { "Upgrade stopped" }
     var maintenanceOpenSoftwareUpdate: String { "Open System Settings…" }
 
     // MARK: Time Machine card

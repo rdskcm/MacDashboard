@@ -62,11 +62,13 @@ enum CommandRunner {
     /// all of them before this function returns. Cancelling the awaiting Task kills the
     /// group (or skips the spawn). Never blocks the caller or the Swift concurrency pool: each running child has one
     /// dedicated waiter thread that blocks until it exits.
+    /// `interruptGrace` (opt-in): cancellation first sends SIGINT to the group so the child can clean up (what Ctrl-C does) and sends SIGKILL only if the leader is still unreaped `interruptGrace` seconds later. The outcome is then the child's own exit status unless the escalation fired or output was cut (→ `.cancelled`). Timeouts always SIGKILL.
     static func run(_ path: String, _ args: [String], timeout: TimeInterval,
                     environment: [String: String] = defaultEnvironment,
+                    interruptGrace: TimeInterval? = nil,
                     onLine: ((_ line: String, _ isStderr: Bool) -> Void)? = nil) async -> CommandOutcome {
         guard path.hasPrefix("/") else { return .launchFailed(EINVAL) }   // R0(c)
-        let job = CommandJob(onLine: onLine, qos: CommandRunner.qos)
+        let job = CommandJob(onLine: onLine, qos: CommandRunner.qos, interruptGrace: interruptGrace)
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (cont: CheckedContinuation<CommandOutcome, Never>) in
                 job.start(path: path, args: args, environment: environment, timeout: timeout) {
@@ -228,6 +230,7 @@ private final class CommandJob: @unchecked Sendable {
     private let queue: DispatchQueue
     private let qos: CommandQoS
     private let onLine: ((String, Bool) -> Void)?
+    private let interruptGrace: TimeInterval?
     private var phase = Phase.idle
     private var killReason: CommandOutcome.KillReason?
     private var completion: ((CommandOutcome) -> Void)?
@@ -239,9 +242,11 @@ private final class CommandJob: @unchecked Sendable {
     private var openStreams = 0
     private var outputCut = false          // stopReading() ran while a stream was still open
     private var timer: DispatchSourceTimer?
+    private var escalation: DispatchSourceTimer?   // SIGKILL fallback after an interrupt
 
-    init(onLine: ((String, Bool) -> Void)?, qos: CommandQoS) {
+    init(onLine: ((String, Bool) -> Void)?, qos: CommandQoS, interruptGrace: TimeInterval?) {
         self.onLine = onLine
+        self.interruptGrace = interruptGrace
         self.qos = qos
         self.queue = DispatchQueue(label: "MacDashboard.CommandRunner.job", qos: qos.dispatchQoS)
     }
@@ -314,7 +319,19 @@ private final class CommandJob: @unchecked Sendable {
             if killReason == nil { killReason = reason }            // launch() will not spawn
         case .running(let pid):
             if killReason == nil { killReason = reason }
-            _ = killpg(pid, SIGKILL)                                // leader unreaped: pgid is ours
+            if reason == .cancelled, let grace = interruptGrace {
+                guard escalation == nil else { return }             // SIGINT already sent; SIGKILL fallback pending
+                _ = killpg(pid, SIGINT)                             // Ctrl-C semantics: the child may clean up
+                let t = DispatchSource.makeTimerSource(queue: queue)
+                t.schedule(deadline: .now() + grace)
+                t.setEventHandler {
+                    guard case .running(let p) = self.phase, p == pid else { return }   // signal only while unreaped
+                    _ = killpg(pid, SIGKILL)
+                }
+                t.resume(); escalation = t
+            } else {
+                _ = killpg(pid, SIGKILL)                            // leader unreaped: pgid is ours
+            }
         case .reaped:
             // Leader gone, but a pipe is still open (a holder outside the group). Stop reading;
             // the output is incomplete, so the outcome is timedOut/cancelled, not the exit status.
@@ -379,6 +396,7 @@ private final class CommandJob: @unchecked Sendable {
         if case .done = phase { return }
         phase = .done
         timer?.cancel(); timer = nil
+        escalation?.cancel(); escalation = nil
         channels = []
         let c = completion; completion = nil
         c?(outcome)

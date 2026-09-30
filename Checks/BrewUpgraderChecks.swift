@@ -40,8 +40,10 @@ func runBrewUpgraderChecks() {
     let inv = BrewUpgrader.invocation(brewPath: homebrew)
     let expectedEnv = ["PATH": "/opt/homebrew/bin:" + sysPATH, "LC_ALL": "C", "LANG": "C", "TZ": "UTC",
                        "HOME": NSHomeDirectory()]
-    check(inv == BrewUpgrader.Invocation(path: homebrew, args: ["upgrade"], timeout: 900, environment: expectedEnv),
+    check(inv == BrewUpgrader.Invocation(path: homebrew, args: ["upgrade"], timeout: 900, interruptGrace: 30,
+                                            environment: expectedEnv),
           "BrewUpgrader: [invocation] BI1 full value")
+    check(inv.interruptGrace == 30, "BrewUpgrader: [invocation] BI8 stop grace 30 s")
     check(inv.environment["PATH"] == "/opt/homebrew/bin:" + sysPATH, "BrewUpgrader: [invocation] BI2 PATH")
     check(inv.environment["HOMEBREW_NO_AUTO_UPDATE"] == nil, "BrewUpgrader: [invocation] BI3 auto-update not disabled")
     check(Set(inv.environment.keys) == ["PATH", "LC_ALL", "LANG", "TZ", "HOME"],
@@ -136,4 +138,22 @@ func runBrewUpgraderChecks() {
         check(buRun(total: 3, brewPath: homebrew, fake, log) == fail, "BrewUpgrader: [progress] BU14 returns failure")
         check(log.items.count == 1, "BrewUpgrader: [progress] BU14 progress still forwarded")
     }
+
+    // --- Stop notice (BREW-CANCEL) ---
+    check(BrewUpgrader.upgradedCount(before: ["a", "b", "c"], after: ["c"]) == 2, "BrewUpgrader: [stop] BS1 count")
+    check(BrewUpgrader.upgradedCount(before: ["a", "b"], after: ["a", "b", "z"]) == 0,
+          "BrewUpgrader: [stop] BS2 newly outdated not counted")
+    check(BrewUpgrader.upgradedCount(before: ["a"], after: []) == 1, "BrewUpgrader: [stop] BS3 all upgraded")
+    check(BrewUpgrader.upgradedCount(before: ["a"], after: nil) == nil, "BrewUpgrader: [stop] BS4 re-check failed")
+    check(BrewUpgrader.upgradedCount(before: [], after: []) == nil, "BrewUpgrader: [stop] BS5 empty before")
+    check(BrewUpgrader.stoppedNotice(before: ["a", "b", "c"], after: ["c"]) == L.maintenanceBrewStopped(2, 3),
+          "BrewUpgrader: [stop] BS6 notice")
+    check(BrewUpgrader.stoppedNotice(before: ["a"], after: nil) == L.maintenanceBrewStoppedUnknown,
+          "BrewUpgrader: [stop] BS7 notice unknown")
+    check(StringsRU().maintenanceBrewStopped(1, 1) == "Обновление остановлено: обновлено 1 из 1 пакета"
+          && StringsRU().maintenanceBrewStopped(2, 5) == "Обновление остановлено: обновлено 2 из 5 пакетов",
+          "BrewUpgrader: [stop] BS8 RU plural")
+    check(StringsEN().maintenanceBrewStopped(1, 1) == "Upgrade stopped: 1 of 1 package upgraded"
+          && StringsEN().maintenanceBrewStopped(0, 3) == "Upgrade stopped: 0 of 3 packages upgraded",
+          "BrewUpgrader: [stop] BS9 EN plural")
 }
