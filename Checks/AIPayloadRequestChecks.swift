@@ -46,6 +46,22 @@ func runAIPayloadRequestChecks() {
               "AIPayloadBuilder: empty assessment -> L.recommendationsAllGood (got \(emptyPayload))")
     }
 
+    // MUTATION-SURVIVORS M29: the "all good" shortcut needs BOTH lists empty (&&, not ||):
+    // problems without tips, and tips without problems, are each rendered.
+    do {
+        var problemsOnly = Assessment()
+        problemsOnly.problems = [Problem(sev: .warn, text: "Problem without tips")]
+        let p1 = AIPayloadBuilder.build(AIPayloadInput(reportText: "x", assessment: problemsOnly, live: LiveSnapshot()))
+        check(p1.contains("- [\(Severity.warn.rawValue)] Problem without tips"),
+              "AIPayloadBuilder: problems with no tips -> problem line listed (got \(p1))")
+
+        var tipsOnly = Assessment()
+        tipsOnly.tips = [Tip(text: "Tip without problems")]
+        let p2 = AIPayloadBuilder.build(AIPayloadInput(reportText: "x", assessment: tipsOnly, live: LiveSnapshot()))
+        check(p2.contains("\(L.aiPayloadTipPrefix)Tip without problems"),
+              "AIPayloadBuilder: tips with no problems -> tip line listed (got \(p2))")
+    }
+
     // 21: only disk populated -> disk line present, no battery/memory lines
     do {
         var live = LiveSnapshot()

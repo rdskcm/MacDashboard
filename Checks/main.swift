@@ -563,6 +563,14 @@ do {
     let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.72, size: 128 * GIB))
     check(a.diskSev == .warn, "assess disk 128GiB@72%: diskSev == .warn (R2 parity with old 0.70 constant)")
 }
+// MUTATION-SURVIVORS M04: free space exactly AT the critical floor is critical (<=, not <).
+// 256 GiB volume: 15 % = 38.4 GiB, so the 24 GiB upgrade-reserve cap is the floor.
+do {
+    var live = LiveSnapshot()
+    live.disk = DiskInfo(size: 256 * GIB, avail: 24 * GIB, dataUsed: nil, sysUsed: nil)
+    let a = Assess.assess(report: FullReport(), live: live)
+    check(a.diskSev == .crit, "assess disk 256GiB, avail == crit floor (24 GiB): diskSev == .crit (got \(a.diskSev))")
+}
 
 func memFixture(total: Int64, compressor: Int64 = 0) -> MemSnapshot {
     MemSnapshot(total: total, pageSize: 16384,
@@ -2382,6 +2390,17 @@ do {
     check(fmtBytesParts(nil).value == "—" && fmtBytesParts(nil).unit == nil,
           "fmtBytesParts: nil ⇒ (\"—\", nil)")
     check(fmtBytes(nil) == "—", "fmtBytes: nil ⇒ \"—\"")
+
+    // MUTATION-SURVIVORS M30: exactly one unit is shown as 1 of the next unit up (>=, not >).
+    let exactSteps: [(Int64, String)] = [
+        (1024, L.byteUnitKB), (1_048_576, L.byteUnitMB),
+        (1_073_741_824, L.byteUnitGB), (1_099_511_627_776, L.byteUnitTB),
+    ]
+    for (bytes, unit) in exactSteps {
+        let p = fmtBytesParts(bytes)
+        check(p.value == "1" && p.unit == unit,
+              "fmtBytesParts: \(bytes) bytes ⇒ (\"1\", \(unit)) (got (\(p.value), \(p.unit ?? "nil")))")
+    }
 
     // Each binary unit step (B/KB/MB/GB/TB).
     let byteCases: [Int64] = [

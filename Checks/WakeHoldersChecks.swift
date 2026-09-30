@@ -167,6 +167,13 @@ func runWakeHoldersChecks() {
     check(zoomHolders == [WakeHolder(owner: "zoom.us", requester: nil, ageSeconds: 900)],
           "WakeHolders: ordinary owner, no delegation -> zoom.us, nil requester (got \(zoomHolders))")
 
+    // --- MUTATION-SURVIVORS M13: age exactly AT the default floor is shown (>=, not >) ---
+    let synthAtFloor = PowerAssertion(pid: 8000, processName: "zoom.us", ageSeconds: WakeHolders.minimumAgeSeconds,
+                                      type: "PreventUserIdleDisplaySleep", name: "x")
+    let atFloorHolders = WakeHolders.holders(from: [synthAtFloor], lookup: lookup(zoomExtra))
+    check(atFloorHolders == [WakeHolder(owner: "zoom.us", requester: nil, ageSeconds: WakeHolders.minimumAgeSeconds)],
+          "WakeHolders: age == minimumAgeSeconds under default floor -> shown (got \(atFloorHolders))")
+
     // --- R5: on-behalf pointing into the owner's own app collapses requester ---
     let fooExtra: [Int32: ProcRecord] = [
         8100: ProcRecord(path: "/Applications/Foo.app/Contents/MacOS/Foo Helper", ppid: 1),
