@@ -27,6 +27,28 @@ struct MaintenanceCard: View {
 
     @ViewBuilder
     private var homebrewSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            homebrewReportContent
+            // BREW-STOP-VISIBLE: keyed on the upgrade alone — a report pass that blanks or
+            // re-lands brewStatus/brewOutdated mid-upgrade must not unmount Stop.
+            if model.brewUpgrading {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(brewStatusLine)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(DS.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    BrewStopButton(enabled: model.brewUpgradeStoppable && !model.brewStopRequested) {
+                        model.stopBrewUpgrade()
+                    }
+                    .fixedSize()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var homebrewReportContent: some View {
         switch model.report.brewStatus {
         case .none:
             SectionStateView(done: model.report.progress["brew"] ?? false)
@@ -59,19 +81,7 @@ struct MaintenanceCard: View {
                             .font(.system(size: 11.5))
                             .foregroundStyle(DS.muted)
                             .lineLimit(2)
-                        if model.brewUpgrading {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
-                                Text(brewStatusLine)
-                                    .font(.system(size: 11.5))
-                                    .foregroundStyle(DS.muted)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                BrewStopButton(enabled: model.brewUpgradeStoppable && !model.brewStopRequested) {
-                                    model.stopBrewUpgrade()
-                                }
-                                .fixedSize()
-                            }
-                        } else {
+                        if !model.brewUpgrading {
                             brewUpgradeButton
                         }
                     }
@@ -127,8 +137,8 @@ struct MaintenanceCard: View {
 }
 
 /// «Остановить» (BREW-CANCEL): C3 small outline capsule (11/600, h11 v5, `line-strong` 1), the
-/// neutral inline-cancel shape of AutostartCard's `OrphanCancelButton`. Always mounted while the
-/// upgrade flow runs; disabled outside the brew step and after the first press.
+/// neutral inline-cancel shape of AutostartCard's `OrphanCancelButton`. Mounted whenever `brewUpgrading`
+/// is true, whatever the report state (BREW-STOP-VISIBLE); disabled outside the brew step and after the first press.
 private struct BrewStopButton: View {
     let enabled: Bool
     let action: () -> Void
