@@ -200,8 +200,13 @@ jobs:
           set -euo pipefail
           TAG="${{ steps.tag.outputs.tag }}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
+            # Standard title "vX.Y (Codename)" (.github/RELEASE_NOTES_TEMPLATE.md), taken from the
+            # bundle's CFBundleShortVersionString ("2.2 (Krieg)"); its version part was checked
+            # against the tag above. The notes are a placeholder that the release flow replaces
+            # with `gh release edit --notes-file`.
+            short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/MacDashboard.app/Contents/Info.plist)"
             gh release create "$TAG" \
-              --title "MacDashboard $TAG" \
+              --title "v$short" \
               --notes "Apple Silicon (arm64) build. Intel Macs: download v2.1 from https://github.com/rdskcm/MacDashboard/releases/tag/v2.1. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
           fi
           gh release upload "$TAG" MacDashboard.zip --clobber
