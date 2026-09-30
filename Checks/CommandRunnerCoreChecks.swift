@@ -192,6 +192,37 @@ func runCommandRunnerCoreChecks() {
         check(elapsed < 3, "streaming cancellation: elapsed < 3 s (was \(elapsed))")
     }
 
+    // Interrupt-first cancellation (BREW-CANCEL).
+    do {
+        let marker = NSTemporaryDirectory() + "macdashboard-sigint-\(getpid())"
+        unlink(marker)
+        let start = Date()
+        let task = Task {
+            await CommandRunner.run("/bin/sh",
+                                    ["-c", "trap 'touch \(marker); exit 7' INT; while :; do sleep 0.1; done"],
+                                    timeout: 30, interruptGrace: 5)
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { task.cancel() }
+        let o = runAsyncBlocking { await task.value }
+        let elapsed = Date().timeIntervalSince(start)
+        check(FileManager.default.fileExists(atPath: marker), "interrupt-first cancellation lets the child clean up: INT trap ran")
+        check(elapsed < 3, "interrupt-first cancellation lets the child clean up: elapsed < 3 s (was \(elapsed))")
+        check(o.termination != .timedOut, "interrupt-first cancellation lets the child clean up: not timedOut")
+        unlink(marker)
+    }
+    do {
+        let start = Date()
+        let task = Task {
+            await CommandRunner.run("/bin/sh", ["-c", "trap '' INT; while :; do sleep 0.1; done"],
+                                    timeout: 30, interruptGrace: 1)
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { task.cancel() }
+        let o = runAsyncBlocking { await task.value }
+        let elapsed = Date().timeIntervalSince(start)
+        check(o.termination == .cancelled, "interrupt ignored → SIGKILL after the grace: termination == .cancelled")
+        check(elapsed >= 1.0 && elapsed < 4, "interrupt ignored → SIGKILL after the grace: 1 s <= elapsed < 4 s (was \(elapsed))")
+    }
+
     // Unaffected run.
     check(runCommand("/bin/echo", ["hi"], timeout: 5).text?.trimmingCharacters(in: .whitespacesAndNewlines) == "hi",
           "unaffected run: /bin/echo hi ⇒ \"hi\"")

@@ -204,6 +204,12 @@ protocol AppStrings {
     func maintenanceBrewProgressUpgrading(_ name: String, _ k: Int, _ n: Int, _ pct: Int) -> String
     func maintenanceBrewProgressUpgradingBare(_ name: String) -> String
     var maintenanceBrewUpgradeFailed: String { get }
+    var maintenanceBrewStopButton: String { get }
+    var maintenanceBrewStopA11y: String { get }
+    var maintenanceBrewStopping: String { get }
+    var maintenanceBrewRechecking: String { get }
+    func maintenanceBrewStopped(_ upgraded: Int, _ total: Int) -> String
+    var maintenanceBrewStoppedUnknown: String { get }
     var maintenanceOpenSoftwareUpdate: String { get }
 
     // MARK: Time Machine card

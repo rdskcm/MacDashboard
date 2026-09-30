@@ -192,6 +192,14 @@ struct StringsRU: AppStrings {
     }
     func maintenanceBrewProgressUpgradingBare(_ name: String) -> String { "Обновляем \(name)…" }
     var maintenanceBrewUpgradeFailed: String { "Не удалось обновить пакеты — запустите brew upgrade в Терминале" }
+    var maintenanceBrewStopButton: String { "Остановить" }
+    var maintenanceBrewStopA11y: String { "Остановить обновление пакетов" }
+    var maintenanceBrewStopping: String { "Останавливаем обновление…" }
+    var maintenanceBrewRechecking: String { "Проверяем, что успело обновиться…" }
+    func maintenanceBrewStopped(_ upgraded: Int, _ total: Int) -> String {
+        "Обновление остановлено: обновлено \(upgraded) из \(total) \(ruPlural(total, "пакета", "пакетов", "пакетов"))"
+    }
+    var maintenanceBrewStoppedUnknown: String { "Обновление остановлено" }
     var maintenanceOpenSoftwareUpdate: String { "Открыть Системные настройки…" }
 
     // MARK: Time Machine card

@@ -12,6 +12,7 @@ enum BrewUpgrader {
         let path: String
         let args: [String]
         let timeout: TimeInterval
+        let interruptGrace: TimeInterval
         let environment: [String: String]
     }
 
@@ -25,7 +26,8 @@ enum BrewUpgrader {
         await upgradeAll(totalOutdated: totalOutdated, brewPath: ReportCollector.findBrew(),
                          onProgress: onProgress, run: { invocation, onLine in
             await CommandRunner.run(invocation.path, invocation.args, timeout: invocation.timeout,
-                                    environment: invocation.environment, onLine: onLine)
+                                    environment: invocation.environment,
+                                    interruptGrace: invocation.interruptGrace, onLine: onLine)
         })
     }
 
@@ -52,7 +54,24 @@ enum BrewUpgrader {
         // the one call that actually matters, until V2-POLISH B1.
         // Generous timeout: downloads can take a while.
         Invocation(path: brewPath, args: ["upgrade"], timeout: 900,
+                   // User Stop: SIGINT lets Homebrew roll back the current keg (Utils::Interrupts); SIGKILL only if it has not exited 30 s later (BREW-CANCEL).
+                   interruptGrace: 30,
                    environment: CommandRunner.environment(
                        prependingPATH: [(brewPath as NSString).deletingLastPathComponent]))
+    }
+
+    /// Pure (Checks-tested). How many packages of `before` (the outdated list the run started
+    /// from) are no longer outdated in `after`; nil when the re-check failed or `before` is empty.
+    /// Packages that became outdated during the run are not counted.
+    static func upgradedCount(before: [String], after: [String]?) -> Int? {
+        guard let after, !before.isEmpty else { return nil }
+        let still = Set(after)
+        return before.filter { !still.contains($0) }.count
+    }
+
+    /// Pure (Checks-tested). The neutral line shown after the user stopped a run (BREW-CANCEL).
+    static func stoppedNotice(before: [String], after: [String]?) -> String {
+        guard let k = upgradedCount(before: before, after: after) else { return L.maintenanceBrewStoppedUnknown }
+        return L.maintenanceBrewStopped(k, before.count)
     }
 }

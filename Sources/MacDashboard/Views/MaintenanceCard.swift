@@ -62,9 +62,14 @@ struct MaintenanceCard: View {
                         if model.brewUpgrading {
                             HStack(spacing: 6) {
                                 ProgressView().controlSize(.small)
-                                Text(model.brewProgress.map(brewProgressText) ?? L.maintenanceBrewUpgrading)
+                                Text(brewStatusLine)
                                     .font(.system(size: 11.5))
                                     .foregroundStyle(DS.muted)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                BrewStopButton(enabled: model.brewUpgradeStoppable && !model.brewStopRequested) {
+                                    model.stopBrewUpgrade()
+                                }
+                                .fixedSize()
                             }
                         } else {
                             brewUpgradeButton
@@ -79,8 +84,19 @@ struct MaintenanceCard: View {
                 if let err = model.brewUpgradeError {
                     Text(err).font(.caption2).foregroundStyle(.red)
                 }
+                if let notice = model.brewUpgradeNotice {
+                    Text(notice).font(.system(size: 11.5)).foregroundStyle(DS.inkSoft)
+                }
             }
         }
+    }
+
+    /// Progress line, or the stop phases (BREW-CANCEL) once Stop was pressed.
+    private var brewStatusLine: String {
+        if model.brewStopRequested {
+            return model.brewUpgradeStoppable ? L.maintenanceBrewStopping : L.maintenanceBrewRechecking
+        }
+        return model.brewProgress.map(brewProgressText) ?? L.maintenanceBrewUpgrading
     }
 
     /// «Обновить пакеты» (Spec §5.8/§2.4 small capsule button, no rainbow ring —
@@ -107,6 +123,38 @@ struct MaintenanceCard: View {
         )
         .asBreathe()
         .accessibilityLabel(L.maintenanceBrewUpgradeButton)
+    }
+}
+
+/// «Остановить» (BREW-CANCEL): C3 small outline capsule (11/600, h11 v5, `line-strong` 1), the
+/// neutral inline-cancel shape of AutostartCard's `OrphanCancelButton`. Always mounted while the
+/// upgrade flow runs; disabled outside the brew step and after the first press.
+private struct BrewStopButton: View {
+    let enabled: Bool
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(L.maintenanceBrewStopButton)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(hovering && enabled ? DS.ink : DS.inkSoft)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(hovering && enabled ? DS.row : Color.clear))
+                .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+        .onHover { hovering = $0 }
+        .animation(
+            reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
+            value: hovering
+        )
+        .accessibilityLabel(L.maintenanceBrewStopA11y)
     }
 }
 
