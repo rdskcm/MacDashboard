@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.3] (Krieg) - 2026-09-30
+
+Faster reports, a History card with a range switch, a warning for programs that keep the Mac awake,
+and a Stop button for Homebrew upgrades. Homebrew failures are now reported as failures.
+
+### New
+
+- Sleep: a new attention item names the programs that have kept the Mac awake for 5 minutes or more. Its tooltip lists them and a click opens Activity Monitor. Nothing is ever terminated.
+- History card: a range switch above the chart shows the last month, 3 months, a year or all days. The default is month and it is not saved. "All" is thinned to at most 365 points.
+- Homebrew upgrade: a Stop button in the progress row stops a running upgrade and lets Homebrew clean up a partial install. The card then re-checks and reports "stopped: K of N upgraded".
+- For contributors: new checks for report writing, history storage, command construction and boundary cases, and a deterministic visual baseline.
+
+### Improved
+
+- History is no longer capped at 60 days. Every day is kept, and the History table shows the 10 newest days with a button for the rest.
+- The macOS update check runs in the background with a 6-hour cache, so it no longer slows the report. The Updates card shows when it was last checked. Automatic work runs at low priority and the Refresh button at normal priority.
+- Folder sizes are counted in the background and cached for 1 hour. The Folders card shows when they were counted, and the Refresh button always counts again.
+- Memory alert: its level now follows the system memory pressure (normal, warning, critical) instead of swap size. The text names the 2 or 3 apps using the most memory. The swap tip is removed.
+- The top-process lists no longer show the app's own helper processes (du, ps, top, brew).
+- The text report has a new "COLLECTION TIMES" section with how long each part of the report took.
+- All hints now use the app's own tooltip, and tooltip bubbles fit wrapped text without extra side margins.
+- VoiceOver now reads the name of each segment and which one is selected in the segmented controls (History, Processes, Settings).
+
+### Fixed
+
+- Battery on macOS 27: capacity, temperature and the Lifetime section showed dashes or were empty. They are read again from the new locations.
+- A history file that cannot be read is renamed aside (`mac_check_state.json.unreadable-<date>`) instead of being overwritten. Unreadable entries and unknown fields are kept on save.
+- A Homebrew upgrade that printed progress and then failed, was killed or timed out was shown as success. It is now reported as failed unless the command exited normally.
+- A failed `brew outdated` check was shown as "all packages up to date". It now shows a failed-check line and is not cached.
+- An installed Homebrew whose `--version` failed was shown as not installed. It now shows "installed, version could not be determined".
+- A failed Homebrew upgrade started from the Advice card showed no error there. The Advice card now shows the same error as the Maintenance card.
+
 ## [2.2] (Krieg) - 2026-09-25
 
 Apple Silicon only, and a rebuilt way of running the system commands behind every
