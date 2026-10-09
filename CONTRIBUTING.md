@@ -12,7 +12,7 @@ arrives as a pull request.
 ./build_app.sh
 ```
 
-Add `--install` to also copy the built app into `~/Applications`:
+Add `--install` to also move the built app into `~/Applications` (`dist.noindex/` is left empty):
 
 ```
 ./build_app.sh --install

@@ -6,6 +6,7 @@ Checks/.build/
 
 # Packaged app / distribution (rebuilt from source via build_app.sh)
 dist/
+dist.noindex/
 *.app
 *.zip
 

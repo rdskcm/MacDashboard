@@ -52,7 +52,7 @@ threshold_for_state() {
 # Argument parsing
 # ---------------------------------------------------------------------------
 MODE="run"
-APP="$ROOT/dist/MacDashboard.app"
+APP="$ROOT/dist.noindex/MacDashboard.app"
 OUT=""
 REFERENCE="$ROOT/tools/visual/reference"
 ALLOW_OLD_SDK=0
@@ -235,7 +235,7 @@ if [ -z "$CLICLICK" ]; then
 fi
 
 # Precondition 7: staleness warning (default dist app only)
-if [ "$APP" = "$ROOT/dist/MacDashboard.app" ]; then
+if [ "$APP" = "$ROOT/dist.noindex/MacDashboard.app" ]; then
   STALE="$(find "$ROOT/Sources" -newer "$APP_BIN" -print -quit 2>/dev/null || true)"
   if [ -n "$STALE" ]; then
     echo "WARNING: dist build is older than Sources/ — run ./build_app.sh"
@@ -365,6 +365,12 @@ restore() {
     if ps -p "$LAUNCHED_PID" >/dev/null 2>&1; then app_status="partial"; fi
   fi
 
+  # The run opened $APP by path, which registered it with LaunchServices. Drop every
+  # registration except the installed copy so opening by bundle ID resolves to it again
+  # (APP-ID-DUPLICATES). A copy that did not quit stays registered (ls-prune skips it).
+  local ls_status="ok"
+  "$ROOT/tools/ls-prune.sh" >/dev/null 2>&1 || ls_status="partial"
+
   local defaults_status="ok"
   defaults delete "$BUNDLE_ID" >/dev/null 2>&1 || true
   if [ -f "$RESTORE_DIR/defaults.plist" ]; then
@@ -444,7 +450,7 @@ EOF_CUR
     osascript -e "tell application id \"$FRONT_BUNDLE0\" to activate" >/dev/null 2>&1 || front_status="partial"
   fi
 
-  echo "RESTORE: app=$app_status defaults=$defaults_status savedstate=$savedstate_status appsupport=$appsupport_status appearance=$appearance_status cursor=$cursor_status front=$front_status"
+  echo "RESTORE: app=$app_status defaults=$defaults_status savedstate=$savedstate_status appsupport=$appsupport_status appearance=$appearance_status cursor=$cursor_status front=$front_status ls=$ls_status"
 
   if [ "$app_status" = "ok" ] && [ "$defaults_status" = "ok" ] && [ "$savedstate_status" = "ok" ] \
      && [ "$appsupport_status" = "ok" ] && { [ "$appearance_status" = "ok" ] || [ "$appearance_status" = "partial" ]; } \
