@@ -81,14 +81,15 @@ enum PrivilegedRunner {
 
     /// `s` as one POSIX single-quoted shell word: every `'` becomes `'\''`. Safe for any
     /// content, including newlines and `$`/backticks; it does NOT stop a word that starts
-    /// with `-` from being read as an option — callers pass absolute paths only.
+    /// with `-` from being read as an option — end the options with `--` first, as `removeCommand(paths:)` does.
     static func shellQuoted(_ s: String) -> String {
         "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    /// `/bin/rm -f` of every path, each one single-quoted word, for `run(_:)`.
+    /// `/bin/rm -f -- <paths>` for `run(_:)`, each path one single-quoted word. The `--` ends
+    /// rm's option parsing, so a path that starts with `-` is always an operand, never an option.
     static func removeCommand(paths: [String]) -> String {
-        "/bin/rm -f " + paths.map(shellQuoted).joined(separator: " ")
+        "/bin/rm -f -- " + paths.map(shellQuoted).joined(separator: " ")
     }
 
     /// True when osascript reported the ADMIN-PASSWORD DIALOG being dismissed, i.e.
