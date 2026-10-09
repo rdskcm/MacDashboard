@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.3.1] (Krieg) - 2026-10-09
+
+Six fixes: folder-size counting after a failure, hover text, the attention card layout, the cores
+line on newer chips, and removal of system autostart items.
+
+### New
+
+- For contributors: the build goes to `dist.noindex/`, which Spotlight does not index, and `tools/ls-prune.sh` removes stale LaunchServices registrations of the app (build output, test builds, backup copies). Opening the app by its bundle ID now starts the installed copy.
+
+### Fixed
+
+- Folders card: when a size count failed (for example, it ran past its 2-minute limit), the app started a new full count every minute. Automatic counts now wait 1 hour after a failure. The Refresh button still counts at once.
+- Autostart: removing a system-level item with administrator rights passed the path to `rm` without ending its options, so a path that began with `-` could be read as an option. Such a path is now always treated as a file name.
+- Hover: on the Autostart capsules, the Homebrew upgrade button and the Memory legend, the label text moved ahead of its card and snapped back when the pointer entered. The text now moves with the card.
+- Attention card: with 3 or more items, each item was stretched to half the card width. Items are now sized to their text and flow in rows, like the Recommendations capsules. An item too wide for the row is truncated.
+- Processor: on a chip whose core layout the app did not know, the cores line could be missing. It now uses the core tier names that macOS reports, or shows the total number of cores.
+
 ## [2.3] (Krieg) - 2026-09-30
 
 Faster reports, a History card with a range switch, a warning for programs that keep the Mac awake,
