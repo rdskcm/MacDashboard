@@ -223,6 +223,10 @@ final class DashboardModel {
     private var sizeScheduleTask: Task<Void, Never>?
     private var isCountingSizes = false
     private var sizeCountGeneration = 0
+    /// Wall time the last folder-size count finished without a result (SIZES-FAIL-BACKOFF).
+    /// Automatic triggers wait the 1 h window after it; the button does not. In-memory only:
+    /// a relaunch makes one fresh attempt. Cleared by a successful count.
+    private var sizeCountFailedAt: Date?
 
     /// SMART re-check cadence (SPEC Block H): SMART attrs change slowly (wear level,
     /// reallocated sectors), so this is far slower than the fast (~2s) / slow (~6s)
@@ -418,8 +422,9 @@ final class DashboardModel {
         loadCachedReportFromDisk()
         refreshReport(trigger: .automatic)
 
-        // Hourly folder-size count (SIZES-BACKGROUND): a cheap poll; the 1 h freshness rule
-        // inside startSizeCountIfNeeded decides. Skipped while paused (SPEC §1.4 energy rule).
+        // Hourly folder-size count (SIZES-BACKGROUND): a cheap poll; the 1 h rule inside
+        // startSizeCountIfNeeded decides (last success or last failed attempt, SIZES-FAIL-BACKOFF).
+        // Skipped while paused (SPEC §1.4 energy rule).
         sizeScheduleTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
@@ -613,6 +618,7 @@ final class DashboardModel {
 
     private func startSizeCountIfNeeded(trigger: CollectTrigger) {
         guard ReportCollector.shouldStartSizeCount(trigger: trigger, countedAt: folderSizes?.countedAt,
+                                                   failedAt: sizeCountFailedAt,
                                                    inFlight: isCountingSizes, now: Date()) else { return }
         isCountingSizes = true
         sizeCountGeneration += 1
@@ -625,7 +631,10 @@ final class DashboardModel {
             guard !Task.isCancelled else { return }
             if let result {
                 self.folderSizes = result
+                self.sizeCountFailedAt = nil
                 try? FolderSizesCacheStore.save(result, to: self.folderSizesURL)   // a failed write costs one recount next launch
+            } else {
+                self.sizeCountFailedAt = Date()          // automatic triggers back off 1 h; the button still forces
             }
             self.mergeBackgroundIntoCommitted()         // also on failure: spinner -> "unavailable" when no cache
         }

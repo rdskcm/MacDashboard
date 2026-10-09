@@ -118,9 +118,15 @@ final class ReportCollector {
     static func isFolderSizesCacheFresh(countedAt: Date?, now: Date, window: TimeInterval = folderSizesCacheWindow) -> Bool {
         isBrewCacheFresh(collectedAt: countedAt, now: now, window: window)
     }
-    /// Same rule as shouldStartUpdateCheck, with the 1 h window.
-    static func shouldStartSizeCount(trigger: CollectTrigger, countedAt: Date?, inFlight: Bool, now: Date) -> Bool {
-        !inFlight && (trigger == .button || !isFolderSizesCacheFresh(countedAt: countedAt, now: now))
+    /// Start a background folder-size count? Never two at once; the button always wants one;
+    /// automatic triggers only when neither the last success (`countedAt`) nor the last failed
+    /// attempt (`failedAt`, SIZES-FAIL-BACKOFF) lies within the 1 h window. A future timestamp
+    /// counts as expired (isBrewCacheFresh rule), so a rolled-back clock cannot block counts.
+    static func shouldStartSizeCount(trigger: CollectTrigger, countedAt: Date?, failedAt: Date?,
+                                     inFlight: Bool, now: Date) -> Bool {
+        !inFlight && (trigger == .button
+                      || (!isFolderSizesCacheFresh(countedAt: countedAt, now: now)
+                          && !isBrewCacheFresh(collectedAt: failedAt, now: now, window: folderSizesCacheWindow)))
     }
     /// The six service paths that live under $HOME, in display/unreadable order.
     static func homeServicePaths(home: String) -> [String] {
