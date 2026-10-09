@@ -363,7 +363,7 @@ final class ReportCollector {
             info.osName = parsed.osName; info.osVersion = parsed.osVersion; info.osBuild = parsed.osBuild
         }
         if let hw = await ParsedCommand.spHardware.run().text {
-            if let h = Parsers.hardwareProfile(json: Data(hw.utf8)) {
+            if let h = Parsers.hardwareProfile(json: Data(hw.utf8), perfLevels: Self.perfLevels()) {
                 info.modelName = h.modelName; info.modelId = h.modelId; info.chip = h.chip
                 info.cores = h.cores; info.memBytes = h.memBytes
             } else if let f = ParseFailure(.spHardware, stdout: hw) {
@@ -389,6 +389,26 @@ final class ReportCollector {
         var buf = [CChar](repeating: 0, count: size)
         guard sysctlbyname(name, &buf, &size, nil, 0) == 0 else { return nil }
         return String(cString: buf)
+    }
+
+    private static func sysctlInt32(_ name: String) -> Int32? {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return nil }
+        return value
+    }
+
+    /// `hw.perflevelN.name` / `.physicalcpu` for N in 0..<hw.nperflevels, highest first; [] if any read
+    /// fails (e.g. Intel), and the parser then falls back to its verified names or the total.
+    private static func perfLevels() -> [Parsers.PerfLevel] {
+        guard let n = sysctlInt32("hw.nperflevels"), n > 0 else { return [] }
+        var levels: [Parsers.PerfLevel] = []
+        for i in 0..<Int(n) {
+            guard let name = sysctlString("hw.perflevel\(i).name"),
+                  let count = sysctlInt32("hw.perflevel\(i).physicalcpu") else { return [] }
+            levels.append(.init(name: name, count: Int(count)))
+        }
+        return levels
     }
 
     // MARK: - Time Machine local snapshots
