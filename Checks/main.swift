@@ -226,10 +226,35 @@ do {
     check(intelInfo?.cores == "6", "hardwareProfile: Intel cores == 6")
     check(intelInfo?.memBytes == 16 * GIB, "hardwareProfile: Intel memBytes")
 
-    for odd in ["proc 10:x:2", "proc 18:6:8:4", "proc 8:0:4:4:1"] {
-        let r = Parsers.hardwareProfile(json: hwJSON(asItem.replacingOccurrences(of: "proc 8:0:4:4", with: odd)))
-        check(r != nil && r?.cores == nil && r?.chip == "Apple M3", "hardwareProfile: '\(odd)' ⇒ cores nil, other fields set")
+    func cores(_ proc: String, _ levels: [Parsers.PerfLevel] = []) -> String? {
+        Parsers.hardwareProfile(json: hwJSON(asItem.replacingOccurrences(of: "proc 8:0:4:4", with: proc)),
+                                perfLevels: levels)?.cores
     }
+    typealias PL = Parsers.PerfLevel
+    let thisMac = [PL(name: "Performance", count: 4), PL(name: "Efficiency", count: 4)]
+    check(cores("proc 8:0:4:4", thisMac) == "8 (4 Performance and 4 Efficiency)", "cores: this Mac with OS perflevels, unchanged")
+    check(cores("proc 8:4:4", thisMac) == "8 (4 Performance and 4 Efficiency)", "cores: 3-field with OS perflevels")
+    check(cores("proc 8:0:4:4", [PL(name: "", count: 4), PL(name: "", count: 4)]) == "8 (4 Performance and 4 Efficiency)",
+          "cores: empty OS names ⇒ verified built-in names")
+    check(cores("proc 8:8:0") == "8 (8 Performance)", "cores: zero tier omitted")
+    let superPerf = [PL(name: "Super", count: 6), PL(name: "Performance", count: 12)]
+    check(cores("proc 18:6:12:0", superPerf) == "18 (6 Super and 12 Performance)", "cores: non-zero 2nd field named by OS")
+    check(cores("proc 18:6:12:0") == "18", "cores: non-zero 2nd field, no perflevels ⇒ total")
+    check(cores("proc 18:6:12:0", thisMac) == "18", "cores: perflevel counts mismatch ⇒ total")
+    let threeTiers = [PL(name: "Super", count: 6), PL(name: "Performance", count: 6), PL(name: "Efficiency", count: 6)]
+    check(cores("proc 18:6:6:6", threeTiers) == "18 (6 Super, 6 Performance and 6 Efficiency)", "cores: three tiers named by OS")
+    check(cores("proc 18:6:6:6") == "18", "cores: three tiers, no perflevels ⇒ total")
+    for (odd, want) in [("proc 10:x:2", "10"), ("proc 18:6:8:4", "18"), ("proc 8:0:4:4:1", "8"),
+                        ("proc 8:0:4:5", "8"), ("proc 8", "8"), ("proc 8:", "8"), ("proc 8:4:-4", "8")] {
+        let r = Parsers.hardwareProfile(json: hwJSON(asItem.replacingOccurrences(of: "proc 8:0:4:4", with: odd)))
+        check(r?.cores == want && r?.chip == "Apple M3", "hardwareProfile: '\(odd)' ⇒ total '\(want)', other fields set")
+    }
+    for bad in ["8 cores", "", "proc ", "proc x:4:4", "proc 0:0:0:0", "PROC 8:4:4", "proc 9999999:1:1"] {
+        let r = Parsers.hardwareProfile(json: hwJSON(asItem.replacingOccurrences(of: "proc 8:0:4:4", with: bad)))
+        check(r != nil && r?.cores == nil && r?.chip == "Apple M3", "hardwareProfile: '\(bad)' ⇒ cores nil, other fields set")
+    }
+    check(Parsers.hardwareProfile(json: hwJSON("\"chip_type\":\"Apple M3\",\"number_processors\":0"))?.cores == nil,
+          "hardwareProfile: Int 0 ⇒ cores nil")
     check(Parsers.hardwareProfile(json: hwJSON("\"chip_type\":\"Apple M3\",\"number_processors\":true")) == nil,
           "hardwareProfile: number_processors bool ⇒ nil")
     check(Parsers.hardwareProfile(json: Data("{\"SPHardwareDataType\":[]}".utf8)) == nil, "hardwareProfile: empty array ⇒ nil")

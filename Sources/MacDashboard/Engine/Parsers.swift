@@ -290,10 +290,14 @@ enum Parsers {
         return info
     }
 
+    /// One CPU performance level as the OS reports it (`hw.perflevelN.name` / `hw.perflevelN.physicalcpu`),
+    /// highest-performing first (perflevel0). Supplied by `ReportCollector`; `[]` when unavailable.
+    struct PerfLevel: Equatable { var name: String; var count: Int }
+
     /// Decodes `system_profiler -json SPHardwareDataType` (first item). Apple Silicon has
-    /// `chip_type`, Intel has `cpu_type`. `number_processors` is an Int (Intel) or a
-    /// "proc T:P:E" / "proc T:0:P:E" string (Apple Silicon); any other shape gives nil cores.
-    static func hardwareProfile(json data: Data) -> SystemInfo? {
+    /// `chip_type`, Intel has `cpu_type`. `number_processors` is an Int (Intel) or a "proc T:…"
+    /// string (Apple Silicon) — see `coresDescription` for the cores contract.
+    static func hardwareProfile(json data: Data, perfLevels: [PerfLevel] = []) -> SystemInfo? {
         enum CoreCount: Decodable {
             case count(Int), tiers(String)
             init(from decoder: Decoder) throws {
@@ -319,19 +323,44 @@ enum Parsers {
         info.chip = item.chip_type ?? item.cpu_type
         info.memBytes = item.physical_memory.flatMap(parseWholeGBString)
         switch item.number_processors {
-        case .count(let n)?: info.cores = "\(n)"
-        case .tiers(let s)?:
-            // exactly "proc T:P:E" or "proc T:0:P:E"; the meaning of the 0 field is unverified
-            let re = #"^proc (\d+):(?:0:)?(\d+):(\d+)$"#
-            if let m = s.range(of: re, options: .regularExpression) {
-                let nums = s[m].dropFirst(5).split(separator: ":").compactMap { Int($0) }
-                if nums.count >= 3 {
-                    info.cores = "\(nums[0]) (\(nums[nums.count - 2]) Performance and \(nums[nums.count - 1]) Efficiency)"
-                }
-            }
+        case .count(let n)?: if n > 0 { info.cores = "\(n)" }
+        case .tiers(let s)?: info.cores = coresDescription(s, perfLevels: perfLevels)
         case nil: break
         }
         return info
+    }
+
+    /// `number_processors` string → the cores line (CORES-TIERS contract):
+    /// - "proc T:a:b" / "proc T:a:b:c", all digits, tiers summing to T → "T (n Name, … and n Name)" listing
+    ///   every non-zero tier, highest first. Names come from `perfLevels` when its counts equal the non-zero
+    ///   tiers in order; otherwise only the verified shapes "proc T:P:E" and "proc T:0:P:E" are named
+    ///   (Performance/Efficiency) — the tier counted by a non-zero second field is never guessed.
+    /// - any other string starting with "proc T" (T > 0) → "T" (total only).
+    /// - anything else → nil.
+    static func coresDescription(_ s: String, perfLevels: [PerfLevel]) -> String? {
+        func number(_ x: Substring) -> Int? {
+            (1...6).contains(x.count) && x.allSatisfy({ $0.isASCII && $0.isNumber }) ? Int(x) : nil
+        }
+        guard s.hasPrefix("proc ") else { return nil }
+        let fields = s.dropFirst(5).split(separator: ":", omittingEmptySubsequences: false)
+        guard let total = fields.first.flatMap(number), total > 0 else { return nil }
+        let tiers = fields.dropFirst().compactMap(number)
+        guard tiers.count == fields.count - 1, tiers.count == 2 || tiers.count == 3,
+              tiers.reduce(0, +) == total else { return "\(total)" }
+        let present = tiers.filter { $0 > 0 }
+        let names: [String]
+        if perfLevels.map(\.count) == present, perfLevels.allSatisfy({ !$0.name.isEmpty }) {
+            names = perfLevels.map(\.name)
+        } else if tiers.count == 2 || tiers[0] == 0 {
+            names = zip(tiers.suffix(2), ["Performance", "Efficiency"]).filter { $0.0 > 0 }.map(\.1)
+        } else {
+            return "\(total)"
+        }
+        let parts = zip(present, names).map { "\($0) \($1)" }
+        let list = parts.count == 1
+            ? parts[0]
+            : parts.dropLast().joined(separator: ", ") + " and " + parts[parts.count - 1]
+        return "\(total) (\(list))"
     }
 
     private static func parseWholeGBString(_ s: String) -> Int64? {
