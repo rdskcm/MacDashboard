@@ -136,17 +136,30 @@ func runPrivilegedRunnerChecks() {
     for (label, v) in prCorpus {
         check(PR.shellQuoted(v) == prLegacyShellQuoted(v), "PrivilegedRunner: [shellQuoted legacy] \(label)")
     }
-    check(PR.removeCommand(paths: ["/Library/LaunchDaemons/a.plist"]) == "/bin/rm -f '/Library/LaunchDaemons/a.plist'",
+    check(PR.removeCommand(paths: ["/Library/LaunchDaemons/a.plist"]) == "/bin/rm -f -- '/Library/LaunchDaemons/a.plist'",
           "PrivilegedRunner: [removeCommand one]")
     check(PR.removeCommand(paths: ["/Library/LaunchAgents/a b.plist", "/Library/LaunchDaemons/it's.plist"])
-            == "/bin/rm -f '/Library/LaunchAgents/a b.plist' '/Library/LaunchDaemons/it'\\''s.plist'",
+            == "/bin/rm -f -- '/Library/LaunchAgents/a b.plist' '/Library/LaunchDaemons/it'\\''s.plist'",
           "PrivilegedRunner: [removeCommand two]")
-    check(PR.removeCommand(paths: []) == "/bin/rm -f ", "PrivilegedRunner: [removeCommand empty]")
+    check(PR.removeCommand(paths: []) == "/bin/rm -f -- ", "PrivilegedRunner: [removeCommand empty]")
+    // PRIV-RM-DASHDASH: `--` ends rm's options before the first path, so a leading `-` stays an operand.
+    check(PR.removeCommand(paths: ["-rf"]) == "/bin/rm -f -- '-rf'",
+          "PrivilegedRunner: [removeCommand leading dash] single")
+    check(PR.removeCommand(paths: ["-rf", "/Library/LaunchAgents/a.plist", "--force"])
+            == "/bin/rm -f -- '-rf' '/Library/LaunchAgents/a.plist' '--force'",
+          "PrivilegedRunner: [removeCommand leading dash] multi")
+    do {
+        let c = PR.removeCommand(paths: ["/Library/LaunchAgents/a.plist", "-x", "/Library/LaunchDaemons/b.plist"])
+        let words = c.components(separatedBy: " ")
+        check(words.filter { $0 == "--" }.count == 1 && words.firstIndex(of: "--") == 2
+                && words.dropFirst(3).allSatisfy { $0.hasPrefix("'") && $0.hasSuffix("'") },
+              "PrivilegedRunner: [removeCommand leading dash] one -- before every quoted path")
+    }
     for (label, v) in prCorpus {
-        check(PR.removeCommand(paths: [v]) == "/bin/rm -f \(prLegacyShellQuoted(v))",
+        check(PR.removeCommand(paths: [v]) == "/bin/rm -f -- \(prLegacyShellQuoted(v))",
               "PrivilegedRunner: [removeCommand legacy] \(label)")
     }
-    check(PR.removeCommand(paths: values) == "/bin/rm -f " + values.map(prLegacyShellQuoted).joined(separator: " "),
+    check(PR.removeCommand(paths: values) == "/bin/rm -f -- " + values.map(prLegacyShellQuoted).joined(separator: " "),
           "PrivilegedRunner: [removeCommand legacy bulk]")
 
     // --- Decision flow (fake executor) ---
@@ -221,7 +234,7 @@ func runPrivilegedRunnerChecks() {
     }
     do {
         let c = PR.removeCommand(paths: values)
-        let prefix = "/bin/rm -f "
+        let prefix = "/bin/rm -f -- "
         let ok = c.hasPrefix(prefix)
         check(ok, "PrivilegedRunner: [removeCommand word split] prefix")
         if ok {
