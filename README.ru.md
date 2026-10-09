@@ -165,8 +165,8 @@ Time Machine. Всё это остаётся локально — но если 
 ```bash
 git clone https://github.com/rdskcm/MacDashboard.git
 cd MacDashboard
-./build_app.sh            # соберёт dist/MacDashboard.app
-./build_app.sh --install  # и скопирует в ~/Applications
+./build_app.sh            # соберёт dist.noindex/MacDashboard.app
+./build_app.sh --install  # и переместит в ~/Applications
 ```
 
 Собранное самостоятельно приложение не получает карантина от скачивания —

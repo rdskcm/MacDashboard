@@ -100,8 +100,8 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
   (create on first run via `FileManager.urls(for: .applicationSupportDirectory…)`).
   - `mac_report.txt` — the single report file (overwritten).
   - `mac_check_state.json` — history (same schema as legacy file, see §7).
-- Built app: `MacDashboard/dist/MacDashboard.app` — `APP_NAME="MacDashboard"` /
-  `DIST="dist/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` copies it to
+- Built app: `MacDashboard/dist.noindex/MacDashboard.app` — `APP_NAME="MacDashboard"` /
+  `DIST="dist.noindex/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` moves it to
   `~/Applications/MacDashboard.app`, removing any stale bundle under the old
   «Дашборд Mac» name first. The bundle name is `MacDashboard` in both languages —
   `build_app.sh:106-117` writes only `NSHumanReadableCopyright` and
@@ -569,7 +569,7 @@ Structure:
 ```
 swift build -c release --build-system native --triple arm64-apple-macosx14.0 \
   -Xswiftc -sdk -Xswiftc <SDK path> -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker <SDK version>
-dist/MacDashboard.app/Contents/{MacOS/MacDashboard, Info.plist, Resources/AppIcon.icns, Resources/{en,ru}.lproj/InfoPlist.strings}
+dist.noindex/MacDashboard.app/Contents/{MacOS/MacDashboard, Info.plist, Resources/AppIcon.icns, Resources/{en,ru}.lproj/InfoPlist.strings}
 ```
 Apple Silicon only (arm64) from v2.2 on; Intel Macs stay on v2.1, the last universal release.
 The SDK is whatever `xcrun --sdk macosx` resolves; the explicit `-sdk`,
@@ -587,7 +587,7 @@ Apple-events usage description.
 Icon: reuse legacy generator idea — render simple pulse-line icon via CoreGraphics
 swift script into iconset → iconutil (best-effort; skip icon on failure).
 codesign --force --options runtime --timestamp=none --entitlements MacDashboard.entitlements
---sign <identity> "dist/MacDashboard.app". <identity> is the SHA-1 of the single keychain identity
+--sign <identity> "dist.noindex/MacDashboard.app". <identity> is the SHA-1 of the single keychain identity
 named "MacDashboard Local Signing" (created once per Mac by tools/signing/make-identity.sh; its
 designated requirement names the certificate, not the cdhash, so TCC grants survive rebuilds), or
 `-` (ad-hoc, with a loud warning) when none exists — release CI always takes the ad-hoc path; two
@@ -597,8 +597,11 @@ process running as this user could inject into an app the README asks users to g
 Access). MacDashboard.entitlements grants exactly one entitlement,
 com.apple.security.automation.apple-events, which the hardened runtime requires for the in-process
 NSAppleScript Trash action.
-`--install` flag: copies the built bundle to `~/Applications/MacDashboard.app`, removing
-any stale bundle under an old app name first.
+`--install` flag: moves the built bundle to `~/Applications/MacDashboard.app` (so `dist.noindex/` holds no
+second copy), removing any stale bundle under an old app name first, then runs `tools/ls-prune.sh`.
+Every build also runs `tools/ls-prune.sh` first and excludes `dist.noindex/` from Time Machine
+(`tmutil addexclusion`): LaunchServices keeps every bundle with this bundle ID it has seen, and
+opening the app by bundle ID must resolve to the installed copy (APP-ID-DUPLICATES).
 README-install note: on another Mac after copying, if Gatekeeper complains:
 `xattr -dr com.apple.quarantine "MacDashboard.app"` or right-click → Open.
 

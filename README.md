@@ -163,8 +163,8 @@ app still runs on macOS 14 (Sonoma) and later.
 ```bash
 git clone https://github.com/rdskcm/MacDashboard.git
 cd MacDashboard
-./build_app.sh            # builds dist/MacDashboard.app
-./build_app.sh --install  # ...and copies it into ~/Applications
+./build_app.sh            # builds dist.noindex/MacDashboard.app
+./build_app.sh --install  # ...and moves it into ~/Applications
 ```
 
 An app you build yourself carries no download quarantine, so it opens with no Gatekeeper prompt at all.

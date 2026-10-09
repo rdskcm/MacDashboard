@@ -24,7 +24,7 @@ Typical run: `./build_app.sh && tools/visual/run.sh`, about 1–2 minutes. It
 moves the real cursor and sends AX actions (no synthetic keystrokes) — do not
 use the Mac while it runs.
 
-- `--app`: default `dist/MacDashboard.app`; `--out`: default `tools/visual/out/<stamp>`; `--reference`: default `tools/visual/reference` (any dir of 1x PNGs named `<state>.png`).
+- `--app`: default `dist.noindex/MacDashboard.app`; `--out`: default `tools/visual/out/<stamp>`; `--reference`: default `tools/visual/reference` (any dir of 1x PNGs named `<state>.png`).
 
 **Main window height.** `1150 x H` pt, `H = min(780, screen_frame_h - 150)`,
 refuses (exit 70) if `vw < 1260`, `H < 620` or `H > vh - 40`.
@@ -100,12 +100,11 @@ protective ACL (the Time Machine history copy
 `mac_check_state.timemachine-*.json` has `everyone deny write,delete`) is
 never touched. Last line of every run: `RESTORE: app=…
 defaults=… savedstate=… appsupport=…|partial(rsync_rc=N)
-appearance=…|partial cursor=… front=…`; an `rsync` failure on the appsupport
+appearance=…|partial cursor=… front=… ls=…|partial`; an `rsync` failure on the appsupport
 restore keeps `<run-dir>/restore-rsync.err`. A Settings window still open 5 s
 after `close_settings` aborts the run loudly.
 
-**Cannot be undone:** TCC prompts; LaunchServices registration of the built
-app bundle. If SIGKILLed (no trap runs), the pre-run backup stays in
+**Cannot be undone:** TCC prompts. The LaunchServices registration of the built app bundle is undone at exit by `tools/ls-prune.sh` (`ls=ok`); a SIGKILLed run leaves it until the next build. If SIGKILLed (no trap runs), the pre-run backup stays in
 `<run-dir>/.restore/` — restore by hand (`defaults import` the plist, `rsync
 -a --delete` `appsupport/` back over the App Support dir), skipping any step
 marked absent. A by-hand `rsync -a --delete` reports `Permission denied` for an ACL-protected

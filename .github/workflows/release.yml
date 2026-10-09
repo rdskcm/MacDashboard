@@ -101,7 +101,7 @@ jobs:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist/MacDashboard.app/Contents/Info.plist)"
+          ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist.noindex/MacDashboard.app/Contents/Info.plist)"
           echo "release tag: $TAG; CFBundleVersion: $ver"
           if [ "v$ver" != "$TAG" ]; then
             echo "::error::the app is version $ver but the release tag is $TAG — set VERSION in build_app.sh to match before tagging"
@@ -112,7 +112,7 @@ jobs:
       - name: Assert arm64-only binary
         run: |
           set -euo pipefail
-          archs="$(lipo -archs dist/MacDashboard.app/Contents/MacOS/MacDashboard)"
+          archs="$(lipo -archs dist.noindex/MacDashboard.app/Contents/MacOS/MacDashboard)"
           echo "archs: $archs"
           if [ "$archs" != "arm64" ]; then
             echo "::error::binary archs are '$archs', expected exactly 'arm64' (the app is Apple Silicon only)"
@@ -123,7 +123,7 @@ jobs:
       - name: Assert the binary records the selected Xcode's SDK
         run: |
           set -euo pipefail
-          bin="dist/MacDashboard.app/Contents/MacOS/MacDashboard"
+          bin="dist.noindex/MacDashboard.app/Contents/MacOS/MacDashboard"
           norm() { sed -E 's/(\.0)+$//' <<<"$1"; }
           info="$(vtool -show-build "$bin")"
           rec="$(awk '$1=="sdk"{print $2; exit}' <<<"$info")"
@@ -140,7 +140,7 @@ jobs:
           # ThermalHIDReader resolves these six at runtime via dlopen/dlsym on
           # purpose: hard-linking them means the app fails to LAUNCH on a macOS
           # that dropped them. `nm` prints the Mach-O leading underscore.
-          bin="dist/MacDashboard.app/Contents/MacOS/MacDashboard"
+          bin="dist.noindex/MacDashboard.app/Contents/MacOS/MacDashboard"
           syms="${RUNNER_TEMP:-.}/iokit-syms.txt"
           # Own command, not a pipeline: `nm` failing (renamed binary, toolchain
           # change) must fail the job. The old form buried it in a command
@@ -159,7 +159,7 @@ jobs:
           echo "no hard-linked private IOKit symbols"
 
       - name: Package (ditto preserves the ad-hoc signature)
-        run: ditto -c -k --keepParent dist/MacDashboard.app MacDashboard.zip
+        run: ditto -c -k --keepParent dist.noindex/MacDashboard.app MacDashboard.zip
 
       - name: Verify signature survives the zip round-trip
         run: |
@@ -204,7 +204,7 @@ jobs:
             # bundle's CFBundleShortVersionString ("2.2 (Krieg)"); its version part was checked
             # against the tag above. The notes are a placeholder that the release flow replaces
             # with `gh release edit --notes-file`.
-            short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/MacDashboard.app/Contents/Info.plist)"
+            short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist.noindex/MacDashboard.app/Contents/Info.plist)"
             gh release create "$TAG" \
               --title "v$short" \
               --notes "Apple Silicon (arm64) build. Intel Macs: download v2.1 from https://github.com/rdskcm/MacDashboard/releases/tag/v2.1. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."

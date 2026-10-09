@@ -1,8 +1,8 @@
 #!/bin/bash
 # Build "MacDashboard.app": Apple Silicon (arm64) release, hand-rolled bundle,
-# codesign (stable local identity, ad-hoc fallback). Output: dist/MacDashboard.app
+# codesign (stable local identity, ad-hoc fallback). Output: dist.noindex/MacDashboard.app
 # Usage: ./build_app.sh [--install]
-#   --install             also copies the built app to ~/Applications
+#   --install             also moves the built app to ~/Applications (dist.noindex/ is left empty)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -15,7 +15,7 @@ for arg in "$@"; do
 done
 
 APP_NAME="MacDashboard"
-DIST="dist/$APP_NAME.app"
+DIST="dist.noindex/$APP_NAME.app"
 VERSION="2.3"
 # Codename names the whole 2.x branch, not the point release — stays "Krieg" until 3.0.
 # Only a NON-empty codename is appended to CFBundleShortVersionString — an empty one must not
@@ -65,9 +65,18 @@ swift build -c release --product MacDashboard --build-system native \
   "${AI_FLAGS[@]+"${AI_FLAGS[@]}"}"
 [ -x "$BIN" ] || { echo "binary not found: $BIN" >&2; exit 1; }
 
+echo "== LaunchServices: drop stale registrations =="
+# LaunchServices keeps every bundle with this CFBundleIdentifier it has seen, and opening
+# the app by bundle ID can launch any of them (APP-ID-DUPLICATES). Clearing them at every
+# build keeps test builds from accumulating. Never fails the build.
+tools/ls-prune.sh || echo "!! tools/ls-prune.sh exited $? — stale LaunchServices registrations may remain" >&2
+
 echo "== bundle =="
 rm -rf "$DIST"
 mkdir -p "$DIST/Contents/MacOS" "$DIST/Contents/Resources"
+# A Time Machine copy of this bundle is registered with LaunchServices whenever the backup is
+# mounted (APP-ID-DUPLICATES). Sticky exclusion on dist.noindex/ itself: survives rebuilds, no sudo.
+tmutil addexclusion dist.noindex 2>/dev/null || echo "!! tmutil addexclusion dist.noindex failed — dist.noindex/ stays in Time Machine backups" >&2
 cp "$BIN" "$DIST/Contents/MacOS/MacDashboard"
 
 cat > "$DIST/Contents/Info.plist" <<PLIST
@@ -216,7 +225,10 @@ if [ "$INSTALL" = "1" ]; then
   echo "== install to ~/Applications =="
   mkdir -p "$HOME/Applications"
   rm -rf "$HOME/Applications/$APP_NAME.app"
-  cp -R "$DIST" "$HOME/Applications/$APP_NAME.app"
+  # Moved, not copied: a second bundle with the same CFBundleIdentifier left in dist.noindex/ stays
+  # registered with LaunchServices and can be the copy that opening by bundle ID launches
+  # (APP-ID-DUPLICATES). A plain ./build_app.sh still leaves dist.noindex/ populated.
+  mv "$DIST" "$HOME/Applications/$APP_NAME.app"
   echo "installed: $HOME/Applications/$APP_NAME.app"
   # Remove the stale pre-rename bundle (old Russian display name) so the Dock/
   # Spotlight don't keep two copies around after the MacDashboard rename.
@@ -224,5 +236,7 @@ if [ "$INSTALL" = "1" ]; then
     rm -rf "$HOME/Applications/Дашборд Mac.app"
     echo "removed stale: $HOME/Applications/Дашборд Mac.app"
   fi
+  echo "== LaunchServices: installed copy only =="
+  tools/ls-prune.sh || echo "!! tools/ls-prune.sh exited $? — other copies may still be registered" >&2
 fi
 echo "DONE"
