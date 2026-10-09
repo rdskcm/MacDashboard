@@ -178,6 +178,18 @@ struct DSHoverLift: ViewModifier {
         // recognizers; clicks still resolve normally on the controls.
         ZStack {
             content
+                // Resolve the lifted subtree's geometry as one unit BEFORE the
+                // animated offset (HOVER-TEXT-JITTER). Without it, a Text whose
+                // own paint animates in the same transaction as the lift (a hover
+                // colour fade on a capsule label, the Memory legend emphasis) is
+                // re-rendered and positioned independently of its siblings: it
+                // reaches the lifted position on the first frame, overshoots on
+                // exit and snaps back. Must stay BEFORE `.offset` — placed after
+                // it the group has no effect (measured). Not a rasterisation: no
+                // offscreen pass, glyph rendering unchanged. Do not replace with
+                // `.drawingGroup()` (1 px lag, re-rasterises text, flattens the
+                // card material) or `.compositingGroup()` (no effect here).
+                .geometryGroup()
                 .offset(y: lift)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)

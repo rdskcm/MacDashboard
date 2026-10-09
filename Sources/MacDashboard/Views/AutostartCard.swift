@@ -299,8 +299,11 @@ struct AutostartCard: View {
         // following the card's `cardHover` curve while the text glyphs followed
         // `rainbowHover`'s spring, visibly desyncing text from capsule on hover.
         // `withAnimation` around the mutation instead opens its own transaction
-        // that doesn't leak into/override the ancestor's, so the whole subtree
-        // (including the Text) rides `DSHoverLift`'s single curve together.
+        // that doesn't leak into/override the ancestor's. On its own that does
+        // NOT keep the glyphs locked to the capsule: any animated change of the
+        // Text's paint in the same transaction as the lift re-renders the Text
+        // against the in-flight offset (HOVER-TEXT-JITTER). `DSHoverLift` fixes
+        // that centrally with `.geometryGroup()` before its `.offset(y:)`.
         .onHover { isHovering in
             withAnimation(
                 reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.rainbowHover
