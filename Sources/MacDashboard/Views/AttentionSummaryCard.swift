@@ -179,15 +179,12 @@ struct AttentionSummaryCard: View {
     @ViewBuilder
     private var itemGrid: some View {
         let displayed = attnMore ? items : Array(items.prefix(4))
-        LazyVGrid(
-            columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())],
-            alignment: .leading,
-            spacing: 6
-        ) {
+        FlowLayout(spacing: 7) {
             ForEach(displayed) { item in
                 ItemPlate(item: item, form: .list, dispatch: dispatch)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, 19)
 
         if items.count > 4 {
@@ -250,8 +247,10 @@ struct AttentionSummaryCard: View {
 private enum ItemPlateForm { case chip, list }
 
 /// One AttentionItem, rendered either as a compact title-row chip (0–2 items)
-/// or a full-width list row inside the grid (3+ items) — same tone/hover/busy/
-/// done logic either way, only geometry differs.
+/// or a list plate in the item flow (3+ items) — same tone/hover/busy/done logic
+/// either way, only geometry differs. ATTENTION-CHIP-WIDTH: the list plate is
+/// content-width (no trailing Spacer) and flows left-aligned in a `FlowLayout`,
+/// capped at the row width (detail truncates first).
 private struct ItemPlate: View {
     let item: AttentionItem
     let form: ItemPlateForm
@@ -332,13 +331,12 @@ private struct ItemPlate: View {
                 .foregroundStyle(DS.inkSoft)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Spacer(minLength: 0)
             trailingSlot
         }
-        .padding(.horizontal, 11)
-        .frame(height: 32)
-        .background(RoundedRectangle(cornerRadius: 10).fill(itemTone.opacity(0.13)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(hovering ? DS.accentInk : itemTone.opacity(0.32), lineWidth: 1))
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+        .background(Capsule().fill(itemTone.opacity(0.13)))
+        .overlay(Capsule().strokeBorder(hovering ? DS.accentInk : itemTone.opacity(0.32), lineWidth: 1))
     }
 
     /// Verb (default) / spinner (busy) / checkmark (done) — the one slot that
