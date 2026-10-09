@@ -108,14 +108,34 @@ func runFolderSizesChecks() {
 
     let fresh = now.addingTimeInterval(-5 * 60)
     let stale = now.addingTimeInterval(-2 * 3600)
-    check(ReportCollector.shouldStartSizeCount(trigger: .button, countedAt: fresh, inFlight: false, now: now),
+    check(ReportCollector.shouldStartSizeCount(trigger: .button, countedAt: fresh, failedAt: nil, inFlight: false, now: now),
           "shouldStartSizeCount: (.button, fresh, inFlight: false) -> true")
-    check(!ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: fresh, inFlight: false, now: now),
+    check(!ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: fresh, failedAt: nil, inFlight: false, now: now),
           "shouldStartSizeCount: (.automatic, fresh, false) -> false")
-    check(ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: stale, inFlight: false, now: now),
+    check(ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: stale, failedAt: nil, inFlight: false, now: now),
           "shouldStartSizeCount: (.automatic, stale, false) -> true")
-    check(!ReportCollector.shouldStartSizeCount(trigger: .button, countedAt: nil, inFlight: true, now: now),
+    check(!ReportCollector.shouldStartSizeCount(trigger: .button, countedAt: nil, failedAt: nil, inFlight: true, now: now),
           "shouldStartSizeCount: (.button, nil, inFlight: true) -> false")
+
+    // SIZES-FAIL-BACKOFF: the last failed attempt gates automatic triggers for 1 h.
+    let failedRecently = now.addingTimeInterval(-5 * 60)
+    let failedLongAgo = now.addingTimeInterval(-61 * 60)
+    check(!ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: nil, failedAt: failedRecently, inFlight: false, now: now),
+          "shouldStartSizeCount: (.automatic, no cache, failed 5 min ago) -> false")
+    check(!ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: stale, failedAt: failedRecently, inFlight: false, now: now),
+          "shouldStartSizeCount: (.automatic, stale cache, failed 5 min ago) -> false")
+    check(ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: nil, failedAt: failedLongAgo, inFlight: false, now: now),
+          "shouldStartSizeCount: (.automatic, no cache, failed 61 min ago) -> true")
+    check(ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: stale, failedAt: failedLongAgo, inFlight: false, now: now),
+          "shouldStartSizeCount: (.automatic, stale cache, failed 61 min ago) -> true")
+    check(ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: nil, failedAt: now.addingTimeInterval(5 * 60), inFlight: false, now: now),
+          "shouldStartSizeCount: (.automatic, no cache, failedAt in the future) -> true (bad clock cannot block)")
+    check(!ReportCollector.shouldStartSizeCount(trigger: .automatic, countedAt: fresh, failedAt: failedLongAgo, inFlight: false, now: now),
+          "shouldStartSizeCount: (.automatic, fresh cache, old failure) -> false")
+    check(ReportCollector.shouldStartSizeCount(trigger: .button, countedAt: nil, failedAt: failedRecently, inFlight: false, now: now),
+          "shouldStartSizeCount: (.button, no cache, failed 5 min ago) -> true (button forces)")
+    check(!ReportCollector.shouldStartSizeCount(trigger: .button, countedAt: nil, failedAt: failedRecently, inFlight: true, now: now),
+          "shouldStartSizeCount: (.button, failed recently, inFlight: true) -> false")
 
     // MARK: - folderSizesAgeString
 

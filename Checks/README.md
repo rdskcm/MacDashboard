@@ -31,7 +31,7 @@ script that copies the files in before each build instead of restructuring `Sour
 `AIRedactionChecks.swift`, `AIPayloadRequestChecks.swift`, `SudoPathSafetyChecks.swift`,
 `CommandRunnerExitChecks.swift`, `CommandRunnerCoreChecks.swift`, `ParserFixtureChecks.swift`,
 `ReportWriterChecks.swift`, `PrivilegedRunnerChecks.swift`, `BrewUpgraderChecks.swift`,
-`HistoryStoreChecks.swift`, `WakeHoldersChecks.swift`, `VisualFixtureChecks.swift`, and `LiveCanary.swift`
+`HistoryStoreChecks.swift`, `WakeHoldersChecks.swift`, `VisualFixtureChecks.swift`, `FolderSizesChecks.swift`, and `LiveCanary.swift`
 are real (non-symlinked) files, like `main.swift`.
 Swift executable targets only permit ONE file with top-level (script-mode) statements —
 `main.swift` owns that slot — so additional check files must instead define a plain
