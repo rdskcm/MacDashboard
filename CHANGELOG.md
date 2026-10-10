@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.3.2] (Krieg) - 2026-10-10
+
+Three fixes: the Homebrew outdated list when the package index is slow to download, the folder-size
+count on large folders, and safer install and cleanup scripts for contributors.
+
+### Fixed
+
+- Homebrew: when downloading the package index took longer than 60 s, the report lost the list of outdated packages. The index is now refreshed as a separate step with its own limit, and the outdated list is read after it even if the refresh fails.
+- Folders: the size count now has one 90 s limit for all folders. When it runs out, the sizes already measured are kept and the folders not reached are listed as "not measured in time" on the Home and Service tabs and in the exported report.
+- For contributors: `./build_app.sh --install` replaces the installed app through a temporary name and keeps the old copy if the move fails. Each `lsregister` call in `tools/ls-prune.sh` stops after 60 s, and `tools/visual/run.sh` reports `ls=partial` when a running copy stays registered.
+
 ## [2.3.1] (Krieg) - 2026-10-09
 
 Six fixes: folder-size counting after a failure, hover text, the attention card layout, the cores

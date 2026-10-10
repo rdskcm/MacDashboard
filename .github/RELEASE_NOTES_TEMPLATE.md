@@ -41,7 +41,7 @@ after it. Codenames name a major version: 1.x = Cadia, 2.x = Krieg (`CODENAME` i
 
 7. `### Privacy` — this exact paragraph:
 
-       The app makes no telemetry or analytics calls of any kind. The only network activity is `softwareupdate -l` when a report is collected (to check for pending macOS updates) and, if you explicitly click an upgrade/install action, Homebrew's own downloads. The optional AI assistant feature is not compiled into the default build.
+       The app makes no telemetry or analytics calls of any kind. The only network activity is `softwareupdate -l` when a report is collected (to check for pending macOS updates), `brew update` when a report is collected and Homebrew is installed (to download Homebrew's package list), and, if you explicitly click an upgrade/install action, Homebrew's own downloads. The optional AI assistant feature is not compiled into the default build.
 
 8. Footer, no heading:
 
