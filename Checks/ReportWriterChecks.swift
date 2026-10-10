@@ -215,6 +215,14 @@ func runReportWriterChecks() {
            [L.sharedUnavailable, L.storageFoldersNoFDA("/x")], "C5 nil homeDirs")
         eq(render { r, _ in r.homeDirs = []; r.folderSizesCountedAt = t }, L.reportSectionHomeDirs,
            [L.reportNone, L.reportFoldersCountedAt(reportUpdatedTimeString(t))], "C6 empty homeDirs")
+        eq(render { r, _ in r.serviceDirs = []; r.serviceDirsNotMeasured = ["/Applications", "/Users/u/Library/Containers"]
+                    r.serviceDirsUnreadable = ["/a/x"]; r.folderSizesCountedAt = t }, L.reportSectionServiceDirs,
+           [L.reportNone, L.storageFoldersNotMeasured("/Applications, /Users/u/Library/Containers"),
+            L.storageFoldersNoFDA("/a/x"), L.reportFoldersCountedAt(reportUpdatedTimeString(t))],
+           "C6b service not measured in time, before unreadable (SERVICE-DIRS-TIMEOUT)")
+        eq(render { r, _ in r.homeDirs = nil; r.homeDirsNotMeasured = ["/Users/u/Documents"] }, L.reportSectionHomeDirs,
+           [L.sharedUnavailable, L.storageFoldersNotMeasured("/Users/u/Documents")], "C6c home not measured in time")
+        check(StringsRU().storageFoldersNotMeasured("X") == "Не успели измерить: X." && StringsEN().storageFoldersNotMeasured("X") == "Not measured in time: X.", "SERVICE-DIRS-TIMEOUT: RU/EN not-measured strings")
         eq(render { _, l in l.mem = nil; l.swap = SwapInfo(total: 0, used: 0, free: 0) }, L.reportSectionMemory,
            ["Mach Virtual Memory Statistics: \(L.sharedUnavailable)", "vm.swapusage: total = 0.00M  used = 0.00M  free = 0.00M"], "C7 nil mem, zero swap")
         let c8 = rwSection(render { _, l in

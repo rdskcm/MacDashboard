@@ -593,6 +593,8 @@ final class DashboardModel {
         r.homeDirsUnreadable = folderSizes?.homeDirsUnreadable ?? []
         r.serviceDirs = folderSizes?.serviceDirs
         r.serviceDirsUnreadable = folderSizes?.serviceDirsUnreadable ?? []
+        r.homeDirsNotMeasured = folderSizes?.homeDirsNotMeasured ?? []
+        r.serviceDirsNotMeasured = folderSizes?.serviceDirsNotMeasured ?? []
         r.folderSizesCountedAt = folderSizes?.countedAt
         r.folderSizesCountDuration = folderSizes?.durationSeconds
         let done = (folderSizes != nil) || !isCountingSizes

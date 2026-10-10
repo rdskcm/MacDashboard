@@ -128,6 +128,7 @@ struct StringsEN: AppStrings {
     func storageFoldersNoFDA(_ folders: String) -> String { "Not shown here: \(folders) — the app doesn't have Full Disk Access." }
     var storageFoldersNoFDAButton: String { "Open Settings" }
     var storageFoldersNoFDAButtonA11y: String { "Open Full Disk Access settings" }
+    func storageFoldersNotMeasured(_ folders: String) -> String { "Not measured in time: \(folders)." }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { "Disks (SMART)" }

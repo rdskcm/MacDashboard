@@ -65,12 +65,14 @@ enum UpdatesCacheStore {
 /// Persisted result of the last background folder-size count (SIZES-BACKGROUND),
 /// ~/Library/Application Support/MacDashboard/folder_sizes_cache.json.
 struct FolderSizes: Codable, Equatable {
-    static let currentSchema = 1
+    static let currentSchema = 2
     var schema: Int = FolderSizes.currentSchema
     var homeDirs: [DirSize]              // top-20 children of $HOME, largest first
     var homeDirsUnreadable: [String]
     var serviceDirs: [DirSize]?          // nil = no service path produced a size
     var serviceDirsUnreadable: [String]
+    var homeDirsNotMeasured: [String] = []      // readable, but the count's deadline came first (SERVICE-DIRS-TIMEOUT)
+    var serviceDirsNotMeasured: [String] = []
     var countedAt: Date
     var durationSeconds: Double
 }
@@ -1055,56 +1057,103 @@ final class ReportCollector {
         return (depth1, service, missing)
     }
 
-    /// Background folder-size count. nil only when the home walk produced no output
-    /// (timeout, cancellation, du missing): the caller then keeps its previous cache.
-    func countFolderSizes() async -> FolderSizes? {
-        let clock = ContinuousClock()
-        let start = clock.now
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let homeService = Self.homeServicePaths(home: home)
-        let outside = Self.outsideServicePaths
+    /// Aggregate deadline for one background folder-size count (SERVICE-DIRS-TIMEOUT, user
+    /// decision 2026-10-10). Each `du` gets the time left until it as its timeout, so
+    /// CommandRunner SIGKILLs every process group still running when it is reached.
+    static let folderSizesDeadline: TimeInterval = 90
 
-        // One walk of $HOME; the three outside paths in parallel with it.
-        async let homeOut = CommandRunner.run("/usr/bin/du", ["-xk", "-d", "2", "--", home], timeout: 120).nonEmptyText
-        let outsideResults: [(index: Int, lines: [DirSize]?, denied: Bool)] =
-            await withTaskGroup(of: (index: Int, lines: [DirSize]?, denied: Bool).self) { group in
-                for (i, p) in outside.enumerated() {
-                    group.addTask {
-                        guard FileManager.default.fileExists(atPath: p) else { return (i, nil, false) }
-                        if let out = await CommandRunner.run("/usr/bin/du", ["-xsk", "--", p], timeout: 60).nonEmptyText {
-                            return (i, Parsers.duKilobyteLines(out), false)
-                        }
-                        return (i, nil, DirectoryAccess.probe(p) == .denied)
-                    }
-                }
-                var acc: [(index: Int, lines: [DirSize]?, denied: Bool)] = []
-                for await r in group { acc.append(r) }
-                return acc
-            }
-        guard let out = await homeOut else { return nil }
+    /// One `du` run reduced to what the assembly needs. `lines`: COMPLETE output lines only.
+    /// `cut`: killed at the deadline (or cancelled) before it finished.
+    struct DuRun: Equatable {
+        var lines: [DirSize]
+        var cut: Bool
+    }
 
-        let split = Self.splitHomeWalk(home: home, lines: Parsers.duKilobyteLines(out), servicePaths: homeService)
-        // Home: identical to yesterday's depth-1 walk over the depth<=1 lines.
-        let homeTop = Array(split.depth1.filter { $0.path != home }.sorted { $0.bytes > $1.bytes }.prefix(20))
-        let homeUnreadable = DirectoryAccess
-            .missingHomeChildren(home: home, duPaths: Set(split.depth1.map(\.path)),
-                                 childNames: DirectoryAccess.childNames(of: home))
-            .filter { DirectoryAccess.probe($0) == .denied }
-        // Service: a home service path du did not print is either absent, on another
-        // device (-x), or refused — only an existing, refused one is reported.
-        let homeServiceDenied = split.missing.filter {
-            FileManager.default.fileExists(atPath: $0) && DirectoryAccess.probe($0) == .denied
+    /// Pure (Checks-tested). A killed `du` leaves a prefix of its output whose last line may be
+    /// cut mid-path ("16\t/Users/u/Docu" still parses), so after a kill everything after the
+    /// last newline is dropped. A finished run keeps the `nonEmptyText` contract.
+    static func duRun(_ o: CommandOutcome) -> DuRun {
+        switch o.termination {
+        case .timedOut, .cancelled:
+            guard let nl = o.stdout.lastIndex(of: "\n") else { return DuRun(lines: [], cut: true) }
+            return DuRun(lines: Parsers.duKilobyteLines(String(o.stdout[...nl])), cut: true)
+        default:
+            return DuRun(lines: o.nonEmptyText.map(Parsers.duKilobyteLines) ?? [], cut: false)
         }
-        var dirs = split.service
-        for r in outsideResults { if let l = r.lines { dirs.append(contentsOf: l) } }
-        let outsideDenied = outsideResults.filter(\.denied).sorted { $0.index < $1.index }.map { outside[$0.index] }
-        // Keep today's order: home service paths first (in homeServicePaths order), then outside ones.
-        let serviceUnreadable = homeService.filter(homeServiceDenied.contains) + outsideDenied
+    }
 
+    /// Pure (Checks-tested). Folds the home walk and the outside runs (same order as `outside`)
+    /// into one FolderSizes. nil when the home walk yielded no complete line: the caller keeps
+    /// its previous cache, as before. Each path lands in at most one place, by priority:
+    /// measured > refused (`.denied` → …Unreadable) > not reached (`.readable` and its run was
+    /// cut → …NotMeasured) > silent (absent, a file, or skipped by -x on a finished walk).
+    static func assembleFolderSizes(home: String, homeWalk: DuRun,
+                                    outside: [String], outsideRuns: [DuRun],
+                                    homeChildNames: [String],
+                                    access: (String) -> DirAccess,
+                                    countedAt: Date, durationSeconds: Double) -> FolderSizes? {
+        guard !homeWalk.lines.isEmpty else { return nil }
+        let homeService = homeServicePaths(home: home)
+        let split = splitHomeWalk(home: home, lines: homeWalk.lines, servicePaths: homeService)
+        let homeTop = Array(split.depth1.filter { $0.path != home }.sorted { $0.bytes > $1.bytes }.prefix(20))
+        let missingChildren = DirectoryAccess.missingHomeChildren(
+            home: home, duPaths: Set(split.depth1.map(\.path)), childNames: homeChildNames)
+        let homeUnreadable = missingChildren.filter { access($0) == .denied }
+        let homeNotMeasured = homeWalk.cut ? missingChildren.filter { access($0) == .readable } : []
+        // split.missing is already in homeServicePaths order.
+        let homeServiceUnreadable = split.missing.filter { access($0) == .denied }
+        let homeServiceNotMeasured = homeWalk.cut ? split.missing.filter { access($0) == .readable } : []
+        var dirs = split.service
+        var outsideUnreadable: [String] = [], outsideNotMeasured: [String] = []
+        for (p, run) in zip(outside, outsideRuns) {
+            if !run.lines.isEmpty { dirs.append(contentsOf: run.lines); continue }
+            switch access(p) {
+            case .denied: outsideUnreadable.append(p)
+            case .readable where run.cut: outsideNotMeasured.append(p)
+            default: break
+            }
+        }
         return FolderSizes(homeDirs: homeTop, homeDirsUnreadable: homeUnreadable,
                            serviceDirs: dirs.isEmpty ? nil : dirs.sorted { $0.bytes > $1.bytes },
-                           serviceDirsUnreadable: serviceUnreadable,
-                           countedAt: Date(), durationSeconds: Self.seconds(clock.now - start))
+                           serviceDirsUnreadable: homeServiceUnreadable + outsideUnreadable,
+                           homeDirsNotMeasured: homeNotMeasured,
+                           serviceDirsNotMeasured: homeServiceNotMeasured + outsideNotMeasured,
+                           countedAt: countedAt, durationSeconds: durationSeconds)
+    }
+
+    /// Background folder-size count under ONE aggregate deadline (SERVICE-DIRS-TIMEOUT). All `du`
+    /// runs start together; each gets the time left until the deadline as its timeout, so every
+    /// process group still running then is killed. What finished is kept; what did not lands in
+    /// …NotMeasured. nil: see assembleFolderSizes. Parameters exist for Checks; the app passes none.
+    func countFolderSizes(home: String = FileManager.default.homeDirectoryForCurrentUser.path,
+                          outside: [String] = ReportCollector.outsideServicePaths,
+                          deadline: TimeInterval = ReportCollector.folderSizesDeadline,
+                          du: String = "/usr/bin/du") async -> FolderSizes? {
+        let clock = ContinuousClock()
+        let start = clock.now
+        let end = start + .seconds(deadline)
+        // Time left until the shared deadline; 0 makes CommandRunner kill at once.
+        let remaining: @Sendable () -> TimeInterval = { max(0, Self.seconds(end - clock.now)) }
+
+        // One walk of $HOME; the outside paths in parallel with it.
+        async let homeOutcome = CommandRunner.run(du, ["-xk", "-d", "2", "--", home], timeout: remaining())
+        let outsideRuns: [DuRun] = await withTaskGroup(of: (Int, DuRun).self) { group in
+            for (i, p) in outside.enumerated() {
+                group.addTask {
+                    guard FileManager.default.fileExists(atPath: p) else { return (i, DuRun(lines: [], cut: false)) }
+                    return (i, Self.duRun(await CommandRunner.run(du, ["-xsk", "--", p], timeout: remaining())))
+                }
+            }
+            var acc: [(Int, DuRun)] = []
+            for await r in group { acc.append(r) }
+            return acc.sorted { $0.0 < $1.0 }.map { $0.1 }
+        }
+        let homeWalk = Self.duRun(await homeOutcome)
+        guard !Task.isCancelled else { return nil }      // stop(): the model discards it anyway
+        return Self.assembleFolderSizes(home: home, homeWalk: homeWalk, outside: outside, outsideRuns: outsideRuns,
+                                        homeChildNames: DirectoryAccess.childNames(of: home),
+                                        access: DirectoryAccess.probe,
+                                        countedAt: Date(), durationSeconds: Self.seconds(clock.now - start))
     }
 
     // MARK: - homebrew (slow)

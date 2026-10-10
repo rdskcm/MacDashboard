@@ -147,6 +147,8 @@ protocol AppStrings {
     func storageFoldersNoFDA(_ folders: String) -> String
     var storageFoldersNoFDAButton: String { get }
     var storageFoldersNoFDAButtonA11y: String { get }
+    // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
+    func storageFoldersNotMeasured(_ folders: String) -> String
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { get }

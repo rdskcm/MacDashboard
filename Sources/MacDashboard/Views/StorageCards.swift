@@ -158,15 +158,31 @@ struct FoldersCard: View {
         folderTab == .home ? model.report.homeDirsUnreadable : model.report.serviceDirsUnreadable
     }
 
-    /// The quiet inline line, or nil when nothing was hidden. At most three folders
-    /// are named; the rest collapse into «и ещё N» so the line stays one calm
-    /// sentence.
+    /// Folders the last count did not reach before its deadline, for the selected tab
+    /// (SERVICE-DIRS-TIMEOUT). Not a permission problem: no button, no tip.
+    private var notMeasured: [String] {
+        folderTab == .home ? model.report.homeDirsNotMeasured : model.report.serviceDirsNotMeasured
+    }
+
+    /// At most three names; the rest collapse into «и ещё N» so each inline line stays
+    /// one calm sentence — shared by both lines.
+    private func namedList(_ paths: [String]) -> String {
+        var names = paths.prefix(3).map { label(for: $0) }
+        if paths.count > 3 { names.append(L.maintenanceAndMore(paths.count - 3)) }
+        return names.joined(separator: ", ")
+    }
+
+    /// The quiet inline line, or nil when nothing was hidden.
     private var noFDAText: String? {
         let paths = unreadable
         guard !paths.isEmpty else { return nil }
-        var names = paths.prefix(3).map { label(for: $0) }
-        if paths.count > 3 { names.append(L.maintenanceAndMore(paths.count - 3)) }
-        return L.storageFoldersNoFDA(names.joined(separator: ", "))
+        return L.storageFoldersNoFDA(namedList(paths))
+    }
+
+    private var notMeasuredText: String? {
+        let paths = notMeasured
+        guard !paths.isEmpty else { return nil }
+        return L.storageFoldersNotMeasured(namedList(paths))
     }
 
     private var title: String {
@@ -233,6 +249,12 @@ struct FoldersCard: View {
                         .foregroundStyle(DS.muted)
                         .lineLimit(1)
                 }
+            }
+            if let notMeasuredText {
+                Text(notMeasuredText)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             // Rendered in all sub-branches on purpose, including the nil/"unavailable"
             // one: if every service `du` was refused, serviceDirs stays nil and the

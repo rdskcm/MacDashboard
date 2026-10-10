@@ -1,5 +1,5 @@
 // Checks/FolderSizesChecks.swift
-// Block SIZES-BACKGROUND: pure-logic checks for the one-walk folder-size job
+// Blocks SIZES-BACKGROUND, SERVICE-DIRS-TIMEOUT: pure-logic checks for the one-walk folder-size job
 // (splitHomeWalk, the cache store, freshness/decision, the age string) plus a
 // real-machine smoke test for descendantPIDs.
 // Real file (not a symlink) — main.swift owns the single top-level-statements slot,
@@ -145,6 +145,139 @@ func runFolderSizesChecks() {
           "folderSizesAgeString: 5 min -> contains '5'")
     check(folderSizesAgeString(countedAt: now.addingTimeInterval(120), now: now) == L.foldersCountedJustNow,
           "folderSizesAgeString: future -> just-now string")
+
+    // MARK: - SERVICE-DIRS-TIMEOUT
+
+    do {
+        let T = "SERVICE-DIRS-TIMEOUT: "
+        // 1. constants
+        check(ReportCollector.folderSizesDeadline == 90, T + "deadline == 90")
+        check(FolderSizes.currentSchema == 2, T + "currentSchema == 2")
+
+        // 2. duRun
+        func outcome(_ t: CommandOutcome.Termination, _ out: String) -> CommandOutcome {
+            CommandOutcome(termination: t, stdout: out, stdoutTruncated: false, stderrHead: "")
+        }
+        check(ReportCollector.duRun(outcome(.timedOut, "8\t/a\n16\t/Users/u/Docu"))
+              == ReportCollector.DuRun(lines: [DirSize(path: "/a", bytes: 8192)], cut: true),
+              T + "duRun: killed run drops the unterminated last line")
+        check(ReportCollector.duRun(outcome(.timedOut, "8\t/a")) == ReportCollector.DuRun(lines: [], cut: true),
+              T + "duRun: killed run without any newline -> no lines")
+        check(ReportCollector.duRun(outcome(.cancelled, "")) == ReportCollector.DuRun(lines: [], cut: true),
+              T + "duRun: cancelled -> cut")
+        check(ReportCollector.duRun(outcome(.exited(0), "8\t/a"))
+              == ReportCollector.DuRun(lines: [DirSize(path: "/a", bytes: 8192)], cut: false),
+              T + "duRun: finished run keeps its last line")
+        check(ReportCollector.duRun(outcome(.exited(1), "")) == ReportCollector.DuRun(lines: [], cut: false),
+              T + "duRun: failed run with no output -> empty, not cut")
+
+        // 3-5. assembleFolderSizes
+        typealias Run = ReportCollector.DuRun
+        let h = "/Users/u"
+        let walkLines = [DirSize(path: "/Users/u/Library/Caches", bytes: 10_000), DirSize(path: "/Users/u/Documents", bytes: 30_000)]
+        let names = ["Documents", "Library", "Private", "notes.txt", "Music"]
+        let outside = ["/o1", "/o2", "/o3", "/o4"]
+        let accessMap: [String: DirAccess] = [
+            "/Users/u/Library": .readable, "/Users/u/Music": .readable, "/Users/u/Private": .denied,
+            "/Users/u/Library/Containers": .readable, "/Users/u/Library/Group Containers": .denied,
+            "/o2": .readable, "/o3": .denied, "/o4": .readable]
+        let access: (String) -> DirAccess = { accessMap[$0] ?? .missing }
+        func assemble(_ walk: Run, _ runs: [Run]) -> FolderSizes? {
+            ReportCollector.assembleFolderSizes(home: h, homeWalk: walk, outside: outside, outsideRuns: runs,
+                                                homeChildNames: names, access: access,
+                                                countedAt: Date(timeIntervalSince1970: 0), durationSeconds: 1)
+        }
+        let cutRuns = [Run(lines: [DirSize(path: "/o1", bytes: 5_000)], cut: false), Run(lines: [], cut: true),
+                       Run(lines: [], cut: true), Run(lines: [], cut: false)]
+        let cut = assemble(Run(lines: walkLines, cut: true), cutRuns)
+        check(cut?.homeDirs == [DirSize(path: "/Users/u/Documents", bytes: 30_000)], T + "assemble cut: homeDirs")
+        check(cut?.homeDirsUnreadable == ["/Users/u/Private"], T + "assemble cut: homeDirsUnreadable")
+        check(cut?.homeDirsNotMeasured == ["/Users/u/Library", "/Users/u/Music"],
+              T + "assemble cut: homeDirsNotMeasured (got \(String(describing: cut?.homeDirsNotMeasured)))")
+        check(cut?.serviceDirs == [DirSize(path: "/Users/u/Library/Caches", bytes: 10_000), DirSize(path: "/o1", bytes: 5_000)],
+              T + "assemble cut: serviceDirs")
+        check(cut?.serviceDirsUnreadable == ["/Users/u/Library/Group Containers", "/o3"],
+              T + "assemble cut: serviceDirsUnreadable (/o3 refused wins over cut)")
+        check(cut?.serviceDirsNotMeasured == ["/Users/u/Library/Containers", "/o2"],
+              T + "assemble cut: serviceDirsNotMeasured, /o4 in no list (got \(String(describing: cut?.serviceDirsNotMeasured)))")
+        let fin = assemble(Run(lines: walkLines, cut: false), cutRuns.map { Run(lines: $0.lines, cut: false) })
+        check(fin?.homeDirsNotMeasured == [] && fin?.serviceDirsNotMeasured == [], T + "assemble finished: empty not-measured lists")
+        check(fin?.homeDirsUnreadable == cut?.homeDirsUnreadable && fin?.serviceDirsUnreadable == cut?.serviceDirsUnreadable,
+              T + "assemble finished: unreadable lists unchanged")
+        check(assemble(Run(lines: [], cut: true), cutRuns) == nil, T + "assemble: no complete home line (cut) -> nil")
+        check(assemble(Run(lines: [], cut: false), cutRuns) == nil, T + "assemble: no complete home line (finished) -> nil")
+
+        // 6. cache round trip + schema 1 rejected
+        let f2 = FileManager.default.temporaryDirectory.appendingPathComponent("sdt-cache-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: f2) }
+        let withLists = FolderSizes(homeDirs: [], homeDirsUnreadable: [], serviceDirs: nil, serviceDirsUnreadable: [],
+                                    homeDirsNotMeasured: ["/Users/u/Music"], serviceDirsNotMeasured: ["/o2"],
+                                    countedAt: countedAt, durationSeconds: 90)
+        do {
+            try FolderSizesCacheStore.save(withLists, to: f2)
+            check(FolderSizesCacheStore.load(from: f2) == withLists, T + "cache round trip keeps the not-measured lists")
+        } catch { check(false, T + "cache save threw \(error)") }
+        let f1 = FileManager.default.temporaryDirectory.appendingPathComponent("sdt-cache1-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: f1) }
+        struct Schema1: Codable { var schema: Int = 1; var homeDirs: [DirSize] = []; var homeDirsUnreadable: [String] = []
+            var serviceDirs: [DirSize]?; var serviceDirsUnreadable: [String] = []; var countedAt: Date; var durationSeconds: Double }
+        try? encoder.encode(Schema1(countedAt: countedAt, durationSeconds: 1)).write(to: f1)
+        check(FolderSizesCacheStore.load(from: f1) == nil, T + "schema 1 -> nil")
+    }
+
+    // 7. Live deadline + no orphans (temp dirs and a stub du only)
+    do {
+        let T = "SERVICE-DIRS-TIMEOUT: live: "
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("sdt-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let home = root.appendingPathComponent("home").path
+        let out1 = root.appendingPathComponent("out1").path
+        for d in ["Library/Caches", "Library/Containers", "Documents"] {
+            try? fm.createDirectory(atPath: home + "/" + d, withIntermediateDirectories: true)
+        }
+        try? fm.createDirectory(atPath: out1, withIntermediateDirectories: true)
+        let pids = root.appendingPathComponent("pids").path
+        let stub = root.appendingPathComponent("fake-du").path
+        let script = """
+        #!/bin/sh
+        for a; do last="$a"; done
+        if [ "$1" = "-xk" ]; then
+          printf '8\\t%s/Library/Caches\\n' "$last"
+          printf '16\\t%s/Docu' "$last"
+        fi
+        /bin/sleep 30 &
+        echo $! >> '\(pids)'
+        wait
+        """
+        try? script.write(toFile: stub, atomically: true, encoding: .utf8)
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: stub)
+        let t0 = Date()
+        let r = runAsyncBlocking { await ReportCollector().countFolderSizes(home: home, outside: [out1], deadline: 1, du: stub) }
+        let elapsed = Date().timeIntervalSince(t0)
+        check(elapsed < 4, T + "returns in < 4 s (was \(elapsed))")
+        check(r != nil, T + "result is not nil")
+        check(r?.serviceDirs == [DirSize(path: home + "/Library/Caches", bytes: 8192)], T + "serviceDirs (got \(String(describing: r?.serviceDirs)))")
+        check(r?.serviceDirsNotMeasured == [home + "/Library/Containers", out1],
+              T + "serviceDirsNotMeasured (got \(String(describing: r?.serviceDirsNotMeasured)))")
+        check(r?.serviceDirsUnreadable == [], T + "serviceDirsUnreadable empty")
+        check(r?.homeDirs == [], T + "homeDirs empty")
+        check(r?.homeDirsNotMeasured == [home + "/Documents", home + "/Library"],
+              T + "homeDirsNotMeasured (got \(String(describing: r?.homeDirsNotMeasured)))")
+        check(!((r?.homeDirs ?? []) + (r?.serviceDirs ?? [])).contains { $0.path.hasSuffix("/Docu") }, T + "no bogus /Docu row")
+        let pidList = ((try? String(contentsOfFile: pids, encoding: .utf8)) ?? "")
+            .split(separator: "\n").compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+        check(pidList.count == 2, T + "two stub sleeps were started (got \(pidList.count))")
+        for pid in pidList {
+            var gone = false
+            let until = Date().addingTimeInterval(3)
+            while Date() < until {
+                if kill(pid, 0) == -1 && errno == ESRCH { gone = true; break }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            check(gone, T + "stub sleep pid \(pid) was killed with its group")
+        }
+    }
 
     // MARK: - descendantPIDs (live)
 
