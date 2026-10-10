@@ -311,6 +311,12 @@ protocol AppStrings {
     var historyRangeAll: String { get }
     var historyRangeA11y: String { get }
     func historyGbValue(_ n: Int) -> String
+    var historyRestartTitle: String { get }
+    func historyRestartDetail(_ file: String) -> String
+    var historyRestartReveal: String { get }
+    var historyRestartRevealA11y: String { get }
+    var historyRestartHide: String { get }
+    var historyRestartHideA11y: String { get }
     var historyInfoDate: String { get }
     var historyInfoDiskFree: String { get }
     var historyInfoBattery: String { get }

@@ -292,6 +292,12 @@ struct StringsRU: AppStrings {
     var historyRangeAll: String { "Всё" }
     var historyRangeA11y: String { "Период графика истории" }
     func historyGbValue(_ n: Int) -> String { "\(n) ГБ" }
+    var historyRestartTitle: String { "История началась заново" }
+    func historyRestartDetail(_ file: String) -> String { "Прежний файл истории не удалось прочитать, поэтому история ведётся заново. Старый файл не удалён: он сохранён в той же папке под именем «\(file)»." }
+    var historyRestartReveal: String { "Показать в Finder" }
+    var historyRestartRevealA11y: String { "Показать прежний файл истории в Finder" }
+    var historyRestartHide: String { "Скрыть" }
+    var historyRestartHideA11y: String { "Скрыть сообщение о том, что история началась заново" }
     var historyInfoDate: String { "Дата — один снимок в день (хранятся все дни)" }
     var historyInfoDiskFree: String { "Диск занято / Свободно — данные и свободное место на системном томе" }
     var historyInfoBattery: String { "Батарея — максимальная ёмкость в % от новой (здоровье батареи), не текущий заряд" }

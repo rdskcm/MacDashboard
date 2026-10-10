@@ -288,6 +288,12 @@ struct StringsEN: AppStrings {
     var historyRangeAll: String { "All" }
     var historyRangeA11y: String { "History chart period" }
     func historyGbValue(_ n: Int) -> String { "\(n) GB" }
+    var historyRestartTitle: String { "History started over" }
+    func historyRestartDetail(_ file: String) -> String { "The previous history file could not be read, so History is being recorded from scratch. The old file was not deleted: it is kept in the same folder as “\(file)”." }
+    var historyRestartReveal: String { "Show in Finder" }
+    var historyRestartRevealA11y: String { "Show the previous history file in Finder" }
+    var historyRestartHide: String { "Hide" }
+    var historyRestartHideA11y: String { "Hide the History started over notice" }
     var historyInfoDate: String { "Date — one snapshot per day (every day is kept)" }
     var historyInfoDiskFree: String { "Disk used / Free — data and free space on the system volume" }
     var historyInfoBattery: String { "Battery — maximum capacity as % of new (battery health), not current charge" }

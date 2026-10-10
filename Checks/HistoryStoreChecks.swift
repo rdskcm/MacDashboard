@@ -5,6 +5,8 @@
 // directory that is removed afterwards; nothing here touches the user's App Support.
 // HISTORY-DECODE-LOSS: Section E — tolerant per-entry load, save() writes every stored element
 // as parsed, and an unreadable file is renamed aside instead of overwritten.
+// HISTORY-UNREADABLE-NOTICE: Section F — the renamed-aside file's name is recorded, survives a
+// reload, is removed on dismissal, and only a plain sibling name is ever loaded.
 
 import Foundation
 
@@ -524,5 +526,83 @@ func runHistoryStoreChecks() {
         s.upsertToday(from: FullReport(), live: LiveSnapshot())
         check(!hsSaveThrows(s) && (try? fm.contentsOfDirectory(atPath: dir.path)) == ["mac_check_state.json"],
               "HistoryStore.save: a missing file is created without any backup")
+    }
+
+    // ---- Section F: the History-restarted notice (HISTORY-UNREADABLE-NOTICE) ----
+    // F1: the rename records the backup's name in state and in the new file; it survives a later
+    // save and a reload; dismissing removes it from the file and leaves the backup untouched.
+    do {
+        let dir = root.appendingPathComponent("f1", isDirectory: true)
+        let url = dir.appendingPathComponent("mac_check_state.json")
+        let junk = Data("not json".utf8)
+        hsWriteData(junk, to: url)
+        let s = HistoryStore(url: url)
+        check(s.load().unreadable_backup == nil, "HistoryStore.load: unreadable file ⇒ no notice before the rename")
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        check(!hsSaveThrows(s), "HistoryStore.save: F1 save succeeds")
+        let name = hsBackups(dir).first
+        check(name != nil && s.state.unreadable_backup == name, "HistoryStore.save: the rename records the backup's name in state")
+        check(name != nil && (hsObject(url)?[HistoryStore.unreadableBackupKey] as? String) == name,
+              "HistoryStore.save: the new file records the backup's name")
+        check(!hsSaveThrows(s) && (hsObject(url)?[HistoryStore.unreadableBackupKey] as? String) == name,
+              "HistoryStore.save: a later save keeps the backup's name")
+        check(HistoryStore(url: url).load().unreadable_backup == name, "HistoryStore.load: the backup's name survives a relaunch")
+        s.clearUnreadableBackup()
+        check(s.state.unreadable_backup == nil, "HistoryStore.clearUnreadableBackup: clears the name in state")
+        check(!hsSaveThrows(s) && hsObject(url)?[HistoryStore.unreadableBackupKey] == nil,
+              "HistoryStore.save: a hidden notice's key is removed from the file")
+        check(HistoryStore(url: url).load().unreadable_backup == nil, "HistoryStore.load: a hidden notice stays hidden after a relaunch")
+        check(hsHistory(url).count == 1, "HistoryStore.save: hiding the notice keeps the history entries")
+        check(name != nil && hsBytes(dir.appendingPathComponent(name ?? "-")) == junk,
+              "HistoryStore: hiding the notice never touches the backup file")
+    }
+
+    // F2: a failed rename records nothing; the retry's rename records the name.
+    do {
+        let dir = root.appendingPathComponent("f2", isDirectory: true)
+        let url = dir.appendingPathComponent("mac_check_state.json")
+        hsWriteData(Data("not json".utf8), to: url)
+        let s = HistoryStore(url: url)
+        s.load()
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        immutablePaths.append(url.path)
+        try? fm.setAttributes([.immutable: true], ofItemAtPath: url.path)
+        check(hsSaveThrows(s) && s.state.unreadable_backup == nil, "HistoryStore.save: a failed rename records no backup name")
+        try? fm.setAttributes([.immutable: false], ofItemAtPath: url.path)
+        check(!hsSaveThrows(s) && s.state.unreadable_backup != nil && s.state.unreadable_backup == hsBackups(dir).first,
+              "HistoryStore.save: the retry's rename records the backup's name")
+    }
+
+    // F3: a missing file, and a readable file without the key, carry no notice.
+    do {
+        let url = root.appendingPathComponent("f3/mac_check_state.json")
+        let s = HistoryStore(url: url)
+        s.load()
+        s.upsertToday(from: FullReport(), live: LiveSnapshot())
+        check(!hsSaveThrows(s) && s.state.unreadable_backup == nil && hsObject(url)?[HistoryStore.unreadableBackupKey] == nil,
+              "HistoryStore.save: a missing file ⇒ no notice")
+        check(HistoryStore(url: url).load().unreadable_backup == nil, "HistoryStore.load: a readable file without the key ⇒ no notice")
+    }
+
+    // F4: only a plain sibling name is loaded; anything else is ignored and dropped on save.
+    do {
+        let bad: [(String, String)] = [
+            ("a relative path", "\"../../etc/passwd\""),
+            ("another file's prefix", "\"other.json.unreadable-1\""),
+            ("a name with a slash", "\"mac_check_state.json.unreadable-1/x\""),
+            ("a number", "5"),
+        ]
+        for (n, (label, json)) in bad.enumerated() {
+            let url = root.appendingPathComponent("f4/\(n)/mac_check_state.json")
+            hsWrite("{\"mac_history\":[{\"date\":\"2024-01-01\"}],\"unreadable_backup\":\(json)}", to: url)
+            let s = HistoryStore(url: url)
+            check(s.load().unreadable_backup == nil, "HistoryStore.load: \(label) as the backup name ⇒ no notice")
+            check(!hsSaveThrows(s) && hsObject(url)?[HistoryStore.unreadableBackupKey] == nil,
+                  "HistoryStore.save: \(label) as the backup name is dropped")
+        }
+        let ok = "mac_check_state.json.unreadable-20240101-000000"
+        let url = root.appendingPathComponent("f4/ok/mac_check_state.json")
+        hsWrite("{\"mac_history\":[{\"date\":\"2024-01-01\"}],\"unreadable_backup\":\"\(ok)\"}", to: url)
+        check(HistoryStore(url: url).load().unreadable_backup == ok, "HistoryStore.load: a valid stored backup name is loaded")
     }
 }
