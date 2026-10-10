@@ -2050,6 +2050,12 @@ runParseFailureChecks()
 
 runWakeHoldersChecks()
 
+// =====================================================================
+// MARK: - Backup age (BACKUP-AGE, in BackupLogChecks.swift)
+// =====================================================================
+
+runBackupLogChecks()
+
 // MARK: - barSegmentIndex (re-review 2 [N4]/[N6]: memory-bar hover hit test)
 do {
     // Three 10 pt segments with a 2 pt gap: [0,10] [12,22] [24,34].
@@ -2224,7 +2230,7 @@ func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
 do {
     // diskFull and diskFullSoon share one `if/else if` on the same live.disk.pct
     // (Assessment.swift), so no single report can trip both; two fixtures that
-    // differ only in disk% cover all 15 kinds between them.
+    // differ only in disk% cover all 16 kinds between them.
     let originalLang = L10nStore.shared.language
     defer { L10nStore.shared.language = originalLang }
 
@@ -2232,8 +2238,8 @@ do {
         L10nStore.shared.language = lang
         let (reportFull, liveFull) = attnFullBadFixture(diskPct: 0.94)   // -> diskFull
         let (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.80)   // -> diskFullSoon
-        let itemsFull = Assess.assess(report: reportFull, live: liveFull, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)]).items
-        let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)]).items
+        let itemsFull = Assess.assess(report: reportFull, live: liveFull, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
+        let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
         let allItems = itemsFull + itemsSoon
         let kinds = Set(allItems.map(\.kind))
         check(kinds.count == AttentionKind.allCases.count, "AttentionModel coverage (\(lang)): all \(AttentionKind.allCases.count) AttentionKind cases produced (got \(kinds.count))")
@@ -2246,7 +2252,7 @@ do {
 }
 
 // A broader fixture that also trips tip/capsule-producing branches, for the verb,
-// parity and regression checks below (these don't need all 15 AttentionKinds, just
+// parity and regression checks below (these don't need all 16 AttentionKinds, just
 // a healthy mix of items+capsules with both nil and non-nil actions).
 func attnMegaBadFixture() -> (FullReport, LiveSnapshot) {
     var (report, live) = attnFullBadFixture(diskPct: 0.90)

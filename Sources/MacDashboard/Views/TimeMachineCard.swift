@@ -9,7 +9,8 @@ import SwiftUI
 /// 11.5 pt) · value right, mono font family so numeric values (quota) read
 /// as tabular columns — a private, card-local row (same convention
 /// `DirBarRow`/`DirBarList` already use in StorageCards.swift).
-private struct TMRow: View {
+/// Internal (not private) because `ClaudeBackupCard` reuses it (BACKUP-AGE).
+struct TMRow: View {
     let label: String
     var value: String = ""
     /// `DS.inkSoft` unless a call site opts into an alert tone; see the last-backup

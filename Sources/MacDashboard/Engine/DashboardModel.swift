@@ -38,6 +38,9 @@ final class DashboardModel {
     /// Диски card can show "обновлено HH:MM" from app start onward.
     var smartUpdatedAt: Date? = nil
 
+    /// BACKUP-AGE: newest successful Claude backup per its log; nil = no log on this Mac (show nothing). Refreshed on the SMART cadence.
+    var claudeBackup: ClaudeBackupStatus? = nil
+
     /// Re-entrancy guard for `refreshSmartNow()` (SPEC Block H follow-up): true while a
     /// manual SMART refresh is in flight, so the card's «Обновить» button can disable
     /// itself and avoid overlapping ReportCollector instances.
@@ -299,6 +302,20 @@ final class DashboardModel {
         history = historyStore.state
     }
 
+    /// BACKUP-AGE: re-read the backup log off the main actor; guarded so an unchanged status notifies nobody.
+    func refreshClaudeBackup() async {
+        let s = await BackupLog.readStatus()
+        if claudeBackup != s { claudeBackup = s }
+    }
+
+    /// BACKUP-AGE: change the stale limit and re-assess now (same report choice as the fast tick).
+    func setBackupStaleHours(_ hours: Int) {
+        guard AppSettings.allowedBackupStaleHours.contains(hours),
+              AppSettings.shared.backupStaleHours != hours else { return }
+        AppSettings.shared.backupStaleHours = hours
+        setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
+    }
+
     /// SLEEP-IGNORE-APP: add (`ignored: true`) or remove a holder from the Sleep item's
     /// ignore list and re-assess now rather than on the next fast tick (which does not run
     /// while paused). Same report choice as the fast tick: never a partial (V2-HEADER-CHURN).
@@ -456,12 +473,14 @@ final class DashboardModel {
                 guard !Task.isCancelled else { return }
                 if self.report.smart != disks { self.report.smart = disks }
                 if self.report.tmDest != tmDest { self.report.tmDest = tmDest }
+                await self.refreshClaudeBackup()
                 self.smartUpdatedAt = Date()
             }
         }
 
         loadCachedReportFromDisk()
         refreshReport(trigger: .automatic)
+        Task { [weak self] in await self?.refreshClaudeBackup() }
 
         // Hourly folder-size count (SIZES-BACKGROUND): a cheap poll; the 1 h rule inside
         // startSizeCountIfNeeded decides (last success or last failed attempt, SIZES-FAIL-BACKOFF).
@@ -736,6 +755,7 @@ final class DashboardModel {
             guard !Task.isCancelled else { return }
             if self.report.smart != disks { self.report.smart = disks }
             if self.report.tmDest != tmDest { self.report.tmDest = tmDest }
+            await self.refreshClaudeBackup()
             self.smartUpdatedAt = Date()
         }
     }
@@ -1256,7 +1276,8 @@ final class DashboardModel {
     /// forgot it.
     private func assessed(_ r: FullReport) -> Assessment {
         Assess.assess(report: r, live: live, memPressure: memPressure, topApps: topApps,
-                      wakeHolders: wakeHolders, ignoredWakeHolders: AppSettings.shared.ignoredWakeHolders)
+                      wakeHolders: wakeHolders, ignoredWakeHolders: AppSettings.shared.ignoredWakeHolders,
+                      claudeBackup: claudeBackup, backupStaleHours: AppSettings.shared.backupStaleHours)
     }
 
     /// Probes `findSmartctl()`/`findBrew()` fresh (cheap `isExecutableFile` checks,

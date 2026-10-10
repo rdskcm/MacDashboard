@@ -36,6 +36,10 @@ protocol AppStrings {
     var settingsWakeIgnoredEmpty: String { get }
     var settingsWakeIgnoredRestore: String { get }
     func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String
+    var settingsSectionBackup: String { get }
+    var settingsBackupStaleLabel: String { get }
+    func settingsBackupStaleOption(_ hours: Int) -> String
+    var settingsBackupStaleNote: String { get }
     var settingsMenuLanguageHint: String { get }
     var settingsRelaunchNow: String { get }
     var settingsSectionGeneral: String { get }
@@ -240,6 +244,16 @@ protocol AppStrings {
     /// disk blocks (BACKLOG F1).
     var timeMachinePurgeableTip: String { get }
 
+    // MARK: Claude backup card (BACKUP-AGE)
+    var claudeBackupCardTitle: String { get }
+    var claudeBackupAgeLabel: String { get }
+    var claudeBackupLastLabel: String { get }
+    var claudeBackupLimitLabel: String { get }
+    func claudeBackupAgo(_ age: String) -> String
+    var claudeBackupJustNow: String { get }
+    var claudeBackupNoneFound: String { get }
+    var claudeBackupUnreadable: String { get }
+
     // MARK: Autostart card
     var autostartTitle: String { get }
     var autostartNoPermission: String { get }
@@ -442,6 +456,8 @@ protocol AppStrings {
     func assessOwnCrashesRecent(_ app: String, _ n: Int) -> String
     func assessKernelPanicsRecent(_ n: Int) -> String
     var assessTimeMachineNotSetUp: String { get }
+    func assessClaudeBackupStale(_ age: String) -> String
+    var assessClaudeBackupNone: String { get }
     func assessSmartDiskErrors(_ title: String) -> String
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String
     func assessSmartDiskUnavailableTip(_ title: String) -> String
@@ -631,6 +647,8 @@ protocol AppStrings {
     func attnDetailCrashes(_ n: Int) -> String
     var attnLabelTimeMachine: String { get }
     var attnDetailTimeMachine: String { get }
+    var attnLabelClaudeBackup: String { get }
+    var attnDetailClaudeBackupNone: String { get }
     var attnLabelWakeHolders: String { get }
     func attnDetailWakeHolders(_ first: String, more: Int) -> String
     func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String

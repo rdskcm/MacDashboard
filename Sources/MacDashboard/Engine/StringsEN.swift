@@ -21,6 +21,10 @@ struct StringsEN: AppStrings {
     var settingsWakeIgnoredEmpty: String { "The list is empty. To add an app, right-click the Sleep warning in the main window." }
     var settingsWakeIgnoredRestore: String { "Warn again" }
     func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String { "Warn again about \(holder)" }
+    var settingsSectionBackup: String { "Backup" }
+    var settingsBackupStaleLabel: String { "Claude backup: warn when older than" }
+    func settingsBackupStaleOption(_ hours: Int) -> String { "\(hours / 24) d" }
+    var settingsBackupStaleNote: String { "The age is read from ~/Library/Logs/claude-backup.log, so it is known even when the disk is unplugged or locked." }
     var settingsMenuLanguageHint: String { "The menu bar and system dialogs follow the app language after a relaunch" }
     var settingsRelaunchNow: String { "Relaunch Now" }
     var settingsSectionGeneral: String { "General" }
@@ -218,6 +222,16 @@ struct StringsEN: AppStrings {
     func timeMachineSnapshotsLast(_ date: String) -> String { ", last \(date)" }
     var timeMachinePurgeable: String { "Purgeable space" }
     var timeMachinePurgeableTip: String { "Space macOS frees on its own when it is needed: Time Machine local snapshots and caches. A per-snapshot size cannot be computed — snapshots share disk blocks." }
+
+    // MARK: Claude backup card (BACKUP-AGE)
+    var claudeBackupCardTitle: String { "Claude backup" }
+    var claudeBackupAgeLabel: String { "Age" }
+    var claudeBackupLastLabel: String { "Last snapshot" }
+    var claudeBackupLimitLabel: String { "Warn after" }
+    func claudeBackupAgo(_ age: String) -> String { "\(age) ago" }
+    var claudeBackupJustNow: String { "just now" }
+    var claudeBackupNoneFound: String { "no successful snapshot in the log" }
+    var claudeBackupUnreadable: String { "the log could not be read" }
 
     // MARK: Autostart card
     var autostartTitle: String { "Startup items" }
@@ -429,6 +443,8 @@ struct StringsEN: AppStrings {
     func assessOwnCrashesRecent(_ app: String, _ n: Int) -> String { "\(app) crash reports in the last 7 days: \(n) — check Console.app." }
     func assessKernelPanicsRecent(_ n: Int) -> String { "System crashes (kernel panics) in the last 7 days: \(n) — check Console.app." }
     var assessTimeMachineNotSetUp: String { "Time Machine is not configured — no backups." }
+    func assessClaudeBackupStale(_ age: String) -> String { "No Claude backup for \(age) — check that the disk is connected and unlocked." }
+    var assessClaudeBackupNone: String { "The Claude backup log has no successful snapshot — check the disk." }
     func assessSmartDiskErrors(_ title: String) -> String { "Disk “\(title)”: SMART reports media errors — check the disk and your backups." }
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String { "Disk “\(title)”: wear is \(pct)% — nearing end of life." }
     func assessSmartDiskUnavailableTip(_ title: String) -> String { "Disk “\(title)”: SMART unavailable — reconnect the cable or install smartmontools (brew install smartmontools)." }
@@ -632,6 +648,8 @@ struct StringsEN: AppStrings {
     func attnDetailCrashes(_ n: Int) -> String { "\(n) reports" }
     var attnLabelTimeMachine: String { "Time Machine" }
     var attnDetailTimeMachine: String { "not set up" }
+    var attnLabelClaudeBackup: String { "Claude backup" }
+    var attnDetailClaudeBackupNone: String { "none succeeded" }
     var attnLabelWakeHolders: String { "Sleep" }
     func attnDetailWakeHolders(_ first: String, more: Int) -> String { more > 0 ? "\(first), +\(more) more" : first }
     func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String { "\(owner) (for \(requester))" }

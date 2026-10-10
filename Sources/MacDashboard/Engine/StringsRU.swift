@@ -21,6 +21,10 @@ struct StringsRU: AppStrings {
     var settingsWakeIgnoredEmpty: String { "Список пуст. Чтобы добавить приложение, щёлкните правой кнопкой по предупреждению «Сон» в главном окне." }
     var settingsWakeIgnoredRestore: String { "Снова предупреждать" }
     func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String { "Снова предупреждать про \(holder)" }
+    var settingsSectionBackup: String { "Бэкап" }
+    var settingsBackupStaleLabel: String { "Бэкап Claude: предупреждать, если старше" }
+    func settingsBackupStaleOption(_ hours: Int) -> String { "\(hours / 24) дн" }
+    var settingsBackupStaleNote: String { "Возраст берётся из журнала ~/Library/Logs/claude-backup.log, поэтому он известен и при отключённом или заблокированном диске." }
     var settingsMenuLanguageHint: String { "Язык меню и системных диалогов применится после перезапуска приложения" }
     var settingsRelaunchNow: String { "Перезапустить сейчас" }
     var settingsSectionGeneral: String { "Общие" }
@@ -222,6 +226,16 @@ struct StringsRU: AppStrings {
     func timeMachineSnapshotsLast(_ date: String) -> String { ", последний \(date)" }
     var timeMachinePurgeable: String { "Очищаемое место" }
     var timeMachinePurgeableTip: String { "Место, которое macOS освободит сама, когда оно понадобится: локальные снапшоты Time Machine и кэши. Размер отдельного снапшота посчитать нельзя — снапшоты делят общие блоки диска." }
+
+    // MARK: Claude backup card (BACKUP-AGE)
+    var claudeBackupCardTitle: String { "Бэкап Claude" }
+    var claudeBackupAgeLabel: String { "Возраст" }
+    var claudeBackupLastLabel: String { "Последний снимок" }
+    var claudeBackupLimitLabel: String { "Предупреждать после" }
+    func claudeBackupAgo(_ age: String) -> String { "\(age) назад" }
+    var claudeBackupJustNow: String { "только что" }
+    var claudeBackupNoneFound: String { "успешных снимков в журнале нет" }
+    var claudeBackupUnreadable: String { "журнал не удалось прочитать" }
 
     // MARK: Autostart card
     var autostartTitle: String { "Автозагрузка" }
@@ -436,6 +450,8 @@ struct StringsRU: AppStrings {
     func assessOwnCrashesRecent(_ app: String, _ n: Int) -> String { "Сбои \(app) за последние 7 дней: \(n) шт. — отчёты в Console.app." }
     func assessKernelPanicsRecent(_ n: Int) -> String { "Сбой системы (паника ядра) за последние 7 дней: \(n) шт. — отчёты в Console.app." }
     var assessTimeMachineNotSetUp: String { "Time Machine не настроен — бэкапов нет." }
+    func assessClaudeBackupStale(_ age: String) -> String { "Бэкапа Claude не было \(age) — проверьте, подключён ли диск и разблокирован ли он." }
+    var assessClaudeBackupNone: String { "В журнале бэкапа Claude нет ни одного успешного снимка — проверьте диск." }
     func assessSmartDiskErrors(_ title: String) -> String { "Диск «\(title)»: SMART сообщает об ошибках носителя — проверьте диск и бэкапы." }
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String { "Диск «\(title)»: износ \(pct)% — ресурс на исходе." }
     func assessSmartDiskUnavailableTip(_ title: String) -> String { "Диск «\(title)»: SMART недоступен — переподключите кабель или установите smartmontools (brew install smartmontools)." }
@@ -639,6 +655,8 @@ struct StringsRU: AppStrings {
     func attnDetailCrashes(_ n: Int) -> String { "\(n) \(ruPlural(n, "отчёт", "отчёта", "отчётов"))" }
     var attnLabelTimeMachine: String { "Time Machine" }
     var attnDetailTimeMachine: String { "не настроена" }
+    var attnLabelClaudeBackup: String { "Бэкап Claude" }
+    var attnDetailClaudeBackupNone: String { "нет успешных" }
     var attnLabelWakeHolders: String { "Сон" }
     func attnDetailWakeHolders(_ first: String, more: Int) -> String { more > 0 ? "\(first), ещё \(more)" : first }
     func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String { "\(owner) (от \(requester))" }

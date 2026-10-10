@@ -50,7 +50,7 @@ enum Assess {
         }
     }
 
-    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = []) -> Assessment {
+    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleHours, now: Date = Date()) -> Assessment {
         var a = Assessment()
         // Paired with its `Problem` so the final sort keeps `items` in lockstep
         // with `problems` (see §3 of the v2 attention spec — parity is structural,
@@ -222,6 +222,21 @@ enum Assess {
                            AttentionItem(kind: .timeMachine, sev: .warn, label: L.attnLabelTimeMachine,
                                          detail: L.attnDetailTimeMachine, fullText: text,
                                          verb: verb(action), action: action)))
+        }
+
+        // --- Claude backup age (BACKUP-AGE): read from the backup log, never the disk ---
+        if let backup = claudeBackup, BackupLog.isStale(backup, thresholdHours: backupStaleHours, now: now) {
+            let action = AdviceAction.revealPath(BackupLog.logURL.path)
+            let text: String, detail: String
+            if case .lastSuccess(let d) = backup {
+                let age = BackupLog.durationText(seconds: Int(max(0, now.timeIntervalSince(d))))
+                text = L.assessClaudeBackupStale(age); detail = L.claudeBackupAgo(age)
+            } else {
+                text = L.assessClaudeBackupNone; detail = L.attnDetailClaudeBackupNone
+            }
+            pairs.append((Problem(sev: .warn, text: text, action: action),
+                          AttentionItem(kind: .claudeBackup, sev: .warn, label: L.attnLabelClaudeBackup,
+                                        detail: detail, fullText: text, verb: verb(action), action: action)))
         }
 
         // --- SMART / disks ---

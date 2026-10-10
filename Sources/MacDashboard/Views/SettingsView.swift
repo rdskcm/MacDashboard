@@ -4,7 +4,7 @@ import AppKit
 import SwiftUI
 
 enum SettingsSection: Hashable {
-    case general, monitoring
+    case general, monitoring, backup
     // Compiled out of the default (public) build — see Package.swift/build_app.sh (AI_ENABLED).
     #if AI_ENABLED
     case ai
@@ -325,6 +325,11 @@ struct SettingsView: View {
             SettingsSidebarRow(icon: .pulse, title: L.settingsSectionMonitoring, selected: section == .monitoring) {
                 section = .monitoring
             }
+            if model.claudeBackup != nil || section == .backup {
+                SettingsSidebarRow(icon: .symbol(name: "externaldrive.badge.timemachine", tint: DS.green), title: L.settingsSectionBackup, selected: section == .backup) {
+                    section = .backup
+                }
+            }
             #if AI_ENABLED
             SettingsSidebarRow(icon: .symbol(name: "sparkles", tint: .purple), title: L.settingsSectionAI, selected: section == .ai) {
                 section = .ai
@@ -382,6 +387,13 @@ struct SettingsView: View {
                 monitoringIntervalCard
                 monitoringProcessCard
                 monitoringWakeIgnoreCard
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .backup:
+            VStack(alignment: .leading, spacing: 12) {
+                backupStaleCard
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 18)
@@ -525,6 +537,34 @@ struct SettingsView: View {
         // Top padding is 10, not 14: the label's own line box carries ~3.5 pt of
         // internal leading above its cap height, so an equal 14 reads as a
         // larger gap than the flat 14 under the capsule row below.
+        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCardSurface()
+    }
+
+    /// BACKUP-AGE: stale limit of the Claude backup age. Same recipe as the process card
+    /// minus the button; the change applies at once through the model. No animation
+    /// (animation-value-size-coupling).
+    private var backupStaleCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.settingsBackupStaleLabel)
+                .font(.system(size: 14))
+                .lineSpacing(14 * 0.3)
+                .foregroundStyle(DS.inkSoft)
+
+            DSSlidingSegmented(
+                options: AppSettings.allowedBackupStaleHours,
+                selection: Binding(get: { settings.backupStaleHours }, set: { model.setBackupStaleHours($0) }),
+                size: .settingsInterval,
+                groupLabel: L.settingsBackupStaleLabel
+            ) { h in L.settingsBackupStaleOption(h) }
+
+            Text(L.settingsBackupStaleNote)
+                .font(.system(size: 11.5))
+                .lineSpacing(11.5 * 0.4)
+                .foregroundStyle(DS.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
         .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .dsCardSurface()
