@@ -415,7 +415,7 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
 - brew: /opt/homebrew/bin/brew; else /usr/local/bin/brew only if trusted
   (`ReportCollector.isTrustedFallbackTool`: a regular file owned by root or the current user, no
   group/world write bit); no PATH lookup; absent or untrusted ⇒ brewStatus = .notInstalled.
-  Else .installed(version:) — version = first non-empty stdout line of `brew --version` on exit 0, else nil = version unknown (card and report say so; not cached) — then `brew outdated` (60 s).
+  Else .installed(version:) — version = first non-empty stdout line of `brew --version` on exit 0, else nil = version unknown (card and report say so; not cached) — preceded by `brew update` (60 s, outcome ignored; skipped in the post-upgrade re-collect) — then `brew outdated` with HOMEBREW_NO_AUTO_UPDATE=1 (30 s).
   Outdated list only on exit 0 with complete stdout; any other outcome ⇒ brewOutdated = nil = check failed (card and report say so; not cached).
 - updates: `softwareupdate -l` (120 s timeout; on timeout ⇒ nil = "не проверено").
 - autostart: `osascript -e 'tell application "System Events" to get the name of every

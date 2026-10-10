@@ -50,7 +50,7 @@ enum BrewUpgrader {
     static func invocation(brewPath: String) -> Invocation {
         // brew is a Homebrew-prefix script that shells out to its own helper binaries
         // (ruby, git, curl, …) inside that prefix — same reason `collectBrewInfo()`
-        // builds this environment for `--version`/`outdated`. It was missing here, on
+        // builds this environment for `update`/`--version`/`outdated`. It was missing here, on
         // the one call that actually matters, until V2-POLISH B1.
         // Generous timeout: downloads can take a while.
         Invocation(path: brewPath, args: ["upgrade"], timeout: 900,

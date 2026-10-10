@@ -97,9 +97,10 @@ final class ReportCollector {
         let mutate: (inout FullReport) -> Void
     }
 
-    /// Freshness window for the session brew-outdated cache (Block N5): `brew
-    /// outdated` costs ~30 s and its result only changes via brew operations, so
-    /// repeat manual refreshes within this window reuse the previous result.
+    /// Freshness window for the session brew-outdated cache (Block N5): the brew
+    /// check (`brew update` + `brew outdated`) takes seconds to over a minute on a slow
+    /// network, and its result only changes via brew operations, so repeat manual
+    /// refreshes within this window reuse the previous result.
     static let brewCacheWindow: TimeInterval = 600
 
     /// macOS update-check cache window (COLLECT-FASTPATH): 6 h.
@@ -1110,19 +1111,22 @@ final class ReportCollector {
 
     private func collectBrew(cached: (status: BrewStatus, outdated: [String]?)?) async -> Outcome {
         if let cached {
-            // Session cache hit (Block N5): skip the ~30 s `brew outdated` re-run.
+            // Session cache hit (Block N5): skip re-running `brew update` + `brew outdated`.
             return Outcome(section: .brew) {
                 $0.brewStatus = cached.status; $0.brewOutdated = cached.outdated
             }
         }
-        let info = await collectBrewInfo()
+        let info = await collectBrewInfo(refreshIndex: true)
         return Outcome(section: .brew) { $0.brewStatus = info.status; $0.brewOutdated = info.outdated }
     }
 
     /// The actual Homebrew collection logic, factored out of `collectBrew()` so the
     /// in-app upgrade flow (DashboardModel) can re-collect a fresh snapshot after
     /// `brew upgrade` without going through the `Outcome` plumbing.
-    func collectBrewInfo() async -> (status: BrewStatus, outdated: [String]?) {
+    /// `refreshIndex` (BREW-OUTDATED-TIMEOUT): run `brew update` first, under its own timeout.
+    /// Its outcome is ignored — if it fails or times out, `outdated` reads the previous index.
+    /// The upgrade flow passes false: `brew upgrade` has just run with auto-update on.
+    func collectBrewInfo(refreshIndex: Bool) async -> (status: BrewStatus, outdated: [String]?) {
         guard let brew = Self.findBrew() else {
             return (.notInstalled, nil)
         }
@@ -1131,8 +1135,16 @@ final class ReportCollector {
         // this file's call sites (absolute-path Apple binaries), it needs its own
         // bin dir on PATH, not just `defaultEnvironment`'s bare system PATH.
         let brewEnv = CommandRunner.environment(prependingPATH: [(brew as NSString).deletingLastPathComponent])
+        if refreshIndex {
+            // Before `--version`: the update can upgrade Homebrew itself.
+            _ = await CommandRunner.run(brew, ["update"], timeout: 60, environment: brewEnv)
+        }
         let version = Self.parseBrewVersion(await CommandRunner.run(brew, ["--version"], timeout: 20, environment: brewEnv))
-        let outdatedRun = await CommandRunner.run(brew, ["outdated"], timeout: 60, environment: brewEnv)
+        // No auto-update inside `outdated`: that network fetch is what pushed this call past
+        // its old 60 s timeout (2026-10-07). Local work only, so 30 s is ample.
+        var outdatedEnv = brewEnv
+        outdatedEnv["HOMEBREW_NO_AUTO_UPDATE"] = "1"
+        let outdatedRun = await CommandRunner.run(brew, ["outdated"], timeout: 30, environment: outdatedEnv)
         return (.installed(version: version), Self.parseBrewOutdated(outdatedRun))
     }
 

@@ -197,7 +197,7 @@ final class DashboardModel {
     /// Session cache for the brew section (Block N5): last collected
     /// (status, outdated) and when. Reused by refreshReport() within
     /// ReportCollector.brewCacheWindow so a manual «Обновить отчёт» doesn't pay
-    /// the ~30 s `brew outdated` cost every time. In-memory only.
+    /// the `brew update` + `brew outdated` cost every time. In-memory only.
     private var lastBrewInfo: (status: BrewStatus, outdated: [String]?)?
     private var lastBrewCollectedAt: Date?
 
@@ -794,7 +794,7 @@ final class DashboardModel {
             guard !Task.isCancelled else { return }        // global teardown: no re-check, no write-back
 
             let collectorBox = UncheckedSendableBox(ReportCollector())
-            let info = await collectorBox.value.collectBrewInfo()
+            let info = await collectorBox.value.collectBrewInfo(refreshIndex: false)
             guard !Task.isCancelled else { return }
 
             // The collect that starts while `brew upgrade` runs captures the PRE-upgrade
