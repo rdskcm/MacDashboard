@@ -26,6 +26,9 @@ struct AttentionItem: Identifiable, Equatable {
     var fullText: String    // the existing assessment sentence (tooltip / list body)
     var verb: String        // action verb; "" when action == nil
     var action: AdviceAction? = nil
+    /// `.wakeHolders` only: the holders this item names, in its order — the targets of the
+    /// plate's per-app «Не предупреждать» menu (SLEEP-IGNORE-APP). Empty for every other kind.
+    var wakeHolderKeys: [WakeHolderKey] = []
     var id: String { "\(kind.rawValue)|\(label)|\(detail)" }
 }
 

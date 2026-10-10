@@ -381,6 +381,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 monitoringIntervalCard
                 monitoringProcessCard
+                monitoringWakeIgnoreCard
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 18)
@@ -524,6 +525,48 @@ struct SettingsView: View {
         // Top padding is 10, not 14: the label's own line box carries ~3.5 pt of
         // internal leading above its cap height, so an equal 14 reads as a
         // larger gap than the flat 14 under the capsule row below.
+        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .dsCardSurface()
+    }
+
+    /// SLEEP-IGNORE-APP: holders the Sleep attention item no longer warns about, each with
+    /// a button that starts warning again. Same card recipe as the two cards above. No
+    /// animation: the card's height depends on the list (animation-value-size-coupling).
+    private var monitoringWakeIgnoreCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.settingsWakeIgnoredLabel)
+                .font(.system(size: 14))
+                .lineSpacing(14 * 0.3)
+                .foregroundStyle(DS.inkSoft)
+
+            if settings.ignoredWakeHolders.isEmpty {
+                Text(L.settingsWakeIgnoredEmpty)
+                    .font(.system(size: 11.5))
+                    .lineSpacing(11.5 * 0.4)
+                    .foregroundStyle(DS.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(settings.ignoredWakeHolders, id: \.self) { key in
+                        let name = WakeHolders.label(for: key)
+                        HStack(alignment: .center, spacing: 12) {
+                            Text(name)
+                                .font(.system(size: 13))
+                                .foregroundStyle(DS.ink)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 0)
+                            RainbowCapsuleButton(title: L.settingsWakeIgnoredRestore, recipe: .settings, size: .card) {
+                                model.setWakeHolderIgnored(key, ignored: false)
+                            }
+                            .accessibilityLabel(L.settingsWakeIgnoredRestoreA11y(name))
+                        }
+                        .frame(minHeight: 28)
+                    }
+                }
+            }
+        }
         .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .dsCardSurface()

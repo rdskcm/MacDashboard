@@ -266,6 +266,11 @@ private struct ItemPlate: View {
     private var interactive: Bool { item.action != nil && !busy && !done }
     /// `item.detail`, swapped for the live brew/firewall progress line while busy.
     private var detailText: String { (busy ? busyDetail : nil) ?? item.detail }
+    /// Hover tip: the item's sentence, plus the right-click hint on the one plate that
+    /// has a per-app menu (SLEEP-IGNORE-APP). `fullText` itself stays the report sentence.
+    private var tipText: String {
+        item.wakeHolderKeys.isEmpty ? item.fullText : "\(item.fullText) \(L.attnWakeIgnoreHint)"
+    }
 
     var body: some View {
         Group {
@@ -275,7 +280,7 @@ private struct ItemPlate: View {
             }
         }
         .contentShape(Rectangle())
-        .attentionTip(item.fullText)
+        .attentionTip(tipText)
         .accessibilityHint(item.fullText)
         .pointingHandOnHover(isEnabled: interactive, hovering: $hovering)
         .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover, value: hovering)
@@ -283,6 +288,7 @@ private struct ItemPlate: View {
             guard interactive, let action = item.action else { return }
             dispatch.handle(action, id: item.id)
         }
+        .modifier(WakeIgnoreMenu(keys: item.wakeHolderKeys, model: dispatch.model))
         .modifier(InteractiveAccessibility(
             isInteractive: interactive,
             label: "\(item.label) \(item.detail) \(item.verb)"
@@ -463,6 +469,29 @@ private struct InteractiveAccessibility: ViewModifier {
             content.accessibilityLabel(label).accessibilityAddTraits(.isButton)
         } else {
             content
+        }
+    }
+}
+
+/// SLEEP-IGNORE-APP: right-click menu on the Sleep plate, one entry per holder the item
+/// names — never an "ignore all" entry (user decision 2026-10-05). The left click keeps
+/// opening Activity Monitor. Plates of every other kind have no keys and get no menu; the
+/// branch cannot flip for a mounted plate because a `.wakeHolders` item always names ≥ 1.
+private struct WakeIgnoreMenu: ViewModifier {
+    let keys: [WakeHolderKey]
+    let model: DashboardModel
+
+    func body(content: Content) -> some View {
+        if keys.isEmpty {
+            content
+        } else {
+            content.contextMenu {
+                ForEach(keys, id: \.self) { key in
+                    let title = L.attnWakeIgnore(WakeHolders.label(for: key))
+                    Button(title) { model.setWakeHolderIgnored(key, ignored: true) }
+                        .accessibilityLabel(title)
+                }
+            }
         }
     }
 }

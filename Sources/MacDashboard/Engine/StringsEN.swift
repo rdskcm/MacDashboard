@@ -17,6 +17,10 @@ struct StringsEN: AppStrings {
     var settingsProcessLimitLabel: String { "Processes listed" }
     func settingsProcessLimitOption(_ count: Int) -> String { "\(count)" }
     var settingsProcessLimitApply: String { "Apply" }
+    var settingsWakeIgnoredLabel: String { "Sleep: don't warn about these apps" }
+    var settingsWakeIgnoredEmpty: String { "The list is empty. To add an app, right-click the Sleep warning in the main window." }
+    var settingsWakeIgnoredRestore: String { "Warn again" }
+    func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String { "Warn again about \(holder)" }
     var settingsMenuLanguageHint: String { "The menu bar and system dialogs follow the app language after a relaunch" }
     var settingsRelaunchNow: String { "Relaunch Now" }
     var settingsSectionGeneral: String { "General" }
@@ -632,6 +636,8 @@ struct StringsEN: AppStrings {
     func attnDetailWakeHolders(_ first: String, more: Int) -> String { more > 0 ? "\(first), +\(more) more" : first }
     func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String { "\(owner) (for \(requester))" }
     func wakeHolderEntry(_ holder: String, _ age: String) -> String { "\(holder) — \(age)" }
+    func attnWakeIgnore(_ holder: String) -> String { "Don't warn about \(holder)" }
+    var attnWakeIgnoreHint: String { "Right-click to stop warning about an app." }
     func attnLabelSmartErrors(_ title: String) -> String { title }
     var attnDetailSmartErrors: String { "SMART errors" }
     func attnLabelSmartWear(_ title: String) -> String { title }

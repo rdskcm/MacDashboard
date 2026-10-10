@@ -31,6 +31,11 @@ protocol AppStrings {
     var settingsProcessLimitLabel: String { get }
     func settingsProcessLimitOption(_ count: Int) -> String
     var settingsProcessLimitApply: String { get }
+    /// Settings → Мониторинг, SLEEP-IGNORE-APP card.
+    var settingsWakeIgnoredLabel: String { get }
+    var settingsWakeIgnoredEmpty: String { get }
+    var settingsWakeIgnoredRestore: String { get }
+    func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String
     var settingsMenuLanguageHint: String { get }
     var settingsRelaunchNow: String { get }
     var settingsSectionGeneral: String { get }
@@ -630,6 +635,9 @@ protocol AppStrings {
     func attnDetailWakeHolders(_ first: String, more: Int) -> String
     func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String
     func wakeHolderEntry(_ holder: String, _ age: String) -> String
+    /// Sleep plate context-menu entry and the hint appended to its hover tip (SLEEP-IGNORE-APP).
+    func attnWakeIgnore(_ holder: String) -> String
+    var attnWakeIgnoreHint: String { get }
     func attnLabelSmartErrors(_ title: String) -> String
     var attnDetailSmartErrors: String { get }
     func attnLabelSmartWear(_ title: String) -> String

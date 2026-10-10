@@ -50,7 +50,7 @@ enum Assess {
         }
     }
 
-    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = []) -> Assessment {
+    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = []) -> Assessment {
         var a = Assessment()
         // Paired with its `Problem` so the final sort keeps `items` in lockstep
         // with `problems` (see §3 of the v2 attention spec — parity is structural,
@@ -258,14 +258,19 @@ enum Assess {
 
         // --- what keeps the Mac awake (WAKE-HOLDERS) --- read-only: names and ages only,
         // the click opens Activity Monitor; nothing here ever terminates a process.
-        if !wakeHolders.isEmpty {
+        // SLEEP-IGNORE-APP: holders the user chose not to be warned about are dropped first —
+        // they appear in neither the count, the text nor the per-app menu, and when none are
+        // left there is no item at all.
+        let warnHolders = WakeHolders.unignored(wakeHolders, ignored: ignoredWakeHolders)
+        if !warnHolders.isEmpty {
             let action = AdviceAction.openApp(AdviceApps.activityMonitor)
-            let entries = wakeHolders.map { L.wakeHolderEntry(WakeHolders.label(for: $0), WakeHolders.ageText($0.ageSeconds)) }
+            let entries = warnHolders.map { L.wakeHolderEntry(WakeHolders.label(for: $0), WakeHolders.ageText($0.ageSeconds)) }
             let text = L.assessWakeHolders(entries)
             pairs.append((Problem(sev: .warn, text: text, action: action),
                           AttentionItem(kind: .wakeHolders, sev: .warn, label: L.attnLabelWakeHolders,
-                                        detail: L.attnDetailWakeHolders(entries[0], more: wakeHolders.count - 1),
-                                        fullText: text, verb: verb(action), action: action)))
+                                        detail: L.attnDetailWakeHolders(entries[0], more: warnHolders.count - 1),
+                                        fullText: text, verb: verb(action), action: action,
+                                        wakeHolderKeys: warnHolders.map(\.key))))
         }
 
         // --- disk-space tips (home / caches) ---
