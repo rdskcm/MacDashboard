@@ -26,9 +26,13 @@ final class AppSettings {
     static let ignoredWakeHoldersKey = "ignoredWakeHolders"
 
     /// SLEEP-IGNORE-APP codec, exposed for Checks. Missing or unreadable data is an empty
-    /// list: failing toward "warn" is the safe direction for this setting.
+    /// list: failing toward "warn" is the safe direction for this setting. Duplicate keys
+    /// (only a hand-edited defaults value can hold them) are dropped, first occurrence kept,
+    /// so Settings' `ForEach(id: \.self)` never sees a repeated ID.
     static func decodeIgnoredWakeHolders(_ data: Data?) -> [WakeHolderKey] {
-        data.flatMap { try? JSONDecoder().decode([WakeHolderKey].self, from: $0) } ?? []
+        let stored = data.flatMap { try? JSONDecoder().decode([WakeHolderKey].self, from: $0) } ?? []
+        var seen = Set<WakeHolderKey>()
+        return stored.filter { seen.insert($0).inserted }
     }
     static func encodeIgnoredWakeHolders(_ list: [WakeHolderKey]) -> Data? {
         try? JSONEncoder().encode(list)
