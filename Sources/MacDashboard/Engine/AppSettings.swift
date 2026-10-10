@@ -25,6 +25,14 @@ final class AppSettings {
 
     static let ignoredWakeHoldersKey = "ignoredWakeHolders"
 
+    /// BACKUP-AGE: stale limit (hours) for the Claude backup age; any other stored value resolves to the default.
+    static let backupStaleHoursKey = "backupStaleHours"
+    static let allowedBackupStaleHours = [24, 48, 72, 168]
+    static let defaultBackupStaleHours = 48
+    static func resolveBackupStaleHours(raw: Int) -> Int {
+        allowedBackupStaleHours.contains(raw) ? raw : defaultBackupStaleHours
+    }
+
     /// SLEEP-IGNORE-APP codec, exposed for Checks. Missing or unreadable data is an empty
     /// list: failing toward "warn" is the safe direction for this setting. Duplicate keys
     /// (only a hand-edited defaults value can hold them) are dropped, first occurrence kept,
@@ -65,6 +73,12 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(Self.encodeIgnoredWakeHolders(ignoredWakeHolders), forKey: Self.ignoredWakeHoldersKey) }
     }
 
+    /// BACKUP-AGE: warn when the newest Claude backup is older than this many hours.
+    /// Mutate through `DashboardModel.setBackupStaleHours` so the assessment updates at once.
+    var backupStaleHours: Int {
+        didSet { UserDefaults.standard.set(backupStaleHours, forKey: Self.backupStaleHoursKey) }
+    }
+
     #if AI_ENABLED
     /// AI provider selection (Block AI, Wave 2). The API key itself is NEVER
     /// stored here / in UserDefaults — only in Keychain via `KeychainStore`.
@@ -90,6 +104,7 @@ final class AppSettings {
         let rawLimit = UserDefaults.standard.integer(forKey: Self.processLimitKey) // 0 if unset
         processListLimit = Self.resolveProcessLimit(raw: rawLimit)
         ignoredWakeHolders = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
+        backupStaleHours = Self.resolveBackupStaleHours(raw: UserDefaults.standard.integer(forKey: Self.backupStaleHoursKey))
 
         #if AI_ENABLED
         let providerRaw = UserDefaults.standard.string(forKey: Self.aiProviderKey)

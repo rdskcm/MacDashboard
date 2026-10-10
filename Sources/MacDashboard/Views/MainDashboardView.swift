@@ -7,7 +7,7 @@
 // related cards instead of a row-aligning LazyVGrid or a height-imbalanced
 // two-column masonry: Процессы (CPU | память) | Папки (домашняя | служебные),
 // and Система (Безопасность/Автозапуск/Энергия/Обслуживание |
-// Диски (SMART)/Time Machine).
+// Диски (SMART)/Time Machine/Бэкап Claude).
 
 import SwiftUI
 import Charts
@@ -238,7 +238,7 @@ struct MainDashboardView: View {
         }
     }
 
-    // MARK: System band (Security/Autostart/Energy/Maintenance | SMART/Time Machine)
+    // MARK: System band (Security/Autostart/Energy/Maintenance | SMART/Time Machine/Бэкап Claude)
 
     /// Security and Updates/Crashes move out of their fixed left-column slots
     /// once quiet (nothing to report) and collapse into `QuietStrip` rows
@@ -267,6 +267,7 @@ struct MainDashboardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 SmartDisksCard(model: model)
                 TimeMachineCard(model: model)
+                ClaudeBackupCard(model: model)
             }
             .frame(maxWidth: .infinity, alignment: .top)
         }
