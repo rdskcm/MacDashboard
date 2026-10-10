@@ -284,6 +284,8 @@ struct FullReport {
     var serviceDirs: [DirSize]?         // caches etc.
     var homeDirsUnreadable: [String]    // paths seen but refused (no FDA); [] = nothing hidden
     var serviceDirsUnreadable: [String] // same, for the fixed service-path list
+    var homeDirsNotMeasured: [String]   // readable, but the 90 s count deadline came before du reached them
+    var serviceDirsNotMeasured: [String] // same, for the fixed service-path list
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?
@@ -393,18 +395,26 @@ du-heavy ones which run serially after the quick ones. Commands (all read-only):
   `sysctlbyname("machdep.cpu.brand_string")` fallback for chip, `uptime` (parse → Russian human form).
 - snapshots: `tmutil listlocalsnapshots /`, parsed by `ReportCollector.localSnapshotNames`. The UI
   reports COUNT only — never a per-snapshot size, because snapshots share disk blocks.
-- homeDirs: `du -xk -d 1 $HOME` (120 s timeout) → top-20 by size. NOTE: first run on a
-  fresh Mac triggers TCC prompts (Desktop/Documents/Downloads) — that's OK; on denial
-  du prints errors to stderr, still use what it returns; never fail the section.
-- serviceDirs: `du -xsk` over: ~/Library/Caches, ~/Library/Application Support,
-  ~/Library/Containers, ~/Library/Group Containers, ~/Library/Developer, ~/.Trash,
-  /Library/Caches, /private/var/log, /Applications (9 paths, swept sequentially, 60 s
-  timeout per path — no aggregate cap).
+- homeDirs / serviceDirs: folder sizes are ONE background job, `ReportCollector.countFolderSizes`, run
+  outside the report pass. One `du -xk -d 2 $HOME` gives homeDirs (depth 1, top 20 by size) and the six
+  home service paths (~/Library/Caches, ~/Library/Application Support, ~/Library/Containers,
+  ~/Library/Group Containers, ~/Library/Developer, ~/.Trash); `du -xsk` runs in parallel over
+  /Library/Caches, /private/var/log and /Applications. One 90 s deadline
+  (`ReportCollector.folderSizesDeadline`) covers all of them: each `du` gets the time left until it as
+  its timeout, and every `du` still running at it is killed with its process group. Finished paths are
+  kept (a partially written last line of a killed `du` is dropped). Readable paths that were not
+  reached go to `homeDirsNotMeasured` / `serviceDirsNotMeasured`, which the «Папки» card and the
+  exported report show as «Не успели измерить: …». The result, lists included, is cached in
+  `folder_sizes_cache.json` (schema 2) with the usual 1 h window. If the home walk produced no complete
+  line the count returns nil and the previous cache stays. NOTE: first run on a fresh Mac triggers TCC
+  prompts (Desktop/Documents/Downloads) — that's OK; on denial du prints errors to stderr, still use
+  what it returns; never fail the section.
 - Both du sections additionally report what they could NOT read: every expected directory that exists
   but refuses to open (`Engine/DirectoryAccess.swift` — `stat` + `opendir`, no TCC/global-status lookup
   anywhere) lands in `homeDirsUnreadable` / `serviceDirsUnreadable` as an absolute path. `homeDirs` /
   `serviceDirs == nil` still means "not collected yet". The UI states it as a quiet inline line in the
   «Папки» card plus exactly one info-level recommendation capsule — never a «Требует внимания» item.
+  Not-measured (deadline) is distinct from unreadable (permission) and raises no tip or capsule.
 - security: `fdesetup status`, `spctl --status`, `csrutil status`,
   `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate` (fallback
   `defaults read /Library/Preferences/com.apple.alf globalstate`; 1/2 ⇒ on).

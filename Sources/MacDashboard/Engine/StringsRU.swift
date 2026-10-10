@@ -130,6 +130,7 @@ struct StringsRU: AppStrings {
     func storageFoldersNoFDA(_ folders: String) -> String { "Здесь не показаны: \(folders) — у приложения нет полного доступа к диску." }
     var storageFoldersNoFDAButton: String { "Открыть настройки" }
     var storageFoldersNoFDAButtonA11y: String { "Открыть настройки полного доступа к диску" }
+    func storageFoldersNotMeasured(_ folders: String) -> String { "Не успели измерить: \(folders)." }
 
     // MARK: Storage — Диски (SMART)
     var storageSmartTitle: String { "Диски (SMART)" }

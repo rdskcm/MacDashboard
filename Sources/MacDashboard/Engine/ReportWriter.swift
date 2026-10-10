@@ -27,8 +27,8 @@ enum ReportWriter {
         addSection(&out, L.reportSectionSystem, renderSystem(report.system))
         addSection(&out, L.reportSectionDisk, renderDisk(live.disk))
         addSection(&out, L.reportSectionSnapshots, renderSnapshots(report.snapshots))
-        addSection(&out, L.reportSectionHomeDirs, renderDirs(report.homeDirs, cap: 20, unreadable: report.homeDirsUnreadable, countedAt: report.folderSizesCountedAt))
-        addSection(&out, L.reportSectionServiceDirs, renderDirs(report.serviceDirs, cap: nil, unreadable: report.serviceDirsUnreadable, countedAt: report.folderSizesCountedAt))
+        addSection(&out, L.reportSectionHomeDirs, renderDirs(report.homeDirs, cap: 20, unreadable: report.homeDirsUnreadable, notMeasured: report.homeDirsNotMeasured, countedAt: report.folderSizesCountedAt))
+        addSection(&out, L.reportSectionServiceDirs, renderDirs(report.serviceDirs, cap: nil, unreadable: report.serviceDirsUnreadable, notMeasured: report.serviceDirsNotMeasured, countedAt: report.folderSizesCountedAt))
         addSection(&out, L.reportSectionMemory, renderMemory(live.mem, live.swap))
         addSection(&out, L.reportSectionTopMem, renderProcTable(live.topMem, primary: .mem))
         addSection(&out, L.reportSectionTopCPU, renderProcTable(live.topCPU, primary: .cpu))
@@ -175,8 +175,9 @@ enum ReportWriter {
 
     // The exported text report is the one artefact the user shares; an FDA-truncated
     // folder list must not read as complete (V2-FDA-DEGRADE honesty, same statement
-    // the UI already makes).
-    private static func renderDirs(_ dirs: [DirSize]?, cap: Int?, unreadable: [String] = [], countedAt: Date? = nil) -> [String] {
+    // the UI already makes); the same holds for a list cut short by the count's
+    // deadline (SERVICE-DIRS-TIMEOUT): the not-measured line comes before the unreadable one.
+    private static func renderDirs(_ dirs: [DirSize]?, cap: Int?, unreadable: [String] = [], notMeasured: [String] = [], countedAt: Date? = nil) -> [String] {
         var lines: [String]
         if let d = dirs {
             lines = d.isEmpty ? [L.reportNone] : {
@@ -185,6 +186,9 @@ enum ReportWriter {
             }()
         } else {
             lines = [L.sharedUnavailable]
+        }
+        if !notMeasured.isEmpty {
+            lines.append(L.storageFoldersNotMeasured(notMeasured.joined(separator: ", ")))
         }
         if !unreadable.isEmpty {
             lines.append(L.storageFoldersNoFDA(unreadable.joined(separator: ", ")))

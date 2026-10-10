@@ -182,6 +182,10 @@ struct FullReport {
     // collected yet".
     var homeDirsUnreadable: [String] = []
     var serviceDirsUnreadable: [String] = []
+    // Readable folders the last folder-size count did not reach before its 90 s deadline
+    // (SERVICE-DIRS-TIMEOUT): size unknown, not a permission problem. `[]` = the count finished.
+    var homeDirsNotMeasured: [String] = []
+    var serviceDirsNotMeasured: [String] = []
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?
