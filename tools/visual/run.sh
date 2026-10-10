@@ -367,9 +367,11 @@ restore() {
 
   # The run opened $APP by path, which registered it with LaunchServices. Drop every
   # registration except the installed copy so opening by bundle ID resolves to it again
-  # (APP-ID-DUPLICATES). A copy that did not quit stays registered (ls-prune skips it).
-  local ls_status="ok"
-  "$ROOT/tools/ls-prune.sh" >/dev/null 2>&1 || ls_status="partial"
+  # (APP-ID-DUPLICATES). A copy that did not quit stays registered: ls-prune prints a RUNNING
+  # line for it and still exits 0, so that line also makes the status partial.
+  local ls_status="ok" ls_out=""
+  ls_out="$("$ROOT/tools/ls-prune.sh" 2>/dev/null)" || ls_status="partial"
+  if grep -q '^RUNNING' <<< "$ls_out"; then ls_status="partial"; fi
 
   local defaults_status="ok"
   defaults delete "$BUNDLE_ID" >/dev/null 2>&1 || true

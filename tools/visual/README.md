@@ -104,7 +104,7 @@ appearance=…|partial cursor=… front=… ls=…|partial`; an `rsync` failure 
 restore keeps `<run-dir>/restore-rsync.err`. A Settings window still open 5 s
 after `close_settings` aborts the run loudly.
 
-**Cannot be undone:** TCC prompts. The LaunchServices registration of the built app bundle is undone at exit by `tools/ls-prune.sh` (`ls=ok`); a SIGKILLed run leaves it until the next build. If SIGKILLed (no trap runs), the pre-run backup stays in
+**Cannot be undone:** TCC prompts. The LaunchServices registration of the built app bundle is undone at exit by `tools/ls-prune.sh` (`ls=ok`), or `ls=partial` if ls-prune failed, timed out, or left a still-running copy registered; a SIGKILLed run leaves it until the next build. If SIGKILLed (no trap runs), the pre-run backup stays in
 `<run-dir>/.restore/` — restore by hand (`defaults import` the plist, `rsync
 -a --delete` `appsupport/` back over the App Support dir), skipping any step
 marked absent. A by-hand `rsync -a --delete` reports `Permission denied` for an ACL-protected

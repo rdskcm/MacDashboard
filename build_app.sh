@@ -223,13 +223,41 @@ codesign -d -r- "$DIST" 2>&1 | grep 'designated =>' || true
 
 if [ "$INSTALL" = "1" ]; then
   echo "== install to ~/Applications =="
-  mkdir -p "$HOME/Applications"
-  rm -rf "$HOME/Applications/$APP_NAME.app"
+  INSTALL_DIR="$HOME/Applications"
+  mkdir -p "$INSTALL_DIR"
+  # Swap through temporary names so that a failed move never leaves ~/Applications without the
+  # app. The temporary names do not end in .app, so LaunchServices does not take them for
+  # application bundles; the tools/ls-prune.sh run below drops any record that still names one.
+  INSTALLED_APP="$INSTALL_DIR/$APP_NAME.app"
+  NEW_APP="$INSTALL_DIR/.$APP_NAME.app.new"
+  OLD_APP="$INSTALL_DIR/.$APP_NAME.app.old"
+  # An --install interrupted between the two renames below left the previous app only at OLD_APP.
+  if [ ! -e "$INSTALLED_APP" ] && [ -d "$OLD_APP" ]; then
+    mv "$OLD_APP" "$INSTALLED_APP"
+    echo "restored the previous install left at $OLD_APP by an interrupted --install"
+  fi
+  rm -rf "$NEW_APP" "$OLD_APP"
   # Moved, not copied: a second bundle with the same CFBundleIdentifier left in dist.noindex/ stays
   # registered with LaunchServices and can be the copy that opening by bundle ID launches
   # (APP-ID-DUPLICATES). A plain ./build_app.sh still leaves dist.noindex/ populated.
-  mv "$DIST" "$HOME/Applications/$APP_NAME.app"
-  echo "installed: $HOME/Applications/$APP_NAME.app"
+  if ! mv "$DIST" "$NEW_APP"; then
+    rm -rf "$NEW_APP"
+    echo "!! could not move $DIST into $INSTALL_DIR — the installed app is unchanged" >&2
+    exit 1
+  fi
+  if [ -e "$INSTALLED_APP" ] && ! mv "$INSTALLED_APP" "$OLD_APP"; then
+    mv "$NEW_APP" "$DIST" 2>/dev/null || true
+    echo "!! could not move $INSTALLED_APP aside — the installed app is unchanged" >&2
+    exit 1
+  fi
+  if ! mv "$NEW_APP" "$INSTALLED_APP"; then
+    if [ -d "$OLD_APP" ]; then mv "$OLD_APP" "$INSTALLED_APP" || true; fi
+    mv "$NEW_APP" "$DIST" 2>/dev/null || true
+    echo "!! could not move the new build to $INSTALLED_APP — the previous install was put back" >&2
+    exit 1
+  fi
+  rm -rf "$OLD_APP"
+  echo "installed: $INSTALLED_APP"
   # Remove the stale pre-rename bundle (old Russian display name) so the Dock/
   # Spotlight don't keep two copies around after the MacDashboard rename.
   if [ -d "$HOME/Applications/Дашборд Mac.app" ]; then
