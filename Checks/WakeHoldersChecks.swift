@@ -321,6 +321,9 @@ func runWakeHoldersChecks() {
           "SleepIgnore: codec round trip keeps entries and order")
     check(AppSettings.decodeIgnoredWakeHolders(nil).isEmpty, "SleepIgnore: no stored data -> []")
     check(AppSettings.decodeIgnoredWakeHolders(Data("not json".utf8)).isEmpty, "SleepIgnore: unreadable stored data -> []")
+    let duplicated = AppSettings.encodeIgnoredWakeHolders([claudeCaf.key, zoomHolder.key, claudeCaf.key, termCaf.key, zoomHolder.key])
+    check(AppSettings.decodeIgnoredWakeHolders(duplicated) == [claudeCaf.key, zoomHolder.key, termCaf.key],
+          "SleepIgnore: duplicate stored keys dropped, first-occurrence order kept")
 
     let allIgnored = Assess.assess(report: FullReport(), live: LiveSnapshot(),
                                    wakeHolders: [claudeCaf], ignoredWakeHolders: [claudeCaf.key])
