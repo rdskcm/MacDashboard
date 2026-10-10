@@ -399,8 +399,9 @@ enum ReportWriter {
         var lines: [String] = []
         if let p = r.passDuration { lines.append(L.reportTimingsPass(fmtSeconds(p))) }
         let entries = r.sectionDurations.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
-        let w = (entries.map { $0.key.count }.max() ?? 0) + 2
-        for (k, v) in entries { lines.append("  " + padRight(k + ":", w) + fmtSeconds(v)) }
+        let labeled = entries.map { (ReportSection(rawValue: $0.key).map(L.reportTimingsSectionName) ?? $0.key, $0.value) }
+        let w = (labeled.map { $0.0.count }.max() ?? 0) + 2
+        for (label, v) in labeled { lines.append("  " + padRight(label + ":", w) + fmtSeconds(v)) }
         if let d = r.updatesCheckDuration, let at = r.updatesCheckedAt {
             lines.append(L.reportTimingsUpdates(fmtSeconds(d), reportUpdatedTimeString(at)))
         }

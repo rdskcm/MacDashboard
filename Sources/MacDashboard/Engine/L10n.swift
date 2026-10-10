@@ -510,6 +510,8 @@ protocol AppStrings {
     var updatesCheckedJustNow: String { get }
     func updatesCheckedAgo(_ age: String) -> String
     func reportTimingsFolderSizes(_ v: String, _ at: String) -> String
+    /// Short name of a report section for the COLLECTION TIMES list.
+    func reportTimingsSectionName(_ s: ReportSection) -> String
     func reportFoldersCountedAt(_ at: String) -> String
     func foldersCountedAgo(_ age: String) -> String
     var foldersCountedJustNow: String { get }

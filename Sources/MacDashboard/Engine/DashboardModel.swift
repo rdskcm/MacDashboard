@@ -477,6 +477,9 @@ final class DashboardModel {
 
     /// Public entry. `.button` only from the «Обновить отчёт» button.
     func refreshReport(trigger: CollectTrigger) {
+        // Fixture mode shows a fixed dataset and must write nothing: no pass, no update check,
+        // no size count (the same predicate MacDashboardApp uses to skip start()).
+        guard !VisualFixture.isRequested else { return }
         startUpdateCheckIfNeeded(trigger: trigger)      // before the in-flight guard: a press mid-pass still gets a check
         startSizeCountIfNeeded(trigger: trigger)        // before the in-flight guard
         guard !isCollectingReport else {
