@@ -16,18 +16,19 @@ Power:
           Charging: No
           State of Charge (%): 100
       Health Information:
-          Cycle Count: 363
+          Cycle Count: 370
           Condition: Normal
           Maximum Capacity: 86%
 
     System Power Settings:
 
       AC Power:
-          System Sleep Timer (Minutes): 1
+          System Sleep Timer (Minutes): 0
           Disk Sleep Timer (Minutes): 10
           Display Sleep Timer (Minutes): 10
           Sleep on Power Button: Yes
           Wake on LAN: Yes
+          Current Power Source: Yes
           Hibernate Mode: 3
           Low Power Mode: No
           Prioritize Network Reachability Over Sleep: No
@@ -38,7 +39,6 @@ Power:
           Display Sleep Timer (Minutes): 5
           Sleep on Power Button: Yes
           Wake on LAN: No
-          Current Power Source: Yes
           Hibernate Mode: 3
           Low Power Mode: Yes
           Prioritize Network Reachability Over Sleep: No
@@ -51,22 +51,9 @@ Power:
 
     AC Charger Information:
 
-      Connected: No
+      Connected: Yes
+      ID: 0x0000
+      Wattage (W): 45
+      Family: 0xe000400a
       Charging: No
-
-    Power Events:
-
-        Next Scheduled Events:
-
-              appPID: 336
-              Type: Wake
-              Scheduled By: com.apple.alarm.user-invisible-com.apple.acmd.alarm
-              Time: 24.09.2026, 2:14 PM
-              UserVisible: 0
-
-              appPID: 601
-              Type: Wake
-              Scheduled By: com.apple.alarm.user-invisible-com.apple.calaccessd.travelEngine.periodicRefreshTimer
-              Time: 24.09.2026, 4:38 PM
-              UserVisible: 0
 

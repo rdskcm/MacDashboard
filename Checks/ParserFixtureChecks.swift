@@ -3,9 +3,21 @@
 // parser accepts its positives and rejects its negatives, empty input and garbage,
 // and structured positives truncated to half), plus the ParseFailure/writer unit
 // checks for the report-time recording of unparsed command output (part 5).
+// PARSER-FIXTURES: real captures carry the macOS version in their name.
 import Foundation
 
 func runParserFixtureChecks() {
+    check(fixtureNameIsVersioned("ps-macos26.3.txt", command: "ps"), "fixture name: ps-macos26.3.txt accepted")
+    check(fixtureNameIsVersioned("tmutil-destinationinfo-macos27.0-not-configured.txt", command: "tmutil-destinationinfo"),
+          "fixture name: version + two-word variant accepted")
+    check(!fixtureNameIsVersioned("ps.txt", command: "ps"), "fixture name: no version rejected")
+    check(!fixtureNameIsVersioned("ps-laptop.txt", command: "ps"), "fixture name: variant without version rejected")
+    check(!fixtureNameIsVersioned("ps-macos26.txt", command: "ps"), "fixture name: major only rejected")
+    check(!fixtureNameIsVersioned("ps-macOS26.3.txt", command: "ps"), "fixture name: wrong case rejected")
+    check(!fixtureNameIsVersioned("top-macos26.3.txt", command: "ps"), "fixture name: other command rejected")
+    check(!fixtureNameIsVersioned("pmset-macos26.3-batt.txt", command: "pmset-batt"), "fixture name: partial command rejected")
+    check(!fixtureNameIsVersioned("ps-macos26.3-.txt", command: "ps"), "fixture name: empty variant rejected")
+
     let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
@@ -40,7 +52,13 @@ func runParserFixtureChecks() {
                 check(false, "fixtures \(name)/\(fname): naming (must end in .txt)")
                 continue
             }
-            if !fname.hasPrefix("neg-") { positives.append(file) }
+            if !fname.hasPrefix("neg-") {
+                positives.append(file)
+                if !fname.contains("synthetic") {
+                    check(fixtureNameIsVersioned(fname, command: cmd.rawValue),
+                          "fixtures \(name)/\(fname): naming (real capture must be \(cmd.rawValue)-macos<major.minor>[-<variant>].txt)")
+                }
+            }
         }
 
         check(!positives.isEmpty, "fixtures \(cmd.rawValue): has a positive fixture")
@@ -72,6 +90,14 @@ func runParserFixtureChecks() {
         check(entries.contains { $0.lastPathComponent == cmd.rawValue },
               "fixtures \(cmd.rawValue): directory present")
     }
+}
+
+/// PARSER-FIXTURES: a real capture's name is `<command>-macos<major>.<minor>[-<variant>].txt`,
+/// variant = lowercase words joined by `-`.
+func fixtureNameIsVersioned(_ fname: String, command: String) -> Bool {
+    let pattern = "^" + NSRegularExpression.escapedPattern(for: command)
+        + "-macos[0-9]+\\.[0-9]+(-[a-z0-9]+)*\\.txt$"
+    return fname.range(of: pattern, options: .regularExpression) != nil
 }
 
 func runParseFailureChecks() {

@@ -8,9 +8,9 @@ func runWakeHoldersChecks() {
     let fixtureURL = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
-        .appendingPathComponent("Tests/Fixtures/pmset-assertions/pmset-assertions.txt")
+        .appendingPathComponent("Tests/Fixtures/pmset-assertions/pmset-assertions-macos27.0-caffeinate.txt")
     guard let captureText = try? String(contentsOf: fixtureURL, encoding: .utf8) else {
-        check(false, "WakeHolders: could not read pmset-assertions.txt fixture")
+        check(false, "WakeHolders: could not read pmset-assertions-macos27.0-caffeinate.txt fixture")
         return
     }
 
