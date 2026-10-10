@@ -233,7 +233,10 @@ if [ "$INSTALL" = "1" ]; then
   OLD_APP="$INSTALL_DIR/.$APP_NAME.app.old"
   # An --install interrupted between the two renames below left the previous app only at OLD_APP.
   if [ ! -e "$INSTALLED_APP" ] && [ -d "$OLD_APP" ]; then
-    mv "$OLD_APP" "$INSTALLED_APP"
+    if ! mv "$OLD_APP" "$INSTALLED_APP"; then
+      echo "!! could not restore the previous install from $OLD_APP to $INSTALLED_APP — nothing was installed and $OLD_APP was kept; the new build is still at $DIST. Move it back by hand, then run ./build_app.sh --install again" >&2
+      exit 1
+    fi
     echo "restored the previous install left at $OLD_APP by an interrupted --install"
   fi
   rm -rf "$NEW_APP" "$OLD_APP"
