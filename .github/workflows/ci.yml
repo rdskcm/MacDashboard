@@ -35,3 +35,16 @@ jobs:
 
       - name: Run checks (MacDashboardChecks)
         run: swift run MacDashboardChecks
+
+      - name: Run swift-testing suite (MacDashboardTests, CI only)
+        # CI-SWIFT-TESTING: the local gate is MacDashboardChecks above; this target needs
+        # the Testing module that ships with the Xcode selected in the first step.
+        # The count guard fails the step if swift-testing ran zero tests, so a toolchain
+        # or manifest change that silently skips the suite cannot pass as green.
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/swift-test.log"
+          swift test 2>&1 | tee "$log"
+          n="$(grep -Eo 'Test run with [0-9]+ test' "$log" | grep -Eo '[0-9]+' | tail -1 || true)"
+          echo "swift-testing tests run: ${n:-none}"
+          [ "${n:-0}" -gt 0 ] || { echo "::error::swift test ran no swift-testing tests"; exit 1; }

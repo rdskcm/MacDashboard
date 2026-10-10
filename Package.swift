@@ -14,11 +14,10 @@ let package = Package(
             name: "MacDashboard",
             path: "Sources/MacDashboard"
         ),
-        // NOTE: no .testTarget here — probed `import Testing` (swift-testing) under
-        // Command Line Tools (no Xcode) and `swift test` failed with "no such module
-        // 'Testing'" (module not shipped outside Xcode on this toolchain). Per SPEC §10,
-        // real tests live in this separate `MacDashboardChecks` executable target
-        // (assert + exit nonzero, no XCTest). Its Checks/ sources are symlinks into
+        // PRIMARY GATE: `swift run MacDashboardChecks` — an executable target (assert +
+        // exit nonzero, no XCTest/swift-testing). It was created when this Mac had
+        // Command Line Tools only and `import Testing` failed (SPEC §10); it stays the
+        // primary gate and the place new checks go. Its Checks/ sources are symlinks into
         // Sources/MacDashboard/... so it compiles and exercises the SAME pure engine
         // files as the app (see Checks/README.md).
         .executableTarget(
@@ -26,6 +25,17 @@ let package = Package(
             path: "Checks",
             exclude: ["README.md"],
             swiftSettings: [.define("AI_ENABLED")]
+        ),
+        // SWIFT-TESTING SAMPLE (CI-SWIFT-TESTING): a fixed swift-testing suite, run by
+        // `swift test` locally (needs Xcode) and in .github/workflows/ci.yml. It reaches the
+        // engine through `@testable import MacDashboard` (no symlinks), so it tests the
+        // app module exactly as the default build compiles it (AI off). `swift build`
+        // never compiles a test target (only `swift test` / `--build-tests` do) and
+        // build_app.sh builds `--product MacDashboard` only, so local builds are unchanged.
+        .testTarget(
+            name: "MacDashboardTests",
+            dependencies: ["MacDashboard"],
+            path: "Tests/MacDashboardTests"
         )
     ]
 )
