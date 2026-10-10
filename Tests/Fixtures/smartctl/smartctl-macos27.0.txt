@@ -21,8 +21,8 @@
     "exit_status": 0
   },
   "local_time": {
-    "time_t": 1790259442,
-    "asctime": "Thu Sep 24 14:17:22 2026 UTC"
+    "time_t": 1791633745,
+    "asctime": "Sat Oct 10 15:02:25 2026 MSK"
   },
   "device": {
     "name": "disk0",
@@ -37,13 +37,13 @@
     "available_spare": 100,
     "available_spare_threshold": 99,
     "percentage_used": 1,
-    "data_units_read": 124905418,
-    "data_units_written": 36568886,
-    "host_reads": 3628355241,
-    "host_writes": 822287729,
+    "data_units_read": 128245070,
+    "data_units_written": 37443915,
+    "host_reads": 3690357320,
+    "host_writes": 838888910,
     "controller_busy_time": 0,
-    "power_cycles": 529,
-    "power_on_hours": 825,
+    "power_cycles": 534,
+    "power_on_hours": 846,
     "unsafe_shutdowns": 24,
     "media_errors": 0,
     "num_err_log_entries": 0
@@ -58,8 +58,8 @@
   "endurance_used": {
     "current_percent": 1
   },
-  "power_cycle_count": 529,
+  "power_cycle_count": 534,
   "power_on_time": {
-    "hours": 825
+    "hours": 846
   }
 }

@@ -75,19 +75,19 @@
 		<key>CONTROLLER_BUSY_TIME_1</key>
 		<integer>0</integer>
 		<key>DATA_UNITS_READ_0</key>
-		<integer>124905417</integer>
+		<integer>128245070</integer>
 		<key>DATA_UNITS_READ_1</key>
 		<integer>0</integer>
 		<key>DATA_UNITS_WRITTEN_0</key>
-		<integer>36568886</integer>
+		<integer>37443915</integer>
 		<key>DATA_UNITS_WRITTEN_1</key>
 		<integer>0</integer>
 		<key>HOST_READ_COMMANDS_0</key>
-		<integer>3628355201</integer>
+		<integer>3690357320</integer>
 		<key>HOST_READ_COMMANDS_1</key>
 		<integer>0</integer>
 		<key>HOST_WRITE_COMMANDS_0</key>
-		<integer>822287728</integer>
+		<integer>838888909</integer>
 		<key>HOST_WRITE_COMMANDS_1</key>
 		<integer>0</integer>
 		<key>MEDIA_ERRORS_0</key>
@@ -101,11 +101,11 @@
 		<key>PERCENTAGE_USED</key>
 		<integer>1</integer>
 		<key>POWER_CYCLES_0</key>
-		<integer>529</integer>
+		<integer>534</integer>
 		<key>POWER_CYCLES_1</key>
 		<integer>0</integer>
 		<key>POWER_ON_HOURS_0</key>
-		<integer>825</integer>
+		<integer>846</integer>
 		<key>POWER_ON_HOURS_1</key>
 		<integer>0</integer>
 		<key>TEMPERATURE</key>

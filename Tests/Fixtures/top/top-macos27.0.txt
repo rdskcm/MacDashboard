@@ -1,0 +1,37 @@
+Processes: 490 total, 2 running, 488 sleeping, 2464 threads 
+2026/10/10 15:02:25
+Load Avg: 1.92, 1.66, 1.65 
+CPU usage: 2.43% user, 12.19% sys, 85.36% idle 
+SharedLibs: 303M resident, 73M data, 53M linkedit.
+MemRegions: 188804 total, 1248M resident, 96M private, 470M shared.
+PhysMem: 7025M used (1305M wired, 3019M compressor), 598M unused.
+VM: 232T vsize, 57G framework vsize, 150802(0) swapins, 344572(0) swapouts.
+Networks: packets: 4475195/4917M in, 3283490/2775M out.
+Disks: 12786798/289G read, 3547717/67G written.
+
+PID    COMMAND          MEM  
+96512  audioanalyticsd  4448K
+94117  mediaanalysisd   46M  
+86064  AppSSODaemon     6208K
+83811  SomeApp          4128K
+83805  zsh              1744K
+83777  mdworker_shared  3056K
+83728  mdworker_shared  3184K
+83646  com.apple.WebKit 9377K
+83645  mdworker_shared  3760K
+83206  FolderActionsDis 6368K
+83205  smd              1664K
+83199  findmydeviced    4992K
+83198  System Events    14M  
+83180  AMPArtworkAgent  6736K
+83177  AMPLibraryAgent  10M  
+83172  TrialArchivingSe 3728K
+83169  AssetCacheTether 2512K
+83168  TrialArchivingSe 2432K
+83167  system_installd  2336K
+83166  geodMachServiceB 2112K
+83165  cloudd           4816K
+83164  AssetCache       3856K
+83163  com.apple.quickl 4512K
+83162  installd         2384K
+83161  triald           4784K

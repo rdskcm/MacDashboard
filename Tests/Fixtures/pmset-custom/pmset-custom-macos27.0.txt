@@ -25,7 +25,7 @@ AC Power:
  displaysleep         10
  womp                 1
  networkoversleep     0
- sleep                1
+ sleep                0
  tcpkeepalive         1
  disksleep            10
  SleepServices        1
