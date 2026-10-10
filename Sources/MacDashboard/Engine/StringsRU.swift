@@ -506,6 +506,24 @@ struct StringsRU: AppStrings {
     var updatesCheckedJustNow: String { "проверено только что" }
     func updatesCheckedAgo(_ age: String) -> String { "проверено \(age) назад" }
     func reportTimingsFolderSizes(_ v: String, _ at: String) -> String { "Размеры папок (фоновый подсчёт в \(at)): \(v)" }
+    func reportTimingsSectionName(_ s: ReportSection) -> String {
+        switch s {
+        case .system: return "Система"
+        case .snapshots: return "Локальные снапшоты"
+        case .homeDirs: return "Домашняя папка"
+        case .serviceDirs: return "Служебные папки"
+        case .security: return "Безопасность"
+        case .tmDest: return "Time Machine"
+        case .spotlight: return "Spotlight"
+        case .crashes: return "Краши"
+        case .brew: return "Homebrew"
+        case .updates: return "Обновления macOS"
+        case .autostart: return "Автозагрузка"
+        case .smart: return "SMART"
+        case .energy: return "Настройки энергии"
+        case .battery: return "Батарея"
+        }
+    }
     func reportFoldersCountedAt(_ at: String) -> String { "(подсчитано \(at))" }
     func foldersCountedAgo(_ age: String) -> String { "подсчитано \(age) назад" }
     var foldersCountedJustNow: String { "подсчитано только что" }

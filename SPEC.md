@@ -289,7 +289,7 @@ struct FullReport {
     var spotlight: String?
     var crashes: [CrashGroup]?          // grouped by process, ≤7 days old
     var brewStatus: BrewStatus?  // nil = not checked; .notInstalled; .installed(version: nil) = brew --version failed
-    var brewOutdated: [String]?           // [] = none outdated; nil with brewStatus .installed = `brew outdated` failed (BREW-OUTDATED-FAIL)
+    var brewOutdated: [String]?         // [] = none outdated; nil with brewStatus .installed = `brew outdated` failed (BREW-OUTDATED-FAIL)
     var updates: [String]?              // pending macOS updates ([] = up to date)
     var smart: [SmartDisk]?
     var autostart: AutostartInfo?

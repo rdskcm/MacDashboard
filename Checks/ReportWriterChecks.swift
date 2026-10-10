@@ -166,7 +166,7 @@ func runReportWriterChecks() {
                                    "  " + rwCol("Критическое предупреждение:", w) + L.reportSmartWarningNone,
                                    "  " + rwCol("Custom Attr:", w) + "7",
                                    L.reportSmartDiskLine("Ext", "/dev/disk4", "NO ACCESS")], "SMART")
-        sec(L.reportSectionTimings, [L.reportTimingsNote, L.reportTimingsPass("7,0 с"), "  brew:   1,5 с", "  disk:   1,5 с", "  system: 0,2 с", L.reportTimingsUpdates("30,0 с", u), L.reportTimingsFolderSizes("6,4 с", u)], "TIMINGS")
+        sec(L.reportSectionTimings, [L.reportTimingsNote, L.reportTimingsPass("7,0 с"), "  Homebrew: 1,5 с", "  disk:     1,5 с", "  Система:  0,2 с", L.reportTimingsUpdates("30,0 с", u), L.reportTimingsFolderSizes("6,4 с", u)], "TIMINGS")
         sec(L.reportSectionUnparsed, [L.reportUnparsedHint, "$ ps -axww -o pid=,rss=,time=,comm=", "  garbage", "$ system_profiler -json SPHardwareDataType", "  l1", "  l2", "  l3", "  l4", "  l5", "  l6", "  l7", "  l8", "  " + L.reportUnparsedMoreLines(2)], "UNPARSED")
 
         // R3: order, uniqueness, footer, history, created-at, EN pass

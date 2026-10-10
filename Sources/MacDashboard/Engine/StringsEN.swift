@@ -499,6 +499,24 @@ struct StringsEN: AppStrings {
     var updatesCheckedJustNow: String { "checked just now" }
     func updatesCheckedAgo(_ age: String) -> String { "checked \(age) ago" }
     func reportTimingsFolderSizes(_ v: String, _ at: String) -> String { "Folder sizes (background count at \(at)): \(v)" }
+    func reportTimingsSectionName(_ s: ReportSection) -> String {
+        switch s {
+        case .system: return "System"
+        case .snapshots: return "Local snapshots"
+        case .homeDirs: return "Home folder"
+        case .serviceDirs: return "Service folders"
+        case .security: return "Security"
+        case .tmDest: return "Time Machine"
+        case .spotlight: return "Spotlight"
+        case .crashes: return "Crashes"
+        case .brew: return "Homebrew"
+        case .updates: return "macOS updates"
+        case .autostart: return "Startup items"
+        case .smart: return "SMART"
+        case .energy: return "Energy settings"
+        case .battery: return "Battery"
+        }
+    }
     func reportFoldersCountedAt(_ at: String) -> String { "(counted \(at))" }
     func foldersCountedAgo(_ age: String) -> String { "counted \(age) ago" }
     var foldersCountedJustNow: String { "counted just now" }

@@ -201,8 +201,9 @@ jobs:
           TAG="${{ steps.tag.outputs.tag }}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             # Standard title "vX.Y (Codename)" (.github/RELEASE_NOTES_TEMPLATE.md), taken from the
-            # bundle's CFBundleShortVersionString ("2.2 (Krieg)"); its version part was checked
-            # against the tag above. The notes are a placeholder that the release flow replaces
+            # bundle's CFBundleShortVersionString ("2.2 (Krieg)"). build_app.sh builds that string from
+            # the same VERSION it writes to CFBundleVersion, and CFBundleVersion was checked against the
+            # tag above. The notes are a placeholder that the release flow replaces
             # with `gh release edit --notes-file`.
             short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist.noindex/MacDashboard.app/Contents/Info.plist)"
             gh release create "$TAG" \
