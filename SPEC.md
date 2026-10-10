@@ -608,7 +608,9 @@ Access). MacDashboard.entitlements grants exactly one entitlement,
 com.apple.security.automation.apple-events, which the hardened runtime requires for the in-process
 NSAppleScript Trash action.
 `--install` flag: moves the built bundle to `~/Applications/MacDashboard.app` (so `dist.noindex/` holds no
-second copy), removing any stale bundle under an old app name first, then runs `tools/ls-prune.sh`.
+second copy) through the temporary names `.MacDashboard.app.new` / `.MacDashboard.app.old`, so a failed move
+leaves the previous install in place, removes any stale bundle under an old app name, then runs
+`tools/ls-prune.sh` (every `lsregister` call bounded to 60 s; exit 3 on a timeout).
 Every build also runs `tools/ls-prune.sh` first and excludes `dist.noindex/` from Time Machine
 (`tmutil addexclusion`): LaunchServices keeps every bundle with this bundle ID it has seen, and
 opening the app by bundle ID must resolve to the installed copy (APP-ID-DUPLICATES).
