@@ -237,5 +237,8 @@ struct MacHistoryEntry: Codable, Equatable {
 struct HistoryState: Codable {
     var last_run: String?
     var mac_history: [MacHistoryEntry] = []
+    /// File name of the unreadable history file HistoryStore renamed aside when History last
+    /// restarted; nil when there was none or the user hid the notice (HISTORY-UNREADABLE-NOTICE).
+    var unreadable_backup: String? = nil
     // legacy keys preserved on round-trip via generic container (see HistoryStore)
 }

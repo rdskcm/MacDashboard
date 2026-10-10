@@ -274,6 +274,31 @@ final class DashboardModel {
         smartToolsState = Self.recomputeSmartToolsState()
     }
 
+    // MARK: - History restart notice (HISTORY-UNREADABLE-NOTICE)
+
+    /// Where the notice's Finder button points: the kept unreadable file, or the folder it was
+    /// kept in if the user has since moved or deleted it. nil when there is no notice. Stats
+    /// the disk — call it from the button action only, never from a view body.
+    var historyRestartRevealPath: String? {
+        guard let name = history.unreadable_backup else { return nil }
+        let dir = historyURL.deletingLastPathComponent()
+        let file = dir.appendingPathComponent(name).path
+        return FileManager.default.fileExists(atPath: file) ? file : dir.path
+    }
+
+    /// The user hid the notice: forget it and persist that now, so it stays hidden after a
+    /// relaunch. If the write fails the notice is still hidden for this session, and the next
+    /// completed pass's save() persists the change.
+    func dismissHistoryRestartNotice() {
+        historyStore.clearUnreadableBackup()
+        do {
+            try historyStore.save()
+        } catch {
+            lastError = L.errorHistorySaveFailed(error.localizedDescription)
+        }
+        history = historyStore.state
+    }
+
     // MARK: - Lifecycle (SPEC §4 contract)
 
     func start() {

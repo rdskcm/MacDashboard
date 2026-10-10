@@ -10,6 +10,8 @@
 // array, so entries this version cannot decode and unknown fields inside an entry survive.
 // A file that exists but cannot be parsed as a history object is never overwritten: the
 // next save() renames it to <name>.unreadable-<yyyyMMdd-HHmmss> first (HISTORY-DECODE-LOSS).
+// The backup's name is recorded in the new file (unreadable_backup) until the user hides the
+// History-restarted notice (HISTORY-UNREADABLE-NOTICE).
 
 import Foundation
 
@@ -42,6 +44,7 @@ final class HistoryStore {
     /// but not an array) ⇒ empty state, and the next save() renames it aside first.
     /// Inside a valid mac_history, an element that does not decode is left out of `state`
     /// but kept in rawEntries, so save() writes it back unchanged. Never writes, never throws.
+    /// A valid stored unreadable_backup name is loaded into state (storedBackupName).
     @discardableResult
     func load() -> HistoryState {
         raw = [:]
@@ -59,6 +62,7 @@ final class HistoryStore {
             loadedUnreadableFile = true
             return state
         }
+        state.unreadable_backup = Self.storedBackupName(obj[Self.unreadableBackupKey], historyFile: url)
         rawEntries = obj["mac_history"] as? [Any] ?? []
         state.last_run = obj["last_run"] as? String
         state.mac_history = Self.decodeEntries(rawEntries)
@@ -116,17 +120,26 @@ final class HistoryStore {
 
     /// Atomic; PRESERVES unknown top-level keys and every stored mac_history element as
     /// parsed (raw ← known-encoded keys overwrite, mac_history ← rawEntries). If load() found
-    /// an unreadable file, renames it aside first; a failed rename throws before any write.
+    /// an unreadable file, renames it aside first and records the backup's name in the new file
+    /// (unreadable_backup); a failed rename throws before any write and records nothing.
     func save() throws {
+        // Chosen before encoding, so the new file names the backup it is about to make.
+        let backup: URL? = loadedUnreadableFile && FileManager.default.fileExists(atPath: url.path)
+            ? unreadableBackupURL() : nil
+        var next = state
+        if let backup { next.unreadable_backup = backup.lastPathComponent }
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let knownData = try encoder.encode(state)
+        let knownData = try encoder.encode(next)
         let knownObj = try JSONSerialization.jsonObject(with: knownData) as? [String: Any] ?? [:]
 
         var merged = raw
         for (key, value) in knownObj {
             merged[key] = value
         }
+        // The encoder omits a nil optional, so without this a hidden notice's key would survive from raw.
+        if next.unreadable_backup == nil { merged.removeValue(forKey: Self.unreadableBackupKey) }
         merged["mac_history"] = rawEntries   // every stored element, not only the decodable ones
 
         let outData = try JSONSerialization.data(withJSONObject: merged, options: [.prettyPrinted, .sortedKeys])
@@ -138,8 +151,9 @@ final class HistoryStore {
                                                  attributes: [.posixPermissions: 0o700])
         try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
         if loadedUnreadableFile {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.moveItem(at: url, to: unreadableBackupURL())
+            if let backup {
+                try FileManager.default.moveItem(at: url, to: backup)
+                state.unreadable_backup = backup.lastPathComponent   // only after a successful rename
             }
             loadedUnreadableFile = false   // only after a successful rename (or nothing left to rename)
         }
@@ -147,6 +161,12 @@ final class HistoryStore {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
 
         raw = merged
+    }
+
+    /// The user hid the History-restarted notice: forget the backup's name. Pure in-memory;
+    /// the next save() removes the key from the file. The backup file itself is never touched.
+    func clearUnreadableBackup() {
+        state.unreadable_backup = nil
     }
 
     // MARK: - Helpers
@@ -165,6 +185,20 @@ final class HistoryStore {
     /// The element's "date" string, or "" when it has none (such elements sort first).
     private static func dateKey(_ item: Any) -> String {
         ((item as? [String: Any])?["date"] as? String) ?? ""
+    }
+
+    /// JSON key of HistoryState.unreadable_backup — must equal that property's name (the
+    /// synthesized Codable key); save() removes the key by this name once the notice is hidden.
+    static let unreadableBackupKey = "unreadable_backup"
+
+    /// `value` if it is a plain `<history file name>.unreadable-…` name in the same folder;
+    /// anything else (not a string, a path, another prefix) ⇒ nil, so the notice's Finder
+    /// button can only ever point next to the history file.
+    static func storedBackupName(_ value: Any?, historyFile: URL) -> String? {
+        guard let name = value as? String,
+              name.hasPrefix(historyFile.lastPathComponent + ".unreadable-"),
+              !name.contains("/") else { return nil }
+        return name
     }
 
     /// `<file name>.unreadable-<yyyyMMdd-HHmmss>` next to the history file.

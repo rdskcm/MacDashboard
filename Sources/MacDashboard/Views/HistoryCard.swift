@@ -216,6 +216,44 @@ struct HistoryCard: View {
     }
 }
 
+// MARK: - History restart notice
+
+/// Shown under the История kicker after HistoryStore renamed an unreadable history file
+/// aside, until the user hides it; the name lives in the history file, so it survives a
+/// relaunch (HISTORY-UNREADABLE-NOTICE). Calm on purpose — no dot, no severity colour: the
+/// machine is fine, only the app's own record restarted (same stance as FoldersNoFDANotice).
+/// A sibling of HistoryCard, not inside it: HistoryCard renders nothing below 2 days, which
+/// is exactly the state right after a restart.
+struct HistoryRestartNotice: View {
+    let model: DashboardModel
+
+    var body: some View {
+        if let name = model.history.unreadable_backup {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L.historyRestartTitle)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DS.ink)
+                Text(L.historyRestartDetail(name))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 8) {
+                    RainbowCapsuleButton(title: L.historyRestartReveal, size: .card) {
+                        if let path = model.historyRestartRevealPath { AdviceActionRunner.reveal(path) }
+                    }
+                    .accessibilityLabel(L.historyRestartRevealA11y)
+                    RainbowCapsuleButton(title: L.historyRestartHide, size: .card) {
+                        model.dismissHistoryRestartNotice()
+                    }
+                    .accessibilityLabel(L.historyRestartHideA11y)
+                }
+                .padding(.top, 2)
+            }
+            .cardBackground()
+        }
+    }
+}
+
 // MARK: - Chart point
 
 /// One plotted (date, value) sample. Charts needs a `Date` (not the raw

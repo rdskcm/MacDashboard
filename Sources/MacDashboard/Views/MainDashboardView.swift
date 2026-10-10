@@ -231,6 +231,7 @@ struct MainDashboardView: View {
                 systemBand
 
                 Text(L.overviewKickerHistory).dsKicker()
+                HistoryRestartNotice(model: model)
                 HistoryCard(model: model)
             }
             .padding(20)
