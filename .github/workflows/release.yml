@@ -28,15 +28,18 @@ permissions:
 jobs:
   release:
     # The app's appearance follows the SDK recorded in its binary (LC_BUILD_VERSION
-    # `sdk`), not the OS it runs on. The next step picks the newest release Xcode
-    # >= 26 on whatever image macos-latest currently is (never assumed in advance),
-    # and the SDK check below fails the run unless the binary records exactly
-    # that Xcode's SDK.
+    # `sdk`), not the OS it runs on. The floor is 26: the Tahoe (Liquid Glass)
+    # appearance is gated on the SDK major version. The shared select-xcode action
+    # (also used by ci.yml) picks the newest release Xcode >= 26 on whatever image
+    # macos-latest currently is (never assumed in advance), and the SDK check below
+    # fails the run unless the binary records exactly that Xcode's SDK. A newer
+    # major SDK is not required: builds with SDK 26.5 and SDK 27.0 showed no
+    # visible difference on macOS 27.0.1 (A/B, 2026-10-11).
     runs-on: macos-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve release tag
         id: tag
@@ -63,35 +66,7 @@ jobs:
           echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Select the newest Xcode (>= 26)
-        run: |
-          set -euo pipefail
-          # Discovered at run time: the runner image's Xcode set is never assumed.
-          # Pre-release Xcodes (beta / RC in the bundle name) are skipped — a release
-          # asset must not be built on a pre-release toolchain.
-          echo "Xcodes on this runner:"
-          candidates=""
-          for xc in /Applications/Xcode*.app; do
-            [ -d "$xc" ] || continue
-            ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$xc/Contents/Info.plist" 2>/dev/null || echo '?')"
-            echo "  $xc ($ver)"
-            case "$xc" in *[Bb]eta*|*_RC*|*[Rr]elease_[Cc]andidate*) continue ;; esac
-            major="${ver%%.*}"
-            case "$major" in ''|*[!0-9]*) continue ;; esac
-            [ "$major" -ge 26 ] || continue
-            candidates="${candidates}${ver} ${xc}"$'\n'
-          done
-          best="$(printf '%s' "$candidates" | sort -V | tail -1)"
-          [ -n "$best" ] || { echo "::error::no release Xcode >= 26 on this runner"; exit 1; }
-          xc="${best#* }"
-          echo "selecting: $xc (${best%% *})"
-          sudo xcode-select -s "$xc/Contents/Developer"
-          xcodebuild -version
-          sdk="$(xcrun --sdk macosx --show-sdk-version)"
-          sdk_major="${sdk%%.*}"
-          case "$sdk_major" in ''|*[!0-9]*) echo "::error::cannot parse the selected SDK version '$sdk'"; exit 1 ;; esac
-          [ "$sdk_major" -ge 26 ] || { echo "::error::selected Xcode's macOS SDK is $sdk, expected >= 26"; exit 1; }
-          echo "::notice::building with $xc, macOS SDK $sdk"
-          echo "EXPECTED_SDK=$sdk" >> "$GITHUB_ENV"
+        uses: ./.github/actions/select-xcode
 
       - name: Build .app
         run: ./build_app.sh
