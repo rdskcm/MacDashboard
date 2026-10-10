@@ -92,7 +92,10 @@ here is everything it does:
 - Collecting a report runs `softwareupdate -l`, which contacts Apple's own
   update service exactly as System Settings does. This sends none of your
   diagnostic data — only the same check Apple itself performs.
-- `brew outdated` reads local Homebrew metadata only.
+- If Homebrew is installed, collecting a report runs `brew update`, which
+  downloads Homebrew's package list from Homebrew's own servers exactly as
+  running it in Terminal does, and then `brew outdated`, which reads that list
+  locally. Neither sends your diagnostic data.
 - The two actions you have to click yourself — Homebrew upgrade and
   installing `smartmontools` — download through Homebrew as usual.
 
