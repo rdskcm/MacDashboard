@@ -1,0 +1,41 @@
+name: Select the newest Xcode (>= 26)
+description: >-
+  Selects the newest Xcode on the runner whose major version is >= 26 and whose
+  bundle name is not a beta or release candidate, fails if there is none, and
+  exports that Xcode's macOS SDK version as EXPECTED_SDK for later steps.
+  Shared by ci.yml and release.yml so CI builds with the same toolchain rule as
+  the release.
+runs:
+  using: composite
+  steps:
+    - name: Select the newest Xcode (>= 26)
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Discovered at run time: the runner image's Xcode set is never assumed.
+        # Pre-release Xcodes (beta / RC in the bundle name) are skipped — a release
+        # asset must not be built on a pre-release toolchain.
+        echo "Xcodes on this runner:"
+        candidates=""
+        for xc in /Applications/Xcode*.app; do
+          [ -d "$xc" ] || continue
+          ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$xc/Contents/Info.plist" 2>/dev/null || echo '?')"
+          echo "  $xc ($ver)"
+          case "$xc" in *[Bb]eta*|*_RC*|*[Rr]elease_[Cc]andidate*) continue ;; esac
+          major="${ver%%.*}"
+          case "$major" in ''|*[!0-9]*) continue ;; esac
+          [ "$major" -ge 26 ] || continue
+          candidates="${candidates}${ver} ${xc}"$'\n'
+        done
+        best="$(printf '%s' "$candidates" | sort -V | tail -1)"
+        [ -n "$best" ] || { echo "::error::no release Xcode >= 26 on this runner"; exit 1; }
+        xc="${best#* }"
+        echo "selecting: $xc (${best%% *})"
+        sudo xcode-select -s "$xc/Contents/Developer"
+        xcodebuild -version
+        sdk="$(xcrun --sdk macosx --show-sdk-version)"
+        sdk_major="${sdk%%.*}"
+        case "$sdk_major" in ''|*[!0-9]*) echo "::error::cannot parse the selected SDK version '$sdk'"; exit 1 ;; esac
+        [ "$sdk_major" -ge 26 ] || { echo "::error::selected Xcode's macOS SDK is $sdk, expected >= 26"; exit 1; }
+        echo "::notice::building with $xc, macOS SDK $sdk"
+        echo "EXPECTED_SDK=$sdk" >> "$GITHUB_ENV"
