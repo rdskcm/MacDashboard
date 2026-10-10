@@ -45,3 +45,12 @@ that tree via `#filePath` and checks every fixture against the shared registry i
 `ParsedCommands.swift`. `swift run MacDashboardChecks --live` runs only the live parser
 canary (`LiveCanary.swift`): it runs every registry command for real and exits 1 iff a
 real command's output was rejected by its parser.
+
+**swift-testing sample target.** `Tests/MacDashboardTests/` is a `.testTarget`
+(`MacDashboardTests`) run with `swift test` — locally (needs Xcode) and in CI
+(`.github/workflows/ci.yml`, step "Run swift-testing suite"). It is not a second copy of
+this harness: it ports a small fixed set — the R3 fixture table as `@Test(arguments:)`,
+`Parsers.parseSize`/`swapUsage`, and the `ProcEntry` id/ordering rules — and reaches the
+engine through `@testable import MacDashboard`, not through symlinks. This directory stays
+the primary gate and the place new checks go; `swift build` and `build_app.sh` never compile
+the test target.
