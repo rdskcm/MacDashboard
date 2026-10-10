@@ -299,6 +299,22 @@ final class DashboardModel {
         history = historyStore.state
     }
 
+    /// SLEEP-IGNORE-APP: add (`ignored: true`) or remove a holder from the Sleep item's
+    /// ignore list and re-assess now rather than on the next fast tick (which does not run
+    /// while paused). Same report choice as the fast tick: never a partial (V2-HEADER-CHURN).
+    func setWakeHolderIgnored(_ key: WakeHolderKey, ignored: Bool) {
+        var list = AppSettings.shared.ignoredWakeHolders
+        if ignored {
+            guard !list.contains(key) else { return }
+            list.append(key)
+        } else {
+            guard list.contains(key) else { return }
+            list.removeAll { $0 == key }
+        }
+        AppSettings.shared.ignoredWakeHolders = list
+        setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
+    }
+
     // MARK: - Lifecycle (SPEC §4 contract)
 
     func start() {
@@ -366,7 +382,7 @@ final class DashboardModel {
                 // as they were when the pass started, live-derived ones keep moving
                 // (V2-HONEST-READINGS, A11).
                 let assessedReport = self.isCollectingReport ? self.lastCommittedReport : self.report
-                self.setAssessment(Assess.assess(report: assessedReport, live: self.live, memPressure: self.memPressure, topApps: self.topApps, wakeHolders: self.wakeHolders))
+                self.setAssessment(self.assessed(assessedReport))
 
                 try? await Task.sleep(for: .seconds(AppSettings.shared.fastIntervalSeconds))
             }
@@ -591,7 +607,7 @@ final class DashboardModel {
 
             self.report = final
             if let sys = final.system { self.lastKnownSystem = sys }
-            self.setAssessment(Assess.assess(report: final, live: self.live, memPressure: self.memPressure, topApps: self.topApps, wakeHolders: self.wakeHolders))
+            self.setAssessment(self.assessed(final))
             self.smartToolsState = Self.recomputeSmartToolsState()
         }
     }
@@ -675,7 +691,7 @@ final class DashboardModel {
         if isCollectingReport {
             applyBackground(to: &lastCommittedReport)   // what the fast tick assesses mid-pass
             applyBackground(to: &report)                // display of the partial; NOT assessed
-            setAssessment(Assess.assess(report: lastCommittedReport, live: live, memPressure: memPressure, topApps: topApps, wakeHolders: wakeHolders))
+            setAssessment(assessed(lastCommittedReport))
             // The pass commit calls applyBackground on `final`, so it picks this result up too.
         } else {
             applyBackground(to: &report)
@@ -683,7 +699,7 @@ final class DashboardModel {
             do { try ReportWriter.write(text: text, to: reportURL) }
             catch { lastError = L.errorReportWriteFailed(error.localizedDescription) }
             reportText = text                           // reportUpdatedAt unchanged: it is the pass time
-            setAssessment(Assess.assess(report: report, live: live, memPressure: memPressure, topApps: topApps, wakeHolders: wakeHolders))
+            setAssessment(assessed(report))
         }
     }
 
@@ -930,7 +946,7 @@ final class DashboardModel {
                 await self.waitForReportRefreshToFinish()
                 guard !Task.isCancelled else { return }
                 self.report.security = s
-                self.setAssessment(Assess.assess(report: self.report, live: self.live, memPressure: self.memPressure, topApps: self.topApps, wakeHolders: self.wakeHolders))
+                self.setAssessment(self.assessed(self.report))
             case .cancelled:
                 break
             case .failed:
@@ -1234,6 +1250,14 @@ final class DashboardModel {
     /// is value-equal to the current one (e.g. repeated live ticks with no
     /// change in severity/tips/problems).
     private func setAssessment(_ n: Assessment) { if assessment != n { assessment = n } }
+
+    /// The model's only way to build an `Assessment` (SLEEP-IGNORE-APP): every path passes
+    /// the current ignore list, so an ignored wake holder cannot re-warn through a path that
+    /// forgot it.
+    private func assessed(_ r: FullReport) -> Assessment {
+        Assess.assess(report: r, live: live, memPressure: memPressure, topApps: topApps,
+                      wakeHolders: wakeHolders, ignoredWakeHolders: AppSettings.shared.ignoredWakeHolders)
+    }
 
     /// Probes `findSmartctl()`/`findBrew()` fresh (cheap `isExecutableFile` checks,
     /// no process spawn) and maps them through `ReportCollector.smartToolsAvailability`.

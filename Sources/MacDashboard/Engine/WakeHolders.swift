@@ -30,6 +30,17 @@ struct WakeHolder: Equatable {
     var ageSeconds: Int
 }
 
+/// SLEEP-IGNORE-APP: what the user ignores — a holder as the Sleep item names it, without
+/// its age. `caffeinate` started by `claude` and by Terminal are two different keys.
+struct WakeHolderKey: Codable, Hashable {
+    var owner: String
+    var requester: String?
+}
+
+extension WakeHolder {
+    var key: WakeHolderKey { WakeHolderKey(owner: owner, requester: requester) }
+}
+
 enum WakeHolders {
     /// Assertion types that keep the system or the display from idle-sleeping (IOPMLib.h
     /// kIOPMAssertionType* plus the two legacy names). `UserIsActive` is the user's own input.
@@ -130,8 +141,18 @@ enum WakeHolders {
     }
 
     /// "caffeinate (от claude)" / "Zoom" in the current language.
-    static func label(for h: WakeHolder) -> String {
-        h.requester.map { L.wakeHolderOnBehalf(h.owner, $0) } ?? h.owner
+    static func label(for h: WakeHolder) -> String { label(for: h.key) }
+
+    /// Same label for a stored ignore-list key (Settings rows, context-menu entries).
+    static func label(for key: WakeHolderKey) -> String {
+        key.requester.map { L.wakeHolderOnBehalf(key.owner, $0) } ?? key.owner
+    }
+
+    /// SLEEP-IGNORE-APP: `holders` minus the ignored keys, order preserved.
+    static func unignored(_ holders: [WakeHolder], ignored: [WakeHolderKey]) -> [WakeHolder] {
+        guard !ignored.isEmpty else { return holders }
+        let ignoredSet = Set(ignored)
+        return holders.filter { !ignoredSet.contains($0.key) }
     }
 
     /// pmset's own age, floored to minutes: "21 мин", "1 ч 21 мин".

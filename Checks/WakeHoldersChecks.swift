@@ -290,4 +290,54 @@ func runWakeHoldersChecks() {
     L10nStore.shared.language = .ru
     let assessNone = Assess.assess(report: FullReport(), live: LiveSnapshot(), wakeHolders: [])
     check(!assessNone.items.contains { $0.kind == .wakeHolders }, "WakeHolders: Assess with [] -> no .wakeHolders item")
+
+    // --- SLEEP-IGNORE-APP: key, filter, label from key, persistence codec, Assess ---
+    let claudeCaf = WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)
+    let termCaf = WakeHolder(owner: "caffeinate", requester: "Terminal", ageSeconds: 600)
+    let zoomHolder = WakeHolder(owner: "zoom.us", requester: nil, ageSeconds: 900)
+    check(claudeCaf.key == WakeHolderKey(owner: "caffeinate", requester: "claude"),
+          "SleepIgnore: key = owner + requester, age not part of it")
+    check(WakeHolders.unignored([claudeCaf, termCaf, zoomHolder], ignored: []) == [claudeCaf, termCaf, zoomHolder],
+          "SleepIgnore: empty ignore list -> holders unchanged")
+    check(WakeHolders.unignored([claudeCaf, termCaf, zoomHolder], ignored: [claudeCaf.key]) == [termCaf, zoomHolder],
+          "SleepIgnore: ignoring caffeinate(claude) keeps caffeinate(Terminal) and zoom.us, order kept")
+    check(WakeHolders.unignored([claudeCaf, termCaf], ignored: [WakeHolderKey(owner: "caffeinate", requester: nil)]) == [claudeCaf, termCaf],
+          "SleepIgnore: owner-only key does not match a delegated holder")
+    check(WakeHolders.unignored([claudeCaf], ignored: [WakeHolderKey(owner: "claude", requester: nil)]) == [claudeCaf],
+          "SleepIgnore: a requester name used as an owner key does not match")
+    check(WakeHolders.unignored([zoomHolder], ignored: [zoomHolder.key]).isEmpty,
+          "SleepIgnore: ignoring the only holder -> []")
+
+    check(WakeHolders.label(for: claudeCaf.key) == "caffeinate (от claude)",
+          "SleepIgnore: label(for: key) RU (got \(WakeHolders.label(for: claudeCaf.key)))")
+    check(WakeHolders.label(for: zoomHolder.key) == "zoom.us", "SleepIgnore: label(for: key) without requester -> owner")
+    L10nStore.shared.language = .en
+    check(WakeHolders.label(for: claudeCaf.key) == "caffeinate (for claude)",
+          "SleepIgnore: label(for: key) EN (got \(WakeHolders.label(for: claudeCaf.key)))")
+    L10nStore.shared.language = .ru
+
+    let storedKeys = [claudeCaf.key, zoomHolder.key]
+    check(AppSettings.decodeIgnoredWakeHolders(AppSettings.encodeIgnoredWakeHolders(storedKeys)) == storedKeys,
+          "SleepIgnore: codec round trip keeps entries and order")
+    check(AppSettings.decodeIgnoredWakeHolders(nil).isEmpty, "SleepIgnore: no stored data -> []")
+    check(AppSettings.decodeIgnoredWakeHolders(Data("not json".utf8)).isEmpty, "SleepIgnore: unreadable stored data -> []")
+
+    let allIgnored = Assess.assess(report: FullReport(), live: LiveSnapshot(),
+                                   wakeHolders: [claudeCaf], ignoredWakeHolders: [claudeCaf.key])
+    check(!allIgnored.items.contains { $0.kind == .wakeHolders } && allIgnored.problems.isEmpty,
+          "SleepIgnore: every holder ignored -> no item, no problem")
+    let oneOfTwo = Assess.assess(report: FullReport(), live: LiveSnapshot(),
+                                 wakeHolders: [claudeCaf, termCaf], ignoredWakeHolders: [claudeCaf.key])
+    if let item = oneOfTwo.items.first(where: { $0.kind == .wakeHolders }) {
+        check(item.sev == .warn, "SleepIgnore: remaining holder still warns")
+        check(item.detail == "caffeinate (от Terminal) — 10 мин",
+              "SleepIgnore: detail names only the unignored holder (got \(item.detail))")
+        check(item.fullText == "1 программа не даёт Mac уснуть: caffeinate (от Terminal) — 10 мин.",
+              "SleepIgnore: fullText counts only the unignored holder (got \(item.fullText))")
+        check(item.wakeHolderKeys == [termCaf.key], "SleepIgnore: item keys = unignored holders only")
+        check(item.action == .openApp(AdviceApps.activityMonitor), "SleepIgnore: click still opens Activity Monitor")
+    } else { check(false, "SleepIgnore: one of two ignored -> item present") }
+    let noneIgnored = Assess.assess(report: FullReport(), live: LiveSnapshot(), wakeHolders: [claudeCaf, termCaf])
+    check(noneIgnored.items.first(where: { $0.kind == .wakeHolders })?.wakeHolderKeys == [claudeCaf.key, termCaf.key],
+          "SleepIgnore: no ignore list -> item keys = all holders, in order")
 }

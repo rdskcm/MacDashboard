@@ -23,6 +23,17 @@ final class AppSettings {
         allowedProcessLimits.contains(raw) ? raw : 10
     }
 
+    static let ignoredWakeHoldersKey = "ignoredWakeHolders"
+
+    /// SLEEP-IGNORE-APP codec, exposed for Checks. Missing or unreadable data is an empty
+    /// list: failing toward "warn" is the safe direction for this setting.
+    static func decodeIgnoredWakeHolders(_ data: Data?) -> [WakeHolderKey] {
+        data.flatMap { try? JSONDecoder().decode([WakeHolderKey].self, from: $0) } ?? []
+    }
+    static func encodeIgnoredWakeHolders(_ list: [WakeHolderKey]) -> Data? {
+        try? JSONEncoder().encode(list)
+    }
+
     // Compiled out of the default (public) build — see Package.swift/build_app.sh (AI_ENABLED).
     #if AI_ENABLED
     static let aiProviderKey = "aiProvider"
@@ -41,6 +52,13 @@ final class AppSettings {
     /// every slow sample, so a change applies on the next tick without a restart.
     var processListLimit: Int {
         didSet { UserDefaults.standard.set(processListLimit, forKey: Self.processLimitKey) }
+    }
+
+    /// Wake holders the Sleep attention item no longer warns about (SLEEP-IGNORE-APP),
+    /// in the order the user added them. Mutate through `DashboardModel.setWakeHolderIgnored`
+    /// so the assessment updates at once.
+    var ignoredWakeHolders: [WakeHolderKey] {
+        didSet { UserDefaults.standard.set(Self.encodeIgnoredWakeHolders(ignoredWakeHolders), forKey: Self.ignoredWakeHoldersKey) }
     }
 
     #if AI_ENABLED
@@ -67,6 +85,7 @@ final class AppSettings {
 
         let rawLimit = UserDefaults.standard.integer(forKey: Self.processLimitKey) // 0 if unset
         processListLimit = Self.resolveProcessLimit(raw: rawLimit)
+        ignoredWakeHolders = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
 
         #if AI_ENABLED
         let providerRaw = UserDefaults.standard.string(forKey: Self.aiProviderKey)

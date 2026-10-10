@@ -17,6 +17,10 @@ struct StringsRU: AppStrings {
     var settingsProcessLimitLabel: String { "Процессов в списке" }
     func settingsProcessLimitOption(_ count: Int) -> String { "\(count)" }
     var settingsProcessLimitApply: String { "Применить" }
+    var settingsWakeIgnoredLabel: String { "Сон: не предупреждать про эти приложения" }
+    var settingsWakeIgnoredEmpty: String { "Список пуст. Чтобы добавить приложение, щёлкните правой кнопкой по предупреждению «Сон» в главном окне." }
+    var settingsWakeIgnoredRestore: String { "Снова предупреждать" }
+    func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String { "Снова предупреждать про \(holder)" }
     var settingsMenuLanguageHint: String { "Язык меню и системных диалогов применится после перезапуска приложения" }
     var settingsRelaunchNow: String { "Перезапустить сейчас" }
     var settingsSectionGeneral: String { "Общие" }
@@ -639,6 +643,8 @@ struct StringsRU: AppStrings {
     func attnDetailWakeHolders(_ first: String, more: Int) -> String { more > 0 ? "\(first), ещё \(more)" : first }
     func wakeHolderOnBehalf(_ owner: String, _ requester: String) -> String { "\(owner) (от \(requester))" }
     func wakeHolderEntry(_ holder: String, _ age: String) -> String { "\(holder) — \(age)" }
+    func attnWakeIgnore(_ holder: String) -> String { "Не предупреждать про \(holder)" }
+    var attnWakeIgnoreHint: String { "Правый щелчок — не предупреждать про приложение." }
     func attnLabelSmartErrors(_ title: String) -> String { title }
     var attnDetailSmartErrors: String { "ошибки SMART" }
     func attnLabelSmartWear(_ title: String) -> String { title }
