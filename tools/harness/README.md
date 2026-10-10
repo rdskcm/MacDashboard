@@ -31,8 +31,28 @@ MainActor.assumeIsolated {
 }
 ```
 
-2. Run: `tools/harness/render.sh scenario.swift /path/out.png`
+2. Run: `tools/harness/render.sh scenario.swift /path/out.png [light|dark|both]` — see Themes below.
 3. Read the PNG to verify what actually rendered.
+
+## Themes (light / dark)
+
+A render is **unpinned** by default: it uses whatever theme the Mac is in, so the
+same command checks a different theme on a different day. Pin it:
+
+- `render.sh scenario.swift /path/out.png both` → compiles once, writes
+  `/path/out-light.png` and `/path/out-dark.png`. `light` or `dark` instead of
+  `both` → one PNG at `/path/out.png` in that theme.
+- In code: `harnessRender(width: 460, appearance: .light) { … }` pins that call
+  whatever the mode argument says (explicit argument wins). Use it only for a
+  state that exists in one theme; otherwise leave it out so `both` works.
+- Every render prints `  appearance: <light|dark> (<pinned|unpinned>)` under
+  its `Wrote …` line — check it before trusting a PNG.
+- `both` derives file names from the output path. A scenario that writes to its
+  own `to:` paths would get the same path twice (dark overwrites light): give
+  such a scenario `appearance:` per call and a per-theme path instead.
+- Light-theme review (hard rule): text roles use the `-ink` colors — accent-ink
+  `#1A63C2`, green-ink `#0A7454`, amber-ink `#8C5C00`, muted `#5E6774`; fills,
+  dots, borders and strokes keep the base colors. Check the `-light.png`.
 
 ## Rules & gotchas (empirical — don't relearn)
 
@@ -50,4 +70,13 @@ MainActor.assumeIsolated {
 - `NavigationSplitView` sidebars render as an EMPTY white panel offscreen (the
   List needs a real window/appearance context) — the detail pane renders fine.
   Verify sidebars in the real app (System Events menu click + screencapture).
+- **Layout-and-appearance verifier, not a rendering verifier.** The PNG comes from
+  `cacheDisplay(in:to:)`: the views draw straight into a bitmap — no window, no
+  window server, no Core Animation compositing. Geometry, text, colors and which
+  state shows what are trustworthy; anything that exists only when layers are
+  composited on screen (content escaping its row during scroll or animation,
+  material/translucency blending, between-frame artefacts) never appears here,
+  so a clean PNG is no evidence against it (the row-escape defect was in this
+  class). Same root cause as the blank sidebar above. Verify that class in the
+  real app: `tools/visual/run.sh` or a live screencapture.
 - Window chrome (titlebar, translucency, traffic lights, alpha holes) is invisible here — use `tools/visual/run.sh` (real windows, reference diff).

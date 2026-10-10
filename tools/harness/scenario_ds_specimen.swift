@@ -1,16 +1,13 @@
 // tools/harness/scenario_ds_specimen.swift
 // Block V2-FOUND design-system specimen: card surface, recessed track, sliding
 // segmented control (both states), disclosure bars (both states), full DS
-// colour swatch row, kicker label. Appearance forced via DS_APPEARANCE env var
-// ("dark" | "light", default "light") read before any DS color is evaluated.
+// colour swatch row, kicker label. Render both themes with
+// `tools/harness/render.sh tools/harness/scenario_ds_specimen.swift out.png both`.
 
 import AppKit
 import SwiftUI
 
 MainActor.assumeIsolated {
-    let wantDark = ProcessInfo.processInfo.environment["DS_APPEARANCE"] == "dark"
-    NSApplication.shared.appearance = NSAppearance(named: wantDark ? .darkAqua : .aqua)
-
     let swatches: [(String, Color)] = [
         ("ground", DS.ground), ("ground2", DS.ground2), ("ink", DS.ink), ("inkSoft", DS.inkSoft),
         ("muted", DS.muted), ("line", DS.line), ("lineStrong", DS.lineStrong), ("track", DS.track),

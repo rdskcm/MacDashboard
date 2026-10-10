@@ -16,6 +16,9 @@
 //   never call it in a harness); inject state directly on fresh instances.
 // - Pin the language first (`L10nStore.shared.language = .ru`) or an EN-first
 //   system locale will render EN strings.
+// - Theme is unpinned by default (follows the system). Pin it per call with
+//   `appearance: .light/.dark`, or per run with render.sh's third argument
+//   (`light|dark|both`, passed in as HARNESS_APPEARANCE). Explicit argument wins.
 
 import AppKit
 import SwiftUI
@@ -44,13 +47,44 @@ struct HarnessSection<Content: View>: View {
     }
 }
 
+/// Theme pinned for one render. `nil` leaves it unpinned: the render uses
+/// whatever the process inherits (system setting, or an
+/// `NSApplication.shared.appearance` the scenario set itself).
+enum HarnessAppearance: String {
+    case light, dark
+    var nsAppearance: NSAppearance {
+        NSAppearance(named: self == .dark ? .darkAqua : .aqua)!
+    }
+}
+
+/// `HARNESS_APPEARANCE` (set by render.sh's mode argument) as a theme; nil when
+/// unset or empty; exits 1 on any other value so a typo cannot pass silently.
+func harnessEnvironmentAppearance() -> HarnessAppearance? {
+    guard let raw = ProcessInfo.processInfo.environment["HARNESS_APPEARANCE"], !raw.isEmpty else { return nil }
+    guard let parsed = HarnessAppearance(rawValue: raw) else {
+        FileHandle.standardError.write(Data("ERROR: HARNESS_APPEARANCE must be 'light' or 'dark', got '\(raw)'\n".utf8))
+        exit(1)
+    }
+    return parsed
+}
+
 /// Renders `content` offscreen at fixed `width` (height = fitting size) on the
 /// standard window background and writes a PNG to `path` (or to the first CLI
 /// argument when `path` is nil, falling back to "harness.png"). Exits nonzero
 /// with a stderr message on any failure, so render.sh surfaces errors loudly.
+/// `appearance` pins the theme for this call (else HARNESS_APPEARANCE, else unpinned); the previous app appearance is restored on return.
 @MainActor
-func harnessRender<Content: View>(width: CGFloat = 460, to path: String? = nil,
+func harnessRender<Content: View>(width: CGFloat = 460, appearance: HarnessAppearance? = nil,
+                                  to path: String? = nil,
                                   @ViewBuilder content: () -> Content) {
+    let pinned = appearance ?? harnessEnvironmentAppearance()
+    var previousAppearance: NSAppearance?
+    if let pinned {
+        previousAppearance = NSApplication.shared.appearance
+        NSApplication.shared.appearance = pinned.nsAppearance
+    }
+    defer { if pinned != nil { NSApplication.shared.appearance = previousAppearance } }
+
     let rootView = VStack(alignment: .leading, spacing: 20) { content() }
         .padding(20)
         .frame(width: width)
@@ -87,6 +121,8 @@ func harnessRender<Content: View>(width: CGFloat = 460, to path: String? = nil,
     do {
         try pngData.write(to: outURL)
         print("Wrote \(outURL.path) — \(Int(hosting.bounds.width))x\(Int(hosting.bounds.height))")
+        let isDark = hosting.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        print("  appearance: \(isDark ? "dark" : "light") (\(pinned == nil ? "unpinned" : "pinned"))")
     } catch {
         FileHandle.standardError.write(Data("ERROR: write failed: \(error)\n".utf8))
         exit(1)
