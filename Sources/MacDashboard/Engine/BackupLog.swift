@@ -28,12 +28,25 @@ enum BackupLog {
         return f
     }
 
+    // BACKUP-LOG-TIDY: built once. NSRegularExpression is immutable and thread-safe; the two
+    // formatters are shared mutable state (their zone follows each call, and readStatus runs
+    // on the global executor, so calls can overlap), so every use of them is under formatterLock.
+    private static let eventRE = try! NSRegularExpression(pattern: "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}  OK$")
+    private static let stampRE = try! NSRegularExpression(pattern: "^\\d{4}-\\d{2}-\\d{2}_\\d{6}$")
+    private static let eventFmt = formatter("yyyy-MM-dd HH:mm:ss", .current)
+    private static let stampFmt = formatter("yyyy-MM-dd_HHmmss", .current)
+    private static let formatterLock = NSLock()
+
     /// Newest success time in `text`: max over `…  OK` event lines and `Snapshot done: …/YYYY-MM-DD_HHMMSS` lines.
     static func latestSuccess(in text: String, timeZone: TimeZone = .current) -> Date? {
-        let eventFmt = formatter("yyyy-MM-dd HH:mm:ss", timeZone)
-        let stampFmt = formatter("yyyy-MM-dd_HHmmss", timeZone)
-        let eventRE = try! NSRegularExpression(pattern: "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}  OK$")
-        let stampRE = try! NSRegularExpression(pattern: "^\\d{4}-\\d{2}-\\d{2}_\\d{6}$")
+        formatterLock.lock()
+        defer { formatterLock.unlock() }
+        // Re-zoning rebuilds a formatter's internals, so only on an actual change; a spurious
+        // "unequal" merely re-assigns, results never depend on this comparison.
+        if eventFmt.timeZone != timeZone {
+            eventFmt.timeZone = timeZone
+            stampFmt.timeZone = timeZone
+        }
         func matches(_ re: NSRegularExpression, _ s: String) -> Bool {
             re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
         }
