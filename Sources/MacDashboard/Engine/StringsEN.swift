@@ -811,6 +811,18 @@ struct StringsEN: AppStrings {
         case .cancelled: return "Import cancelled."
         }
     }
+    func iphoneImportErrorDetail(_ e: ImportError) -> String? {
+        guard case .tarFailed(let f) = e else { return nil }
+        switch f {
+        case .message(let line): return line
+        case .exitCode(let n): return "tar exited with code \(n)."
+        case .signal(let s): return "tar was stopped by signal \(s)."
+        case .launchFailed(let code): return "tar could not be started (error \(code))."
+        case .timedOut: return "tar did not finish in time."
+        case .listingTooLong: return "The archive lists too many files."
+        case .workFiles: return "Could not create temporary files for extraction."
+        }
+    }
     var iphoneImportKeptTitle: String { "Kept archives" }
     func iphoneImportRevealA11y(_ name: String) -> String { "Show archive \(name) in Finder" }
     func iphoneLogsFromArchive(_ name: String) -> String { "From sysdiagnose \(name)" }

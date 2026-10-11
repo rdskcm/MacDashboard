@@ -1,5 +1,5 @@
 // Engine/SysdiagnoseImporter.swift
-// App-only (tar, temp dirs, file moves; not in Checks). Imports one sysdiagnose
+// App-only (temp dirs, file moves; not in Checks; tar runs in SysdiagnoseExtractor). Imports one sysdiagnose
 // `.tar.gz`: copies it from the phone (read-only AFC, through the transport) or uses the
 // Mac file the user picked, extracts only the members the import parses (D13) into a
 // fresh temp dir, parses them, optionally keeps the archive under App Support, and ALWAYS
@@ -68,19 +68,17 @@ struct SysdiagnoseImporter {
         }
         if Task.isCancelled { return .failure(.cancelled) }
 
-        // 3. Extract only the needed members.
+        // 3. Extract only the needed members (SysdiagnoseExtractor: list, select, extract).
         await onProgress(.extracting)
         let extractDir = root.appendingPathComponent("x", isDirectory: true)
         do {
             try fm.createDirectory(at: extractDir, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         } catch {
-            return .failure(.tarFailed)
+            return .failure(.tarFailed(.workFiles))
         }
-        let outcome = await CommandRunner.run("/usr/bin/tar",
-                                              IPhoneData.tarArguments(archive: archiveURL.path, into: extractDir.path),
-                                              timeout: 300)
-        if outcome.termination == .cancelled { return .failure(.cancelled) }
-        guard outcome.termination == .exited(0) else { return .failure(.tarFailed) }
+        let extracted = await SysdiagnoseExtractor.extract(archive: archiveURL, into: extractDir,
+                                                           memberList: root.appendingPathComponent("members.txt"))
+        if case .failure(let e) = extracted { return .failure(e) }
 
         // 4. Parse.
         await onProgress(.parsing)

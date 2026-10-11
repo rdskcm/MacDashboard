@@ -181,12 +181,6 @@ func runIPhoneChecks() {
           "iPhone: logCacheKey changes with size")
 
     // --- sysdiagnose import (Stage 5) ---
-    check(IPhoneData.tarArguments(archive: "/t/a.tar.gz", into: "/t/x") ==
-          ["-xzf", "/t/a.tar.gz", "-C", "/t/x",
-           "--include", "*/logs/BatteryBDC/BDC_Daily_*.csv",
-           "--include", "*/crashes_and_spins/*.ips",
-           "--include", "*/crashes_and_spins/Retired/*.ips"],
-          "iPhone: tarArguments are exact")
     let hdr = "TimeStamp,WeightedRa,Qmax0,CycleCount,NominalChargeCapacity,TimeAtHighSoc,ChargingVoltage,BHServiceFlags,BHCalibrationFlags,MaxCapacityPercent"
     let bdc = [hdr,
                "2026-07-16 09:00:00,58,5197,190,5015,ab12,4278,3,0,99",

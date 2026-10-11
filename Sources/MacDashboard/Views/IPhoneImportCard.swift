@@ -90,7 +90,12 @@ struct IPhoneImportCard: View {
             case .success(let ok):
                 Text("\(ok.name): \(L.iphoneImportSummary(ok.summary))").font(.callout).foregroundStyle(DS.ink)
             case .failure(let e):
-                Text(L.iphoneImportError(e)).font(.callout).foregroundStyle(DS.muted)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L.iphoneImportError(e)).font(.callout).foregroundStyle(DS.muted)
+                    if let detail = L.iphoneImportErrorDetail(e) {
+                        Text(detail).font(.caption).foregroundStyle(DS.muted).lineLimit(3)
+                    }
+                }
             }
         }
     }

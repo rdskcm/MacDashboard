@@ -783,6 +783,7 @@ protocol AppStrings {
     func iphoneImportProgress(_ p: ImportProgress) -> String
     func iphoneImportSummary(_ s: ImportSummary) -> String
     func iphoneImportError(_ e: ImportError) -> String
+    func iphoneImportErrorDetail(_ e: ImportError) -> String?
     var iphoneImportKeptTitle: String { get }
     func iphoneImportRevealA11y(_ name: String) -> String
     func iphoneLogsFromArchive(_ name: String) -> String
