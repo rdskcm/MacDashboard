@@ -1,12 +1,11 @@
 // Views/IPhoneModeView.swift
 // iPhone mode content (layout only, no animation): the tiles grid and, after a click, the
-// device page. Navigation is a plain @State key, not NavigationStack (D19: custom chrome).
+// device page. Navigation is a plain model key, not NavigationStack (D19: custom chrome).
 
 import SwiftUI
 
 struct IPhoneModeView: View {
     let model: IPhoneModel
-    @State private var selectedKey: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -15,11 +14,12 @@ struct IPhoneModeView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(DS.muted)
                     .lineLimit(1)
+                    .help(err)
                     .padding(.horizontal, 18)
                     .padding(.top, 8)
             }
-            if let key = selectedKey {
-                IPhoneDeviceView(model: model, deviceKey: key, onBack: { selectedKey = nil })
+            if let key = model.selectedDeviceKey {
+                IPhoneDeviceView(model: model, deviceKey: key, onBack: { model.selectedDeviceKey = nil })
             } else {
                 tiles
             }
@@ -39,7 +39,7 @@ struct IPhoneModeView: View {
                               alignment: .leading, spacing: 12) {
                         ForEach(model.sortedDevices) { record in
                             IPhoneTileView(record: record, status: model.status[record.id] ?? .remembered) {
-                                selectedKey = record.id
+                                model.selectedDeviceKey = record.id
                             }
                         }
                         ForEach(model.sortedPending, id: \.raw) { handle in
@@ -152,6 +152,7 @@ struct IPhonePendingTileView: View {
     private var statusLine: String {
         switch status {
         case .readFailed(let text): return text
+        // pendingStatus holds only .needsTrust and .readFailed (IPhoneModel.apply).
         default: return L.iphoneStatusNeedsTrust
         }
     }

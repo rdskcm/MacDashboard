@@ -37,6 +37,7 @@ enum SysdiagnoseExtractor {
     /// each listing escape (`\` + 3 octal digits, or `\` + one character: one archive byte)
     /// and every other byte becomes `?`, tar's one-byte wildcard. So no name can inject a
     /// wildcard, and the pattern matches whether tar printed a byte raw or escaped.
+    /// A `-` as the first byte also becomes `?`, so no line of the member list can read as a tar option.
     static func pattern(forListed line: String) -> String {
         let b = Array(line.utf8)
         var out: [UInt8] = []
@@ -51,7 +52,7 @@ enum SysdiagnoseExtractor {
             }
             let safe = (0x30...0x39).contains(c) || (0x41...0x5A).contains(c) || (0x61...0x7A).contains(c)
                 || c == UInt8(ascii: "/") || c == UInt8(ascii: ".") || c == UInt8(ascii: "_") || c == UInt8(ascii: "-")
-            out.append(safe ? c : UInt8(ascii: "?"))
+            out.append(safe && !(c == UInt8(ascii: "-") && i == 0) ? c : UInt8(ascii: "?"))
             i += 1
         }
         return String(decoding: out, as: UTF8.self)
@@ -61,7 +62,7 @@ enum SysdiagnoseExtractor {
     static func memberPatterns(listing: String) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
-        for line in listing.split(separator: "\n") where isWanted(String(line)) {
+        for line in listing.split(whereSeparator: { $0 == "\n" || $0 == "\r\n" || $0 == "\r" }) where isWanted(String(line)) {
             let p = pattern(forListed: String(line))
             if seen.insert(p).inserted { out.append(p) }
         }

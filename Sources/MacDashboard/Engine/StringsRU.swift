@@ -743,7 +743,6 @@ struct StringsRU: AppStrings {
     var iphoneChargeCharging: String { "Заряжается" }
     var iphoneChargeExternal: String { "Подключён к питанию" }
     var iphoneChargeBattery: String { "От батареи" }
-    var iphoneUnitVolt: String { "В" }
     var iphoneUnitMAh: String { "мА·ч" }
     var iphoneUnitWh: String { "Wh" }
     var iphoneCapacityUnitA11y: String { "Единицы ёмкости" }
@@ -781,6 +780,7 @@ struct StringsRU: AppStrings {
     func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String {
         expanded ? "Свернуть «\(category)»" : "Развернуть «\(category)»"
     }
+    var iphoneSectionReadFailed: String { "Не удалось прочитать данные с iPhone. Нажмите «Обновить», чтобы попробовать снова." }
 
     var iphoneImportTitle: String { "Импорт sysdiagnose" }
     var iphoneImportButton: String { "Импортировать" }
@@ -832,7 +832,7 @@ struct StringsRU: AppStrings {
     }
     var iphoneImportKeptTitle: String { "Сохранённые архивы" }
     func iphoneImportRevealA11y(_ name: String) -> String { "Показать архив \(name) в Finder" }
-    func iphoneLogsFromArchive(_ name: String) -> String { "Из sysdiagnose \(name)" }
+    func iphoneLogsFromArchive(_ name: String) -> String { "Из архива \(name)" }
     var iphoneIdentityTitle: String { "Устройство и детали" }
     var iphoneIdentityConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать данные устройства." }
     var iphoneIdentityRefreshA11y: String { "Обновить данные устройства" }

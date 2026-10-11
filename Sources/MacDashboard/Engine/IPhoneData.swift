@@ -12,7 +12,6 @@
 import CryptoKit
 import Foundation
 
-/// Crash-log categories in DISPLAY order (real app crashes first).
 /// Identity and parts fields, in display order (non-secret first, then the masked ones).
 enum IdentityLabel: String, CaseIterable {
     case marketingName, modelNumber, regulatoryModel, hardwareModel, ios, storage, colorCode
@@ -37,6 +36,7 @@ struct IPhoneIdentityField: Equatable, Identifiable {
     let isSecret: Bool
 }
 
+/// Crash-log categories in DISPLAY order (real app crashes first).
 enum LogCategory: String, CaseIterable {
     case appCrash, exceptionFault, jetsam, diskWrites, cpuResource, stackshot
     case otherReport, analytics, other
@@ -239,6 +239,21 @@ enum IPhoneData {
 
     // MARK: - Battery history
 
+    /// Battery-history day id: "yyyy-MM-dd" in the Mac's time zone, `en_US_POSIX` (D7 one
+    /// point per day). The live read writes it; the views parse it back for display.
+    private static let historyDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    static func historyDay(_ date: Date) -> String { historyDayFormatter.string(from: date) }
+
+    /// nil for anything that is not a valid "yyyy-MM-dd" day.
+    static func historyDate(_ day: String) -> Date? { historyDayFormatter.date(from: day) }
+
     /// D7: one point per day; a live read replaces any point of its day (live wins over an
     /// import, a later live read replaces an earlier one). Sorted by day.
     static func upsertLive(_ points: [BatteryPoint], _ p: BatteryPoint) -> [BatteryPoint] {
@@ -320,6 +335,20 @@ enum IPhoneData {
                 case (nil, nil): return a.path < b.path
                 }
             }
+    }
+
+    /// Name prefix of the per-import temp root (`SysdiagnoseImporter.run`).
+    static let importTempPrefix = "MacDashboard-sysdiag-"
+
+    /// Removes every item directly in `dir` whose name starts with `importTempPrefix`: temp
+    /// roots left by an import the app quit in the middle of. Called once when iPhone mode
+    /// starts, before any import can run. Touches nothing else.
+    static func removeStaleImportRoots(in dir: URL) {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: dir.path) else { return }
+        for name in names where name.hasPrefix(importTempPrefix) {
+            try? fm.removeItem(at: dir.appendingPathComponent(name))
+        }
     }
 
     // MARK: - diagnostics_relay requests
