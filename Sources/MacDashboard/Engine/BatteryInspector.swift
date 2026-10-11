@@ -58,11 +58,11 @@ struct BatteryDetail: Equatable {
     var timeToEmptyMin: Int?                   // AvgTimeToEmpty, nil if absent or 65535
     var timeToFullMin: Int?                    // AvgTimeToFull, nil if absent or 65535
     var currentCapacityMAh: Int?               // AppleRawCurrentCapacity
-    var maxCapacityMAh: Int?                   // AppleRawMaxCapacity
-    var designCapacityMAh: Int?                // DesignCapacity
+    var maxCapacityMAh: Int?                   // AppleRawMaxCapacity; iOS 27: BatteryData.FullChargeCapacity
+    var designCapacityMAh: Int?                // DesignCapacity (top level, Pack child, or iOS 27 BatteryData)
     var cycleCount: Int?
     var designCycleCount: Int?                 // DesignCycleCount9C
-    var healthPercent: Int?                    // computed: round(maxCapacityMAh/designCapacityMAh*100)
+    var healthPercent: Int?                    // computed: round(maxCapacityMAh/designCapacityMAh*100); iOS 27 without FullChargeCapacity: BatteryData.NominalChargeCapacity
     var adapter: BatteryAdapterInfo?           // nil unless AdapterDetails contains "Watts"
     var charger: BatteryChargerInfo?           // nil if ChargerData dict absent
     var lifetime: BatteryLifetimeInfo?         // nil if LifetimeData dict absent
@@ -118,10 +118,17 @@ enum BatteryInspector {
         let cellVoltagesMV = (batteryData?["CellVoltage"] as? [Int]) ?? bankCellVoltages(pack)
 
         let maxCapacityMAh = (dict["AppleRawMaxCapacity"] as? Int) ?? (packData?["AppleRawMaxCapacity"] as? Int)
+            ?? (batteryData?["FullChargeCapacity"] as? Int)
         let designCapacityMAh = (dict["DesignCapacity"] as? Int) ?? (packData?["DesignCapacity"] as? Int)
+            ?? (batteryData?["DesignCapacity"] as? Int)
+        // iOS 27 diagnostics_relay reply: no AppleRawMaxCapacity and no children; the capacities
+        // sit in the top-level BatteryData. FullChargeCapacity is the raw max capacity there (same
+        // value as the Pack's AppleRawMaxCapacity on macOS 27); NominalChargeCapacity is the health
+        // basis only when FullChargeCapacity is absent. Mac and pre-27 iPhone results are unchanged.
+        let healthBasisMAh = maxCapacityMAh ?? (batteryData?["NominalChargeCapacity"] as? Int)
         let healthPercent: Int?
-        if let maxCap = maxCapacityMAh, let designCap = designCapacityMAh, designCap != 0 {
-            healthPercent = Int((Double(maxCap) / Double(designCap) * 100).rounded())
+        if let basis = healthBasisMAh, let designCap = designCapacityMAh, designCap != 0 {
+            healthPercent = Int((Double(basis) / Double(designCap) * 100).rounded())
         } else {
             healthPercent = nil
         }

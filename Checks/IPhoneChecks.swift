@@ -122,6 +122,44 @@ func runIPhoneChecks() {
     check(b.externalConnected && !b.isCharging && b.maxCapacityMAh == 4933 && b.designCapacityMAh == 5030,
           "iPhone: parse(dict:) power state and capacities")
 
+    // iOS 26.x shape: top-level AppleRawMaxCapacity wins even when BatteryData carries
+    // NominalChargeCapacity (Nominal would give 97; Apple's Settings shows 98).
+    let shape26: [String: Any] = ["CycleCount": 269, "CurrentCapacity": 79, "AppleRawMaxCapacity": 4915,
+                                  "DesignCapacity": 5030,
+                                  "BatteryData": ["DesignCapacity": 5030, "NominalChargeCapacity": 4865] as [String: Any]]
+    let b26 = BatteryInspector.parse(dict: shape26)
+    check(b26.healthPercent == 98 && b26.maxCapacityMAh == 4915 && b26.designCapacityMAh == 5030,
+          "iPhone: parse(dict:) 26.x shape keeps the AppleRawMaxCapacity basis (got \(String(describing: b26.healthPercent)))")
+
+    // iOS 27.0 shape: no top-level capacities, no children; capacities in BatteryData.
+    let shape27: [String: Any] = ["CycleCount": 666, "CurrentCapacity": 86, "MaxCapacity": 100,
+                                  "BatteryData": ["DesignCapacity": 4395, "FullChargeCapacity": 3771,
+                                                  "NominalChargeCapacity": 3732, "AbsoluteCapacity": 3282,
+                                                  "RemainingCapacity": 3222, "CurrentCapacity": 86,
+                                                  "MaxCapacity": 100] as [String: Any]]
+    let b27 = BatteryInspector.parse(dict: shape27)
+    check(b27.healthPercent == 86 && b27.maxCapacityMAh == 3771,
+          "iPhone: parse(dict:) iOS 27 health 86% from FullChargeCapacity 3771/4395 (got \(String(describing: b27.healthPercent)))")
+    check(b27.designCapacityMAh == 4395 && b27.cycleCount == 666 && b27.percent == 86,
+          "iPhone: parse(dict:) iOS 27 design capacity, cycles, charge")
+    check(b27.currentCapacityMAh == nil,
+          "iPhone: parse(dict:) iOS 27 RemainingCapacity is not mapped")
+
+    // iOS 27.0 without FullChargeCapacity: health falls back to NominalChargeCapacity.
+    let b27nominal = BatteryInspector.parse(dict: ["BatteryData": ["DesignCapacity": 4395, "NominalChargeCapacity": 3732] as [String: Any]])
+    check(b27nominal.healthPercent == 85 && b27nominal.maxCapacityMAh == nil,
+          "iPhone: parse(dict:) iOS 27 without FullChargeCapacity -> Nominal basis 85%")
+
+    // Nothing to compute from: no crash, nil health and capacities.
+    let none = [BatteryInspector.parse(dict: [:]),
+                BatteryInspector.parse(dict: ["CycleCount": 5, "BatteryData": "x"]),
+                BatteryInspector.parse(dict: ["BatteryData": ["NominalChargeCapacity": 3732, "DesignCapacity": 0] as [String: Any]]),
+                BatteryInspector.parse(dict: ["BatteryData": ["NominalChargeCapacity": 3732] as [String: Any]])]
+    check(none.allSatisfy { $0.healthPercent == nil && $0.maxCapacityMAh == nil },
+          "iPhone: parse(dict:) without usable capacities -> nil health, no crash")
+    check(none[0].designCapacityMAh == nil && none[0].cycleCount == nil && none[1].cycleCount == 5,
+          "iPhone: parse(dict:) empty dict -> nil fields; non-dict BatteryData ignored")
+
     // --- IPhoneStore (temp dir only) ---
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("iphone-checks-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: tmp) }
