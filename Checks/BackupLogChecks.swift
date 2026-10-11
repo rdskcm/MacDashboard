@@ -38,6 +38,29 @@ func runBackupLogChecks() {
         check(BackupLog.latestSuccess(in: n, timeZone: utc) == nil, "BackupLog: negative line -> nil (\(n))")
     }
 
+    // 2b. BACKUP-LOG-TIDY: the cached formatters follow the zone passed on each call,
+    // sequentially and concurrently. Asia/Tokyo = UTC+9 with no DST.
+    let tokyo = TimeZone(identifier: "Asia/Tokyo")!
+    let okLine = "2026-10-09 18:44:14  OK\n"
+    let stampLine = "    Snapshot done: /x/ClaudeProjectBackups/2026-10-09_184340\n"
+    let okUTC = utcDate("2026-10-09 18:44:14"), okTokyo = utcDate("2026-10-09 09:44:14")
+    check(BackupLog.latestSuccess(in: okLine, timeZone: utc) == okUTC
+          && BackupLog.latestSuccess(in: okLine, timeZone: tokyo) == okTokyo
+          && BackupLog.latestSuccess(in: okLine, timeZone: utc) == okUTC,
+          "BackupLog: OK line UTC -> Tokyo -> UTC each parsed in its own zone")
+    check(BackupLog.latestSuccess(in: stampLine, timeZone: tokyo) == utcDate("2026-10-09 09:43:40")
+          && BackupLog.latestSuccess(in: stampLine, timeZone: utc) == utcDate("2026-10-09 18:43:40"),
+          "BackupLog: Snapshot stamp Tokyo -> UTC each parsed in its own zone")
+    let badLock = NSLock()
+    var bad = 0
+    DispatchQueue.concurrentPerform(iterations: 400) { i in
+        let even = i.isMultiple(of: 2)
+        if BackupLog.latestSuccess(in: okLine, timeZone: even ? utc : tokyo) != (even ? okUTC : okTokyo) {
+            badLock.lock(); bad += 1; badLock.unlock()
+        }
+    }
+    check(bad == 0, "BackupLog: 400 concurrent calls alternating UTC/Tokyo all correct (bad \(bad))")
+
     // 3-5. File-based checks in a temp dir.
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
