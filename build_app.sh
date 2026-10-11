@@ -254,9 +254,17 @@ if [ "$INSTALL" = "1" ]; then
     exit 1
   fi
   if ! mv "$NEW_APP" "$INSTALLED_APP"; then
-    if [ -d "$OLD_APP" ]; then mv "$OLD_APP" "$INSTALLED_APP" || true; fi
-    mv "$NEW_APP" "$DIST" 2>/dev/null || true
-    echo "!! could not move the new build to $INSTALLED_APP — the previous install was put back" >&2
+    PREVIOUS=none
+    if [ -e "$OLD_APP" ]; then
+      if mv "$OLD_APP" "$INSTALLED_APP"; then PREVIOUS=restored; else PREVIOUS=stranded; fi
+    fi
+    NEW_BUILD_AT="$NEW_APP"
+    if mv "$NEW_APP" "$DIST" 2>/dev/null; then NEW_BUILD_AT="$DIST"; fi
+    case "$PREVIOUS" in
+      restored) echo "!! could not move the new build to $INSTALLED_APP — the previous install was put back; the new build is at $NEW_BUILD_AT" >&2 ;;
+      none) echo "!! could not move the new build to $INSTALLED_APP — there was no previous install, so $INSTALLED_APP does not exist; the new build is at $NEW_BUILD_AT" >&2 ;;
+      stranded) echo "!! could not move the new build to $INSTALLED_APP, and the previous install could not be put back: it is still at $OLD_APP and $INSTALLED_APP does not exist — move it back by hand. The new build is at $NEW_BUILD_AT" >&2 ;;
+    esac
     exit 1
   fi
   rm -rf "$OLD_APP"
