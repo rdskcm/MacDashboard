@@ -736,7 +736,6 @@ struct StringsEN: AppStrings {
     var iphoneChargeCharging: String { "Charging" }
     var iphoneChargeExternal: String { "Plugged in" }
     var iphoneChargeBattery: String { "On battery" }
-    var iphoneUnitVolt: String { "V" }
     var iphoneUnitMAh: String { "mAh" }
     var iphoneUnitWh: String { "Wh" }
     var iphoneCapacityUnitA11y: String { "Capacity units" }
@@ -774,6 +773,7 @@ struct StringsEN: AppStrings {
     func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String {
         expanded ? "Hide \(category)" : "Show \(category)"
     }
+    var iphoneSectionReadFailed: String { "Could not read from the iPhone. Press Refresh to try again." }
 
     var iphoneImportTitle: String { "Sysdiagnose import" }
     var iphoneImportButton: String { "Import" }
@@ -825,7 +825,7 @@ struct StringsEN: AppStrings {
     }
     var iphoneImportKeptTitle: String { "Kept archives" }
     func iphoneImportRevealA11y(_ name: String) -> String { "Show archive \(name) in Finder" }
-    func iphoneLogsFromArchive(_ name: String) -> String { "From sysdiagnose \(name)" }
+    func iphoneLogsFromArchive(_ name: String) -> String { "From archive \(name)" }
     var iphoneIdentityTitle: String { "Device and parts" }
     var iphoneIdentityConnectToRead: String { "Connect the iPhone by cable to read its device details." }
     var iphoneIdentityRefreshA11y: String { "Refresh the device details" }

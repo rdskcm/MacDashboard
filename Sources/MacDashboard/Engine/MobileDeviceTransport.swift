@@ -223,6 +223,7 @@ final class MobileDeviceTransport {
     func start(onEvent: @escaping @MainActor (IPhoneTransportEvent) -> Void) {
         onThread { [self] in
             guard !started, let s = syms else { return }
+            // Stays true even when subscribe fails: restartDiscovery («Искать снова») is the retry and needs it.
             started = true
             eventHandler = onEvent
             notification = subscribe(s)
@@ -271,6 +272,7 @@ final class MobileDeviceTransport {
             emit(.detached(handle))
             Unmanaged<CFTypeRef>.fromOpaque(UnsafeRawPointer(known)).release()
         default:
+            // Only 1 (attached) and 2 (detached) change the device set; any other message is ignored on purpose.
             break
         }
     }
@@ -528,7 +530,7 @@ final class MobileDeviceTransport {
     /// Lists the crash-log tree in one session and classifies each regular file by the
     /// `bug_type` of its header. `knownHeaders` maps "<path>|<size>|<mtime>" to a bug_type
     /// ("" = none); only files missing from it have their header read. Returns the entries
-    /// and the updated cache (entries not seen this time are dropped from it).
+    /// and the updated cache (entries not seen this time, and files whose header read failed, are dropped from it).
     func listLogs(_ h: IPhoneHandle, knownHeaders: [String: String],
                   completion: @escaping @MainActor (Result<([IPhoneLogEntry], [String: String]), IPhoneReadError>) -> Void) {
         let queued = onThread { [self] in
@@ -538,7 +540,7 @@ final class MobileDeviceTransport {
                     var cache: [String: String] = [:]
                     for f in afc.list() where !f.isDirectory {
                         let k = IPhoneData.logCacheKey(path: f.path, size: f.size, modified: f.modified)
-                        let bug: String
+                        let bug: String?
                         if let known = knownHeaders[k] {
                             bug = known
                         } else {
@@ -546,10 +548,11 @@ final class MobileDeviceTransport {
                             if let d = head, f.size > 4096, !d.contains(0x0A) {
                                 head = afc.readPrefix(path: f.path, limit: 65536)
                             }
-                            bug = head.flatMap { IPhoneData.bugType(fromHeader: $0) } ?? ""
+                            // nil = the read failed: not cached, so the next listing reads it again.
+                            bug = head.map { IPhoneData.bugType(fromHeader: $0) ?? "" }
                         }
-                        cache[k] = bug
-                        let bugType = bug.isEmpty ? nil : bug
+                        if let bug { cache[k] = bug }
+                        let bugType = (bug?.isEmpty ?? true) ? nil : bug
                         entries.append(IPhoneLogEntry(path: f.path, size: f.size, modified: f.modified,
                                                       bugType: bugType,
                                                       category: IPhoneData.category(bugType: bugType),

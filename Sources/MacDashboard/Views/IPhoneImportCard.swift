@@ -133,7 +133,6 @@ struct IPhoneImportCard: View {
         panel.allowedContentTypes = [.gzip]
         panel.prompt = L.iphoneImportPickPrompt
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard url.lastPathComponent.hasSuffix(".tar.gz") else { return }
         pending = Pending(name: url.lastPathComponent, source: .mac(url))
     }
 

@@ -238,6 +238,27 @@ func runIPhoneChecks() {
     check(IPhoneData.identityFields(lockdown: ["DeviceColor": "7"], diskUsage: nil, battery: nil, panel: nil,
                                     product: nil, camera: nil).map(\.value) == ["7"], "iPhone: identity colour falls back to DeviceColor")
 
+    // --- history day helpers (IPHONE-REVIEW-LEFTOVERS) ---
+    let dayNoon = Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 7, hour: 12))!
+    check(IPhoneData.historyDay(dayNoon) == "2026-03-07", "iPhone: historyDay is yyyy-MM-dd local")
+    check(IPhoneData.historyDate("2026-03-07").map(IPhoneData.historyDay) == "2026-03-07", "iPhone: historyDate round-trips")
+    check(IPhoneData.historyDate("2026-13-40") == nil && IPhoneData.historyDate("x") == nil, "iPhone: historyDate rejects invalid days")
+
+    // --- stale import temp roots (scratch dir only, never the real temp root) ---
+    let sweepDir = FileManager.default.temporaryDirectory.appendingPathComponent("MacDashboardChecks-sweep-\(UUID().uuidString)")
+    try? FileManager.default.createDirectory(at: sweepDir.appendingPathComponent(IPhoneData.importTempPrefix + "A/x"), withIntermediateDirectories: true)
+    try? Data("x".utf8).write(to: sweepDir.appendingPathComponent(IPhoneData.importTempPrefix + "B"))
+    try? FileManager.default.createDirectory(at: sweepDir.appendingPathComponent("MacDashboardChecks-sysdiag-keep"), withIntermediateDirectories: true)
+    try? Data("x".utf8).write(to: sweepDir.appendingPathComponent("other.txt"))
+    IPhoneData.removeStaleImportRoots(in: sweepDir)
+    let left = Set((try? FileManager.default.contentsOfDirectory(atPath: sweepDir.path)) ?? [])
+    check(left == ["MacDashboardChecks-sysdiag-keep", "other.txt"], "iPhone: removeStaleImportRoots removes only the import prefix (\(left))")
+    try? FileManager.default.removeItem(at: sweepDir)
+
+    // --- archive group header (user report IPHONE-IMPORT-IOS27 #3) ---
+    check(StringsRU().iphoneLogsFromArchive("sysdiagnose_x.tar.gz") == "Из архива sysdiagnose_x.tar.gz", "iPhone: RU archive header has no doubled word")
+    check(StringsEN().iphoneLogsFromArchive("sysdiagnose_x.tar.gz") == "From archive sysdiagnose_x.tar.gz", "iPhone: EN archive header has no doubled word")
+
     check(IPhoneData.usbmuxdRestartCommand == "/usr/bin/killall usbmuxd", "iPhone: usbmuxd restart command exact")
     check(PrivilegedRunner.sudoInvocation(IPhoneData.usbmuxdRestartCommand).args
           == ["/bin/sh", "-c", "/usr/bin/killall usbmuxd"], "iPhone: usbmuxd restart sudo invocation args")

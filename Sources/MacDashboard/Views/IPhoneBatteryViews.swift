@@ -17,8 +17,8 @@ struct IPhoneBatteryCard: View {
                     row(L.iphoneBatCycles, b.cycleCount.map { "\($0)" })
                     row(L.iphoneBatCharge, b.percent.map { "\($0) %" })
                     row(L.iphoneBatState, state(b))
-                    row(L.iphoneBatTemperature, b.temperatureC.map { String(format: "%.1f °C", $0) })
-                    row(L.iphoneBatVoltage, b.voltageMV.map { String(format: "%.2f %@", Double($0) / 1000, L.iphoneUnitVolt) })
+                    row(L.iphoneBatTemperature, b.temperatureC.map { L.batteryCelsius(fmtNum($0, decimals: 1)) })
+                    row(L.iphoneBatVoltage, b.voltageMV.map { L.batteryVolts(fmtNum(Double($0) / 1000, decimals: 2)) })
                     row(L.iphoneBatCapacity, capacity(b), help: unit == "Wh" ? L.iphoneWhSourceHelp : nil)
                 }
             } else if snapshot != nil {
@@ -39,7 +39,7 @@ struct IPhoneBatteryCard: View {
     }
 
     private var caption: String? {
-        guard snapshot == nil, let p = lastPoint, let d = IPhoneBatteryFormat.date(p.day) else { return nil }
+        guard snapshot == nil, let p = lastPoint, let d = IPhoneData.historyDate(p.day) else { return nil }
         return L.iphoneBatteryFromHistory(fmtDisplayDay(d))
     }
 
@@ -47,8 +47,8 @@ struct IPhoneBatteryCard: View {
         b.isCharging ? L.iphoneChargeCharging : (b.externalConnected ? L.iphoneChargeExternal : L.iphoneChargeBattery)
     }
 
-    /// mAh | Wh switch (its accessibility name is the control's `groupLabel`; an outer
-    /// `.accessibilityLabel` would replace the segment names); sits in the header slot, outside any branch on the unit or the snapshot.
+    /// mAh | Wh switch, in the header slot outside any branch on the unit or the snapshot.
+    /// Its accessibility name is the control's `groupLabel` (an outer label would hide the segment names).
     private var unitSwitch: some View {
         DSSlidingSegmented(options: ["mAh", "Wh"], selection: $unit, groupLabel: L.iphoneCapacityUnitA11y) { u in
             u == "Wh" ? L.iphoneUnitWh : L.iphoneUnitMAh
@@ -79,27 +79,14 @@ struct IPhoneBatteryCard: View {
     private func row(_ label: String, _ value: String?, help: String? = nil) -> some View {
         GridRow {
             Text(label).font(.system(size: 12.5)).foregroundStyle(DS.muted)
-            Text(value ?? "—").font(.system(size: 12.5, weight: .semibold)).monospacedDigit()
-                .help(help ?? "")
+            let value = Text(value ?? "—").font(.system(size: 12.5, weight: .semibold)).monospacedDigit()
+            if let help { value.help(help) } else { value }
         }
     }
 
     private func text(_ s: String) -> some View {
         Text(s).font(.callout).foregroundStyle(DS.muted)
     }
-}
-
-enum IPhoneBatteryFormat {
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    /// Parses a stored "yyyy-MM-dd" history day.
-    static func date(_ day: String) -> Date? { dayFormatter.date(from: day) }
 }
 
 struct IPhoneBatteryHistoryCard: View {
@@ -115,7 +102,7 @@ struct IPhoneBatteryHistoryCard: View {
 
     private var chartPoints: [ChartPoint] {
         sorted.compactMap { p in
-            guard let h = p.healthPercent, let d = IPhoneBatteryFormat.date(p.day) else { return nil }
+            guard let h = p.healthPercent, let d = IPhoneData.historyDate(p.day) else { return nil }
             return ChartPoint(id: p.day, date: d, health: h)
         }
     }
@@ -150,7 +137,7 @@ struct IPhoneBatteryHistoryCard: View {
         SimpleTable(
             headers: [L.iphoneHistoryColDate, L.iphoneHistoryColHealth, L.iphoneHistoryColCycles, L.iphoneHistoryColSource],
             rows: sorted.reversed().map { p in
-                [IPhoneBatteryFormat.date(p.day).map(fmtDisplayDay) ?? p.day,
+                [IPhoneData.historyDate(p.day).map(fmtDisplayDay) ?? p.day,
                  p.healthPercent.map { "\($0) %" } ?? "—",
                  p.cycles.map { "\($0)" } ?? "—",
                  p.source == "live" ? L.iphoneHistorySourceLive : L.iphoneHistorySourceImport]

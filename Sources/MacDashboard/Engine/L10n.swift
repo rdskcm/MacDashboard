@@ -741,7 +741,6 @@ protocol AppStrings {
     var iphoneChargeCharging: String { get }
     var iphoneChargeExternal: String { get }
     var iphoneChargeBattery: String { get }
-    var iphoneUnitVolt: String { get }
     var iphoneUnitMAh: String { get }
     var iphoneUnitWh: String { get }
     var iphoneCapacityUnitA11y: String { get }
@@ -765,6 +764,7 @@ protocol AppStrings {
     func iphoneLogsCaption(_ n: Int) -> String
     func iphoneLogsCategory(_ c: LogCategory) -> String
     func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String
+    var iphoneSectionReadFailed: String { get }
 
     var iphoneImportTitle: String { get }
     var iphoneImportButton: String { get }

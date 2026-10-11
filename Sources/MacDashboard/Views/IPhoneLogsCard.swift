@@ -42,6 +42,8 @@ struct IPhoneLogsCard: View {
                 SectionStateView(done: false)
             } else if !isConnected {
                 Text(L.iphoneLogsConnectToRead).font(.callout).foregroundStyle(DS.muted)
+            } else if model.logsFailed.contains(deviceKey) {
+                Text(L.iphoneSectionReadFailed).font(.callout).foregroundStyle(DS.muted)
             } else {
                 SectionStateView(done: false)
             }

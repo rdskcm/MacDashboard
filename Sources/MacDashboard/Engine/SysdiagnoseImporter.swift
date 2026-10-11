@@ -29,12 +29,13 @@ struct SysdiagnoseImporter {
         self.transport = transport
     }
 
+    /// A keep failure fails the whole import: nothing is merged, so a retry starts clean.
     func run(source: Source, deviceKey: String, keep: Bool,
              keepRoot: URL = IPhoneStore.defaultURL().deletingLastPathComponent(),
              onProgress: @escaping @MainActor (ImportProgress) -> Void) async -> Result<ImportOutput, ImportError> {
         let fm = FileManager.default
-        // 1. Fresh temp root, removed on every exit (success, failure, cancel).
-        let root = fm.temporaryDirectory.appendingPathComponent("MacDashboard-sysdiag-\(UUID().uuidString)", isDirectory: true)
+        // 1. Fresh temp root, removed on every exit (success or failure); a root left by an app quit is removed at the next iPhone-mode start.
+        let root = fm.temporaryDirectory.appendingPathComponent(IPhoneData.importTempPrefix + UUID().uuidString, isDirectory: true)
         do {
             try fm.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         } catch {
@@ -66,7 +67,6 @@ struct SysdiagnoseImporter {
             archiveURL = url
             isPhoneCopy = false
         }
-        if Task.isCancelled { return .failure(.cancelled) }
 
         // 3. Extract only the needed members (SysdiagnoseExtractor: list, select, extract).
         await onProgress(.extracting)
@@ -148,6 +148,7 @@ struct SysdiagnoseImporter {
     /// Moves (phone copy) or copies (Mac file) the archive to
     /// `<keepRoot>/iphones/<deviceKey>/sysdiagnose/<name>`; dirs 0700, file 0600; on a name
     /// clash " (2)", " (3)"… is inserted before `.tar.gz`; never overwrites.
+    /// `keepRoot` must exist; the default (App Support/MacDashboard) is created by `IPhoneStore.defaultURL()`.
     static func keepArchive(from src: URL, move: Bool, deviceKey: String, keepRoot: URL) -> URL? {
         let fm = FileManager.default
         var dir = keepRoot

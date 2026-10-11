@@ -31,9 +31,12 @@ final class IPhoneModel {
     var transportAvailable = true
     /// Crash-log listing per device (memory only).
     var logs: [String: [IPhoneLogEntry]] = [:]
-    /// "<path>|<size>|<mtime>" → bug_type ("" = none). Memory only; never written to disk.
-    var headerCache: [String: String] = [:]
+    /// Per device: "<path>|<size>|<mtime>" → bug_type ("" = none), replaced by each successful
+    /// listing (files gone from the phone drop out). Memory only; never written to disk.
+    var headerCache: [String: [String: String]] = [:]
     var logsLoading: Set<String> = []
+    /// Devices whose last crash-log listing failed; cleared by a successful listing or detach.
+    var logsFailed: Set<String> = []
     /// Sysdiagnose import (Stage 5). Archive entries are memory only; the latest import of
     /// a device replaces the previous list.
     var archiveLogs: [String: [IPhoneLogEntry]] = [:]
@@ -44,10 +47,14 @@ final class IPhoneModel {
     /// Identity and parts per connected device. Memory only (R13, D10); cleared on detach.
     var identity: [String: [IPhoneIdentityField]] = [:]
     var identityLoading: Set<String> = []
+    /// Devices whose last identity read failed; cleared by a successful read or detach.
+    var identityFailed: Set<String> = []
 
     /// «Найти iPhone» → restart of the connection service (Stage 7).
     var restartingService = false
     var restartError: String?
+    /// The open device page (nil = tiles). Memory only; survives a Mac↔iPhone switch.
+    var selectedDeviceKey: String?
 
     private let store: IPhoneStore
     private let transport: MobileDeviceTransport
@@ -65,6 +72,8 @@ final class IPhoneModel {
     func start() {
         guard !started else { return }
         started = true
+        // Before any import can start (D7).
+        IPhoneData.removeStaleImportRoots(in: FileManager.default.temporaryDirectory)
         devices = store.load()
         for d in devices { status[d.id] = .remembered }
         transportAvailable = transport.isAvailable
@@ -90,6 +99,7 @@ final class IPhoneModel {
         switch event {
         case .attached(let h):
             attached.insert(h)
+            restartError = nil
             refresh(handle: h)
         case .detached(let h):
             attached.remove(h)
@@ -99,6 +109,10 @@ final class IPhoneModel {
                 connected[key] = nil
                 status[key] = .remembered
                 identity[key] = nil
+                identityFailed.remove(key)
+                lastSnapshot[key] = nil
+                logs[key] = nil
+                logsFailed.remove(key)
             }
         }
     }
@@ -123,13 +137,19 @@ final class IPhoneModel {
     func loadLogs(deviceKey: String) {
         guard let h = connected[deviceKey], !logsLoading.contains(deviceKey) else { return }
         logsLoading.insert(deviceKey)
-        transport.listLogs(h, knownHeaders: headerCache) { [weak self] result in
+        transport.listLogs(h, knownHeaders: headerCache[deviceKey] ?? [:]) { [weak self] result in
             guard let self else { return }
             logsLoading.remove(deviceKey)
             // A listing that lands after its phone detached is dropped (the detach wins).
-            guard attached.contains(h), case .success(let (entries, cache)) = result else { return }
-            logs[deviceKey] = entries
-            headerCache = headerCache.merging(cache) { _, new in new }
+            guard attached.contains(h) else { return }
+            switch result {
+            case .success(let (entries, cache)):
+                logs[deviceKey] = entries
+                headerCache[deviceKey] = cache
+                logsFailed.remove(deviceKey)
+            case .failure:
+                logsFailed.insert(deviceKey)
+            }
         }
     }
 
@@ -142,8 +162,14 @@ final class IPhoneModel {
             guard let self else { return }
             identityLoading.remove(deviceKey)
             // A read that lands after its phone detached is dropped (the detach wins).
-            guard attached.contains(h), case .success(let fields) = result else { return }
-            identity[deviceKey] = fields
+            guard attached.contains(h) else { return }
+            switch result {
+            case .success(let fields):
+                identity[deviceKey] = fields
+                identityFailed.remove(deviceKey)
+            case .failure:
+                identityFailed.insert(deviceKey)
+            }
         }
     }
 
@@ -152,7 +178,11 @@ final class IPhoneModel {
     /// device at a time.
     func importArchive(deviceKey: String, source: SysdiagnoseImporter.Source, keep: Bool) {
         guard importing[deviceKey] == nil, devices.contains(where: { $0.id == deviceKey }) else { return }
-        importing[deviceKey] = .extracting
+        if case .phone(_, _, let size) = source {
+            importing[deviceKey] = .copying(done: 0, total: size)
+        } else {
+            importing[deviceKey] = .extracting
+        }
         importResult[deviceKey] = nil
         Task { [weak self] in
             let importer = SysdiagnoseImporter()
@@ -196,7 +226,7 @@ final class IPhoneModel {
             record.osVersion = snap.osVersion
             record.lastSeen = now
             if let b = snap.battery, b.healthPercent != nil || b.cycleCount != nil {
-                let point = BatteryPoint(day: Self.dayFormatter.string(from: now),
+                let point = BatteryPoint(day: IPhoneData.historyDay(now),
                                          cycles: b.cycleCount,
                                          healthPercent: b.healthPercent,
                                          maxCapacityMAh: b.maxCapacityMAh,
@@ -226,31 +256,25 @@ final class IPhoneModel {
         }
     }
 
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = .current
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
     // MARK: Find iPhone (Stage 7)
 
     func searchAgain() {
+        restartError = nil
         transport.restartDiscovery()
     }
 
     /// Restarts `usbmuxd` with admin rights (Touch ID, password dialog as fallback), off the
-    /// main actor; a cancelled prompt is silent. Searches again 2 s after a success.
+    /// main actor; a cancelled prompt is silent. Searches again 2 s after a success;
+    /// `restartingService` stays true until that search has started.
     @discardableResult
     func restartConnectionService() async -> PrivilegedRunner.Outcome {
         guard !restartingService else { return .cancelled }
         restartingService = true
+        defer { restartingService = false }
         restartError = nil
         let outcome = await Task.detached {
             PrivilegedRunner.run(IPhoneData.usbmuxdRestartCommand)
         }.value
-        restartingService = false
         switch outcome {
         case .success:
             try? await Task.sleep(nanoseconds: 2_000_000_000)

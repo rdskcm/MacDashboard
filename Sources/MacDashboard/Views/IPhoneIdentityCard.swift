@@ -8,7 +8,7 @@ import SwiftUI
 struct IPhoneIdentityCard: View {
     let model: IPhoneModel
     let deviceKey: String
-    /// Revealed ids reset when the user leaves the device page (the card is unmounted).
+    /// Revealed ids reset when the user leaves the device page or the phone is unplugged.
     @State private var revealed: Set<String>
     @State private var copiedID: String?
 
@@ -36,6 +36,9 @@ struct IPhoneIdentityCard: View {
         .task(id: isConnected) {
             if isConnected, model.identity[deviceKey] == nil { model.loadIdentity(deviceKey: deviceKey) }
         }
+        .onChange(of: model.identity[deviceKey] == nil) { _, cleared in
+            if cleared { revealed.removeAll() }
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -47,6 +50,8 @@ struct IPhoneIdentityCard: View {
             SectionStateView(done: false)
         } else if !isConnected {
             Text(L.iphoneIdentityConnectToRead).font(.callout).foregroundStyle(DS.muted)
+        } else if model.identityFailed.contains(deviceKey) {
+            Text(L.iphoneSectionReadFailed).font(.callout).foregroundStyle(DS.muted)
         } else {
             SectionStateView(done: false)
         }
