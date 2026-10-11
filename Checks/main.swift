@@ -25,6 +25,13 @@ setbuf(stdout, nil)
 // R3-FIXTURES: `--live` runs only the live parser canary (Checks/LiveCanary.swift) and exits.
 if CommandLine.arguments.contains("--live") { exit(runLiveCanary()) }
 
+// IPHONE-IMPORT-IOS27: `--sysdiagnose <archive>` runs the app's extractor on a real archive into
+// a fresh temp dir (SysdiagnoseExtractorChecks.swift), prints the counts and exits.
+if let i = CommandLine.arguments.firstIndex(of: "--sysdiagnose") {
+    guard i + 1 < CommandLine.arguments.count else { print("usage: --sysdiagnose <archive.tar.gz>"); exit(2) }
+    exit(runSysdiagnoseProbe(CommandLine.arguments[i + 1]))
+}
+
 var failures = 0
 var total = 0
 
@@ -2127,6 +2134,7 @@ runHistoryStoreChecks()
 // =====================================================================
 
 runIPhoneChecks()
+runSysdiagnoseExtractorChecks()
 
 // =====================================================================
 // MARK: - AttentionModel

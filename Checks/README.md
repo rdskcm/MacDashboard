@@ -15,7 +15,7 @@ Every other file in this directory (`Models.swift`, `AppInfo.swift`, `AttentionM
 `LaunchdPlistInspector.swift`, `Formatting.swift`, `BarHitTest.swift`, `BatteryInspector.swift`,
 `Advice.swift`, `HistorySeries.swift`, `AIRedaction.swift`, `AIPayload.swift`,
 `AIRequest.swift`, `DirectoryAccess.swift`, `AppleScriptResult.swift`, `PrivilegedRunner.swift`, `BrewUpgrader.swift`,
-`ParsedCommands.swift`, `WakeHolders.swift`, `BackupLog.swift`, `VisualFixture.swift`, `IPhoneData.swift`) is a **symlink** back into
+`ParsedCommands.swift`, `WakeHolders.swift`, `BackupLog.swift`, `VisualFixture.swift`, `IPhoneData.swift`, `SysdiagnoseExtractor.swift`) is a **symlink** back into
 `../Sources/MacDashboard/...`. SwiftPM compiles whatever source files it finds under a
 target's `path`, following symlinks, so this target builds and tests the exact same pure
 engine source files the app itself ships — no copy-paste drift, no separate module to
@@ -31,7 +31,7 @@ script that copies the files in before each build instead of restructuring `Sour
 `AIRedactionChecks.swift`, `AIPayloadRequestChecks.swift`, `SudoPathSafetyChecks.swift`,
 `CommandRunnerExitChecks.swift`, `CommandRunnerCoreChecks.swift`, `ParserFixtureChecks.swift`,
 `ReportWriterChecks.swift`, `PrivilegedRunnerChecks.swift`, `BrewUpgraderChecks.swift`,
-`HistoryStoreChecks.swift`, `IPhoneChecks.swift`, `WakeHoldersChecks.swift`, `BackupLogChecks.swift`, `VisualFixtureChecks.swift`, `FolderSizesChecks.swift`, and `LiveCanary.swift`
+`HistoryStoreChecks.swift`, `IPhoneChecks.swift`, `WakeHoldersChecks.swift`, `BackupLogChecks.swift`, `VisualFixtureChecks.swift`, `FolderSizesChecks.swift`, `SysdiagnoseExtractorChecks.swift`, and `LiveCanary.swift`
 are real (non-symlinked) files, like `main.swift`.
 Swift executable targets only permit ONE file with top-level (script-mode) statements —
 `main.swift` owns that slot — so additional check files must instead define a plain
@@ -45,6 +45,7 @@ that tree via `#filePath` and checks every fixture against the shared registry i
 `ParsedCommands.swift`. `swift run MacDashboardChecks --live` runs only the live parser
 canary (`LiveCanary.swift`): it runs every registry command for real and exits 1 iff a
 real command's output was rejected by its parser.
+`swift run MacDashboardChecks --sysdiagnose <archive.tar.gz>` runs the import's extractor on a real archive in a fresh temp dir and prints what it selected.
 
 **swift-testing sample target.** `Tests/MacDashboardTests/` is a `.testTarget`
 (`MacDashboardTests`) run with `swift test` — locally (needs Xcode) and in CI

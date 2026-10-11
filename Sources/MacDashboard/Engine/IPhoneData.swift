@@ -102,9 +102,21 @@ struct ImportSummary: Equatable {
 enum ImportError: Error, Equatable {
     case copyFailed
     case sizeMismatch
-    case tarFailed
+    case tarFailed(ExtractFailure)
     case keepFailed
     case cancelled
+}
+
+/// Why extracting a sysdiagnose archive failed (IPHONE-IMPORT-IOS27). The import card shows
+/// it as a second muted line; `AppStrings.iphoneImportErrorDetail` formats it.
+enum ExtractFailure: Equatable {
+    case message(String)      // first non-empty line of tar's stderr, verbatim, ≤200 chars
+    case exitCode(Int32)      // tar exited non-zero and wrote nothing to stderr
+    case signal(Int32)        // tar died by a signal and wrote nothing to stderr
+    case launchFailed(Int32)  // tar could not be started (errno)
+    case timedOut             // tar did not finish within SysdiagnoseExtractor.timeout
+    case listingTooLong       // the member listing exceeded CommandRunner.outputCap
+    case workFiles            // the extract dir or the member-list file could not be created
 }
 
 /// The only request shapes the transport can send (R10).
@@ -249,15 +261,6 @@ enum IPhoneData {
     }
 
     // MARK: - Sysdiagnose import (Stage 5)
-
-    /// Archive members the import parses (D13); nothing else is extracted.
-    static let sysdiagnoseIncludes = ["*/logs/BatteryBDC/BDC_Daily_*.csv",
-                                      "*/crashes_and_spins/*.ips",
-                                      "*/crashes_and_spins/Retired/*.ips"]
-
-    static func tarArguments(archive: String, into dir: String) -> [String] {
-        ["-xzf", archive, "-C", dir] + sysdiagnoseIncludes.flatMap { ["--include", $0] }
-    }
 
     private static func bdcTimestampFormatter() -> DateFormatter {
         let f = DateFormatter()
