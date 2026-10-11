@@ -249,8 +249,9 @@ if [ "$INSTALL" = "1" ]; then
     exit 1
   fi
   if [ -e "$INSTALLED_APP" ] && ! mv "$INSTALLED_APP" "$OLD_APP"; then
-    mv "$NEW_APP" "$DIST" 2>/dev/null || true
-    echo "!! could not move $INSTALLED_APP aside — the installed app is unchanged" >&2
+    NEW_BUILD_AT="$NEW_APP"
+    if mv "$NEW_APP" "$DIST" 2>/dev/null; then NEW_BUILD_AT="$DIST"; fi
+    echo "!! could not move $INSTALLED_APP aside — the installed app is unchanged; the new build is at $NEW_BUILD_AT" >&2
     exit 1
   fi
   if ! mv "$NEW_APP" "$INSTALLED_APP"; then
