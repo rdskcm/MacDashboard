@@ -90,7 +90,7 @@ The app is launched with `-visualFixture 1`: it shows a fixed, built-in
 dataset (`VisualFixture.swift`) instead of live data, so `main-*`,
 `main-report-*` and every `content-*` state are deterministic regardless of
 live machine state (wake holders, battery, history); the app's `defaults`
-domain is cleared for the run (snapshotted first, restored after).
+domain is cleared for the run (snapshotted first, restored after). Scroller style is pinned to overlay with the launch argument `-AppleShowScrollBars WhenScrolling` (argument domain, this process only), so a connected mouse or a "Show scroll bars" setting of Automatic/Always does not add a legacy scrollbar to `main-*`; the global setting is only read (recorded as `scrollbars:` in `build-info.txt`), never written.
 
 Also snapshotted/restored: saved application state, App Support dir,
 appearance, cursor, frontmost app. The App Support snapshot is taken with

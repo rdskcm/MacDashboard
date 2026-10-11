@@ -278,6 +278,7 @@ AUTO0="$(defaults read -g AppleInterfaceStyleSwitchesAutomatically 2>/dev/null |
 REDUCE_TRANSPARENCY="$(defaults read com.apple.universalaccess reduceTransparency 2>/dev/null || echo 0)"
 INCREASE_CONTRAST="$(defaults read com.apple.universalaccess increaseContrast 2>/dev/null || echo 0)"
 ACCENT_COLOR="$(defaults read -g AppleAccentColor 2>/dev/null || echo multicolor)"
+SCROLLBARS_GLOBAL="$(defaults read -g AppleShowScrollBars 2>/dev/null || echo unset)"
 THRESHOLDS_CONTENTS="$(cat "$ROOT/tools/visual/thresholds.txt")"
 
 {
@@ -300,6 +301,7 @@ THRESHOLDS_CONTENTS="$(cat "$ROOT/tools/visual/thresholds.txt")"
   echo "increase_contrast: $INCREASE_CONTRAST"
   echo "accent_color: $ACCENT_COLOR"
   echo "language: en (pinned via argument domain)"
+  echo "scrollbars: WhenScrolling (pinned via argument domain; global=$SCROLLBARS_GLOBAL)"
   echo "fixture: visualFixture"
   echo "app_defaults: cleared for run"
   echo "alpha_params: corner_pt=32 edge_inset_px=0"
@@ -484,7 +486,11 @@ defaults delete "$BUNDLE_ID" >/dev/null 2>&1 || true
 # ---------------------------------------------------------------------------
 # Launch
 # ---------------------------------------------------------------------------
-open -F "$APP" --args -appLanguage en -AppleLanguages "(en)" -visualFixture 1
+# Pin overlay scrollers for this process only: with a mouse connected and
+# "Show scroll bars" = Automatic/Always the main window would get a legacy
+# scrollbar and shift. The argument domain is never persisted; the global
+# setting is not touched.
+open -F "$APP" --args -appLanguage en -AppleLanguages "(en)" -AppleShowScrollBars WhenScrolling -visualFixture 1
 
 waited=0
 PID=""
