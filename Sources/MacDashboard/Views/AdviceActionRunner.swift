@@ -5,8 +5,9 @@
 import AppKit
 
 /// Serial owner of the `NSAppleScript` used by `AdviceActionRunner.emptyTrash`:
-/// ONE thread with a parked run loop, started lazily on first empty-trash and
-/// kept for the process lifetime.
+/// ONE thread with a parked run loop (`ParkedRunLoopThread`), started lazily on
+/// first empty-trash (a file-scope `let` is initialised on first access) and kept
+/// for the process lifetime.
 ///
 /// Why not the main actor (the shape this replaces): `executeAndReturnError`
 /// blocks until Finder is done — which includes Finder's own "permanently
@@ -18,52 +19,7 @@ import AppKit
 /// different thread per call.
 /// Blocks queue on this thread's run loop, so two empty-trash runs can never
 /// overlap and no lock is needed.
-private final class AppleScriptThread {
-    static let shared = AppleScriptThread()
-
-    private var runLoop: CFRunLoop?
-
-    private init() {
-        let ready = DispatchSemaphore(value: 0)
-        let thread = Thread { [self] in
-            runLoop = CFRunLoopGetCurrent()
-            ready.signal()
-            // A run loop with no input source returns immediately, so the port is
-            // what parks this thread instead of spinning it.
-            RunLoop.current.add(NSMachPort(), forMode: .default)
-            while true {
-                // `run(mode:before:)` returns false only if the mode has no input
-                // source at all. The port above guarantees one; the sleep is a
-                // backstop so a degenerate case can never become a busy loop
-                // (idle CPU is a standing constraint in this app).
-                if !RunLoop.current.run(mode: .default, before: .distantFuture) {
-                    Thread.sleep(forTimeInterval: 0.1)
-                }
-            }
-        }
-        thread.name = "com.macdashboard.applescript"
-        thread.stackSize = 512 * 1024
-        thread.start()
-        // Bounded by a thread start (no I/O): the run loop must exist before the
-        // first block can be posted to it.
-        ready.wait()
-    }
-
-    /// Runs `body` on the owning thread, asynchronously. Returns false if the run loop
-    /// is somehow missing — unreachable (the `ready.wait()` semaphore guarantees it),
-    /// but this is the only place in the trash flow that could lose a completion and
-    /// strand the capsule on a spinner for the rest of the session.
-    @discardableResult
-    func async(_ body: @escaping () -> Void) -> Bool {
-        guard let runLoop else {
-            assertionFailure("AppleScriptThread.runLoop is nil after ready.wait()")
-            return false
-        }
-        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue, body)
-        CFRunLoopWakeUp(runLoop)
-        return true
-    }
-}
+private let appleScriptThread = ParkedRunLoopThread(name: "com.macdashboard.applescript")
 
 enum AdviceActionRunner {
     static func openPane(_ url: String) {
@@ -112,11 +68,11 @@ enum AdviceActionRunner {
 
     /// Empties the Trash via Finder (our own confirmation dialog precedes this and
     /// is dismissed before the call — see `AdviceActionDispatch.confirmEmptyTrash`).
-    /// Runs on `AppleScriptThread` (see its doc comment for why not main / not a
+    /// Runs on `appleScriptThread` (see its doc comment for why not main / not a
     /// queue); `completion` is delivered on the main actor exactly once.
     @MainActor
     static func emptyTrash(completion: @escaping @MainActor (TrashOutcome) -> Void) {
-        if !AppleScriptThread.shared.async({
+        if !appleScriptThread.async({
             // Created AND executed on the owning thread — an NSAppleScript
             // instance must not travel between threads.
             guard let script = NSAppleScript(source: "tell application \"Finder\" to empty trash") else {

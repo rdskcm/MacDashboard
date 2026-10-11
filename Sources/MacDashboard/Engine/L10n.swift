@@ -702,6 +702,101 @@ protocol AppStrings {
     var quietMarkOff: String { get }
     var quietMarkUnknown: String { get }
     func quietCountItems(_ n: Int) -> String
+
+    // MARK: iPhone module
+    var mainModeMac: String { get }
+    var mainModeIPhone: String { get }
+    var iphoneKickerDevices: String { get }
+    var iphoneStatusConnected: String { get }
+    var iphoneStatusNeedsTrust: String { get }
+    var iphoneStatusReading: String { get }
+    var iphoneStatusFailed: String { get }
+    var iphoneUnknownDevice: String { get }
+    var iphoneRetry: String { get }
+    var iphoneFindMenu: String { get }
+    var iphoneSearchAgain: String { get }
+    var iphoneRestartService: String { get }
+    var iphoneRestartConfirmTitle: String { get }
+    var iphoneRestartConfirmBody: String { get }
+    var iphoneRestartConfirm: String { get }
+    var iphoneRestartCancel: String { get }
+    var iphoneRestartBusy: String { get }
+    func iphoneRestartFailed(_ detail: String) -> String
+    var iphoneBack: String { get }
+    var iphoneRefresh: String { get }
+    var iphoneEmpty: String { get }
+    var iphoneUnavailable: String { get }
+    func iphoneStatusRemembered(_ date: String) -> String
+    func iphoneOpenDeviceA11y(_ name: String) -> String
+
+    var iphoneBatteryTitle: String { get }
+    var iphoneHistoryTitle: String { get }
+    var iphoneBatHealth: String { get }
+    var iphoneBatCycles: String { get }
+    var iphoneBatCharge: String { get }
+    var iphoneBatState: String { get }
+    var iphoneBatTemperature: String { get }
+    var iphoneBatVoltage: String { get }
+    var iphoneBatCapacity: String { get }
+    var iphoneChargeCharging: String { get }
+    var iphoneChargeExternal: String { get }
+    var iphoneChargeBattery: String { get }
+    var iphoneUnitVolt: String { get }
+    var iphoneUnitMAh: String { get }
+    var iphoneUnitWh: String { get }
+    var iphoneCapacityUnitA11y: String { get }
+    var iphoneWhSourceHelp: String { get }
+    var iphoneBatteryConnectToRead: String { get }
+    var iphoneBatteryNoData: String { get }
+    var iphoneHistoryEmpty: String { get }
+    var iphoneHistorySourceLive: String { get }
+    var iphoneHistorySourceImport: String { get }
+    var iphoneHistoryColDate: String { get }
+    var iphoneHistoryColHealth: String { get }
+    var iphoneHistoryColCycles: String { get }
+    var iphoneHistoryColSource: String { get }
+    func iphoneBatteryFromHistory(_ date: String) -> String
+    func iphoneHistoryCaption(_ n: Int) -> String
+
+    var iphoneLogsTitle: String { get }
+    var iphoneLogsConnectToRead: String { get }
+    var iphoneLogsEmpty: String { get }
+    var iphoneLogsRefreshA11y: String { get }
+    func iphoneLogsCaption(_ n: Int) -> String
+    func iphoneLogsCategory(_ c: LogCategory) -> String
+    func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String
+
+    var iphoneImportTitle: String { get }
+    var iphoneImportButton: String { get }
+    func iphoneImportArchiveA11y(_ name: String) -> String
+    var iphoneImportPickFile: String { get }
+    var iphoneImportPickA11y: String { get }
+    var iphoneImportPickPrompt: String { get }
+    func iphoneImportConfirmTitle(_ name: String) -> String
+    var iphoneImportParseOnly: String { get }
+    var iphoneImportParseKeep: String { get }
+    var iphoneImportCancel: String { get }
+    var iphoneImportParseOnlyA11y: String { get }
+    var iphoneImportParseKeepA11y: String { get }
+    var iphoneImportCancelA11y: String { get }
+    var iphoneImportHint: String { get }
+    func iphoneImportProgress(_ p: ImportProgress) -> String
+    func iphoneImportSummary(_ s: ImportSummary) -> String
+    func iphoneImportError(_ e: ImportError) -> String
+    var iphoneImportKeptTitle: String { get }
+    func iphoneImportRevealA11y(_ name: String) -> String
+    func iphoneLogsFromArchive(_ name: String) -> String
+    var iphoneIdentityTitle: String { get }
+    var iphoneIdentityConnectToRead: String { get }
+    var iphoneIdentityRefreshA11y: String { get }
+    var iphoneIdentityShow: String { get }
+    var iphoneIdentityHide: String { get }
+    var iphoneIdentityCopy: String { get }
+    var iphoneIdentityCopied: String { get }
+    func iphoneRevealA11y(_ label: String) -> String
+    func iphoneHideA11y(_ label: String) -> String
+    func iphoneCopyA11y(_ label: String) -> String
+    func iphoneIdentityLabel(_ l: IdentityLabel) -> String
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",
