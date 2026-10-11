@@ -43,7 +43,7 @@ Events. A freshly built app's first launch can raise its own TCC prompts;
 `assert_key` (before every AX action/capture) waits up to 30 s, printing
 `waiting for MacDashboard to become key … — answer any system prompt`, and
 on timeout names the state it was preparing and which of
-frontmost/AXMain/bounds failed.
+frontmost/AXMain/bounds failed. The screen must be unlocked: a locked session shows no app windows, so the run refuses up front (exit 65) instead of failing to find the window.
 
 ## 4. States captured
 

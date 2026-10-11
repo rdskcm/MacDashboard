@@ -183,12 +183,21 @@ fi
 
 PIXEL_TOLERANCE="$(awk '$1=="pixel_tolerance"{print $2}' "$ROOT/tools/visual/thresholds.txt")"
 
-# Precondition 2: no running instance
+# Precondition 2: screen not locked. A locked session puts no app window on
+# screen, so the window lookup would fail later with "got 0". IOConsoleLocked
+# absent, or ioreg failing, counts as unlocked.
+IOREG_ROOT="$(ioreg -n Root -d1 2>/dev/null || true)"
+LOCK_RE='"IOConsoleLocked" *= *Yes'
+if [[ "$IOREG_ROOT" =~ $LOCK_RE ]]; then
+  precondition_refused "the screen is locked — unlock it and run again"
+fi
+
+# Precondition 3: no running instance
 if pgrep -x MacDashboard >/dev/null 2>&1; then
   precondition_refused "quit MacDashboard first"
 fi
 
-# Precondition 3: SDK gate
+# Precondition 4: SDK gate
 OS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
 SDK_MAJOR="$(vtool -show-build "$APP_BIN" 2>/dev/null | awk '$1=="sdk"{print $2}' | cut -d. -f1 | sort -n | head -1)"
 SDK_GATE="passed"
@@ -206,7 +215,7 @@ fi
 # Compile the helper (also needed for preflight / accessibility checks below).
 # Built into a scratch dir first — R7: no run directory exists yet, so a
 # precondition refusal below leaves nothing behind. Moved into $OUT/.bin once
-# every precondition has passed (after precondition 7).
+# every precondition has passed (after precondition 8).
 TMPBIN="$(mktemp -d /tmp/vbtool-run.XXXXXX)"
 trap 'rm -rf "$TMPBIN"' EXIT
 VBTOOL="$TMPBIN/vbtool"
@@ -214,18 +223,18 @@ if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit;
   runtime_error "vbtool compile failed"
 fi
 
-# Precondition 4: Screen Recording
+# Precondition 5: Screen Recording
 if ! "$VBTOOL" preflight >/dev/null 2>&1; then
   precondition_refused "grant Screen Recording to the terminal running this tool"
 fi
 
-# Precondition 5: Accessibility
+# Precondition 6: Accessibility
 AX_ENABLED="$(osascript -e 'tell application "System Events" to get UI elements enabled' 2>/dev/null || echo false)"
 if [ "$AX_ENABLED" != "true" ]; then
   precondition_refused "Accessibility is needed (System Events UI elements enabled = $AX_ENABLED)"
 fi
 
-# Precondition 6: cliclick
+# Precondition 7: cliclick
 CLICLICK="$(command -v cliclick || true)"
 if [ -z "$CLICLICK" ] && [ -x /opt/homebrew/bin/cliclick ]; then
   CLICLICK=/opt/homebrew/bin/cliclick
@@ -234,7 +243,7 @@ if [ -z "$CLICLICK" ]; then
   precondition_refused "cliclick not found"
 fi
 
-# Precondition 7: staleness warning (default dist app only)
+# Precondition 8: staleness warning (default dist app only)
 if [ "$APP" = "$ROOT/dist.noindex/MacDashboard.app" ]; then
   STALE="$(find "$ROOT/Sources" -newer "$APP_BIN" -print -quit 2>/dev/null || true)"
   if [ -n "$STALE" ]; then
