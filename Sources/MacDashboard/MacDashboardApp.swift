@@ -23,6 +23,7 @@ struct MacDashboardApp: App {
                         model.applyVisualFixture()
                     } else {
                         model.start()
+                        IPhoneModel.shared.start()
                     }
                 }
         }

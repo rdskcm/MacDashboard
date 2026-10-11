@@ -705,4 +705,158 @@ struct StringsRU: AppStrings {
     var quietMarkOff: String { "выключен" }
     var quietMarkUnknown: String { "неизвестно" }
     func quietCountItems(_ n: Int) -> String { "\(n) шт." }
+
+    // MARK: iPhone module
+    var mainModeMac: String { "Этот Mac" }
+    var mainModeIPhone: String { "iPhone" }
+    var iphoneKickerDevices: String { "Устройства" }
+    var iphoneStatusConnected: String { "Подключён по кабелю" }
+    var iphoneStatusNeedsTrust: String { "Нужно доверие: разблокируйте iPhone и нажмите «Доверять»" }
+    var iphoneStatusReading: String { "Чтение…" }
+    var iphoneStatusFailed: String { "Не удалось прочитать iPhone" }
+    var iphoneUnknownDevice: String { "iPhone" }
+    var iphoneRetry: String { "Повторить" }
+    var iphoneFindMenu: String { "Найти iPhone" }
+    var iphoneSearchAgain: String { "Искать снова" }
+    var iphoneRestartService: String { "Перезапустить службу подключения…" }
+    var iphoneRestartConfirmTitle: String { "Перезапустить службу подключения?" }
+    var iphoneRestartConfirmBody: String { "Служба на мгновение прервёт связь со всеми iPhone и iPad, подключёнными к этому Mac, включая синхронизацию в Finder. Понадобится пароль администратора или Touch ID." }
+    var iphoneRestartConfirm: String { "Перезапустить" }
+    var iphoneRestartCancel: String { "Отмена" }
+    var iphoneRestartBusy: String { "Перезапуск службы подключения" }
+    func iphoneRestartFailed(_ detail: String) -> String { "Не удалось перезапустить службу подключения: \(detail)" }
+    var iphoneBack: String { "Назад" }
+    var iphoneRefresh: String { "Обновить" }
+    var iphoneEmpty: String { "iPhone не найден. Подключите iPhone кабелем, разблокируйте его и нажмите «Доверять»." }
+    var iphoneUnavailable: String { "Подключение к iPhone недоступно на этой версии macOS." }
+    func iphoneStatusRemembered(_ date: String) -> String { "Не подключён · был \(date)" }
+    func iphoneOpenDeviceA11y(_ name: String) -> String { "Открыть \(name)" }
+    var iphoneBatteryTitle: String { "Батарея" }
+    var iphoneHistoryTitle: String { "История батареи" }
+    var iphoneBatHealth: String { "Здоровье" }
+    var iphoneBatCycles: String { "Циклы" }
+    var iphoneBatCharge: String { "Заряд" }
+    var iphoneBatState: String { "Состояние" }
+    var iphoneBatTemperature: String { "Температура" }
+    var iphoneBatVoltage: String { "Напряжение" }
+    var iphoneBatCapacity: String { "Ёмкость" }
+    var iphoneChargeCharging: String { "Заряжается" }
+    var iphoneChargeExternal: String { "Подключён к питанию" }
+    var iphoneChargeBattery: String { "От батареи" }
+    var iphoneUnitVolt: String { "В" }
+    var iphoneUnitMAh: String { "мА·ч" }
+    var iphoneUnitWh: String { "Wh" }
+    var iphoneCapacityUnitA11y: String { "Единицы ёмкости" }
+    var iphoneWhSourceHelp: String { "Примерно: ёмкость × 3,88 В — типовое напряжение батарей iPhone (Википедия, статьи iPhone 16 Pro / 17 Pro, по данным регуляторов)" }
+    var iphoneBatteryConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать батарею." }
+    var iphoneBatteryNoData: String { "нет данных" }
+    var iphoneHistoryEmpty: String { "История пока пуста: точки появятся в дни, когда iPhone подключён." }
+    var iphoneHistorySourceLive: String { "Измерено" }
+    var iphoneHistorySourceImport: String { "Из sysdiagnose" }
+    var iphoneHistoryColDate: String { "Дата" }
+    var iphoneHistoryColHealth: String { "Здоровье" }
+    var iphoneHistoryColCycles: String { "Циклы" }
+    var iphoneHistoryColSource: String { "Источник" }
+    func iphoneBatteryFromHistory(_ date: String) -> String { "Последние данные из истории · \(date)" }
+    func iphoneHistoryCaption(_ n: Int) -> String { "\(n) \(ruPlural(n, "день", "дня", "дней"))" }
+
+    var iphoneLogsTitle: String { "Журналы сбоев" }
+    var iphoneLogsConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать журналы." }
+    var iphoneLogsEmpty: String { "Файлов журналов не найдено." }
+    var iphoneLogsRefreshA11y: String { "Обновить список журналов сбоев" }
+    func iphoneLogsCaption(_ n: Int) -> String { "\(n) \(ruPlural(n, "файл", "файла", "файлов"))" }
+    func iphoneLogsCategory(_ c: LogCategory) -> String {
+        switch c {
+        case .appCrash: return "Сбои приложений"
+        case .exceptionFault: return "Исключения"
+        case .jetsam: return "Нехватка памяти (Jetsam)"
+        case .diskWrites: return "Запись на диск"
+        case .cpuResource: return "Нагрузка CPU"
+        case .stackshot: return "Стекшоты"
+        case .otherReport: return "Другие отчёты"
+        case .analytics: return "Аналитика"
+        case .other: return "Прочие файлы"
+        }
+    }
+    func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String {
+        expanded ? "Свернуть «\(category)»" : "Развернуть «\(category)»"
+    }
+
+    var iphoneImportTitle: String { "Импорт sysdiagnose" }
+    var iphoneImportButton: String { "Импортировать" }
+    func iphoneImportArchiveA11y(_ name: String) -> String { "Импортировать архив \(name)" }
+    var iphoneImportPickFile: String { "Выбрать файл на Mac…" }
+    var iphoneImportPickA11y: String { "Выбрать архив sysdiagnose на Mac" }
+    var iphoneImportPickPrompt: String { "Выбрать" }
+    func iphoneImportConfirmTitle(_ name: String) -> String { "Импорт «\(name)»" }
+    var iphoneImportParseOnly: String { "Только разобрать" }
+    var iphoneImportParseKeep: String { "Разобрать и сохранить" }
+    var iphoneImportCancel: String { "Отмена" }
+    var iphoneImportParseOnlyA11y: String { "Только разобрать архив, не сохраняя его" }
+    var iphoneImportParseKeepA11y: String { "Разобрать архив и сохранить его на Mac" }
+    var iphoneImportCancelA11y: String { "Отменить импорт" }
+    var iphoneImportHint: String { "Архивы с телефона видны после чтения журналов; можно выбрать и файл .tar.gz на Mac." }
+    func iphoneImportProgress(_ p: ImportProgress) -> String {
+        switch p {
+        case .copying(let done, let total):
+            return "Копирование с телефона: \(fmtBytes(done)) из \(fmtBytes(total))"
+        case .extracting: return "Распаковка нужных файлов…"
+        case .parsing: return "Разбор…"
+        }
+    }
+    func iphoneImportSummary(_ s: ImportSummary) -> String {
+        var t = "Точек батареи: \(s.batteryPoints), файлов журналов: \(s.logFiles)"
+        if s.skippedRows > 0 { t += ", пропущено строк: \(s.skippedRows)" }
+        return t + (s.keptPath != nil ? ". Архив сохранён." : ".")
+    }
+    func iphoneImportError(_ e: ImportError) -> String {
+        switch e {
+        case .copyFailed: return "Не удалось скопировать архив с телефона."
+        case .sizeMismatch: return "Размер скопированного архива не совпал с размером на телефоне."
+        case .tarFailed: return "Не удалось распаковать архив."
+        case .keepFailed: return "Не удалось сохранить архив."
+        case .cancelled: return "Импорт отменён."
+        }
+    }
+    var iphoneImportKeptTitle: String { "Сохранённые архивы" }
+    func iphoneImportRevealA11y(_ name: String) -> String { "Показать архив \(name) в Finder" }
+    func iphoneLogsFromArchive(_ name: String) -> String { "Из sysdiagnose \(name)" }
+    var iphoneIdentityTitle: String { "Устройство и детали" }
+    var iphoneIdentityConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать данные устройства." }
+    var iphoneIdentityRefreshA11y: String { "Обновить данные устройства" }
+    var iphoneIdentityShow: String { "Показать полностью" }
+    var iphoneIdentityHide: String { "Скрыть" }
+    var iphoneIdentityCopy: String { "Копировать" }
+    var iphoneIdentityCopied: String { "Скопировано" }
+    func iphoneRevealA11y(_ label: String) -> String { "Показать полностью: \(label)" }
+    func iphoneHideA11y(_ label: String) -> String { "Скрыть значение: \(label)" }
+    func iphoneCopyA11y(_ label: String) -> String { "Копировать значение: \(label)" }
+    func iphoneIdentityLabel(_ l: IdentityLabel) -> String {
+        switch l {
+        case .marketingName: return "Модель"
+        case .modelNumber: return "Номер модели"
+        case .regulatoryModel: return "Регуляторная модель"
+        case .hardwareModel: return "Аппаратная модель"
+        case .ios: return "Версия iOS"
+        case .storage: return "Память"
+        case .colorCode: return "Код цвета"
+        case .serial: return "Серийный номер"
+        case .logicBoard: return "Логическая плата"
+        case .imei: return "IMEI"
+        case .imei2: return "IMEI 2"
+        case .battery: return "Батарея"
+        case .displayPanel: return "Дисплей (панель)"
+        case .displayRawPanel: return "Дисплей (заводской номер)"
+        case .coverGlass: return "Защитное стекло"
+        case .backGlass: return "Задняя панель"
+        case .nova: return "Модуль Nova"
+        case .ambientLight: return "Датчик освещённости"
+        case .backCamera: return "Основная камера"
+        case .backSuperWide: return "Сверхширокоугольная"
+        case .backTele: return "Телефото"
+        case .frontCamera: return "Фронтальная камера"
+        case .frontIR: return "ИК-камера Face ID"
+        case .faceIDProjector: return "Проектор Face ID"
+        }
+    }
 }

@@ -698,4 +698,158 @@ struct StringsEN: AppStrings {
     var quietMarkOff: String { "off" }
     var quietMarkUnknown: String { "unknown" }
     func quietCountItems(_ n: Int) -> String { "\(n)" }
+
+    // MARK: iPhone module
+    var mainModeMac: String { "This Mac" }
+    var mainModeIPhone: String { "iPhone" }
+    var iphoneKickerDevices: String { "Devices" }
+    var iphoneStatusConnected: String { "Connected by cable" }
+    var iphoneStatusNeedsTrust: String { "Trust needed: unlock the iPhone and tap “Trust”" }
+    var iphoneStatusReading: String { "Reading…" }
+    var iphoneStatusFailed: String { "Could not read the iPhone" }
+    var iphoneUnknownDevice: String { "iPhone" }
+    var iphoneRetry: String { "Retry" }
+    var iphoneFindMenu: String { "Find iPhone" }
+    var iphoneSearchAgain: String { "Search again" }
+    var iphoneRestartService: String { "Restart connection service…" }
+    var iphoneRestartConfirmTitle: String { "Restart the connection service?" }
+    var iphoneRestartConfirmBody: String { "The service briefly interrupts every iPhone and iPad connected to this Mac, including Finder sync. It needs an administrator password or Touch ID." }
+    var iphoneRestartConfirm: String { "Restart" }
+    var iphoneRestartCancel: String { "Cancel" }
+    var iphoneRestartBusy: String { "Restarting the connection service" }
+    func iphoneRestartFailed(_ detail: String) -> String { "Could not restart the connection service: \(detail)" }
+    var iphoneBack: String { "Back" }
+    var iphoneRefresh: String { "Refresh" }
+    var iphoneEmpty: String { "No iPhone found. Connect the iPhone by cable, unlock it and tap “Trust”." }
+    var iphoneUnavailable: String { "iPhone connection is not available on this version of macOS." }
+    func iphoneStatusRemembered(_ date: String) -> String { "Not connected · last seen \(date)" }
+    func iphoneOpenDeviceA11y(_ name: String) -> String { "Open \(name)" }
+    var iphoneBatteryTitle: String { "Battery" }
+    var iphoneHistoryTitle: String { "Battery history" }
+    var iphoneBatHealth: String { "Health" }
+    var iphoneBatCycles: String { "Cycles" }
+    var iphoneBatCharge: String { "Charge" }
+    var iphoneBatState: String { "State" }
+    var iphoneBatTemperature: String { "Temperature" }
+    var iphoneBatVoltage: String { "Voltage" }
+    var iphoneBatCapacity: String { "Capacity" }
+    var iphoneChargeCharging: String { "Charging" }
+    var iphoneChargeExternal: String { "Plugged in" }
+    var iphoneChargeBattery: String { "On battery" }
+    var iphoneUnitVolt: String { "V" }
+    var iphoneUnitMAh: String { "mAh" }
+    var iphoneUnitWh: String { "Wh" }
+    var iphoneCapacityUnitA11y: String { "Capacity units" }
+    var iphoneWhSourceHelp: String { "Approximate: capacity × 3.88 V, the typical iPhone battery voltage (Wikipedia, iPhone 16 Pro / 17 Pro articles, from regulatory listings)" }
+    var iphoneBatteryConnectToRead: String { "Connect the iPhone by cable to read the battery." }
+    var iphoneBatteryNoData: String { "no data" }
+    var iphoneHistoryEmpty: String { "No history yet: points appear on days the iPhone is connected." }
+    var iphoneHistorySourceLive: String { "Measured" }
+    var iphoneHistorySourceImport: String { "From sysdiagnose" }
+    var iphoneHistoryColDate: String { "Date" }
+    var iphoneHistoryColHealth: String { "Health" }
+    var iphoneHistoryColCycles: String { "Cycles" }
+    var iphoneHistoryColSource: String { "Source" }
+    func iphoneBatteryFromHistory(_ date: String) -> String { "From history · \(date)" }
+    func iphoneHistoryCaption(_ n: Int) -> String { "\(n) \(n == 1 ? "day" : "days")" }
+
+    var iphoneLogsTitle: String { "Crash logs" }
+    var iphoneLogsConnectToRead: String { "Connect the iPhone by cable to read its logs." }
+    var iphoneLogsEmpty: String { "No log files found." }
+    var iphoneLogsRefreshA11y: String { "Refresh the crash log list" }
+    func iphoneLogsCaption(_ n: Int) -> String { "\(n) \(n == 1 ? "file" : "files")" }
+    func iphoneLogsCategory(_ c: LogCategory) -> String {
+        switch c {
+        case .appCrash: return "App crashes"
+        case .exceptionFault: return "Exception faults"
+        case .jetsam: return "Memory pressure (Jetsam)"
+        case .diskWrites: return "Disk writes"
+        case .cpuResource: return "CPU resource"
+        case .stackshot: return "Stackshots"
+        case .otherReport: return "Other reports"
+        case .analytics: return "Analytics"
+        case .other: return "Other files"
+        }
+    }
+    func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String {
+        expanded ? "Hide \(category)" : "Show \(category)"
+    }
+
+    var iphoneImportTitle: String { "Sysdiagnose import" }
+    var iphoneImportButton: String { "Import" }
+    func iphoneImportArchiveA11y(_ name: String) -> String { "Import archive \(name)" }
+    var iphoneImportPickFile: String { "Choose file on Mac…" }
+    var iphoneImportPickA11y: String { "Choose a sysdiagnose archive on this Mac" }
+    var iphoneImportPickPrompt: String { "Choose" }
+    func iphoneImportConfirmTitle(_ name: String) -> String { "Import “\(name)”" }
+    var iphoneImportParseOnly: String { "Parse only" }
+    var iphoneImportParseKeep: String { "Parse and keep" }
+    var iphoneImportCancel: String { "Cancel" }
+    var iphoneImportParseOnlyA11y: String { "Parse the archive without keeping it" }
+    var iphoneImportParseKeepA11y: String { "Parse the archive and keep it on this Mac" }
+    var iphoneImportCancelA11y: String { "Cancel the import" }
+    var iphoneImportHint: String { "Archives on the phone appear once the logs are read; you can also choose a .tar.gz file on this Mac." }
+    func iphoneImportProgress(_ p: ImportProgress) -> String {
+        switch p {
+        case .copying(let done, let total):
+            return "Copying from the phone: \(fmtBytes(done)) of \(fmtBytes(total))"
+        case .extracting: return "Extracting the needed files…"
+        case .parsing: return "Parsing…"
+        }
+    }
+    func iphoneImportSummary(_ s: ImportSummary) -> String {
+        var t = "Battery points: \(s.batteryPoints), log files: \(s.logFiles)"
+        if s.skippedRows > 0 { t += ", skipped rows: \(s.skippedRows)" }
+        return t + (s.keptPath != nil ? ". Archive kept." : ".")
+    }
+    func iphoneImportError(_ e: ImportError) -> String {
+        switch e {
+        case .copyFailed: return "Could not copy the archive from the phone."
+        case .sizeMismatch: return "The copied archive size did not match the size on the phone."
+        case .tarFailed: return "Could not extract the archive."
+        case .keepFailed: return "Could not keep the archive."
+        case .cancelled: return "Import cancelled."
+        }
+    }
+    var iphoneImportKeptTitle: String { "Kept archives" }
+    func iphoneImportRevealA11y(_ name: String) -> String { "Show archive \(name) in Finder" }
+    func iphoneLogsFromArchive(_ name: String) -> String { "From sysdiagnose \(name)" }
+    var iphoneIdentityTitle: String { "Device and parts" }
+    var iphoneIdentityConnectToRead: String { "Connect the iPhone by cable to read its device details." }
+    var iphoneIdentityRefreshA11y: String { "Refresh the device details" }
+    var iphoneIdentityShow: String { "Show in full" }
+    var iphoneIdentityHide: String { "Hide" }
+    var iphoneIdentityCopy: String { "Copy" }
+    var iphoneIdentityCopied: String { "Copied" }
+    func iphoneRevealA11y(_ label: String) -> String { "Show in full: \(label)" }
+    func iphoneHideA11y(_ label: String) -> String { "Hide value: \(label)" }
+    func iphoneCopyA11y(_ label: String) -> String { "Copy value: \(label)" }
+    func iphoneIdentityLabel(_ l: IdentityLabel) -> String {
+        switch l {
+        case .marketingName: return "Model"
+        case .modelNumber: return "Model number"
+        case .regulatoryModel: return "Regulatory model"
+        case .hardwareModel: return "Hardware model"
+        case .ios: return "iOS version"
+        case .storage: return "Storage"
+        case .colorCode: return "Colour code"
+        case .serial: return "Serial number"
+        case .logicBoard: return "Logic board"
+        case .imei: return "IMEI"
+        case .imei2: return "IMEI 2"
+        case .battery: return "Battery"
+        case .displayPanel: return "Display panel"
+        case .displayRawPanel: return "Display raw panel"
+        case .coverGlass: return "Cover glass"
+        case .backGlass: return "Back glass"
+        case .nova: return "Nova module"
+        case .ambientLight: return "Ambient light sensor"
+        case .backCamera: return "Main camera"
+        case .backSuperWide: return "Ultra Wide"
+        case .backTele: return "Telephoto"
+        case .frontCamera: return "Front camera"
+        case .frontIR: return "Face ID IR camera"
+        case .faceIDProjector: return "Face ID projector"
+        }
+    }
 }

@@ -35,7 +35,10 @@ private let headerTitlePullLeft: CGFloat = 58
 @MainActor
 struct MainDashboardView: View {
     var model: DashboardModel
+    var iphone: IPhoneModel = .shared
 
+    private enum Mode { case mac, iphone }
+    @State private var mode: Mode = .mac
     private enum Tab { case overview, report }
     @State private var tab: Tab = .overview
 
@@ -56,9 +59,15 @@ struct MainDashboardView: View {
             VStack(spacing: 0) {
                 toolbar
 
-                switch tab {
-                case .overview: overview
-                case .report: ReportTab(model: model)
+                // Only the content branches; both segmented controls live in `toolbar`
+                // outside this branch (control-identity-branch).
+                if mode == .mac {
+                    switch tab {
+                    case .overview: overview
+                    case .report: ReportTab(model: model)
+                    }
+                } else {
+                    IPhoneModeView(model: iphone)
                 }
             }
             .onChange(of: L10nStore.shared.language) { model.refreshReport(trigger: .automatic) }
@@ -84,6 +93,12 @@ struct MainDashboardView: View {
             // Anchored immediately after the title at a fixed gap (spacing: 16 above) —
             // this control's x position must never depend on window width. All slack
             // and all shrink pressure live to its right, past the flexible Spacer below.
+            DSSlidingSegmented(options: [Mode.mac, .iphone], selection: $mode, size: .tabs, identifier: { m in
+                m == .mac ? "main-mode-mac" : "main-mode-iphone"
+            }) { m in
+                m == .mac ? L.mainModeMac : L.mainModeIPhone
+            }
+            .layoutPriority(2)
             DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab, size: .tabs, identifier: { t in
                 switch t {
                 case .overview: return "main-tab-overview"
@@ -96,10 +111,19 @@ struct MainDashboardView: View {
                 }
             }
             .layoutPriority(2)
+            // Stays mounted in iPhone mode (D14): hidden, not removable, so the header
+            // geometry is identical across modes.
+            .opacity(mode == .mac ? 1 : 0)
+            .allowsHitTesting(mode == .mac)
+            .accessibilityHidden(mode != .mac)
             Spacer(minLength: 12)
             // No layoutPriority here (default 0): chips own the progressive-hiding
             // ViewThatFits tiers and must be the first child to lose space.
-            HeaderChipsView(model: model)
+            if mode == .mac {
+                HeaderChipsView(model: model)
+            } else {
+                IPhoneHeaderActions(model: iphone)
+            }
         }
         .padding(.leading, 78)
         .padding(.trailing, 18)

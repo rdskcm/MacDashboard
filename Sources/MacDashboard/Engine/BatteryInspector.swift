@@ -87,7 +87,12 @@ enum BatteryInspector {
               let array = raw as? [[String: Any]],
               let dict = array.first
         else { return nil }
+        return parse(dict: dict)
+    }
 
+    /// Maps one AppleSmartBattery registry dictionary (Mac plist element or an iPhone
+    /// diagnostics_relay IORegistry payload) to a BatteryDetail.
+    static func parse(dict: [String: Any]) -> BatteryDetail {
         let voltageMV = dict["Voltage"] as? Int
         let amperageMA = dict["Amperage"] as? Int
         let powerW: Double?
