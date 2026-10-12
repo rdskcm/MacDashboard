@@ -569,41 +569,6 @@ protocol AppStrings {
     var smartAttrErrorInformationLogEntries: String { get }
     var reportSmartStatusOk: String { get }
 
-    // MARK: AI assistant
-    var settingsSectionAI: String { get }
-    var aiSettingsProviderLabel: String { get }
-    var aiSettingsBaseURLLabel: String { get }
-    var aiSettingsBaseURLPlaceholder: String { get }
-    var aiSettingsModelLabel: String { get }
-    var aiSettingsKeyLabel: String { get }
-    var aiSettingsKeySave: String { get }
-    var aiSettingsKeyDelete: String { get }
-    var aiSettingsKeyStored: String { get }
-    var aiSettingsKeyMissing: String { get }
-    var aiSettingsPrivacyNote: String { get }
-    var aiSettingsModelCustom: String { get }
-    var aiSettingsModelCustomPlaceholder: String { get }
-    var aiSettingsInDevelopmentNote: String { get }
-    var aiAskButton: String { get }
-    var aiSheetTitle: String { get }
-    var aiSheetPayloadCaption: String { get }
-    var aiToggleSerials: String { get }
-    var aiToggleUsername: String { get }
-    var aiToggleHostname: String { get }
-    var aiToggleSSID: String { get }
-    var aiSendButton: String { get }
-    var aiSending: String { get }
-    var aiAnswerTitle: String { get }
-    func aiRequestFailed(_ msg: String) -> String
-    var aiKeyReadFailed: String { get }
-    var aiNoReport: String { get }
-    var aiPayloadSectionAssessment: String { get }
-    var aiPayloadSectionLive: String { get }
-    var aiPayloadSectionReport: String { get }
-    var aiPayloadTipPrefix: String { get }
-    var aiSystemPrompt: String { get }
-    var aiPrivacyContract: String { get }
-
     // MARK: Report collector
     var reportCollectorNoBackupsYet: String { get }
     var reportCollectorDiskNotConnected: String { get }

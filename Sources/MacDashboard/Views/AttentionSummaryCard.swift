@@ -25,16 +25,6 @@ struct AttentionSummaryCard: View {
     /// Capsule-row overflow toggle ("+N" / "Свернуть"), only shown past 6 capsules.
     @State private var tipsMore = false
 
-    // Compiled out of the default (public) build — see Package.swift/build_app.sh
-    // (AI_ENABLED). Moved verbatim from the legacy Рекомендации card (its only call
-    // site — AIAskSheet has no other entry point).
-    #if AI_ENABLED
-    /// Refreshed in `.onAppear` and again when the AI sheet is dismissed, so a
-    /// key just saved/deleted in Settings is reflected without restarting the app.
-    @State private var aiKeyExists = false
-    @State private var showAISheet = false
-    #endif
-
     init(model: DashboardModel) {
         self.model = model
         _dispatch = State(wrappedValue: AdviceActionDispatch(model: model))
@@ -92,12 +82,6 @@ struct AttentionSummaryCard: View {
         .dsCardSurface()
         .dsBorderHover()
         .adviceActionDialogs(dispatch)
-        #if AI_ENABLED
-        .onAppear { aiKeyExists = KeychainStore.exists() }
-        .sheet(isPresented: $showAISheet, onDismiss: { aiKeyExists = KeychainStore.exists() }) {
-            AIAskSheet(model: model)
-        }
-        #endif
     }
 
     // MARK: - Title row
@@ -112,19 +96,6 @@ struct AttentionSummaryCard: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             trailingArea
-            #if AI_ENABLED
-            if AppSettings.shared.aiConfig.isComplete && aiKeyExists {
-                Button {
-                    showAISheet = true
-                } label: {
-                    Label(L.aiAskButton, systemImage: "sparkles")
-                        .font(.system(size: 12.5))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(DS.accentInk)
-                .accessibilityLabel(L.aiAskButton)
-            }
-            #endif
             lastCheckTime
         }
         .frame(minHeight: 30)

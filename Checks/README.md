@@ -13,8 +13,8 @@ Every other file in this directory (`Models.swift`, `AppInfo.swift`, `AttentionM
 `ReportWriter.swift`, `HistoryStore.swift`, `L10n.swift`, `BrewProgress.swift`,
 `ThermalSensors.swift`, `AppSettings.swift`, `StringsRU.swift`, `StringsEN.swift`,
 `LaunchdPlistInspector.swift`, `Formatting.swift`, `BarHitTest.swift`, `BatteryInspector.swift`,
-`Advice.swift`, `HistorySeries.swift`, `AIRedaction.swift`, `AIPayload.swift`,
-`AIRequest.swift`, `DirectoryAccess.swift`, `AppleScriptResult.swift`, `PrivilegedRunner.swift`, `BrewUpgrader.swift`,
+`Advice.swift`, `HistorySeries.swift`,
+`DirectoryAccess.swift`, `AppleScriptResult.swift`, `PrivilegedRunner.swift`, `BrewUpgrader.swift`,
 `ParsedCommands.swift`, `WakeHolders.swift`, `BackupLog.swift`, `VisualFixture.swift`, `IPhoneData.swift`, `InFlightReads.swift`, `SysdiagnoseExtractor.swift`) is a **symlink** back into
 `../Sources/MacDashboard/...`. SwiftPM compiles whatever source files it finds under a
 target's `path`, following symlinks, so this target builds and tests the exact same pure
@@ -28,7 +28,7 @@ script that copies the files in before each build instead of restructuring `Sour
 
 `SmartToolsAvailabilityChecks.swift`, `ThermalSensorsChecks.swift`,
 `ProcessSamplerChecks.swift`, `HistorySeriesChecks.swift`, `LaunchdPlistInspectorChecks.swift`,
-`AIRedactionChecks.swift`, `AIPayloadRequestChecks.swift`, `SudoPathSafetyChecks.swift`,
+`SudoPathSafetyChecks.swift`,
 `CommandRunnerExitChecks.swift`, `CommandRunnerCoreChecks.swift`, `ParserFixtureChecks.swift`,
 `ReportWriterChecks.swift`, `PrivilegedRunnerChecks.swift`, `BrewUpgraderChecks.swift`,
 `HistoryStoreChecks.swift`, `IPhoneChecks.swift`, `WakeHoldersChecks.swift`, `BackupLogChecks.swift`, `VisualFixtureChecks.swift`, `FolderSizesChecks.swift`, `SysdiagnoseExtractorChecks.swift`, `InFlightReadsChecks.swift`, and `LiveCanary.swift`

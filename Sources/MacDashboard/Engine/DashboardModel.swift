@@ -133,11 +133,6 @@ final class DashboardModel {
         return s
     }
 
-    /// Imperative one-shot read of `live` for the AI sheet's payload builder. Views
-    /// MUST NOT treat this as an observed/reactive binding — call it once when
-    /// building the payload, not from a view body (see `live`'s doc comment above).
-    func currentLiveSnapshot() -> LiveSnapshot { live }
-
     var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
     var report: FullReport            // sections fill in as collected
 

@@ -52,17 +52,10 @@ echo "== swift build (Apple Silicon, arm64) =="
 EXPECTED_ARCH="arm64"
 BIN=".build/$EXPECTED_ARCH-apple-macosx/release/MacDashboard"
 
-AI_FLAGS=()
-if [ "${MACDASHBOARD_AI:-}" = "1" ]; then
-  echo "MACDASHBOARD_AI=1 — building with AI assistant enabled" >&2
-  AI_FLAGS=(-Xswiftc -DAI_ENABLED)
-fi
-
 swift build -c release --product MacDashboard --build-system native \
   --triple "$EXPECTED_ARCH-apple-macosx$MIN_MACOS" \
   -Xswiftc -sdk -Xswiftc "$SDK_PATH" \
-  -Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_MACOS" -Xlinker "$SDK_VERSION" \
-  "${AI_FLAGS[@]+"${AI_FLAGS[@]}"}"
+  -Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_MACOS" -Xlinker "$SDK_VERSION"
 [ -x "$BIN" ] || { echo "binary not found: $BIN" >&2; exit 1; }
 
 echo "== LaunchServices: drop stale registrations =="

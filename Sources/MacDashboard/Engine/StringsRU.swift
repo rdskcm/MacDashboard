@@ -578,41 +578,6 @@ struct StringsRU: AppStrings {
     var smartAttrErrorInformationLogEntries: String { "Записей в журнале ошибок" }
     var reportSmartStatusOk: String { "SMART: в норме" }
 
-    // MARK: AI assistant
-    var settingsSectionAI: String { "ИИ-ассистент" }
-    var aiSettingsProviderLabel: String { "Провайдер" }
-    var aiSettingsBaseURLLabel: String { "Базовый URL" }
-    var aiSettingsBaseURLPlaceholder: String { "Для Anthropic по умолчанию: api.anthropic.com" }
-    var aiSettingsModelLabel: String { "Модель" }
-    var aiSettingsKeyLabel: String { "API-ключ" }
-    var aiSettingsKeySave: String { "Сохранить ключ" }
-    var aiSettingsKeyDelete: String { "Удалить ключ" }
-    var aiSettingsKeyStored: String { "Ключ сохранён" }
-    var aiSettingsKeyMissing: String { "Ключ не задан — кнопка «Спросить ИИ» скрыта" }
-    var aiSettingsPrivacyNote: String { "Ключ хранится только в Связке ключей. Ничего не отправляется без явного подтверждения." }
-    var aiSettingsModelCustom: String { "Другое…" }
-    var aiSettingsModelCustomPlaceholder: String { "Введите ID модели" }
-    var aiSettingsInDevelopmentNote: String { "Функция находится в разработке" }
-    var aiAskButton: String { "Спросить ИИ" }
-    var aiSheetTitle: String { "Спросить ИИ" }
-    var aiSheetPayloadCaption: String { "Будет отправлено ровно то, что показано ниже" }
-    var aiToggleSerials: String { "Скрывать серийные номера" }
-    var aiToggleUsername: String { "Скрывать имя пользователя в путях" }
-    var aiToggleHostname: String { "Скрывать имя компьютера" }
-    var aiToggleSSID: String { "Скрывать имя сети Wi-Fi" }
-    var aiSendButton: String { "Отправить" }
-    var aiSending: String { "Отправка…" }
-    var aiAnswerTitle: String { "Ответ" }
-    func aiRequestFailed(_ msg: String) -> String { "Ошибка запроса: \(msg)" }
-    var aiKeyReadFailed: String { "Не удалось прочитать ключ из Связки ключей" }
-    var aiNoReport: String { "Отчёт ещё не собран" }
-    var aiPayloadSectionAssessment: String { "ОЦЕНКА" }
-    var aiPayloadSectionLive: String { "ТЕКУЩИЕ ПОКАЗАТЕЛИ" }
-    var aiPayloadSectionReport: String { "ОТЧЁТ" }
-    var aiPayloadTipPrefix: String { "- совет: " }
-    var aiSystemPrompt: String { "Ты — ассистент по диагностике Mac. Ниже — диагностический отчёт компьютера пользователя. Кратко ответь по-русски: что в порядке, какие есть проблемы и что делать в первую очередь." }
-    var aiPrivacyContract: String { "Ничего не отправляется без ключа и явного подтверждения. Ключ хранится только в Связке ключей и не попадает в отчёты и журналы. Телеметрии нет." }
-
     // MARK: Report collector
     var reportCollectorNoBackupsYet: String { "бэкапов ещё не было" }
     var reportCollectorDiskNotConnected: String { "диск не подключён" }

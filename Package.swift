@@ -23,13 +23,12 @@ let package = Package(
         .executableTarget(
             name: "MacDashboardChecks",
             path: "Checks",
-            exclude: ["README.md"],
-            swiftSettings: [.define("AI_ENABLED")]
+            exclude: ["README.md"]
         ),
         // SWIFT-TESTING SAMPLE (CI-SWIFT-TESTING): a fixed swift-testing suite, run by
         // `swift test` locally (needs Xcode) and in .github/workflows/ci.yml. It reaches the
         // engine through `@testable import MacDashboard` (no symlinks), so it tests the
-        // app module exactly as the default build compiles it (AI off). `swift build`
+        // app module exactly as the app build compiles it. `swift build`
         // never compiles a test target (only `swift test` / `--build-tests` do) and
         // build_app.sh builds `--product MacDashboard` only, so local builds are unchanged.
         .testTarget(
