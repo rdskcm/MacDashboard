@@ -33,7 +33,7 @@ struct IPhoneIdentityCard: View {
         } content: {
             content
         }
-        .task(id: isConnected) {
+        .task(id: model.connected[deviceKey]) {
             if isConnected, model.identity[deviceKey] == nil { model.loadIdentity(deviceKey: deviceKey) }
         }
         .onChange(of: model.identity[deviceKey] == nil) { _, cleared in
