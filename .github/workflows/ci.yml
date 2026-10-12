@@ -26,19 +26,6 @@ jobs:
       - name: Select the newest Xcode (>= 26)
         uses: ./.github/actions/select-xcode
 
-      - name: Toolchain fingerprint (cache key)
-        id: toolchain
-        run: echo "fp=$(swift --version 2>&1 | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore/save .build
-        # CI-SPEED: kept only because it measured >= 15 s net saving per run (see block spec).
-        uses: actions/cache@v6
-        with:
-          path: .build
-          key: spm-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fp }}-${{ hashFiles('Package.swift', 'Sources/**', 'Checks/**', 'Tests/**') }}
-          restore-keys: |
-            spm-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fp }}-
-
       - name: swift build (all targets, including tests)
         # CI-SPEED: the only compile in this run. --build-tests builds MacDashboard,
         # MacDashboardChecks and MacDashboardTests; the two steps below reuse it via
