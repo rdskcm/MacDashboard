@@ -24,6 +24,8 @@ extension DashboardModel {
         assessment = d.assessment
         history = d.history
         reportText = d.reportText
+        claudeBackup = d.claudeBackup
+        fixtureNow = VisualFixture.referenceDate
         reportUpdatedAt = VisualFixture.referenceDate
         smartUpdatedAt = VisualFixture.referenceDate
         lastSampleAt = VisualFixture.referenceDate

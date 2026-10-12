@@ -1,6 +1,7 @@
 // tools/visual/content_states.swift
 // VISUAL-COVERAGE: offscreen content stage — cards that sit below the fold of
-// the real 1150xH window (Processes/Folders segments, История metrics/ranges)
+// the real 1150xH window (Processes/Folders segments, История metrics/ranges,
+// the Claude backup card)
 // rendered directly from the fixed VisualFixture dataset, dark+light, via the
 // harness (tools/harness/render.sh). Pattern: scenario_ds_specimen.swift.
 // argv[1] = the output DIRECTORY (run.sh's raw/); each state writes
@@ -34,6 +35,9 @@ MainActor.assumeIsolated {
         }
         harnessRender(width: 589, to: "\(outDir)/content-folders-service-\(mode).png") {
             FoldersCard(model: m, initialTab: .service)
+        }
+        harnessRender(width: 589, to: "\(outDir)/content-claude-backup-\(mode).png") {
+            ClaudeBackupCard(model: m)
         }
         harnessRender(width: 1150, to: "\(outDir)/content-history-disk-\(mode).png") {
             HistoryCard(model: m, initialMetric: .disk, initialRange: .month)

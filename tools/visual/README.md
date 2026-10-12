@@ -47,15 +47,17 @@ frontmost/AXMain/bounds failed. The screen must be unlocked: a locked session sh
 
 ## 4. States captured
 
-**Real window (10 states, `screencapture -x -o -l <windowid>`):** `main`,
+**Real window (12 states, `screencapture -x -o -l <windowid>`):** `main`,
 `main-report` (Report tab, via an AX press on the tab button — see §8),
-`settings-general`, `settings-monitoring`, `settings-titlebar-hover`, each
+`settings-general`, `settings-monitoring`, `settings-titlebar-hover`,
+`settings-backup` (Backups section, third sidebar row), each
 `dark`/`light`. Window id via `vbtool windows --pid P`; the Settings window
 must be 680±2 pt wide or the run aborts.
 
-**Offscreen content (22 states, `tools/visual/content_states.swift` via
+**Offscreen content (24 states, `tools/visual/content_states.swift` via
 `tools/harness/render.sh`):** `content-processes-{cpu,mem}`,
-`content-folders-{home,service}`, `content-history-{disk,battery,cycles,swap}`
+`content-folders-{home,service}`, `content-claude-backup` (the Claude backup
+card), `content-history-{disk,battery,cycles,swap}`
 (range Month), `content-history-disk-{quarter,year,all}`, each `dark`/`light`
 — cards below the fold of the real window, which would need fragile
 scroll/click driving to reach there.
@@ -90,7 +92,7 @@ The app is launched with `-visualFixture 1`: it shows a fixed, built-in
 dataset (`VisualFixture.swift`) instead of live data, so `main-*`,
 `main-report-*` and every `content-*` state are deterministic regardless of
 live machine state (wake holders, battery, history); the app's `defaults`
-domain is cleared for the run (snapshotted first, restored after). Scroller style is pinned to overlay with the launch argument `-AppleShowScrollBars WhenScrolling` (argument domain, this process only), so a connected mouse or a "Show scroll bars" setting of Automatic/Always does not add a legacy scrollbar to `main-*`; the global setting is only read (recorded as `scrollbars:` in `build-info.txt`), never written.
+domain is cleared for the run (snapshotted first, restored after). The fixture's Claude-backup status is a fixed last success 2 h before the fixture reference date (Jan 15, 2026 10:30 local); in fixture mode the backup age is measured from that reference date (`DashboardModel.fixtureNow`), so the Backups row, the card and its "2 h ago" are deterministic. The stale limit shown is the default 48 h (the card formats it as "2 d") because the defaults domain is cleared. Scroller style is pinned to overlay with the launch argument `-AppleShowScrollBars WhenScrolling` (argument domain, this process only), so a connected mouse or a "Show scroll bars" setting of Automatic/Always does not add a legacy scrollbar to `main-*`; the global setting is only read (recorded as `scrollbars:` in `build-info.txt`), never written.
 
 Also snapshotted/restored: saved application state, App Support dir,
 appearance, cursor, frontmost app. The App Support snapshot is taken with
@@ -121,5 +123,6 @@ not found — never a coordinate click.
 
 **Sidebar.** `press_section <label>` is the one **coordinate-click
 contingency**: the Settings sidebar `List` is not AX-exposed here at all
-(unlike the main tab control). It clicks `(x+98, y+T+29)`/`(x+98, y+T+65)`
-from the Settings window's bounds and titlebar height `T = h - 420`.
+(unlike the main tab control). It clicks `(x+98, y+T+29)`/`(x+98, y+T+65)`/`(x+98, y+T+101)` (General/Monitoring/Backup)
+from the Settings window's bounds and titlebar height `T = h - 420`. A
+Monitoring-vs-Backup sanity guard aborts the run if the Backup click changed nothing.
