@@ -15,7 +15,7 @@ Its sections therefore have **two different lifetimes**, and they are labelled:
 
 | Still binding | Historical — describes the v1.0 build, not today's code |
 |---|---|
-| §1 Goals & hard constraints, §2 Locations, §4 Data contracts, §5 Collectors, §6 Assessment, §7 Report text, §9 Packaging, §12 AI_ENABLED flag | §3 Package layout & file ownership, §8 UI, §10 Testing, §11 Phases |
+| §1 Goals & hard constraints, §2 Locations, §4 Data contracts, §5 Collectors, §6 Assessment, §7 Report text, §9 Packaging, §12 AI assistant (removed) | §3 Package layout & file ownership, §8 UI, §10 Testing, §11 Phases |
 
 **For anything in the right-hand column the code is the source of truth, not this file.**
 Do not "restore" something it describes; do not update it to match a refactor either —
@@ -88,7 +88,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
 
    Two further boundaries hold with no exceptions: the app writes file **content** only
    inside `~/Library/Application Support/MacDashboard/` (rows 1, 3, 4 delete or move
-   files elsewhere but never author them), and a default build contains no networking
+   files elsewhere but never author them), and the app contains no networking code
    at all — see §12.
 7. min deployment: **macOS 14** (needed for @Observable + Swift Charts). Build:
    SwiftPM, Apple Silicon (arm64) binary, hand-rolled .app bundle, codesign with the local signing identity if present, otherwise ad-hoc (§9).
@@ -340,7 +340,7 @@ struct HistoryState: Codable {
 // "live" is not a single property any more — DashboardModel exposes cpu/mem/swap/disk/
 // battery/load/topCPU/topMem etc. as individual @Observable fields (see
 // Engine/DashboardModel.swift:104-108's doc comment for why); a private computed `live`
-// and `currentLiveSnapshot()` exist only for the report/assess/AI-payload code paths.
+// exists only for the report/assess code paths.
 var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
 var report: FullReport            // sections fill in as collected
 var assessment: Assessment
@@ -661,19 +661,10 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
 3. Integration: wire real collectors into model, tests (§10), fix build.
 4. Packaging + E2E + install to ~/Applications.
 
-## 12. AI assistant compile flag (AI_ENABLED)
+## 12. AI assistant (removed)
 
-The optional AI assistant feature is gated behind the Swift compile-time flag
-`AI_ENABLED`, OFF by default:
-
-- `Package.swift` defines `AI_ENABLED` unconditionally for the `MacDashboardChecks`
-  SPM target only, so the AI-related pure-logic files (`AIRedaction.swift`,
-  `AIPayload.swift`, `AIRequest.swift`, etc.) keep building and running under
-  `swift run MacDashboardChecks` regardless of how the app itself is built.
-- The `MacDashboard` app target does NOT get `AI_ENABLED` by default. It is only
-  passed in when building with `MACDASHBOARD_AI=1 ./build_app.sh`, which adds
-  `-Xswiftc -DAI_ENABLED` to the arm64 build (see
-  `build_app.sh`).
-- A default build (`./build_app.sh` with no environment override) therefore ships
-  zero AI/networking code: no AI request/redaction/payload logic is compiled into
-  the app binary at all, not merely hidden behind a UI toggle.
+The optional AI assistant was the only networking code the app ever had, and it was
+compiled only into opt-in builds — no released build contained it. It was removed from
+the code in October 2026 (block AI-ARCHIVE). Its last state is preserved under the
+annotated git tag `ai-assistant-archive`; reviving it means a rework, not a re-merge of
+that tag.

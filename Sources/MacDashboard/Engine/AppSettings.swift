@@ -46,13 +46,6 @@ final class AppSettings {
         try? JSONEncoder().encode(list)
     }
 
-    // Compiled out of the default (public) build — see Package.swift/build_app.sh (AI_ENABLED).
-    #if AI_ENABLED
-    static let aiProviderKey = "aiProvider"
-    static let aiBaseURLKey = "aiBaseURL"
-    static let aiModelIdKey = "aiModelId"
-    #endif
-
     /// Sleep interval of DashboardModel's fast task (native CPU/RAM/disk/battery
     /// gauges). Read by the loop on every iteration, so a change applies on the
     /// next tick without restarting the task.
@@ -79,24 +72,6 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(backupStaleHours, forKey: Self.backupStaleHoursKey) }
     }
 
-    #if AI_ENABLED
-    /// AI provider selection (Block AI, Wave 2). The API key itself is NEVER
-    /// stored here / in UserDefaults — only in Keychain via `KeychainStore`.
-    var aiProvider: AIProvider {
-        didSet { UserDefaults.standard.set(aiProvider.rawValue, forKey: Self.aiProviderKey) }
-    }
-
-    var aiBaseURL: String {
-        didSet { UserDefaults.standard.set(aiBaseURL, forKey: Self.aiBaseURLKey) }
-    }
-
-    var aiModelId: String {
-        didSet { UserDefaults.standard.set(aiModelId, forKey: Self.aiModelIdKey) }
-    }
-
-    var aiConfig: AIProviderConfig { AIProviderConfig(provider: aiProvider, baseURL: aiBaseURL, model: aiModelId) }
-    #endif
-
     private init() {
         let raw = UserDefaults.standard.integer(forKey: Self.fastIntervalKey) // 0 if unset
         fastIntervalSeconds = Self.allowedIntervals.contains(raw) ? raw : 2
@@ -105,12 +80,5 @@ final class AppSettings {
         processListLimit = Self.resolveProcessLimit(raw: rawLimit)
         ignoredWakeHolders = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
         backupStaleHours = Self.resolveBackupStaleHours(raw: UserDefaults.standard.integer(forKey: Self.backupStaleHoursKey))
-
-        #if AI_ENABLED
-        let providerRaw = UserDefaults.standard.string(forKey: Self.aiProviderKey)
-        aiProvider = providerRaw.flatMap(AIProvider.init(rawValue:)) ?? .anthropic
-        aiBaseURL = UserDefaults.standard.string(forKey: Self.aiBaseURLKey) ?? ""
-        aiModelId = UserDefaults.standard.string(forKey: Self.aiModelIdKey) ?? "claude-opus-4-8"
-        #endif
     }
 }

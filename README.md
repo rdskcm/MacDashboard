@@ -101,12 +101,9 @@ here is everything it does:
 
 Nothing else touches the network.
 
-**The AI assistant is not built into the public release.** Its source is
-present in the repository, gated behind a compile-time flag, and stays inert
-unless you deliberately opt in: `MACDASHBOARD_AI=1 ./build_app.sh`. Building
-with that flag sends the full diagnostic report to a third-party LLM provider
-you configure. It is off by default, still under development, and not
-something the app does unless you ask it to.
+**There is no AI assistant in the app.** An unfinished one, never part of a
+release, was removed from the code; its last state is kept under the git tag
+`ai-assistant-archive`.
 
 **What's in the report.** The diagnostic report MacDashboard collects is
 machine-identifying: it can include folder names, installed-app hints,

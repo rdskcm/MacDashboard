@@ -2094,18 +2094,6 @@ runHistorySeriesChecks()
 runVisualFixtureChecks()
 
 // =====================================================================
-// MARK: - AI assistant redaction (Block AI, in AIRedactionChecks.swift)
-// =====================================================================
-
-runAIRedactionChecks()
-
-// =====================================================================
-// MARK: - AI assistant payload/request (Block AI, in AIPayloadRequestChecks.swift)
-// =====================================================================
-
-runAIPayloadRequestChecks()
-
-// =====================================================================
 // MARK: - ReportWriter render/write (COVERAGE-REPORT, in ReportWriterChecks.swift)
 // =====================================================================
 

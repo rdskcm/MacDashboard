@@ -93,9 +93,8 @@ struct SettingsPulseIconShape: Shape {
 
 /// Which glyph a sidebar row draws, plus (SW:20/26) its own stroke width — the
 /// gear strokes at 1.25 pt, the pulse line at 1.4 pt. `.symbol` is the legacy
-/// SF-Symbol path kept only for the `AI_ENABLED`-only AI row (out of scope for
-/// this block): it keeps compiling and keeps its `sparkles` glyph without being
-/// forced into either custom shape above.
+/// SF-Symbol path used by the Backup row: it keeps its solid tinted badge
+/// instead of either custom shape above.
 enum SettingsSidebarIconKind {
     case gear
     case pulse

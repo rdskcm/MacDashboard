@@ -571,41 +571,6 @@ struct StringsEN: AppStrings {
     var smartAttrErrorInformationLogEntries: String { "Error Information Log Entries" }
     var reportSmartStatusOk: String { "SMART: OK" }
 
-    // MARK: AI assistant
-    var settingsSectionAI: String { "AI assistant" }
-    var aiSettingsProviderLabel: String { "Provider" }
-    var aiSettingsBaseURLLabel: String { "Base URL" }
-    var aiSettingsBaseURLPlaceholder: String { "Anthropic defaults to api.anthropic.com when left empty" }
-    var aiSettingsModelLabel: String { "Model" }
-    var aiSettingsKeyLabel: String { "API key" }
-    var aiSettingsKeySave: String { "Save key" }
-    var aiSettingsKeyDelete: String { "Delete key" }
-    var aiSettingsKeyStored: String { "Key stored" }
-    var aiSettingsKeyMissing: String { "No key set — the \"Ask AI\" button is hidden" }
-    var aiSettingsPrivacyNote: String { "The key is stored in Keychain only. Nothing is sent without explicit confirmation." }
-    var aiSettingsModelCustom: String { "Other…" }
-    var aiSettingsModelCustomPlaceholder: String { "Enter model ID" }
-    var aiSettingsInDevelopmentNote: String { "This feature is under development" }
-    var aiAskButton: String { "Ask AI" }
-    var aiSheetTitle: String { "Ask AI" }
-    var aiSheetPayloadCaption: String { "Exactly the text below will be sent" }
-    var aiToggleSerials: String { "Redact serial numbers" }
-    var aiToggleUsername: String { "Redact username in paths" }
-    var aiToggleHostname: String { "Redact computer name" }
-    var aiToggleSSID: String { "Redact Wi-Fi network name" }
-    var aiSendButton: String { "Send" }
-    var aiSending: String { "Sending…" }
-    var aiAnswerTitle: String { "Answer" }
-    func aiRequestFailed(_ msg: String) -> String { "Request failed: \(msg)" }
-    var aiKeyReadFailed: String { "Could not read the key from Keychain" }
-    var aiNoReport: String { "No report has been collected yet" }
-    var aiPayloadSectionAssessment: String { "ASSESSMENT" }
-    var aiPayloadSectionLive: String { "CURRENT METRICS" }
-    var aiPayloadSectionReport: String { "REPORT" }
-    var aiPayloadTipPrefix: String { "- tip: " }
-    var aiSystemPrompt: String { "You are a Mac diagnostics assistant. Below is a diagnostic report for the user's computer. Briefly answer: what's fine, what problems exist, and what to fix first." }
-    var aiPrivacyContract: String { "Nothing is sent without a key and explicit confirmation. The key stays in Keychain and never appears in reports or logs. No telemetry." }
-
     // MARK: Report collector
     var reportCollectorNoBackupsYet: String { "no backups yet" }
     var reportCollectorDiskNotConnected: String { "disk not connected" }

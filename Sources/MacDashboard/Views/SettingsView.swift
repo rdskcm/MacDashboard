@@ -5,10 +5,6 @@ import SwiftUI
 
 enum SettingsSection: Hashable {
     case general, monitoring, backup
-    // Compiled out of the default (public) build — see Package.swift/build_app.sh (AI_ENABLED).
-    #if AI_ENABLED
-    case ai
-    #endif
 }
 
 /// Same rounded-rect/hairline-border/top-sheen-highlight treatment and the same
@@ -89,8 +85,7 @@ private struct SettingsSidebarRow: View {
 
     /// 22×22, radius 7 — concentric with the row's own radius 10 (Spec §7.1).
     /// `.gear`/`.pulse` use the new selected/unselected DS-token badge; the
-    /// legacy `.symbol` case (AI row only, out of scope) keeps its old solid-
-    /// tint-square look so it still compiles without adopting either new shape.
+    /// legacy `.symbol` case (the Backup row) keeps its old solid-tint-square look.
     @ViewBuilder
     private var iconBadge: some View {
         switch icon {
@@ -131,119 +126,6 @@ private struct SettingsSidebarRow: View {
         }
     }
 }
-
-// Compiled out of the default (public) build — see Package.swift/build_app.sh (AI_ENABLED).
-#if AI_ENABLED
-/// AI assistant settings (Block AI, Wave 2): provider/base URL/model config in
-/// `AppSettings`, API key kept out of UserDefaults entirely — it round-trips
-/// through Keychain via `KeychainStore` only, never bound to a persisted property.
-private struct AISettingsForm: View {
-    @Bindable var settings: AppSettings
-
-    @State private var keyInput: String = ""
-    @State private var keyExists: Bool = false
-
-    private static let anthropicModels = ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"]
-    private static let openaiModels = ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini", "o3-mini"]
-    private static let customModelTag = "__custom__"
-
-    private static func presetModels(for provider: AIProvider) -> [String] {
-        provider == .anthropic ? anthropicModels : openaiModels
-    }
-
-    private var modelSelectionBinding: Binding<String> {
-        Binding(
-            get: {
-                let presets = Self.presetModels(for: settings.aiProvider)
-                return presets.contains(settings.aiModelId) ? settings.aiModelId : Self.customModelTag
-            },
-            set: { newValue in
-                settings.aiModelId = newValue == Self.customModelTag ? "" : newValue
-            }
-        )
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Label(L.aiSettingsInDevelopmentNote, systemImage: "hammer")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Picker(L.aiSettingsProviderLabel, selection: $settings.aiProvider) {
-                    Text(verbatim: "Anthropic").tag(AIProvider.anthropic)
-                    Text(verbatim: "OpenAI-compatible").tag(AIProvider.openaiCompatible)
-                }
-                .pickerStyle(.menu)
-                .onChange(of: settings.aiProvider) { _, newProvider in
-                    let presets = Self.presetModels(for: newProvider)
-                    if !presets.contains(settings.aiModelId), let first = presets.first {
-                        settings.aiModelId = first
-                    }
-                }
-
-                HStack(spacing: 6) {
-                    TextField(L.aiSettingsBaseURLLabel, text: $settings.aiBaseURL)
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                        .hoverTip(L.aiSettingsBaseURLPlaceholder)
-                        .accessibilityLabel(L.aiSettingsBaseURLPlaceholder)
-                }
-
-                Picker(L.aiSettingsModelLabel, selection: modelSelectionBinding) {
-                    ForEach(Self.presetModels(for: settings.aiProvider), id: \.self) { id in
-                        Text(verbatim: id).tag(id)
-                    }
-                    Text(L.aiSettingsModelCustom).tag(Self.customModelTag)
-                }
-                .pickerStyle(.menu)
-
-                if !Self.presetModels(for: settings.aiProvider).contains(settings.aiModelId) {
-                    TextField(L.aiSettingsModelCustomPlaceholder, text: $settings.aiModelId)
-                }
-            }
-
-            Section {
-                SecureField(L.aiSettingsKeyLabel, text: $keyInput)
-
-                HStack {
-                    Button(L.aiSettingsKeySave) {
-                        if KeychainStore.save(keyInput) {
-                            keyInput = ""
-                        }
-                        keyExists = KeychainStore.exists()
-                    }
-                    .disabled(keyInput.isEmpty)
-
-                    Button(L.aiSettingsKeyDelete) {
-                        KeychainStore.delete()
-                        keyExists = KeychainStore.exists()
-                    }
-                    .disabled(!keyExists)
-                }
-
-                if keyExists {
-                    Label(L.aiSettingsKeyStored, systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                } else {
-                    Label(L.aiSettingsKeyMissing, systemImage: "exclamationmark.circle")
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section {
-                Text(L.aiSettingsPrivacyNote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .onAppear { keyExists = KeychainStore.exists() }
-    }
-}
-#endif
 
 struct SettingsView: View {
     // Harness-only init param so offscreen renders can show any section without
@@ -330,11 +212,6 @@ struct SettingsView: View {
                     section = .backup
                 }
             }
-            #if AI_ENABLED
-            SettingsSidebarRow(icon: .symbol(name: "sparkles", tint: .purple), title: L.settingsSectionAI, selected: section == .ai) {
-                section = .ai
-            }
-            #endif
             Spacer(minLength: 0)
         }
         .padding(.top, 12).padding(.bottom, 12).padding(.horizontal, 10)
@@ -398,10 +275,6 @@ struct SettingsView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
-        #if AI_ENABLED
-        case .ai:
-            AISettingsForm(settings: settings)
-        #endif
         }
     }
 
