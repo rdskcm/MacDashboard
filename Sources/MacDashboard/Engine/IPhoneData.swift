@@ -107,6 +107,24 @@ enum ImportError: Error, Equatable {
     case cancelled
 }
 
+/// IPHONE-HISTORY-MIXUP: an import paused because the archive's battery design capacity
+/// does not match the open phone's. `IPhoneImportCard` shows it as a confirmation dialog.
+struct ImportIdentityQuestion: Equatable, Identifiable {
+    var archiveName: String
+    var archiveMAh: [Int]        // the archive's design capacities, ascending
+    var deviceMAh: Int           // the open phone's stored design capacity
+    var targetName: String       // the open phone (IPhoneData.displayName)
+    var ownerName: String?       // the one other remembered phone whose capacity matches; nil = none or several
+    var id: String { archiveName }
+}
+
+/// IPHONE-HISTORY-MIXUP: the archive checked against the open phone.
+enum ArchiveIdentity: Equatable {
+    case match
+    case unknown
+    case mismatch(ImportIdentityQuestion)
+}
+
 /// Why extracting a sysdiagnose archive failed (IPHONE-IMPORT-IOS27). The import card shows
 /// it as a second muted line; `AppStrings.iphoneImportErrorDetail` formats it.
 enum ExtractFailure: Equatable {
@@ -321,6 +339,56 @@ enum IPhoneData {
             best[day] = (when, p)
         }
         return (best.values.map { $0.1 }.sorted { $0.day < $1.day }, skipped)
+    }
+
+    /// IPHONE-HISTORY-MIXUP: the battery design capacities (mAh) one `BDC_Once_*.csv` states.
+    /// The column is found by name (`DesignCapacity`), as in `parseBDCDaily`; a row with a
+    /// different column count or a non-numeric or non-positive value is ignored. No column → empty.
+    static func parseBDCOnceDesignCapacities(_ csv: String) -> Set<Int> {
+        let lines = csv.split(whereSeparator: { $0 == "\n" || $0 == "\r\n" || $0 == "\r" })
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard let headerLine = lines.first else { return [] }
+        let header = headerLine.split(separator: ",", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let i = header.firstIndex(of: "DesignCapacity") else { return [] }
+        var out = Set<Int>()
+        for line in lines.dropFirst() {
+            let cols = line.split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard cols.count == header.count, let v = Int(cols[i]), v > 0 else { continue }
+            out.insert(v)
+        }
+        return out
+    }
+
+    /// The phone's own battery design capacity: the latest point (by day) that carries a
+    /// positive one. Only live reads store it (imported points have nil).
+    static func designCapacity(of record: IPhoneDeviceRecord) -> Int? {
+        record.battery.sorted { $0.day < $1.day }
+            .last(where: { ($0.designCapacityMAh ?? 0) > 0 })?.designCapacityMAh
+    }
+
+    /// How a dialog names a phone: the marketing name, else the user-given name.
+    static func displayName(_ record: IPhoneDeviceRecord) -> String {
+        if let m = record.marketingName, !m.isEmpty { return m }
+        return record.name
+    }
+
+    /// IPHONE-HISTORY-MIXUP: an archive whose design capacities do not include the open
+    /// phone's stored one is `.mismatch`; if either side is unknown (empty set, no stored
+    /// capacity, no record) the verdict is `.unknown` and the import proceeds as before.
+    static func archiveIdentity(archiveName: String, archiveMAh: Set<Int>, deviceKey: String,
+                                devices: [IPhoneDeviceRecord]) -> ArchiveIdentity {
+        guard !archiveMAh.isEmpty,
+              let target = devices.first(where: { $0.id == deviceKey }),
+              let deviceMAh = designCapacity(of: target) else { return .unknown }
+        if archiveMAh.contains(deviceMAh) { return .match }
+        let owners = devices.filter { d in
+            d.id != deviceKey && designCapacity(of: d).map { archiveMAh.contains($0) } == true
+        }
+        return .mismatch(ImportIdentityQuestion(archiveName: archiveName, archiveMAh: archiveMAh.sorted(),
+                                                deviceMAh: deviceMAh, targetName: displayName(target),
+                                                ownerName: owners.count == 1 ? displayName(owners[0]) : nil))
     }
 
     /// Regular `.tar.gz` files under `/DiagnosticLogs/sysdiagnose/`, newest first (nil

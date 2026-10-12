@@ -772,13 +772,17 @@ protocol AppStrings {
     var iphoneImportPickFile: String { get }
     var iphoneImportPickA11y: String { get }
     var iphoneImportPickPrompt: String { get }
-    func iphoneImportConfirmTitle(_ name: String) -> String
+    func iphoneImportConfirmTitle(_ name: String, into phone: String) -> String
     var iphoneImportParseOnly: String { get }
     var iphoneImportParseKeep: String { get }
     var iphoneImportCancel: String { get }
     var iphoneImportParseOnlyA11y: String { get }
     var iphoneImportParseKeepA11y: String { get }
     var iphoneImportCancelA11y: String { get }
+    func iphoneImportMismatchTitle(_ target: String) -> String
+    func iphoneImportMismatchMessage(file: String, owner: String?, archiveMAh: [Int], deviceMAh: Int, target: String) -> String
+    var iphoneImportMismatchProceed: String { get }
+    var iphoneImportMismatchProceedA11y: String { get }
     var iphoneImportHint: String { get }
     func iphoneImportProgress(_ p: ImportProgress) -> String
     func iphoneImportSummary(_ s: ImportSummary) -> String

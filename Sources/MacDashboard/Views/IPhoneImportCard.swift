@@ -17,10 +17,16 @@ struct IPhoneImportCard: View {
         var source: SysdiagnoseImporter.Source
     }
     @State private var pending: Pending?
+    /// False once the card has left the screen (page switch): the dialog's dismissal then is not an answer.
+    @State private var onScreen = true
 
     private var isConnected: Bool { model.connected[deviceKey] != nil }
     private var running: ImportProgress? { model.importing[deviceKey] }
     private var kept: [String] { model.devices.first { $0.id == deviceKey }?.keptArchives ?? [] }
+    private var targetName: String {
+        model.devices.first { $0.id == deviceKey }.map(IPhoneData.displayName) ?? L.iphoneUnknownDevice
+    }
+    private var question: ImportIdentityQuestion? { model.importQuestion[deviceKey] }
 
     /// Phone archives: from the crash-log listing, newest first. Empty when not connected.
     private var phoneArchives: [IPhoneAFCEntry] {
@@ -46,8 +52,23 @@ struct IPhoneImportCard: View {
                 status
                 if !kept.isEmpty { keptList }
             }
+            .onAppear { onScreen = true }
+            .onDisappear { onScreen = false }
+            // A sheet, not a confirmationDialog/alert (macOS 27, checked with real key events): a system dialog
+            // cannot have Cancel as both the Return default and the Escape button without a third, auto-added
+            // Cancel (`role: .cancel` + `.defaultAction` leaves Escape dead; no role adds a system Cancel).
+            .sheet(isPresented: Binding(get: { question != nil }, set: { shown in
+                // Escape dismisses the sheet without running a button action: that is Cancel. A button click
+                // runs its action first (the question is then already nil); a page switch runs onDisappear
+                // first, so it leaves the question pending.
+                if !shown, onScreen, question != nil {
+                    model.answerImportQuestion(deviceKey: deviceKey, proceed: false)
+                }
+            })) {
+                if let q = question { mismatchSheet(q) }
+            }
         }
-        .confirmationDialog(pending.map { L.iphoneImportConfirmTitle($0.name) } ?? "",
+        .confirmationDialog(pending.map { L.iphoneImportConfirmTitle($0.name, into: targetName) } ?? "",
                             isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
                             titleVisibility: .visible, presenting: pending) { p in
             Button(L.iphoneImportParseOnly) { start(p, keep: false) }
@@ -57,6 +78,28 @@ struct IPhoneImportCard: View {
             Button(L.iphoneImportCancel, role: .cancel) { pending = nil }
                 .accessibilityLabel(L.iphoneImportCancelA11y)
         }
+    }
+
+    private func mismatchSheet(_ q: ImportIdentityQuestion) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L.iphoneImportMismatchTitle(q.targetName)).font(.headline)
+            Text(L.iphoneImportMismatchMessage(file: q.archiveName, owner: q.ownerName, archiveMAh: q.archiveMAh,
+                                               deviceMAh: q.deviceMAh, target: q.targetName))
+                .font(.callout).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button(L.iphoneImportMismatchProceed, role: .destructive) {
+                    model.answerImportQuestion(deviceKey: deviceKey, proceed: true)
+                }
+                .accessibilityLabel(L.iphoneImportMismatchProceedA11y)
+                Button(L.iphoneImportCancel) {
+                    model.answerImportQuestion(deviceKey: deviceKey, proceed: false)
+                }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityLabel(L.iphoneImportCancelA11y)
+            }
+        }
+        .padding(20).frame(width: 400)
     }
 
     private func archiveRow(_ a: IPhoneAFCEntry) -> some View {

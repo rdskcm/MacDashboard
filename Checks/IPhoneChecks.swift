@@ -240,6 +240,60 @@ func runIPhoneChecks() {
     check(IPhoneData.parseBDCDaily("").points.isEmpty && IPhoneData.parseBDCDaily(hdr).points.isEmpty,
           "iPhone: BDC empty input and header-only give no points")
     check(IPhoneData.parseBDCDaily("A,B\n1,2").points.isEmpty, "iPhone: BDC without the named columns gives no points")
+    // --- archive identity (IPHONE-HISTORY-MIXUP) ---
+    let onceHdr = "TimeStamp,DesignCapacity,Other"
+    check(IPhoneData.parseBDCOnceDesignCapacities([onceHdr, "2026-09-16 21:25:58,4395,a"].joined(separator: "\n")) == [4395],
+          "iPhone: BDC_Once one row gives its design capacity")
+    check(IPhoneData.parseBDCOnceDesignCapacities([onceHdr, "2026-03-26 17:37:52,5030,a", "2026-03-27 10:00:00,5030,a",
+                                                   "x,0,a", "y,n/a,a", "z,4000"].joined(separator: "\n")) == [5030],
+          "iPhone: BDC_Once duplicates collapse; zero, non-numeric and short rows are ignored")
+    check(IPhoneData.parseBDCOnceDesignCapacities("A,B\n1,2").isEmpty && IPhoneData.parseBDCOnceDesignCapacities("").isEmpty,
+          "iPhone: BDC_Once without the column or empty gives nothing")
+    func bp(_ day: String, _ source: String, _ design: Int?) -> BatteryPoint {
+        BatteryPoint(day: day, cycles: 1, healthPercent: 98, maxCapacityMAh: nil, designCapacityMAh: design, source: source)
+    }
+    func rec(_ id: String, _ marketing: String?, _ name: String, _ pts: [BatteryPoint]) -> IPhoneDeviceRecord {
+        IPhoneDeviceRecord(id: id, name: name, marketingName: marketing, productType: nil, enclosureColor: nil,
+                           osVersion: nil, lastSeen: Date(timeIntervalSince1970: 1_700_000_000), battery: pts, keptArchives: [])
+    }
+    let r17 = rec("k17", "iPhone 17 Pro Max", "iPhone", [bp("2026-10-12", "live", 5030), bp("2026-10-01", "import", nil)])
+    let r15 = rec("k15", "iPhone 15 Pro Max", "iPhone", [bp("2026-10-12", "live", 4395)])
+    let rBare = rec("kb", nil, "Old phone", [bp("2026-10-01", "import", nil), bp("2026-10-02", "live", nil)])
+    check(IPhoneData.designCapacity(of: r17) == 5030, "iPhone: designCapacity from the live point")
+    check(IPhoneData.designCapacity(of: rec("x", nil, "x", [bp("2026-10-12", "live", 5030), bp("2026-10-10", "live", 4000)])) == 5030,
+          "iPhone: designCapacity takes the latest day, not the array order")
+    check(IPhoneData.designCapacity(of: rBare) == nil, "iPhone: designCapacity nil without a stored value")
+    check(IPhoneData.displayName(r17) == "iPhone 17 Pro Max" && IPhoneData.displayName(rBare) == "Old phone"
+          && IPhoneData.displayName(rec("e", "", "Named", [])) == "Named", "iPhone: displayName marketing name, else name")
+    let all = [r17, r15, rBare]
+    func ident(_ mAh: Set<Int>, _ key: String, _ devs: [IPhoneDeviceRecord]) -> ArchiveIdentity {
+        IPhoneData.archiveIdentity(archiveName: "a.tar.gz", archiveMAh: mAh, deviceKey: key, devices: devs)
+    }
+    check(ident([5030], "k17", all) == .match, "iPhone: identity match")
+    check(ident([4000, 5030], "k17", all) == .match, "iPhone: identity match when any archive capacity matches")
+    check(ident([4395], "k17", all) == .mismatch(ImportIdentityQuestion(archiveName: "a.tar.gz", archiveMAh: [4395], deviceMAh: 5030,
+                                                                    targetName: "iPhone 17 Pro Max", ownerName: "iPhone 15 Pro Max")),
+          "iPhone: identity mismatch names both phones")
+    check(ident([5100, 4395], "k17", [r17, rBare]) == .mismatch(ImportIdentityQuestion(archiveName: "a.tar.gz", archiveMAh: [4395, 5100],
+                                                                    deviceMAh: 5030, targetName: "iPhone 17 Pro Max", ownerName: nil)),
+          "iPhone: identity mismatch with no known owner; capacities sorted")
+    let r15b = rec("k15b", "iPhone 15 Pro Max", "Second", [bp("2026-10-12", "live", 4395)])
+    if case .mismatch(let q) = ident([4395], "k17", [r17, r15, r15b]) { check(q.ownerName == nil, "iPhone: identity two possible owners -> unnamed") }
+    else { check(false, "iPhone: identity two possible owners -> unnamed") }
+    check(ident([], "k17", all) == .unknown, "iPhone: identity unknown when the archive has no capacity")
+    check(ident([4395], "kb", all) == .unknown, "iPhone: identity unknown when the phone has no stored capacity")
+    check(ident([4395], "missing", all) == .unknown, "iPhone: identity unknown without a record")
+    check(StringsEN().iphoneImportConfirmTitle("a.tar.gz", into: "iPhone 17 Pro Max") == "Import “a.tar.gz” into iPhone 17 Pro Max",
+          "iPhone: EN confirm title names the phone")
+    check(StringsRU().iphoneImportConfirmTitle("a.tar.gz", into: "iPhone 17 Pro Max") == "Импорт «a.tar.gz» в iPhone 17 Pro Max",
+          "iPhone: RU confirm title names the phone")
+    let mEN = StringsEN().iphoneImportMismatchMessage(file: "a.tar.gz", owner: "iPhone 15 Pro Max", archiveMAh: [4395],
+                                                      deviceMAh: 5030, target: "iPhone 17 Pro Max")
+    check(mEN.contains("iPhone 15 Pro Max") && mEN.contains("iPhone 17 Pro Max") && mEN.contains("4395 mAh") && mEN.contains("5030 mAh"),
+          "iPhone: EN mismatch message names both phones and both capacities")
+    check(StringsEN().iphoneImportMismatchMessage(file: "a", owner: nil, archiveMAh: [1], deviceMAh: 2, target: "T").contains("another iPhone")
+          && StringsRU().iphoneImportMismatchMessage(file: "a", owner: nil, archiveMAh: [1], deviceMAh: 2, target: "T").contains("другого iPhone"),
+          "iPhone: mismatch message without an owner says another iPhone")
     func af(_ path: String, dir: Bool = false, _ t: Double?) -> IPhoneAFCEntry {
         IPhoneAFCEntry(path: path, isDirectory: dir, size: 10, modified: t.map { Date(timeIntervalSince1970: $0) })
     }
