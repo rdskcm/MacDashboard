@@ -30,8 +30,11 @@ struct SysdiagnoseImporter {
     }
 
     /// A keep failure fails the whole import: nothing is merged, so a retry starts clean.
+    /// After parsing and before keeping, `confirm` receives the archive's battery design
+    /// capacities; `false` ends the import as `.cancelled` with nothing kept (IPHONE-HISTORY-MIXUP).
     func run(source: Source, deviceKey: String, keep: Bool,
              keepRoot: URL = IPhoneStore.defaultURL().deletingLastPathComponent(),
+             confirm: @escaping @MainActor (_ archiveName: String, _ designMAh: Set<Int>) async -> Bool,
              onProgress: @escaping @MainActor (ImportProgress) -> Void) async -> Result<ImportOutput, ImportError> {
         let fm = FileManager.default
         // 1. Fresh temp root, removed on every exit (success or failure); a root left by an app quit is removed at the next iPhone-mode start.
@@ -82,8 +85,9 @@ struct SysdiagnoseImporter {
 
         // 4. Parse.
         await onProgress(.parsing)
-        var (csvFiles, ipsFiles) = Self.extractedFiles(in: extractDir)
-        csvFiles.sort { $0.lastPathComponent < $1.lastPathComponent }
+        let found = Self.extractedFiles(in: extractDir)
+        let csvFiles = found.csv.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let ipsFiles = found.ips
         var days: [String: BatteryPoint] = [:]
         var skipped = 0
         for u in csvFiles {
@@ -110,6 +114,14 @@ struct SysdiagnoseImporter {
                                        source: .archive(name: archiveName)))
         }
 
+        // 4b. Identity (IPHONE-HISTORY-MIXUP): asked before anything is kept or merged.
+        var designMAh = Set<Int>()
+        for u in found.once {
+            guard let text = try? String(contentsOf: u, encoding: .utf8) else { continue }
+            designMAh.formUnion(IPhoneData.parseBDCOnceDesignCapacities(text))
+        }
+        guard await confirm(archiveName, designMAh) else { return .failure(.cancelled) }
+
         // 5. Keep.
         var keptURL: URL?
         if keep {
@@ -124,19 +136,20 @@ struct SysdiagnoseImporter {
                                      points: points, logs: logs))
     }
 
-    /// BDC_Daily CSVs and `.ips` files under `dir`. Synchronous: FileManager.enumerator
+    /// BDC_Daily CSVs, BDC_Once CSVs and `.ips` files under `dir`. Synchronous: FileManager.enumerator
     /// iteration is not allowed in an async context.
-    private static func extractedFiles(in dir: URL) -> (csv: [URL], ips: [URL]) {
-        var csv: [URL] = [], ips: [URL] = []
+    private static func extractedFiles(in dir: URL) -> (csv: [URL], once: [URL], ips: [URL]) {
+        var csv: [URL] = [], once: [URL] = [], ips: [URL] = []
         if let en = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey]) {
             for case let u as URL in en {
                 guard (try? u.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
                 let name = u.lastPathComponent
                 if name.hasPrefix("BDC_Daily_"), name.hasSuffix(".csv") { csv.append(u) }
+                else if name.hasPrefix("BDC_Once_"), name.hasSuffix(".csv") { once.append(u) }
                 else if name.hasSuffix(".ips") { ips.append(u) }
             }
         }
-        return (csv, ips)
+        return (csv, once, ips)
     }
 
     private static func readPrefix(_ url: URL, limit: Int) -> Data? {

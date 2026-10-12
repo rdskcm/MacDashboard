@@ -57,6 +57,9 @@ func runSysdiagnoseExtractorChecks() {
     check(!X.isWanted("top/logs/BatteryBDC/Other_a.csv"), "sysdiag: isWanted BDC wrong prefix")
     check(!X.isWanted("top/logs/BatteryBDC/sub/BDC_Daily_a.csv"), "sysdiag: isWanted BDC subfolder")
     check(!X.isWanted("top/BatteryBDC/BDC_Daily_a.csv"), "sysdiag: isWanted BDC without logs")
+    check(X.isWanted("sysdiagnose_X/logs/BatteryBDC/BDC_Once_version3.3_2026-09-16_21:25:58.csv"), "sysdiag: isWanted BDC_Once")
+    check(!X.isWanted("top/logs/BatteryBDC/BDC_Once_a.txt"), "sysdiag: isWanted BDC_Once wrong ext")
+    check(!X.isWanted("top/BatteryBDC/BDC_Once_a.csv"), "sysdiag: isWanted BDC_Once without logs")
     check(X.isWanted("top/crashes_and_spins/a.ips"), "sysdiag: isWanted crash ips")
     check(X.isWanted("top/crashes_and_spins/Retired/b.ips"), "sysdiag: isWanted retired ips")
     check(X.isWanted("crashes_and_spins/a.ips"), "sysdiag: isWanted crash ips no top")
@@ -119,12 +122,13 @@ func runSysdiagnoseExtractorChecks() {
     func eq(_ r: Result<Int, ImportError>, _ n: Int) -> Bool { if case .success(let m) = r { return m == n }; return false }
 
     let allFiles = ["top/logs/BatteryBDC/BDC_Daily_version3.3_2026-09-16_21:25:49.csv",
+                    "top/logs/BatteryBDC/BDC_Once_version3.0_2026-03-26_17:37:52.csv",
                     "top/crashes_and_spins/stacks-1.ips", "top/crashes_and_spins/Retired/old-1.ips"]
     let aAll = sdMakeArchive(root: root, case: "all",
                              files: allFiles + ["top/logs/BatteryBDC/notes.txt", "top/crashes_and_spins/Other/x.ips",
                                                 "top/summaries/crashes_and_spins.log"], base: "", item: "top")
     let rAll = run("all", aAll)
-    check(eq(rAll.0, 3), "sysdiag: all result")
+    check(eq(rAll.0, 4), "sysdiag: all result")
     check(rAll.1 == Set(allFiles), "sysdiag: all files")
 
     let wanted2 = ["top/logs/BatteryBDC/BDC_Daily_a.csv", "top/crashes_and_spins/stacks-1.ips"]
@@ -192,7 +196,18 @@ func runSysdiagnoseProbe(_ archivePath: String) -> Int32 {
         let names = sdFiles(under: x).map { ($0 as NSString).lastPathComponent }
         let csv = names.filter { $0.hasPrefix("BDC_Daily_") && $0.hasSuffix(".csv") }.count
         let ips = names.filter { $0.hasSuffix(".ips") }.count
-        print("sysdiag probe: result=success selected=\(n) csv=\(csv) ips=\(ips) seconds=\(String(format: "%.1f", secs)) tmp=\(dir.path)")
+        let onceRel = sdFiles(under: x).filter {
+            let n = ($0 as NSString).lastPathComponent
+            return n.hasPrefix("BDC_Once_") && n.hasSuffix(".csv")
+        }
+        var design = Set<Int>()
+        for rel in onceRel {
+            if let t = try? String(contentsOf: x.appendingPathComponent(rel), encoding: .utf8) {
+                design.formUnion(IPhoneData.parseBDCOnceDesignCapacities(t))
+            }
+        }
+        let designText = design.isEmpty ? "none" : design.sorted().map(String.init).joined(separator: ",")
+        print("sysdiag probe: result=success selected=\(n) csv=\(csv) once=\(onceRel.count) designMAh=\(designText) ips=\(ips) seconds=\(String(format: "%.1f", secs)) tmp=\(dir.path)")
         code = 0
     case .failure(let e):
         print("sysdiag probe: result=failure error=\(String(describing: e)) tmp=\(dir.path)")

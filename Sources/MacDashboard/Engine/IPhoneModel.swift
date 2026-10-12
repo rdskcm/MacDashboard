@@ -43,6 +43,11 @@ final class IPhoneModel {
     var importing: [String: ImportProgress] = [:]
     /// Last import result per device: the archive name with its summary, or the error.
     var importResult: [String: Result<(name: String, summary: ImportSummary), ImportError>] = [:]
+    /// IPHONE-HISTORY-MIXUP: an import paused on an archive that looks like another phone's;
+    /// the device's import card shows it as a dialog. Memory only.
+    var importQuestion: [String: ImportIdentityQuestion] = [:]
+    /// The paused import's continuation per device, resumed by `answerImportQuestion`.
+    @ObservationIgnored private var importAnswer: [String: CheckedContinuation<Bool, Never>] = [:]
 
     /// Identity and parts per connected device. Memory only (R13, D10); cleared on detach.
     var identity: [String: [IPhoneIdentityField]] = [:]
@@ -186,7 +191,11 @@ final class IPhoneModel {
         importResult[deviceKey] = nil
         Task { [weak self] in
             let importer = SysdiagnoseImporter()
-            let result = await importer.run(source: source, deviceKey: deviceKey, keep: keep) { [weak self] p in
+            let result = await importer.run(source: source, deviceKey: deviceKey, keep: keep,
+                                            confirm: { [weak self] name, mAh in
+                                                await self?.confirmIdentity(deviceKey: deviceKey, archiveName: name,
+                                                                            archiveMAh: mAh) ?? false
+                                            }) { [weak self] p in
                 self?.importing[deviceKey] = p
             }
             self?.finishImport(deviceKey: deviceKey, keep: keep, result: result)
@@ -207,6 +216,25 @@ final class IPhoneModel {
             archiveLogs[deviceKey] = out.logs
             importResult[deviceKey] = .success((out.archiveName, out.summary))
         }
+    }
+
+    /// Called by the importer after parsing, before keeping or merging. Answers at once on a
+    /// match or an unknown identity; on a mismatch publishes `importQuestion` and waits.
+    private func confirmIdentity(deviceKey: String, archiveName: String, archiveMAh: Set<Int>) async -> Bool {
+        guard case .mismatch(let q) = IPhoneData.archiveIdentity(archiveName: archiveName, archiveMAh: archiveMAh,
+                                                                 deviceKey: deviceKey, devices: devices) else { return true }
+        return await withCheckedContinuation { cont in
+            Task { @MainActor in
+                self.importAnswer[deviceKey] = cont
+                self.importQuestion[deviceKey] = q
+            }
+        }
+    }
+
+    /// The import card's answer to `importQuestion[deviceKey]`. A second call is a no-op.
+    func answerImportQuestion(deviceKey: String, proceed: Bool) {
+        importQuestion[deviceKey] = nil
+        importAnswer.removeValue(forKey: deviceKey)?.resume(returning: proceed)
     }
 
     private func apply(_ result: Result<IPhoneSnapshot, IPhoneReadError>, for h: IPhoneHandle) {

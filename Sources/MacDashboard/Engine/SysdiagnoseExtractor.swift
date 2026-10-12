@@ -18,7 +18,7 @@ enum SysdiagnoseExtractor {
     }
 
     /// True for a member the import parses, judged by the path components of one `tar -t`
-    /// line: `…/logs/BatteryBDC/BDC_Daily_*.csv`, `…/crashes_and_spins/*.ips`,
+    /// line: `…/logs/BatteryBDC/BDC_Daily_*.csv`, `…/logs/BatteryBDC/BDC_Once_*.csv`, `…/crashes_and_spins/*.ips`,
     /// `…/crashes_and_spins/Retired/*.ips`. Any number of leading components (none included);
     /// `.` components are ignored; a line ending in `/` is a directory.
     static func isWanted(_ line: String) -> Bool {
@@ -26,7 +26,7 @@ enum SysdiagnoseExtractor {
         let parts = line.split(separator: "/").map(String.init).filter { $0 != "." }
         guard let name = parts.last else { return false }
         let dirs = Array(parts.dropLast())
-        if name.hasPrefix("BDC_Daily_") && name.hasSuffix(".csv") {
+        if (name.hasPrefix("BDC_Daily_") || name.hasPrefix("BDC_Once_")) && name.hasSuffix(".csv") {
             return Array(dirs.suffix(2)) == ["logs", "BatteryBDC"]
         }
         guard name.hasSuffix(".ips") else { return false }

@@ -788,13 +788,21 @@ struct StringsRU: AppStrings {
     var iphoneImportPickFile: String { "Выбрать файл на Mac…" }
     var iphoneImportPickA11y: String { "Выбрать архив sysdiagnose на Mac" }
     var iphoneImportPickPrompt: String { "Выбрать" }
-    func iphoneImportConfirmTitle(_ name: String) -> String { "Импорт «\(name)»" }
+    func iphoneImportConfirmTitle(_ name: String, into phone: String) -> String { "Импорт «\(name)» в \(phone)" }
     var iphoneImportParseOnly: String { "Только разобрать" }
     var iphoneImportParseKeep: String { "Разобрать и сохранить" }
     var iphoneImportCancel: String { "Отмена" }
     var iphoneImportParseOnlyA11y: String { "Только разобрать архив, не сохраняя его" }
     var iphoneImportParseKeepA11y: String { "Разобрать архив и сохранить его на Mac" }
     var iphoneImportCancelA11y: String { "Отменить импорт" }
+    func iphoneImportMismatchTitle(_ target: String) -> String { "Загрузить данные другого телефона в \(target)?" }
+    func iphoneImportMismatchMessage(file: String, owner: String?, archiveMAh: [Int], deviceMAh: Int, target: String) -> String {
+        "Похоже, файл «\(file)» снят с \(owner ?? "другого iPhone"): проектная ёмкость его аккумулятора — "
+            + "\(archiveMAh.map { batteryMAh($0) }.joined(separator: ", ")), у \(target) — \(batteryMAh(deviceMAh)). "
+            + "Если загрузить, история аккумулятора из файла заменит историю \(target) за те же дни."
+    }
+    var iphoneImportMismatchProceed: String { "Всё равно загрузить" }
+    var iphoneImportMismatchProceedA11y: String { "Загрузить историю аккумулятора другого телефона в этот" }
     var iphoneImportHint: String { "Архивы с телефона видны после чтения журналов; можно выбрать и файл .tar.gz на Mac." }
     func iphoneImportProgress(_ p: ImportProgress) -> String {
         switch p {
