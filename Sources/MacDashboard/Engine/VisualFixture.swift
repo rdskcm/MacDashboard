@@ -40,6 +40,7 @@ enum VisualFixture {
         var assessment: Assessment
         var history: HistoryState
         var reportText: String
+        var claudeBackup: ClaudeBackupStatus
     }
 
     static func make() -> Dataset {
@@ -126,11 +127,17 @@ enum VisualFixture {
 
         let wakeHolders = [WakeHolder(owner: "caffeinate", requester: "Terminal", ageSeconds: 5400)]
 
+        // VISUAL-HARNESS-STALE: fresh Claude backup, 2 h before the reference date, so the
+        // Settings Backups row and ClaudeBackupCard are in the baseline. Age is pinned by
+        // assessing at `now: referenceDate` here and by DashboardModel.fixtureNow in the views.
+        let claudeBackup = ClaudeBackupStatus.lastSuccess(referenceDate.addingTimeInterval(-2 * 3600))
+
         let live = LiveSnapshot(
             t: referenceDate, load: load, cpu: cpu,
             topCPU: topCPU, topMem: topMem, mem: mem, swap: swap, disk: disk, battery: battery
         )
-        let assessment = Assess.assess(report: report, live: live, memPressure: nil, topApps: [], wakeHolders: wakeHolders)
+        let assessment = Assess.assess(report: report, live: live, memPressure: nil, topApps: [], wakeHolders: wakeHolders,
+                                       claudeBackup: claudeBackup, now: referenceDate)
 
         var history = HistoryState()
         var entries: [MacHistoryEntry] = []
@@ -217,7 +224,7 @@ enum VisualFixture {
             load: load, cpu: cpu, mem: mem, swap: swap, disk: disk, battery: battery,
             socTempC: socTempC, topCPU: topCPU, topMem: topMem, cpuHistory: cpuHistory,
             report: report, wakeHolders: wakeHolders, assessment: assessment,
-            history: history, reportText: reportText
+            history: history, reportText: reportText, claudeBackup: claudeBackup
         )
     }
 }

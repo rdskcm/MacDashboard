@@ -33,7 +33,7 @@ usage_error() { echo "usage error: $1" >&2; echo "$HELP" >&2; exit 64; }
 precondition_refused() { echo "REFUSED: $1" >&2; exit 65; }
 runtime_error() { echo "RUNTIME ERROR: $1" >&2; exit 70; }
 
-STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark main-report-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light main-report-light content-processes-cpu-dark content-processes-mem-dark content-folders-home-dark content-folders-service-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-processes-cpu-light content-processes-mem-light content-folders-home-light content-folders-service-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light"
+STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark settings-backup-dark main-report-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light settings-backup-light main-report-light content-processes-cpu-dark content-processes-mem-dark content-folders-home-dark content-folders-service-dark content-claude-backup-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-processes-cpu-light content-processes-mem-light content-folders-home-light content-folders-service-light content-claude-backup-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light"
 
 # edge_inset_px is 0 by default (see README §5); only changed with measured
 # evidence, in a separate documented commit.
@@ -644,14 +644,17 @@ park_cursor() {
 # up; the sidebar List is accessibility-invisible to System Events on this
 # macOS). The AX press route in the block spec cannot work here, so this uses
 # the spec's documented fallback: a coordinate click at (x+98, y+T+29) for
-# General and (x+98, y+T+65) for Monitoring, from the Settings window's
-# current bounds (x, y) and titlebar height T = h - 420.
+# General, (x+98, y+T+65) for Monitoring and (x+98, y+T+101) for Backup (rows
+# 34 pt + 2 pt spacing, 12 pt top padding); the Backup row exists only while
+# the model has a Claude-backup status, which the visual fixture always sets,
+# from the Settings window's current bounds (x, y) and titlebar height T = h - 420.
 press_section() {
   local label="$1" setx="$2" sety="$3" t="$4"
   local off
   case "$label" in
     General) off=29 ;;
     Monitoring) off=65 ;;
+    Backup) off=101 ;;
     *) runtime_error "press_section: unknown section label '$label'" ;;
   esac
   local cx cy
@@ -925,6 +928,12 @@ for mode in dark light; do
   capture_state "settings-titlebar-hover-$mode" "$SET_ID"
   park_cursor
 
+  press_section "Backup" "$SETX" "$SETY" "$T"
+  park_cursor
+  sleep 1.5
+  assert_key "$SET_ID" "settings-backup-$mode"
+  capture_state "settings-backup-$mode" "$SET_ID"
+
   assert_key "$SET_ID" "close-settings-$mode"
   close_settings "$SET_ID"
   waited=0
@@ -963,8 +972,8 @@ while IFS= read -r line; do
       ;;
   esac
 done < "$OUT/content-render.log"
-if [ "$CONTENT_COUNT" -lt 22 ]; then
-  runtime_error "content render produced only $CONTENT_COUNT states (expected 22, see content-render.log)"
+if [ "$CONTENT_COUNT" -lt 24 ]; then
+  runtime_error "content render produced only $CONTENT_COUNT states (expected 24, see content-render.log)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1039,6 +1048,13 @@ GD_PCT="$(printf '%s\n' "$GD_LINE" | sed -n 's/.*pct=\([0-9.]*\).*/\1/p')"
 rm -f "$OUT/diff/.sanity-section.png"
 if [ -n "$GD_PCT" ] && awk -v p="$GD_PCT" 'BEGIN{exit !(p<=1.0)}'; then
   runtime_error "sanity: section switch had no visible effect (diff ${GD_PCT}%)"
+fi
+
+BM_LINE="$("$VBTOOL" diff "$OUT/norm/settings-monitoring-dark.png" "$OUT/norm/settings-backup-dark.png" --tol "$PIXEL_TOLERANCE" --mask "$OUT/diff/.sanity-backup.png" 2>&1 || true)"
+BM_PCT="$(printf '%s\n' "$BM_LINE" | sed -n 's/.*pct=\([0-9.]*\).*/\1/p')"
+rm -f "$OUT/diff/.sanity-backup.png"
+if [ -n "$BM_PCT" ] && awk -v p="$BM_PCT" 'BEGIN{exit !(p<=1.0)}'; then
+  runtime_error "sanity: Backup section click had no visible effect (diff ${BM_PCT}%) — no Backups row? (fixture must set claudeBackup)"
 fi
 
 MM_LINE="$("$VBTOOL" diff "$OUT/norm/main-dark.png" "$OUT/norm/main-light.png" --tol "$PIXEL_TOLERANCE" --mask "$OUT/diff/.sanity-appearance.png" 2>&1 || true)"

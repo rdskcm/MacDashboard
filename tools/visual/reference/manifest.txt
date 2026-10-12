@@ -1,12 +1,12 @@
 # state	blessed	macos	sdk	commit
 main-dark	2026-10-11	27.0.1	27	dcfd0a0-dirty
-settings-general-dark	2026-09-28	27.0	27	24cf194-dirty
-settings-monitoring-dark	2026-10-10	27.0.1	27	a8d50bb-dirty
-settings-titlebar-hover-dark	2026-10-10	27.0.1	27	a8d50bb-dirty
+settings-general-dark	2026-10-12	27.0.1	27	38c50c2-dirty
+settings-monitoring-dark	2026-10-12	27.0.1	27	38c50c2-dirty
+settings-titlebar-hover-dark	2026-10-12	27.0.1	27	38c50c2-dirty
 main-light	2026-10-11	27.0.1	27	dcfd0a0-dirty
-settings-general-light	2026-09-28	27.0	27	24cf194-dirty
-settings-monitoring-light	2026-10-10	27.0.1	27	a8d50bb-dirty
-settings-titlebar-hover-light	2026-10-10	27.0.1	27	a8d50bb-dirty
+settings-general-light	2026-10-12	27.0.1	27	38c50c2-dirty
+settings-monitoring-light	2026-10-12	27.0.1	27	38c50c2-dirty
+settings-titlebar-hover-light	2026-10-12	27.0.1	27	38c50c2-dirty
 main-report-dark	2026-10-11	27.0.1	27	dcfd0a0-dirty
 main-report-light	2026-10-11	27.0.1	27	dcfd0a0-dirty
 content-processes-cpu-dark	2026-09-28	27.0	27	24cf194-dirty
@@ -31,3 +31,7 @@ content-history-swap-light	2026-09-28	27.0	27	24cf194-dirty
 content-history-disk-quarter-light	2026-09-28	27.0	27	24cf194-dirty
 content-history-disk-year-light	2026-09-28	27.0	27	24cf194-dirty
 content-history-disk-all-light	2026-09-28	27.0	27	24cf194-dirty
+settings-backup-dark	2026-10-12	27.0.1	27	38c50c2-dirty
+settings-backup-light	2026-10-12	27.0.1	27	38c50c2-dirty
+content-claude-backup-dark	2026-10-12	27.0.1	27	38c50c2-dirty
+content-claude-backup-light	2026-10-12	27.0.1	27	38c50c2-dirty

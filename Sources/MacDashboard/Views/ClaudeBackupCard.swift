@@ -12,7 +12,7 @@ struct ClaudeBackupCard: View {
         if let status = model.claudeBackup {
             CardChrome(title: L.claudeBackupCardTitle) {
                 TimelineView(.everyMinute) { ctx in
-                    rows(status, now: ctx.date)
+                    rows(status, now: model.fixtureNow ?? ctx.date)
                 }
             }
         }

@@ -26,6 +26,15 @@ func runVisualFixtureChecks() {
     check(d1.assessment.items.count == 4, "VisualFixture: 4 attention items (got \(d1.assessment.items.count))")
     check(d1.assessment.capsules.count == 5, "VisualFixture: 5 tip capsules (got \(d1.assessment.capsules.count))")
 
+    // --- VISUAL-HARNESS-STALE: fixed, fresh Claude backup ---
+    let expectedBackup = ClaudeBackupStatus.lastSuccess(VisualFixture.referenceDate.addingTimeInterval(-2 * 3600))
+    check(d1.claudeBackup == expectedBackup, "VisualFixture: claudeBackup == lastSuccess(referenceDate - 2 h) (got \(d1.claudeBackup))")
+    check(d1.claudeBackup == d2.claudeBackup, "VisualFixture: two make() calls -> equal claudeBackup")
+    check(!BackupLog.isStale(d1.claudeBackup, thresholdHours: AppSettings.defaultBackupStaleHours, now: VisualFixture.referenceDate),
+          "VisualFixture: claudeBackup is fresh at referenceDate under the default limit")
+    check(!d1.assessment.items.contains { $0.kind == .claudeBackup },
+          "VisualFixture: no claudeBackup attention item (assessment must use now: referenceDate)")
+
     // --- R2: history ---
     check(d1.history.mac_history.count == 500, "VisualFixture: 500 history entries (got \(d1.history.mac_history.count))")
 

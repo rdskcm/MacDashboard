@@ -41,6 +41,10 @@ final class DashboardModel {
     /// BACKUP-AGE: newest successful Claude backup per its log; nil = no log on this Mac (show nothing). Refreshed on the SMART cadence.
     var claudeBackup: ClaudeBackupStatus? = nil
 
+    /// VISUAL-HARNESS-STALE: visual fixture only — the instant that backup-age displays and
+    /// assessments treat as "now", so fixture captures do not depend on the wall clock. nil = wall clock.
+    var fixtureNow: Date? = nil
+
     /// Re-entrancy guard for `refreshSmartNow()` (SPEC Block H follow-up): true while a
     /// manual SMART refresh is in flight, so the card's «Обновить» button can disable
     /// itself and avoid overlapping ReportCollector instances.
@@ -1277,7 +1281,8 @@ final class DashboardModel {
     private func assessed(_ r: FullReport) -> Assessment {
         Assess.assess(report: r, live: live, memPressure: memPressure, topApps: topApps,
                       wakeHolders: wakeHolders, ignoredWakeHolders: AppSettings.shared.ignoredWakeHolders,
-                      claudeBackup: claudeBackup, backupStaleHours: AppSettings.shared.backupStaleHours)
+                      claudeBackup: claudeBackup, backupStaleHours: AppSettings.shared.backupStaleHours,
+                      now: fixtureNow ?? Date())
     }
 
     /// Probes `findSmartctl()`/`findBrew()` fresh (cheap `isExecutableFile` checks,
