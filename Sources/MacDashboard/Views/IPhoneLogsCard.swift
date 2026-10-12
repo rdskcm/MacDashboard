@@ -25,8 +25,8 @@ struct IPhoneLogsCard: View {
                 archiveSections
             }
         }
-        // First appearance for a connected phone (also when it connects while the page is open).
-        .task(id: isConnected) {
+        // First appearance for a connected phone, and every time its connection (handle) changes.
+        .task(id: model.connected[deviceKey]) {
             if isConnected, model.logs[deviceKey] == nil { model.loadLogs(deviceKey: deviceKey) }
         }
     }

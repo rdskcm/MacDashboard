@@ -2135,6 +2135,7 @@ runHistoryStoreChecks()
 
 runIPhoneChecks()
 runSysdiagnoseExtractorChecks()
+runInFlightReadsChecks()
 
 // =====================================================================
 // MARK: - AttentionModel

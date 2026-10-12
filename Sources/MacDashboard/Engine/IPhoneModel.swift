@@ -34,7 +34,7 @@ final class IPhoneModel {
     /// Per device: "<path>|<size>|<mtime>" → bug_type ("" = none), replaced by each successful
     /// listing (files gone from the phone drop out). Memory only; never written to disk.
     var headerCache: [String: [String: String]] = [:]
-    var logsLoading: Set<String> = []
+    var logsLoading = InFlightReads<IPhoneHandle>()
     /// Devices whose last crash-log listing failed; cleared by a successful listing or detach.
     var logsFailed: Set<String> = []
     /// Sysdiagnose import (Stage 5). Archive entries are memory only; the latest import of
@@ -51,7 +51,7 @@ final class IPhoneModel {
 
     /// Identity and parts per connected device. Memory only (R13, D10); cleared on detach.
     var identity: [String: [IPhoneIdentityField]] = [:]
-    var identityLoading: Set<String> = []
+    var identityLoading = InFlightReads<IPhoneHandle>()
     /// Devices whose last identity read failed; cleared by a successful read or detach.
     var identityFailed: Set<String> = []
 
@@ -108,6 +108,8 @@ final class IPhoneModel {
             refresh(handle: h)
         case .detached(let h):
             attached.remove(h)
+            logsLoading.detach(h)
+            identityLoading.detach(h)
             pendingHandles.remove(h)
             pendingStatus[h] = nil
             for (key, handle) in connected where handle == h {
@@ -138,15 +140,13 @@ final class IPhoneModel {
     }
 
     /// Lists the phone's crash logs (headers already in `headerCache` are not re-read).
-    /// No-op when the phone is not connected or a listing is already running.
+    /// No-op when the phone is not connected or a listing over the current connection is already running.
     func loadLogs(deviceKey: String) {
-        guard let h = connected[deviceKey], !logsLoading.contains(deviceKey) else { return }
-        logsLoading.insert(deviceKey)
+        guard let h = connected[deviceKey], let id = logsLoading.begin(deviceKey, handle: h) else { return }
         transport.listLogs(h, knownHeaders: headerCache[deviceKey] ?? [:]) { [weak self] result in
             guard let self else { return }
-            logsLoading.remove(deviceKey)
-            // A listing that lands after its phone detached is dropped (the detach wins).
-            guard attached.contains(h) else { return }
+            // A listing superseded by a newer one, or whose phone detached, is dropped.
+            guard logsLoading.finish(deviceKey, id: id), attached.contains(h) else { return }
             switch result {
             case .success(let (entries, cache)):
                 logs[deviceKey] = entries
@@ -159,15 +159,13 @@ final class IPhoneModel {
     }
 
     /// Reads identity and parts of a connected phone; the result is held in memory only.
-    /// No-op when the phone is not connected or a read is already running.
+    /// No-op when the phone is not connected or a read over the current connection is already running.
     func loadIdentity(deviceKey: String) {
-        guard let h = connected[deviceKey], !identityLoading.contains(deviceKey) else { return }
-        identityLoading.insert(deviceKey)
+        guard let h = connected[deviceKey], let id = identityLoading.begin(deviceKey, handle: h) else { return }
         transport.readIdentity(h) { [weak self] result in
             guard let self else { return }
-            identityLoading.remove(deviceKey)
-            // A read that lands after its phone detached is dropped (the detach wins).
-            guard attached.contains(h) else { return }
+            // A read superseded by a newer one, or whose phone detached, is dropped.
+            guard identityLoading.finish(deviceKey, id: id), attached.contains(h) else { return }
             switch result {
             case .success(let fields):
                 identity[deviceKey] = fields
