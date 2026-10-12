@@ -24,10 +24,11 @@ tools/visual/run.sh --bless RUN_DIR [STATE ...]
 tools/visual/run.sh --selftest
 tools/visual/run.sh -h | --help
 
-Exit codes: 0 all alpha ok and every diff <= threshold. 1 at least one alpha
-FAIL (wins over 2). 2 no alpha FAIL, but >=1 state is CHANGED, SIZE-CHANGED or
-NO-REF. 64 usage error. 65 precondition refused. 70 runtime error (restoration
-still ran). --bless and --selftest exit 0 on success, 1 on refusal/failure."
+Exit codes: 0 all alpha ok, every diff <= threshold and no text change. 1 at
+least one alpha FAIL (wins over 2). 2 no alpha FAIL, but >=1 state is CHANGED,
+SIZE-CHANGED, TEXT-CHANGED or NO-REF (or its text column reads changed). 64
+usage error. 65 precondition refused. 70 runtime error (restoration still
+ran). --bless and --selftest exit 0 on success, 1 on refusal/failure."
 
 usage_error() { echo "usage error: $1" >&2; echo "$HELP" >&2; exit 64; }
 precondition_refused() { echo "REFUSED: $1" >&2; exit 65; }
@@ -95,7 +96,7 @@ if [ -z "$OUT" ]; then OUT="$ROOT/tools/visual/out/$DATESTAMP"; fi
 if [ "$MODE" = "selftest" ]; then
   TMPBIN="$(mktemp -d /tmp/vbtool-selftest.XXXXXX)"
   trap 'rm -rf "$TMPBIN"' EXIT
-  swiftc -O -o "$TMPBIN/vbtool" "$ROOT/tools/visual/vbtool.swift" -framework AppKit
+  swiftc -O -o "$TMPBIN/vbtool" "$ROOT/tools/visual/vbtool.swift" -framework AppKit -framework Vision
   "$TMPBIN/vbtool" selftest
   exit $?
 fi
@@ -219,7 +220,7 @@ fi
 TMPBIN="$(mktemp -d /tmp/vbtool-run.XXXXXX)"
 trap 'rm -rf "$TMPBIN"' EXIT
 VBTOOL="$TMPBIN/vbtool"
-if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit; then
+if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit -framework Vision; then
   runtime_error "vbtool compile failed"
 fi
 
@@ -253,7 +254,7 @@ fi
 
 # Every precondition passed: now it is safe to create the run directory and
 # hand vbtool over to it (R7).
-mkdir -p "$OUT/raw" "$OUT/norm" "$OUT/diff" "$OUT/.bin" "$OUT/.restore"
+mkdir -p "$OUT/raw" "$OUT/norm" "$OUT/diff" "$OUT/text" "$OUT/.bin" "$OUT/.restore"
 mv "$TMPBIN/vbtool" "$OUT/.bin/vbtool"
 VBTOOL="$OUT/.bin/vbtool"
 rm -rf "$TMPBIN"
@@ -980,7 +981,7 @@ fi
 # Per-state processing
 # ---------------------------------------------------------------------------
 RESULTS="$OUT/results.tsv"
-printf 'state\talpha\thole_px\tbbox_pt\tregions\tdiff_pct\tthreshold\tverdict\n' > "$RESULTS"
+printf 'state\talpha\thole_px\tbbox_pt\tregions\tdiff_pct\tthreshold\tverdict\ttext\n' > "$RESULTS"
 
 ANY_ALPHA_FAIL=0
 ANY_CHANGE=0
@@ -1015,6 +1016,7 @@ while [ "$i" -lt "${#STATE_NAMES[@]}" ]; do
   DIFF_PCT="0.00"
   VERDICT="same"
   THRESH="$(threshold_for_state "$st")"
+  TEXT="n/a"
 
   if [ -f "$REFERENCE/$st.png" ]; then
     DIFF_LINE="$("$VBTOOL" diff "$REFERENCE/$st.png" "$OUT/norm/$st.png" --tol "$PIXEL_TOLERANCE" --mask "$OUT/diff/$st.png")"
@@ -1031,13 +1033,26 @@ while [ "$i" -lt "${#STATE_NAMES[@]}" ]; do
         VERDICT="same"
       fi
     fi
+    # Text check (VISUAL-TEXT-DRIFT): OCR of reference vs capture, independent of diff_pct.
+    TEXT_LINE="$("$VBTOOL" text-diff "$REFERENCE/$st.png" "$OUT/norm/$st.png" --out "$OUT/text/$st.txt")" \
+      || runtime_error "text-diff failed for $st"
+    printf '%s\t%s\n' "$st" "$TEXT_LINE" >> "$OUT/text/summary.txt"
+    case "$TEXT_LINE" in
+      "TEXT same"*) TEXT="same" ;;
+      "TEXT changed"*)
+        TEXT="changed"
+        ANY_CHANGE=1
+        if [ "$VERDICT" = "same" ]; then VERDICT="TEXT-CHANGED"; fi
+        ;;
+      *) runtime_error "text-diff printed no TEXT line for $st: $TEXT_LINE" ;;
+    esac
   else
     VERDICT="NO-REF"
     DIFF_PCT="n/a"
     ANY_CHANGE=1
   fi
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$st" "$ALPHA_OK" "$HOLE_PX" "$BBOX_PT" "$REGIONS" "$DIFF_PCT" "$THRESH" "$VERDICT" >> "$RESULTS"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$st" "$ALPHA_OK" "$HOLE_PX" "$BBOX_PT" "$REGIONS" "$DIFF_PCT" "$THRESH" "$VERDICT" "$TEXT" >> "$RESULTS"
 done
 
 # ---------------------------------------------------------------------------
@@ -1110,6 +1125,17 @@ fi
       print st"  blessed="blessed[st]"  ref="rm"/"rs"  current="cur_macos"/"cur_sdk"  "same
     }
   ' "$RESULTS"
+  echo
+  echo "text differences (OCR; - only in reference, + only in capture):"
+  TEXT_CHANGED_STATES="$(awk -F'\t' 'NR>1 && $9=="changed"{print $1}' "$RESULTS")"
+  if [ -z "$TEXT_CHANGED_STATES" ]; then
+    echo "none"
+  else
+    for tst in $TEXT_CHANGED_STATES; do
+      echo "$tst:"
+      sed 's/^/  /' "$OUT/text/$tst.txt"
+    done
+  fi
 } | tee "$OUT/report.txt"
 
 TITLE="current: macOS $(sw_vers -productVersion) / SDK $SDK_MAJOR / commit $GIT_COMMIT — reference: $REFERENCE"
