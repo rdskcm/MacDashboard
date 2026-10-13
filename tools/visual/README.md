@@ -54,10 +54,10 @@ frontmost/AXMain/bounds failed.
 `dark`/`light`. Window id via `vbtool windows --pid P`; the Settings window
 must be 680±2 pt wide or the run aborts.
 
-**Offscreen content (22 states, `tools/visual/content_states.swift` via
+**Offscreen content (24 states, `tools/visual/content_states.swift` via
 `tools/harness/render.sh`):** `content-processes-{cpu,mem}`,
 `content-folders-{home,service}`, `content-history-{disk,battery,cycles,swap}`
-(range Month), `content-history-disk-{quarter,year,all}`, each `dark`/`light`
+(range Month), `content-history-disk-{quarter,year,all}`, `content-history-fresh` (the History section at 0, 1 and 2 recorded days: placeholder, placeholder, full card), each `dark`/`light`
 — cards below the fold of the real window, which would need fragile
 scroll/click driving to reach there.
 

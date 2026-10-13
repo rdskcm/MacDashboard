@@ -305,6 +305,7 @@ protocol AppStrings {
     var historyMetricYLabelCycles: String { get }
     var historyMetricYLabelSwap: String { get }
     var historyMetricInsufficientData: String { get }
+    var historyNotEnoughDays: String { get }
     var historyRangeMonth: String { get }
     var historyRangeQuarter: String { get }
     var historyRangeYear: String { get }

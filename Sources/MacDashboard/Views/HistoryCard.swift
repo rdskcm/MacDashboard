@@ -60,6 +60,9 @@ struct HistoryCard: View {
         return tableShowAll ? newestFirst : Array(newestFirst.prefix(Self.tableCollapsedRows))
     }
 
+    // Below 2 days (a new Mac, or History just restarted) there is nothing to chart:
+    // show the same card chrome with one calm line instead of an empty section
+    // under the История kicker (NEWMAC-HISTORY-EMPTY).
     var body: some View {
         if entries.count >= 2 {
             ChartOrTableCard(
@@ -69,6 +72,13 @@ struct HistoryCard: View {
                 chart: { chart },
                 table: { table }
             )
+        } else {
+            CardChrome(title: L.historyTitle) {
+                Text(L.historyNotEnoughDays)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
