@@ -172,19 +172,12 @@ private struct BrewStopButton: View {
 
 /// Amber border/glow breathing animation, played once on appear — Spec §5.8's
 /// prototype `asBreathe` keyframe (`animation: asBreathe 2s ease-in-out 5
-/// alternate forwards`, unconditional, not gated on any state). `DSMotion
-/// .breathing` (DesignSystem.swift) is the exact same easeInOut/2s/5-rep/
-/// autoreverses curve already used for this identical keyframe on
-/// `AutostartCard`'s "check for outdated" capsule — that button's own
-/// `BreathingWarnBackground` modifier additionally gates on
-/// `DashboardModel.isPaused` (re-breathing on window return) and is `private`
-/// to its file, so it can't be imported here; this is the same technique
-/// (amber strokeBorder + amber glow shadow, Reduce-Motion-safe) minus that
-/// pause-gating, since the Homebrew button has no equivalent concept and the
-/// spec only calls for "on appear".
+/// alternate forwards`, unconditional, not gated on any state). Same technique
+/// as `AutostartCard`'s "check for outdated" capsule: drawn once by
+/// `BreathingCapsuleGlow` (Core Animation opacity breath, GPU-RENDER-AUDIT C1),
+/// no pause gate, starts when the view joins a window. Reduce-Motion-safe.
 private struct AsBreatheBorder: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isAnimating = false
 
     func body(content: Content) -> some View {
         if reduceMotion {
@@ -194,15 +187,7 @@ private struct AsBreatheBorder: ViewModifier {
                     .shadow(color: DS.amber.opacity(0.6), radius: 6)
             )
         } else {
-            content
-                .background(
-                    Capsule()
-                        .strokeBorder(DS.amber.opacity(isAnimating ? 1.0 : 0.5), lineWidth: 1)
-                        .shadow(color: DS.amber.opacity(isAnimating ? 0.6 : 0.25), radius: 6)
-                )
-                .onAppear {
-                    withAnimation(DSMotion.breathing) { isAnimating = true }
-                }
+            content.background(BreathingCapsuleGlow(lineWidth: 1, paused: false))
         }
     }
 }

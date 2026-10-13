@@ -170,21 +170,19 @@ struct AutostartCard: View {
     /// reduce-motion fallback + 2s easeInOut timing), adapted to a border/glow instead
     /// of icon opacity/scale.
     ///
-    /// Block PERF: the pulse is FINITE (5 legs = 2.5 breaths, ~10 s), not
-    /// `repeatForever` — a continuous animation kept `NSHostingView` re-laying out
-    /// every frame and alone cost ~16pp of idle CPU (measured 2026-07-18). After the
-    /// last leg the glow settles at the bright state, which still flags the orphans
-    /// statically. The breathe is also gated on `DashboardModel.isPaused` (the same
-    /// occlusion/miniaturization/activity signal that pauses the live collectors):
-    /// cancelled while paused, restarted on resume — re-drawing attention each time
-    /// the user comes back to the app.
+    /// The pulse is a FINITE Core Animation breath (`BreathingCapsuleGlow`, 5 legs =
+    /// 2.5 breaths, ~10 s; GPU-RENDER-AUDIT C1/P7) run by the render server, not a
+    /// SwiftUI state animation. After the last leg the glow settles at the bright
+    /// state, which still flags the orphans statically. The breathe is also gated on
+    /// `DashboardModel.isPaused` (the same occlusion/miniaturization/activity signal
+    /// that pauses the live collectors): cancelled while paused (settles dim),
+    /// restarted on resume — re-drawing attention each time the user comes back.
     private struct BreathingWarnBackground: ViewModifier {
         @Environment(\.accessibilityReduceMotion) var reduceMotion
         /// `DashboardModel.isPaused`: true when no effectively visible window exists
         /// or the app is inactive. Passed in by value from the card body so the
         /// modifier stays a plain value type.
         let paused: Bool
-        @State private var isAnimating = false
 
         func body(content: Content) -> some View {
             if reduceMotion {
@@ -194,35 +192,8 @@ struct AutostartCard: View {
                         .shadow(color: DS.amber.opacity(0.5), radius: 6)
                 )
             } else {
-                content
-                    .background(
-                        Capsule()
-                            .strokeBorder(DS.amber.opacity(isAnimating ? 1.0 : 0.5), lineWidth: 1.5)
-                            .shadow(color: DS.amber.opacity(isAnimating ? 0.6 : 0.25), radius: 6)
-                    )
-                    .onAppear(perform: startBreathing)
-                    .onDisappear { isAnimating = false }
-                    .onChange(of: paused) { _, isNowPaused in
-                        if isNowPaused { stopBreathing() } else { startBreathing() }
-                    }
+                content.background(BreathingCapsuleGlow(lineWidth: 1.5, paused: paused))
             }
-        }
-
-        /// Odd repeat count on purpose: with `autoreverses`, an odd number of legs
-        /// ends the presentation at the bright state — which is also the model value
-        /// (`isAnimating == true`) — so the animation finishes without a visible snap.
-        private func startBreathing() {
-            guard !paused, !isAnimating else { return }
-            withAnimation(DSMotion.breathing) {
-                isAnimating = true
-            }
-        }
-
-        /// Cancelling an in-flight repeating animation in SwiftUI = writing a NEW
-        /// value with a short non-repeating animation (re-setting the same value is
-        /// a no-op and would leave the repeat running).
-        private func stopBreathing() {
-            withAnimation(.easeInOut(duration: 0.2)) { isAnimating = false }
         }
     }
 

@@ -908,13 +908,11 @@ struct LegendItem: View {
 // MARK: - Rainbow border (shimmering, "AI mode" chip style)
 
 /// Full-perimeter shimmering rainbow stroke, reusable on any capsule-shaped control.
-/// A slow, continuous rotation of an `AngularGradient` around the shape's perimeter —
-/// the gradient's first and last stops share the same color so the 360°→0° wrap is
-/// seamless. Shimmer shows only while `isActive`: both the stroke opacity and the phase
-/// rotation animation are gated on it, so the `repeatForever` animation only runs
-/// while an active/hover state is true — it does not keep driving CoreAnimation
-/// in the background when inactive. The glow effect uses layered centered strokes
-/// with increasing blur for a soft fading outer edge.
+/// Drawn once (conic image + blurred-stroke mask), rotated by Core Animation while active
+/// (GPU-RENDER-AUDIT C8). The gradient's first and last stops share the same color so the
+/// 360°→0° wrap is seamless. The rotation runs only while `isActive`, so nothing drives
+/// Core Animation in the background when inactive. The glow effect uses layered centered
+/// strokes with increasing blur for a soft fading outer edge.
 /// One shadow/glow layer of a rainbow ring, out→in: how far it sits outside the
 /// shape's edge (`inset`, negative = outward), its stroke `thickness`, its
 /// gaussian `blur` radius, and its `opacity`.
@@ -963,67 +961,195 @@ struct RainbowBorder: ViewModifier {
     var recipe: RainbowRingRecipe = .overview
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var phase: Double = 0
-
-    private var colors: [Color] {
-        [
-            Color(hex: 0xff3b30), Color(hex: 0xff9500), Color(hex: 0xffcc00),
-            Color(hex: 0x34c759), Color(hex: 0x0a84ff), Color(hex: 0xaf52de),
-            Color(hex: 0xff3b30),
-        ]
-    }
-
-    /// Reduce Motion still allows the opacity fade — it's a color/opacity
-    /// transition per the project-wide Reduce Motion contract — just at the
-    /// shortened 0.12 s fallback duration instead of the normal 0.25 s.
-    private var fadeDuration: Double {
-        reduceMotion ? DSMotion.reduceMotionFallback : 0.25
-    }
 
     func body(content: Content) -> some View {
-        content
-            .overlay {
-                ZStack {
-                    ForEach(Array(recipe.layers.enumerated()), id: \.offset) { _, layer in
-                        Capsule()
-                            .strokeBorder(
-                                AngularGradient(gradient: Gradient(colors: colors), center: .center, angle: .zero),
-                                lineWidth: layer.thickness
-                            )
-                            .padding(layer.inset)
-                            .blur(radius: layer.blur)
-                            .hueRotation(.degrees(phase))
-                            .opacity(layer.opacity)
-                    }
+        content.overlay(
+            RainbowRingOverlay(recipe: recipe, isActive: isActive, period: period, reduceMotion: reduceMotion)
+        )
+    }
+}
+
+struct RainbowRingOverlay: NSViewRepresentable {
+    let recipe: RainbowRingRecipe
+    let isActive: Bool
+    let period: Double
+    let reduceMotion: Bool
+
+    func makeNSView(context: Context) -> RainbowRingView {
+        let v = RainbowRingView()
+        v.configure(recipe: recipe, period: period, reduceMotion: reduceMotion)
+        v.setActive(isActive)
+        return v
+    }
+
+    func updateNSView(_ nsView: RainbowRingView, context: Context) {
+        nsView.configure(recipe: recipe, period: period, reduceMotion: reduceMotion)
+        nsView.setActive(isActive)
+    }
+
+    /// Takes whatever the parent offers (same as `BarFillLayer.sizeThatFits`).
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: RainbowRingView, context: Context) -> CGSize? {
+        func finite(_ v: CGFloat?) -> CGFloat {
+            guard let v, v.isFinite else { return 0 }
+            return v
+        }
+        return CGSize(width: finite(proposal.width), height: finite(proposal.height))
+    }
+}
+
+final class RainbowRingView: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// Outermost recipe layer: inset 5 + 3 x blur 14 = 47, rounded up.
+    static let pad: CGFloat = 48
+
+    /// The one rainbow palette (red repeated at the end to close the loop).
+    private static let colors: [Color] = [
+        Color(hex: 0xff3b30), Color(hex: 0xff9500), Color(hex: 0xffcc00),
+        Color(hex: 0x34c759), Color(hex: 0x0a84ff), Color(hex: 0xaf52de),
+        Color(hex: 0xff3b30),
+    ]
+
+    /// One conic image per process.
+    @MainActor private static let conicImage: CGImage? = {
+        let renderer = ImageRenderer(
+            content: Rectangle()
+                .fill(AngularGradient(gradient: Gradient(colors: RainbowRingView.colors), center: .center, angle: .zero))
+                .frame(width: 1024, height: 1024)
+        )
+        renderer.scale = 1
+        return renderer.cgImage
+    }()
+
+    private let container = CALayer()
+    private let maskLayer = CALayer()
+    private let conic = CALayer()
+
+    private var recipe: RainbowRingRecipe = .overview
+    private var period: Double = DSMotion.rainbow
+    private var reduceMotion = false
+    private var active = false
+    private var maskKey: (size: CGSize, recipe: RainbowRingRecipe, scale: CGFloat)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .never
+        layer?.masksToBounds = false
+        let off = NSNull()
+        let keys = ["bounds", "position", "frame", "transform", "contents", "opacity"]
+        for l in [container, maskLayer, conic] as [CALayer] {
+            l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
+        }
+        container.opacity = 0
+        container.mask = maskLayer
+        maskLayer.contentsGravity = .resize
+        conic.contents = Self.conicImage
+        conic.contentsGravity = .resize
+        container.addSublayer(conic)
+        layer?.addSublayer(container)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    func configure(recipe: RainbowRingRecipe, period: Double, reduceMotion: Bool) {
+        self.period = period
+        let reduceChanged = self.reduceMotion != reduceMotion
+        self.reduceMotion = reduceMotion
+        if reduceChanged { updateSpin() }
+        if self.recipe != recipe {
+            self.recipe = recipe
+            needsLayout = true
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let pad = Self.pad
+        container.frame = bounds.insetBy(dx: -pad, dy: -pad)
+        maskLayer.frame = container.bounds
+        updateMask()
+        let d = (container.bounds.width * container.bounds.width + container.bounds.height * container.bounds.height)
+            .squareRoot().rounded(.up) + 2
+        conic.bounds = CGRect(x: 0, y: 0, width: d, height: d)
+        conic.position = CGPoint(x: container.bounds.midX, y: container.bounds.midY)
+        CATransaction.commit()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        let s = window?.backingScaleFactor ?? 2
+        container.contentsScale = s
+        maskLayer.contentsScale = s
+        conic.contentsScale = s
+        updateMask()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateSpin()
+    }
+
+    /// The spin runs only while active, in a window, and without Reduce Motion. Called on every
+    /// change of those inputs, so a re-attach or a Reduce Motion toggle while active stays correct.
+    private func updateSpin() {
+        conic.removeAnimation(forKey: "spin")
+        guard active, window != nil, !reduceMotion else { return }
+        conic.transform = CATransform3DIdentity
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = 0
+        spin.toValue = -2 * Double.pi
+        spin.duration = period
+        spin.repeatCount = .infinity
+        spin.timingFunction = CAMediaTimingFunction(name: .linear)
+        conic.add(spin, forKey: "spin")
+    }
+
+    /// Re-renders the mask image only when (size, recipe, backing scale) changes.
+    private func updateMask() {
+        let size = bounds.size
+        guard size.width > 0, size.height > 0 else { return }
+        let scale = window?.backingScaleFactor ?? 2
+        if let k = maskKey, k.size == size, k.recipe == recipe, k.scale == scale { return }
+        maskKey = (size, recipe, scale)
+        let layers = recipe.layers
+        let pad = Self.pad
+        let renderer = ImageRenderer(
+            content: ZStack {
+                ForEach(Array(layers.enumerated()), id: \.offset) { _, l in
+                    Capsule()
+                        .strokeBorder(Color.white, lineWidth: l.thickness)
+                        .padding(l.inset)
+                        .blur(radius: l.blur)
+                        .opacity(l.opacity)
                 }
-                .opacity(isActive ? 1 : 0)
-                .animation(.easeInOut(duration: fadeDuration), value: isActive)
             }
-            .onChange(of: isActive, initial: true) { _, newValue in
-                guard !reduceMotion else {
-                    // Reduce Motion: ring appears static (no spin), fade only.
-                    var stillTransaction = Transaction()
-                    stillTransaction.disablesAnimations = true
-                    withTransaction(stillTransaction) { phase = 0 }
-                    return
-                }
-                if newValue {
-                    var resetTransaction = Transaction()
-                    resetTransaction.disablesAnimations = true
-                    withTransaction(resetTransaction) {
-                        phase = 0
-                    }
-                    withAnimation(.linear(duration: period).repeatForever(autoreverses: false)) {
-                        phase = 360
-                    }
-                } else {
-                    var stopTransaction = Transaction()
-                    stopTransaction.disablesAnimations = true
-                    withTransaction(stopTransaction) {
-                        phase = 0
-                    }
-                }
-            }
+            .frame(width: size.width, height: size.height)
+            .padding(pad)
+        )
+        renderer.scale = scale
+        maskLayer.contents = renderer.cgImage
+        maskLayer.contentsScale = scale
+    }
+
+    func setActive(_ on: Bool) {
+        guard on != active else { return }
+        active = on
+        let duration = reduceMotion ? DSMotion.reduceMotionFallback : 0.25
+        let from = container.presentation()?.opacity ?? container.opacity
+        let target: Float = on ? 1 : 0
+        container.opacity = target
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = from
+        fade.toValue = target
+        fade.duration = duration
+        fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        container.add(fade, forKey: "fade")
+        updateSpin()
     }
 }
 
