@@ -15,3 +15,4 @@ dist.noindex/
 
 # Runtime data lives in ~/Library/Application Support/MacDashboard, never in repo
 tools/visual/out/
+tools/perf/out/

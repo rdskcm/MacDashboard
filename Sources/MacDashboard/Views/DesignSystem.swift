@@ -29,7 +29,6 @@ enum DSMotion {
     /// Paired with `.dsDisclosure(reduceMotion:)`: the disclosed content rises by
     /// this many points while it fades in/out.
     static let discloseRiseY: CGFloat = -7
-    static let breathing = Animation.easeInOut(duration: 2).repeatCount(5, autoreverses: true)
     /// Rainbow ring rotation period, seconds/turn. Both prototypes and the shipping
     /// default agree on 6 s; Spec §4's "~1.4 s" row is not authoritative — flip
     /// here only, at acceptance, so it's a one-line edit (see SharedUI.swift Step 3a).
