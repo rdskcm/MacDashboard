@@ -21,6 +21,7 @@ struct MacDashboardApp: App {
                 .onAppear {
                     if VisualFixture.isRequested {
                         model.applyVisualFixture()
+                        IPhoneModel.shared.applyVisualFixture()
                     } else {
                         model.start()
                         IPhoneModel.shared.start()

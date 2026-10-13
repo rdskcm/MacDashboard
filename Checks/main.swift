@@ -2122,6 +2122,7 @@ runHistoryStoreChecks()
 // =====================================================================
 
 runIPhoneChecks()
+runRimAngleChecks()
 runSysdiagnoseExtractorChecks()
 runInFlightReadsChecks()
 

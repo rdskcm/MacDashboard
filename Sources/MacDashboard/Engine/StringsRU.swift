@@ -681,7 +681,6 @@ struct StringsRU: AppStrings {
     var iphoneStatusFailed: String { "Не удалось прочитать iPhone" }
     var iphoneUnknownDevice: String { "iPhone" }
     var iphoneRetry: String { "Повторить" }
-    var iphoneFindMenu: String { "Найти iPhone" }
     var iphoneSearchAgain: String { "Искать снова" }
     var iphoneRestartService: String { "Перезапустить службу подключения…" }
     var iphoneRestartConfirmTitle: String { "Перезапустить службу подключения?" }
@@ -692,7 +691,6 @@ struct StringsRU: AppStrings {
     func iphoneRestartFailed(_ detail: String) -> String { "Не удалось перезапустить службу подключения: \(detail)" }
     var iphoneBack: String { "Назад" }
     var iphoneRefresh: String { "Обновить" }
-    var iphoneEmpty: String { "iPhone не найден. Подключите iPhone кабелем, разблокируйте его и нажмите «Доверять»." }
     var iphoneUnavailable: String { "Подключение к iPhone недоступно на этой версии macOS." }
     func iphoneStatusRemembered(_ date: String) -> String { "Не подключён · был \(date)" }
     func iphoneOpenDeviceA11y(_ name: String) -> String { "Открыть \(name)" }
@@ -709,7 +707,7 @@ struct StringsRU: AppStrings {
     var iphoneChargeExternal: String { "Подключён к питанию" }
     var iphoneChargeBattery: String { "От батареи" }
     var iphoneUnitMAh: String { "мА·ч" }
-    var iphoneUnitWh: String { "Wh" }
+    var iphoneUnitWh: String { "Вт·ч" }
     var iphoneCapacityUnitA11y: String { "Единицы ёмкости" }
     var iphoneWhSourceHelp: String { "Примерно: ёмкость × 3,88 В — типовое напряжение батарей iPhone (Википедия, статьи iPhone 16 Pro / 17 Pro, по данным регуляторов)" }
     var iphoneBatteryConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать батарею." }
@@ -721,8 +719,18 @@ struct StringsRU: AppStrings {
     var iphoneHistoryColHealth: String { "Здоровье" }
     var iphoneHistoryColCycles: String { "Циклы" }
     var iphoneHistoryColSource: String { "Источник" }
-    func iphoneBatteryFromHistory(_ date: String) -> String { "Последние данные из истории · \(date)" }
+    func iphoneBatteryFromHistory(_ date: String) -> String { "Из истории · \(date)" }
     func iphoneHistoryCaption(_ n: Int) -> String { "\(n) \(ruPlural(n, "день", "дня", "дней"))" }
+    var iphoneHistoryChart: String { "График" }
+    var iphoneHistoryTable: String { "Таблица" }
+    var iphoneHistoryViewA11y: String { "Вид истории батареи" }
+    func iphoneChartCycles(_ n: Int) -> String { "\(n) \(ruPlural(n, "цикл", "цикла", "циклов"))" }
+    var iphoneChartSourceImport: String { "sysdiagnose" }
+    func iphoneChartMonth(_ m: Int) -> String {
+        let names = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+        return names[min(max(m, 1), 12) - 1]
+    }
+    func iphoneChartWeekLabel(day: Int, month: Int) -> String { "\(day) \(iphoneChartMonth(month))" }
 
     var iphoneLogsTitle: String { "Журналы сбоев" }
     var iphoneLogsConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать журналы." }
@@ -741,9 +749,6 @@ struct StringsRU: AppStrings {
         case .analytics: return "Аналитика"
         case .other: return "Прочие файлы"
         }
-    }
-    func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String {
-        expanded ? "Свернуть «\(category)»" : "Развернуть «\(category)»"
     }
     var iphoneSectionReadFailed: String { "Не удалось прочитать данные с iPhone. Нажмите «Обновить», чтобы попробовать снова." }
 
@@ -844,4 +849,51 @@ struct StringsRU: AppStrings {
         case .faceIDProjector: return "Проектор Face ID"
         }
     }
+
+    var iphoneTagNotConnected: String { "Не подключён" }
+    var iphoneTagTrustNeeded: String { "Нужно доверие" }
+    var iphoneTagReadFailed: String { "Не удалось прочитать" }
+    var iphoneSubTrust: String { "разблокируйте и нажмите «Доверять»" }
+    var iphoneSubReconnect: String { "переподключите кабель" }
+    func iphoneSubLastSeen(_ date: String) -> String { "был \(date)" }
+    func iphoneSubCharge(_ percent: Int, _ state: String) -> String { "\(percent) % · \(state)" }
+    var iphoneStateChargingLower: String { "заряжается" }
+    var iphoneStateExternalLower: String { "от сети" }
+    var iphoneStateBatteryLower: String { "от батареи" }
+    var iphoneTileHealth: String { "Здоровье батареи" }
+    var iphoneNotIdentified: String { "Ещё не опознан" }
+    var iphonePendingTrustText: String { "Разблокируйте iPhone, нажмите «Доверять» на его экране и повторите." }
+    var iphonePendingFailedText: String { "Не удалось прочитать iPhone. Переподключите кабель и повторите." }
+    func iphoneSummary(connected: Int, notConnected: Int, waiting: Int) -> String {
+        var parts: [String] = []
+        if connected > 0 { parts.append("подключено: \(connected)") }
+        if notConnected > 0 { parts.append("не подключено: \(notConnected)") }
+        if waiting > 0 { parts.append("ждёт доверия: \(waiting)") }
+        return parts.joined(separator: " · ")
+    }
+    var iphoneSummaryNone: String { "iPhone пока не найден" }
+    var iphoneSummaryUnavailable: String { "Недоступно на этом Mac" }
+    var iphoneNoticeEmptyTitle: String { "iPhone не найден" }
+    var iphoneNoticeEmptyBody: String { "Подключите iPhone кабелем, разблокируйте его и нажмите «Доверять»." }
+    var iphoneNoticeUnavailableTitle: String { "Подключение к iPhone недоступно" }
+    var iphoneRestartingShort: String { "Перезапуск…" }
+    var iphoneRestartingBanner: String { "Служба подключения перезапускается. Устройства переподключатся через несколько секунд." }
+
+    var iphoneBatteryMeasuredNow: String { "Измерено сейчас" }
+    var iphoneHealthNote: String { "Текущая ёмкость к проектной" }
+    func iphoneHealthHistoryNote(cycles: Int?) -> String {
+        guard let n = cycles else { return "последнее значение из истории" }
+        return "\(n) \(ruPlural(n, "цикл", "цикла", "циклов")) · последнее значение из истории"
+    }
+    var iphoneLiveReadings: String { "Текущие показания" }
+    var iphoneLiveReadingsConnect: String { "Подключите iPhone кабелем, чтобы увидеть заряд, состояние, температуру, напряжение и ёмкость." }
+    var iphoneRefreshOfflineHelp: String { "Подключите iPhone кабелем, чтобы обновить" }
+    var iphoneLogsSourceLive: String { "На iPhone" }
+    var iphoneLogsSourceArchive: String { "Из архива" }
+    var iphoneLogsSourceA11y: String { "Источник журналов сбоев" }
+    var iphoneLogsColSize: String { "Размер" }
+    var iphoneImportOnPhone: String { "На iPhone" }
+    var iphoneImportChoiceBody: String { "Разбор читает из архива историю батареи и журналы. «Сохранить» также оставляет копию архива на этом Mac." }
+    var iphoneImportInArchive: String { "В архиве" }
+    var iphoneIdentitySerials: String { "Серийные номера" }
 }

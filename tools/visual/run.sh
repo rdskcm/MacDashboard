@@ -881,6 +881,21 @@ for mode in dark light; do
   capture_state "main-report-$mode" "$MAIN_ID"
   press_main_tab main-tab-overview
   sleep 1
+  assert_key "$MAIN_ID" "main-iphone-$mode"
+  press_main_tab main-mode-iphone
+  park_cursor
+  sleep 2
+  assert_key "$MAIN_ID" "main-iphone-$mode"
+  capture_state "main-iphone-$mode" "$MAIN_ID"
+  press_main_tab iphone-tile-0
+  park_cursor
+  sleep 2
+  assert_key "$MAIN_ID" "main-iphone-device-$mode"
+  capture_state "main-iphone-device-$mode" "$MAIN_ID"
+  press_main_tab iphone-back
+  sleep 1
+  press_main_tab main-mode-mac
+  sleep 1
 
   assert_key "$MAIN_ID" "open-settings-$mode"
   open_settings
@@ -973,8 +988,8 @@ while IFS= read -r line; do
       ;;
   esac
 done < "$OUT/content-render.log"
-if [ "$CONTENT_COUNT" -lt 24 ]; then
-  runtime_error "content render produced only $CONTENT_COUNT states (expected 24, see content-render.log)"
+if [ "$CONTENT_COUNT" -lt 40 ]; then
+  runtime_error "content render produced only $CONTENT_COUNT states (expected 40, see content-render.log)"
 fi
 
 # ---------------------------------------------------------------------------
