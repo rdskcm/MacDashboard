@@ -56,11 +56,11 @@ frontmost/AXMain/bounds failed. The screen must be unlocked: a locked session sh
 `dark`/`light`. Window id via `vbtool windows --pid P`; the Settings window
 must be 680±2 pt wide or the run aborts.
 
-**Offscreen content (40 states, `tools/visual/content_states.swift` via
-`tools/harness/render.sh`; `run.sh` aborts below 40):** `content-processes-{cpu,mem}`,
+**Offscreen content (42 states, `tools/visual/content_states.swift` via
+`tools/harness/render.sh`; `run.sh` aborts below 42):** `content-processes-{cpu,mem}`,
 `content-folders-{home,service}`, `content-claude-backup` (the Claude backup
 card), `content-history-{disk,battery,cycles,swap}`
-(range Month), `content-history-disk-{quarter,year,all}`, and the iPhone cards
+(range Month), `content-history-disk-{quarter,year,all}`, `content-history-fresh` (the History section at 0, 1 and 2 recorded days and after a restart: notice + placeholder), and the iPhone cards
 `content-iphone-{tiles,notices,battery,history,logs,import,identity,dialogs}`
 (`history`: chart with the hover tooltip pinned, table, empty), each `dark`/`light`
 — cards below the fold of the real window, which would need fragile

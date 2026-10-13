@@ -60,6 +60,9 @@ struct HistoryCard: View {
         return tableShowAll ? newestFirst : Array(newestFirst.prefix(Self.tableCollapsedRows))
     }
 
+    // Below 2 days (a new Mac, or History just restarted) there is nothing to chart:
+    // show the same card chrome with one calm line instead of an empty section
+    // under the История kicker (NEWMAC-HISTORY-EMPTY).
     var body: some View {
         if entries.count >= 2 {
             ChartOrTableCard(
@@ -69,6 +72,13 @@ struct HistoryCard: View {
                 chart: { chart },
                 table: { table }
             )
+        } else {
+            CardChrome(title: L.historyTitle) {
+                Text(L.historyNotEnoughDays)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -222,8 +232,9 @@ struct HistoryCard: View {
 /// aside, until the user hides it; the name lives in the history file, so it survives a
 /// relaunch (HISTORY-UNREADABLE-NOTICE). Calm on purpose — no dot, no severity colour: the
 /// machine is fine, only the app's own record restarted (same stance as FoldersNoFDANotice).
-/// A sibling of HistoryCard, not inside it: HistoryCard renders nothing below 2 days, which
-/// is exactly the state right after a restart.
+/// A sibling of HistoryCard, not inside it: below 2 days HistoryCard shows only its
+/// "not enough days" placeholder, which is exactly the state right after a restart, and this
+/// notice sits above that placeholder (NEWMAC-HISTORY-EMPTY).
 struct HistoryRestartNotice: View {
     let model: DashboardModel
 

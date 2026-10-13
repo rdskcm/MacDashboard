@@ -304,6 +304,7 @@ struct StringsRU: AppStrings {
     var historyMetricYLabelCycles: String { "циклы" }
     var historyMetricYLabelSwap: String { "ГБ" }
     var historyMetricInsufficientData: String { "Недостаточно данных для графика по этому показателю" }
+    var historyNotEnoughDays: String { "История появится здесь, когда приложение проверит этот Mac в два разных дня — оно сохраняет один снимок в день." }
     var historyRangeMonth: String { "Месяц" }
     var historyRangeQuarter: String { "3 мес" }
     var historyRangeYear: String { "Год" }
