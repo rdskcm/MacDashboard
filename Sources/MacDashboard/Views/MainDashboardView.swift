@@ -41,6 +41,7 @@ struct MainDashboardView: View {
     @State private var mode: Mode = .mac
     private enum Tab { case overview, report }
     @State private var tab: Tab = .overview
+    @State private var pointer = DS3PointerTracker()
 
     // Процессы/Папки pair (V2-DRIFT-FIX): the pair is an `HStack` (the fix for
     // the live-resize overlap, proven 2/2 in the hunt). Two follow-up attempts
@@ -54,8 +55,13 @@ struct MainDashboardView: View {
 
     var body: some View {
         ZStack {
-            DS.ground
-            OrbLayer()
+            if mode == .iphone {
+                DS3.ground
+                DS3OrbField()
+            } else {
+                DS.ground
+                OrbLayer()
+            }
             VStack(spacing: 0) {
                 toolbar
 
@@ -73,6 +79,7 @@ struct MainDashboardView: View {
             .onChange(of: L10nStore.shared.language) { model.refreshReport(trigger: .automatic) }
         }
         .ignoresSafeArea()
+        .ds3PointerTracking(pointer)
     }
 
     // MARK: Toolbar (single row: title block · leading-anchored tab control · flexible gap · chips/status/refresh)
@@ -122,7 +129,12 @@ struct MainDashboardView: View {
             if mode == .mac {
                 HeaderChipsView(model: model)
             } else {
+                // Above the title (1): the title block claims its whole ideal width (the full
+                // subtitle tier) before any lower-priority sibling is sized, which left the buttons
+                // only what remained (compact icon below ~1230 pt, «Иск…» clipped at 900). Here the
+                // subtitle tiers yield first; `titleBlock`'s name is pinned in iPhone mode, so it never does.
                 IPhoneHeaderActions(model: iphone)
+                    .layoutPriority(1.5)
             }
         }
         .padding(.leading, 78)
@@ -173,6 +185,10 @@ struct MainDashboardView: View {
                 .lineSpacing(1.9) // 19 pt · 1.1 line-height
                 .lineLimit(1)
                 .truncationMode(.tail)
+                // iPhone mode ranks the actions above the title (see `toolbar`), so the name is
+                // pinned to its width there and only the subtitle tiers give way. In This Mac mode
+                // the title keeps its original truncating behaviour (`false` is a no-op).
+                .fixedSize(horizontal: mode == .iphone, vertical: false)
             subtitleView
         }
     }

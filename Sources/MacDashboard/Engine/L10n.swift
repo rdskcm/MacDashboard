@@ -678,7 +678,6 @@ protocol AppStrings {
     var iphoneStatusFailed: String { get }
     var iphoneUnknownDevice: String { get }
     var iphoneRetry: String { get }
-    var iphoneFindMenu: String { get }
     var iphoneSearchAgain: String { get }
     var iphoneRestartService: String { get }
     var iphoneRestartConfirmTitle: String { get }
@@ -689,7 +688,6 @@ protocol AppStrings {
     func iphoneRestartFailed(_ detail: String) -> String
     var iphoneBack: String { get }
     var iphoneRefresh: String { get }
-    var iphoneEmpty: String { get }
     var iphoneUnavailable: String { get }
     func iphoneStatusRemembered(_ date: String) -> String
     func iphoneOpenDeviceA11y(_ name: String) -> String
@@ -721,6 +719,13 @@ protocol AppStrings {
     var iphoneHistoryColSource: String { get }
     func iphoneBatteryFromHistory(_ date: String) -> String
     func iphoneHistoryCaption(_ n: Int) -> String
+    var iphoneHistoryChart: String { get }
+    var iphoneHistoryTable: String { get }
+    var iphoneHistoryViewA11y: String { get }
+    func iphoneChartCycles(_ n: Int) -> String
+    var iphoneChartSourceImport: String { get }
+    func iphoneChartMonth(_ m: Int) -> String
+    func iphoneChartWeekLabel(day: Int, month: Int) -> String
 
     var iphoneLogsTitle: String { get }
     var iphoneLogsConnectToRead: String { get }
@@ -728,7 +733,6 @@ protocol AppStrings {
     var iphoneLogsRefreshA11y: String { get }
     func iphoneLogsCaption(_ n: Int) -> String
     func iphoneLogsCategory(_ c: LogCategory) -> String
-    func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String
     var iphoneSectionReadFailed: String { get }
 
     var iphoneImportTitle: String { get }
@@ -767,6 +771,44 @@ protocol AppStrings {
     func iphoneHideA11y(_ label: String) -> String
     func iphoneCopyA11y(_ label: String) -> String
     func iphoneIdentityLabel(_ l: IdentityLabel) -> String
+
+    var iphoneTagNotConnected: String { get }
+    var iphoneTagTrustNeeded: String { get }
+    var iphoneTagReadFailed: String { get }
+    var iphoneSubTrust: String { get }
+    var iphoneSubReconnect: String { get }
+    func iphoneSubLastSeen(_ date: String) -> String
+    func iphoneSubCharge(_ percent: Int, _ state: String) -> String
+    var iphoneStateChargingLower: String { get }
+    var iphoneStateExternalLower: String { get }
+    var iphoneStateBatteryLower: String { get }
+    var iphoneTileHealth: String { get }
+    var iphoneNotIdentified: String { get }
+    var iphonePendingTrustText: String { get }
+    var iphonePendingFailedText: String { get }
+    func iphoneSummary(connected: Int, notConnected: Int, waiting: Int) -> String
+    var iphoneSummaryNone: String { get }
+    var iphoneSummaryUnavailable: String { get }
+    var iphoneNoticeEmptyTitle: String { get }
+    var iphoneNoticeEmptyBody: String { get }
+    var iphoneNoticeUnavailableTitle: String { get }
+    var iphoneRestartingShort: String { get }
+    var iphoneRestartingBanner: String { get }
+
+    var iphoneBatteryMeasuredNow: String { get }
+    var iphoneHealthNote: String { get }
+    func iphoneHealthHistoryNote(cycles: Int?) -> String
+    var iphoneLiveReadings: String { get }
+    var iphoneLiveReadingsConnect: String { get }
+    var iphoneRefreshOfflineHelp: String { get }
+    var iphoneLogsSourceLive: String { get }
+    var iphoneLogsSourceArchive: String { get }
+    var iphoneLogsSourceA11y: String { get }
+    var iphoneLogsColSize: String { get }
+    var iphoneImportOnPhone: String { get }
+    var iphoneImportChoiceBody: String { get }
+    var iphoneImportInArchive: String { get }
+    var iphoneIdentitySerials: String { get }
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",

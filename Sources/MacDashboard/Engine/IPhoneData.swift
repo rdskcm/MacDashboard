@@ -165,6 +165,82 @@ enum IPhoneData {
         Double(mAh) * nominalVoltage / 1000
     }
 
+    // MARK: - Battery history chart (IPHONE-DESIGN)
+
+    struct HealthChartScale: Equatable {
+        let lower: Int
+        let upper: Int
+        let step: Int
+        let gridValues: [Int]
+    }
+
+    /// Y domain floor(min − max(1, span·0.4)) … ceil(max + 0.5); grid step 1/2/4 for spans ≤4/≤8/more.
+    static func healthChartScale(_ values: [Int]) -> HealthChartScale? {
+        guard let mn = values.min(), let mx = values.max() else { return nil }
+        let lo = Int((Double(mn) - max(1, Double(mx - mn) * 0.4)).rounded(.down))
+        let hi = Int((Double(mx) + 0.5).rounded(.up))
+        let span = hi - lo
+        let step = span > 8 ? 4 : (span > 4 ? 2 : 1)
+        let first = Int((Double(lo) / Double(step)).rounded(.up)) * step
+        return HealthChartScale(lower: lo, upper: hi, step: step,
+                                gridValues: Array(stride(from: first, through: hi, by: step)))
+    }
+
+    /// Index of the time nearest to `t`; the earlier one wins a tie. nil for an empty list.
+    static func nearestIndex(_ times: [Date], to t: Date) -> Int? {
+        var best: Int?
+        var bestDistance = Double.infinity
+        for (i, x) in times.enumerated() {
+            let d = abs(x.timeIntervalSince(t))
+            if d < bestDistance { bestDistance = d; best = i }
+        }
+        return best
+    }
+
+    enum ChartTick: Equatable {
+        case month(Int)               // 1...12
+        case day(day: Int, month: Int)
+    }
+
+    struct ChartTickMark: Equatable {
+        let date: Date
+        let tick: ChartTick
+    }
+
+    /// ≤ 45 days: weekly marks back from `t1` while later than `t0`; else the 1st of every month
+    /// after `t0`'s month up to `t1`. Ascending.
+    static func chartTicks(from t0: Date, to t1: Date, calendar: Calendar) -> [ChartTickMark] {
+        if t1.timeIntervalSince(t0) <= 45 * 86_400 {
+            var out: [ChartTickMark] = []
+            var t = t1
+            while t > t0 {
+                let c = calendar.dateComponents([.day, .month], from: t)
+                out.insert(ChartTickMark(date: t, tick: .day(day: c.day ?? 1, month: c.month ?? 1)), at: 0)
+                guard let prev = calendar.date(byAdding: .day, value: -7, to: t) else { break }
+                t = prev
+            }
+            return out
+        }
+        var out: [ChartTickMark] = []
+        let startMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: t0)) ?? t0
+        var m = calendar.date(byAdding: .month, value: 1, to: startMonth)
+        while let d = m, d <= t1 {
+            out.append(ChartTickMark(date: d, tick: .month(calendar.component(.month, from: d))))
+            m = calendar.date(byAdding: .month, value: 1, to: d)
+        }
+        return out
+    }
+
+    /// Top-left of the hover tooltip in plot coordinates: centred on the point, clamped to the plot
+    /// by pixel width; 12 pt above the point, or below it when the point is in the top 38 %.
+    static func tooltipOrigin(point: CGPoint, plot: CGSize,
+                              size: CGSize = CGSize(width: 168, height: 74),
+                              gap: CGFloat = 12, topZone: CGFloat = 0.38) -> CGPoint {
+        let x = min(max(0, point.x - size.width / 2), max(0, plot.width - size.width))
+        let below = plot.height > 0 && point.y / plot.height <= topZone
+        return CGPoint(x: x, y: below ? point.y + gap : point.y - gap - size.height)
+    }
+
     // MARK: - Device key and masking
 
     /// First 16 lowercase hex characters of SHA-256 over the UDID's UTF-8 bytes. The key

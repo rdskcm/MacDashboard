@@ -674,7 +674,6 @@ struct StringsEN: AppStrings {
     var iphoneStatusFailed: String { "Could not read the iPhone" }
     var iphoneUnknownDevice: String { "iPhone" }
     var iphoneRetry: String { "Retry" }
-    var iphoneFindMenu: String { "Find iPhone" }
     var iphoneSearchAgain: String { "Search again" }
     var iphoneRestartService: String { "Restart connection service…" }
     var iphoneRestartConfirmTitle: String { "Restart the connection service?" }
@@ -685,7 +684,6 @@ struct StringsEN: AppStrings {
     func iphoneRestartFailed(_ detail: String) -> String { "Could not restart the connection service: \(detail)" }
     var iphoneBack: String { "Back" }
     var iphoneRefresh: String { "Refresh" }
-    var iphoneEmpty: String { "No iPhone found. Connect the iPhone by cable, unlock it and tap “Trust”." }
     var iphoneUnavailable: String { "iPhone connection is not available on this version of macOS." }
     func iphoneStatusRemembered(_ date: String) -> String { "Not connected · last seen \(date)" }
     func iphoneOpenDeviceA11y(_ name: String) -> String { "Open \(name)" }
@@ -716,6 +714,16 @@ struct StringsEN: AppStrings {
     var iphoneHistoryColSource: String { "Source" }
     func iphoneBatteryFromHistory(_ date: String) -> String { "From history · \(date)" }
     func iphoneHistoryCaption(_ n: Int) -> String { "\(n) \(n == 1 ? "day" : "days")" }
+    var iphoneHistoryChart: String { "Chart" }
+    var iphoneHistoryTable: String { "Table" }
+    var iphoneHistoryViewA11y: String { "Battery history view" }
+    func iphoneChartCycles(_ n: Int) -> String { "\(n) \(n == 1 ? "cycle" : "cycles")" }
+    var iphoneChartSourceImport: String { "Sysdiagnose" }
+    func iphoneChartMonth(_ m: Int) -> String {
+        let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        return names[min(max(m, 1), 12) - 1]
+    }
+    func iphoneChartWeekLabel(day: Int, month: Int) -> String { "\(iphoneChartMonth(month)) \(day)" }
 
     var iphoneLogsTitle: String { "Crash logs" }
     var iphoneLogsConnectToRead: String { "Connect the iPhone by cable to read its logs." }
@@ -734,9 +742,6 @@ struct StringsEN: AppStrings {
         case .analytics: return "Analytics"
         case .other: return "Other files"
         }
-    }
-    func iphoneLogsToggleA11y(_ category: String, expanded: Bool) -> String {
-        expanded ? "Hide \(category)" : "Show \(category)"
     }
     var iphoneSectionReadFailed: String { "Could not read from the iPhone. Press Refresh to try again." }
 
@@ -837,4 +842,51 @@ struct StringsEN: AppStrings {
         case .faceIDProjector: return "Face ID projector"
         }
     }
+
+    var iphoneTagNotConnected: String { "Not connected" }
+    var iphoneTagTrustNeeded: String { "Trust needed" }
+    var iphoneTagReadFailed: String { "Could not read" }
+    var iphoneSubTrust: String { "unlock it and tap “Trust”" }
+    var iphoneSubReconnect: String { "reconnect the cable" }
+    func iphoneSubLastSeen(_ date: String) -> String { "last seen \(date)" }
+    func iphoneSubCharge(_ percent: Int, _ state: String) -> String { "\(percent) % · \(state)" }
+    var iphoneStateChargingLower: String { "charging" }
+    var iphoneStateExternalLower: String { "plugged in" }
+    var iphoneStateBatteryLower: String { "on battery" }
+    var iphoneTileHealth: String { "Battery health" }
+    var iphoneNotIdentified: String { "Not identified yet" }
+    var iphonePendingTrustText: String { "Unlock the iPhone and tap “Trust” on its screen, then retry." }
+    var iphonePendingFailedText: String { "Could not read the iPhone. Reconnect the cable, then retry." }
+    func iphoneSummary(connected: Int, notConnected: Int, waiting: Int) -> String {
+        var parts: [String] = []
+        if connected > 0 { parts.append("\(connected) connected") }
+        if notConnected > 0 { parts.append("\(notConnected) not connected") }
+        if waiting > 0 { parts.append("\(waiting) waiting for trust") }
+        return parts.joined(separator: " · ")
+    }
+    var iphoneSummaryNone: String { "No iPhone found yet" }
+    var iphoneSummaryUnavailable: String { "Not available on this Mac" }
+    var iphoneNoticeEmptyTitle: String { "No iPhone found" }
+    var iphoneNoticeEmptyBody: String { "Connect the iPhone by cable, unlock it and tap “Trust”." }
+    var iphoneNoticeUnavailableTitle: String { "iPhone connection is not available" }
+    var iphoneRestartingShort: String { "Restarting…" }
+    var iphoneRestartingBanner: String { "Restarting the connection service. Devices reconnect in a few seconds." }
+
+    var iphoneBatteryMeasuredNow: String { "Measured now" }
+    var iphoneHealthNote: String { "Maximum capacity vs design capacity" }
+    func iphoneHealthHistoryNote(cycles: Int?) -> String {
+        guard let n = cycles else { return "last value from history" }
+        return "\(n) \(n == 1 ? "cycle" : "cycles") · last value from history"
+    }
+    var iphoneLiveReadings: String { "Live readings" }
+    var iphoneLiveReadingsConnect: String { "Connect the iPhone by cable to see charge, state, temperature, voltage and capacity." }
+    var iphoneRefreshOfflineHelp: String { "Connect the iPhone by cable to refresh" }
+    var iphoneLogsSourceLive: String { "On iPhone" }
+    var iphoneLogsSourceArchive: String { "From archive" }
+    var iphoneLogsSourceA11y: String { "Crash log source" }
+    var iphoneLogsColSize: String { "Size" }
+    var iphoneImportOnPhone: String { "On the iPhone" }
+    var iphoneImportChoiceBody: String { "Parse reads battery history and log files from the archive. Keep also stores a copy of the archive on this Mac." }
+    var iphoneImportInArchive: String { "In the archive" }
+    var iphoneIdentitySerials: String { "Serial numbers" }
 }

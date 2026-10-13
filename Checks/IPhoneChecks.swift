@@ -354,4 +354,28 @@ func runIPhoneChecks() {
     check(IPhoneData.usbmuxdRestartCommand == "/usr/bin/killall usbmuxd", "iPhone: usbmuxd restart command exact")
     check(PrivilegedRunner.sudoInvocation(IPhoneData.usbmuxdRestartCommand).args
           == ["/bin/sh", "-c", "/usr/bin/killall usbmuxd"], "iPhone: usbmuxd restart sudo invocation args")
+
+    // --- battery history chart helpers (IPHONE-DESIGN) ---
+    func utcDay(_ y: Int, _ m: Int, _ d: Int) -> Date { utc.date(from: DateComponents(year: y, month: m, day: d))! }
+    check(IPhoneData.healthChartScale([98, 99, 100, 101])
+          == IPhoneData.HealthChartScale(lower: 96, upper: 102, step: 2, gridValues: [96, 98, 100, 102]), "iPhone chart: scale 98-101")
+    check(IPhoneData.healthChartScale([91, 92, 93, 94, 96, 98, 99, 100])
+          == IPhoneData.HealthChartScale(lower: 87, upper: 101, step: 4, gridValues: [88, 92, 96, 100]), "iPhone chart: scale 91-100")
+    check(IPhoneData.healthChartScale([98])
+          == IPhoneData.HealthChartScale(lower: 97, upper: 99, step: 1, gridValues: [97, 98, 99]), "iPhone chart: single value")
+    check(IPhoneData.healthChartScale([]) == nil, "iPhone chart: empty scale is nil")
+    let near = [utcDay(2026, 1, 10), utcDay(2026, 1, 12)]
+    check(IPhoneData.nearestIndex(near, to: utcDay(2026, 1, 11)) == 0, "iPhone chart: nearest tie goes to the earlier sample")
+    check(IPhoneData.nearestIndex(near, to: utcDay(2026, 1, 12)) == 1, "iPhone chart: nearest exact match")
+    check(IPhoneData.nearestIndex([], to: utcDay(2026, 1, 1)) == nil, "iPhone chart: nearest of an empty list is nil")
+    let weekly = IPhoneData.chartTicks(from: utcDay(2026, 1, 1), to: utcDay(2026, 1, 31), calendar: utc)
+    check(weekly.count == 5 && weekly.last?.date == utcDay(2026, 1, 31) && weekly.first?.date == utcDay(2026, 1, 3)
+          && weekly.allSatisfy { if case .day = $0.tick { return true } else { return false } }, "iPhone chart: weekly ticks for a month")
+    check(IPhoneData.chartTicks(from: utcDay(2026, 3, 27), to: utcDay(2026, 10, 12), calendar: utc).map(\.tick)
+          == [.month(4), .month(5), .month(6), .month(7), .month(8), .month(9), .month(10)], "iPhone chart: monthly ticks for seven months")
+    let plot = CGSize(width: 600, height: 194)
+    check(IPhoneData.tooltipOrigin(point: CGPoint(x: 10, y: 100), plot: plot).x == 0, "iPhone chart: tooltip clamped at the left edge")
+    check(IPhoneData.tooltipOrigin(point: CGPoint(x: 590, y: 100), plot: plot).x == 432, "iPhone chart: tooltip clamped at the right edge")
+    check(abs(IPhoneData.tooltipOrigin(point: CGPoint(x: 300, y: 73.72), plot: plot).y - 85.72) < 1e-6, "iPhone chart: tooltip below at the 38 % line")
+    check(abs(IPhoneData.tooltipOrigin(point: CGPoint(x: 300, y: 75.66), plot: plot).y - (-10.34)) < 1e-6, "iPhone chart: tooltip above just past 38 %")
 }

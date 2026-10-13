@@ -48,18 +48,21 @@ frontmost/AXMain/bounds failed. The screen must be unlocked: a locked session sh
 
 ## 4. States captured
 
-**Real window (12 states, `screencapture -x -o -l <windowid>`):** `main`,
+**Real window (16 states, `screencapture -x -o -l <windowid>`):** `main`,
 `main-report` (Report tab, via an AX press on the tab button — see §8),
 `settings-general`, `settings-monitoring`, `settings-titlebar-hover`,
-`settings-backup` (Backups section, third sidebar row), each
+`settings-backup` (Backups section, third sidebar row), `main-iphone` (iPhone mode device list, fixture data),
+`main-iphone-device` (the first tile opened via its AX identifier `iphone-tile-0`; the Back button is `iphone-back`), each
 `dark`/`light`. Window id via `vbtool windows --pid P`; the Settings window
 must be 680±2 pt wide or the run aborts.
 
-**Offscreen content (24 states, `tools/visual/content_states.swift` via
-`tools/harness/render.sh`):** `content-processes-{cpu,mem}`,
+**Offscreen content (40 states, `tools/visual/content_states.swift` via
+`tools/harness/render.sh`; `run.sh` aborts below 40):** `content-processes-{cpu,mem}`,
 `content-folders-{home,service}`, `content-claude-backup` (the Claude backup
 card), `content-history-{disk,battery,cycles,swap}`
-(range Month), `content-history-disk-{quarter,year,all}`, each `dark`/`light`
+(range Month), `content-history-disk-{quarter,year,all}`, and the iPhone cards
+`content-iphone-{tiles,notices,battery,history,logs,import,identity,dialogs}`
+(`history`: chart with the hover tooltip pinned, table, empty), each `dark`/`light`
 — cards below the fold of the real window, which would need fragile
 scroll/click driving to reach there.
 

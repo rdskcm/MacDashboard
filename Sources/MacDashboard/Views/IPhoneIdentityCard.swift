@@ -1,6 +1,6 @@
 // Views/IPhoneIdentityCard.swift
-// Device and parts identity (layout only, no animation). Serial-type values are masked
-// by default; reveal and copy are per value. Values live in memory only (R13, D10).
+// IPHONE-DESIGN: device and parts identity as an info grid and a serial-number grid. Serial-type values are
+// masked by default; reveal and copy are per value. Values live in memory only (R13, D10).
 
 import AppKit
 import SwiftUI
@@ -8,15 +8,20 @@ import SwiftUI
 struct IPhoneIdentityCard: View {
     let model: IPhoneModel
     let deviceKey: String
+    /// Window is at least 1200 pt wide: 7 info columns and 3 serial columns instead of 4 and 2.
+    let wide: Bool
     /// Revealed ids reset when the user leaves the device page or the phone is unplugged.
     @State private var revealed: Set<String>
     @State private var copiedID: String?
 
-    /// `initiallyRevealed` exists for the harness render; the page always passes none.
-    init(model: IPhoneModel, deviceKey: String, initiallyRevealed: Set<String> = []) {
+    /// `initiallyRevealed` and `initiallyCopied` exist for the harness render; the page always passes none.
+    init(model: IPhoneModel, deviceKey: String, wide: Bool = false,
+         initiallyRevealed: Set<String> = [], initiallyCopied: String? = nil) {
         self.model = model
         self.deviceKey = deviceKey
+        self.wide = wide
         _revealed = State(initialValue: initiallyRevealed)
+        _copiedID = State(initialValue: initiallyCopied)
     }
 
     private var isConnected: Bool { model.connected[deviceKey] != nil }
@@ -24,13 +29,12 @@ struct IPhoneIdentityCard: View {
     private var loading: Bool { model.identityLoading.contains(deviceKey) }
 
     var body: some View {
-        CardChrome(title: L.iphoneIdentityTitle) {
-            RainbowCapsuleButton(title: L.iphoneRefresh, size: .card) {
-                model.loadIdentity(deviceKey: deviceKey)
-            }
-            .disabled(!isConnected || loading)
-            .accessibilityLabel(L.iphoneIdentityRefreshA11y)
-        } content: {
+        DS3Card(title: L.iphoneIdentityTitle, trailing: {
+            Button(L.iphoneRefresh) { model.loadIdentity(deviceKey: deviceKey) }
+                .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, topRim: 1))
+                .disabled(!isConnected || loading)
+                .accessibilityLabel(L.iphoneIdentityRefreshA11y)
+        }) {
             content
         }
         .task(id: model.connected[deviceKey]) {
@@ -43,42 +47,80 @@ struct IPhoneIdentityCard: View {
 
     @ViewBuilder private var content: some View {
         if let fields, !fields.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(fields) { f in row(f) }
+            VStack(alignment: .leading, spacing: 16) {
+                infoGrid(fields)
+                serials(fields)
             }
         } else if loading {
-            SectionStateView(done: false)
+            IPhoneMessagePanel(text: L.sharedCollectingData, tone: .loading)
         } else if !isConnected {
-            Text(L.iphoneIdentityConnectToRead).font(.callout).foregroundStyle(DS.muted)
+            IPhoneMessagePanel(text: L.iphoneIdentityConnectToRead)
         } else if model.identityFailed.contains(deviceKey) {
-            Text(L.iphoneSectionReadFailed).font(.callout).foregroundStyle(DS.muted)
+            IPhoneMessagePanel(text: L.iphoneSectionReadFailed, tone: .error)
         } else {
-            SectionStateView(done: false)
+            IPhoneMessagePanel(text: L.sharedCollectingData, tone: .loading)
         }
     }
 
-    private func row(_ f: IPhoneIdentityField) -> some View {
-        let label = L.iphoneIdentityLabel(f.label)
-        let shown = !f.isSecret || revealed.contains(f.id)
-        return HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .font(.system(size: 12.5)).foregroundStyle(DS.muted)
-                .frame(width: 190, alignment: .leading)
-            Text(shown ? f.value : IPhoneData.mask(f.value))
-                .font(.system(size: f.isSecret ? 12 : 12.5, design: f.isSecret ? .monospaced : .default))
-                .foregroundStyle(DS.ink)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if f.isSecret {
-                Button {
-                    if revealed.contains(f.id) { revealed.remove(f.id) } else { revealed.insert(f.id) }
-                } label: {
-                    Text(shown ? L.iphoneIdentityHide : L.iphoneIdentityShow)
-                        .font(.system(size: 12)).foregroundStyle(DS.muted)
+    private func infoGrid(_ fields: [IPhoneIdentityField]) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: wide ? 7 : 4),
+                  alignment: .leading, spacing: 8) {
+            ForEach(fields.filter { !$0.isSecret }) { f in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L.iphoneIdentityLabel(f.label))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(DS3.inkSoft)
+                        .lineLimit(1)
+                    Text(f.value)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(DS3.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(f.value)
                 }
-                .buttonStyle(.plain)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .ds3RowPanel(cornerRadius: 20)
+            }
+        }
+    }
+
+    private func serials(_ fields: [IPhoneIdentityField]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L.iphoneIdentitySerials)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(DS3.muted)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: wide ? 3 : 2),
+                      alignment: .leading, spacing: 8) {
+                ForEach(fields.filter(\.isSecret)) { secretRow($0) }
+            }
+        }
+    }
+
+    private func secretRow(_ f: IPhoneIdentityField) -> some View {
+        let label = L.iphoneIdentityLabel(f.label)
+        let shown = revealed.contains(f.id)
+        let copied = copiedID == f.id
+        return HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(DS3.inkSoft)
+                    .lineLimit(1)
+                Text(shown ? f.value : IPhoneData.mask(f.value))
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .tracking(0.28)
+                    .foregroundStyle(DS3.ink)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 4) {
+                Button(shown ? L.iphoneIdentityHide : L.iphoneIdentityShow) {
+                    if revealed.contains(f.id) { revealed.remove(f.id) } else { revealed.insert(f.id) }
+                }
+                .buttonStyle(DS3ButtonStyle(kind: .text, height: 30, hPad: 11, fontSize: 12.5))
                 .accessibilityLabel(shown ? L.iphoneHideA11y(label) : L.iphoneRevealA11y(label))
                 Button {
                     NSPasteboard.general.clearContents()
@@ -89,12 +131,18 @@ struct IPhoneIdentityCard: View {
                         if copiedID == f.id { copiedID = nil }
                     }
                 } label: {
-                    Text(copiedID == f.id ? L.iphoneIdentityCopied : L.iphoneIdentityCopy)
-                        .font(.system(size: 12)).foregroundStyle(DS.muted)
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(copied ? DS3.accentInk : DS3.ink)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(DS3CircleButtonStyle(diameter: 30))
+                .help(copied ? L.iphoneIdentityCopied : L.iphoneIdentityCopy)
                 .accessibilityLabel(L.iphoneCopyA11y(label))
             }
         }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .padding(.vertical, 10)
+        .ds3RowPanel(cornerRadius: 20)
     }
 }
