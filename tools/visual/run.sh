@@ -34,7 +34,7 @@ usage_error() { echo "usage error: $1" >&2; echo "$HELP" >&2; exit 64; }
 precondition_refused() { echo "REFUSED: $1" >&2; exit 65; }
 runtime_error() { echo "RUNTIME ERROR: $1" >&2; exit 70; }
 
-STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark settings-backup-dark main-report-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light settings-backup-light main-report-light content-processes-cpu-dark content-processes-mem-dark content-folders-home-dark content-folders-service-dark content-claude-backup-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-processes-cpu-light content-processes-mem-light content-folders-home-light content-folders-service-light content-claude-backup-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light"
+STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark settings-backup-dark main-report-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light settings-backup-light main-report-light content-processes-cpu-dark content-processes-mem-dark content-folders-home-dark content-folders-service-dark content-claude-backup-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-history-fresh-dark content-processes-cpu-light content-processes-mem-light content-folders-home-light content-folders-service-light content-claude-backup-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light content-history-fresh-light"
 
 # edge_inset_px is 0 by default (see README §5); only changed with measured
 # evidence, in a separate documented commit.
@@ -988,8 +988,8 @@ while IFS= read -r line; do
       ;;
   esac
 done < "$OUT/content-render.log"
-if [ "$CONTENT_COUNT" -lt 40 ]; then
-  runtime_error "content render produced only $CONTENT_COUNT states (expected 40, see content-render.log)"
+if [ "$CONTENT_COUNT" -lt 42 ]; then
+  runtime_error "content render produced only $CONTENT_COUNT states (expected 42, see content-render.log)"
 fi
 
 # ---------------------------------------------------------------------------

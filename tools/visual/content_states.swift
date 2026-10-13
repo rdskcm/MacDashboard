@@ -1,6 +1,6 @@
 // tools/visual/content_states.swift
 // VISUAL-COVERAGE: offscreen content stage — cards that sit below the fold of
-// the real 1150xH window (Processes/Folders segments, История metrics/ranges,
+// the real 1150xH window (Processes/Folders segments, История metrics/ranges and its 0/1/2-day states,
 // the Claude backup card, the iPhone states: content-iphone-tiles / notices / battery / history / logs / import / identity / dialogs)
 // rendered directly from the fixed VisualFixture dataset, dark+light, via the
 // harness (tools/harness/render.sh). Pattern: scenario_ds_specimen.swift.
@@ -9,6 +9,19 @@
 
 import AppKit
 import SwiftUI
+
+/// The История section exactly as `MainDashboardView.overview` stacks it: kicker, restart
+/// notice, card (NEWMAC-HISTORY-EMPTY).
+struct HistorySectionSpecimen: View {
+    let model: DashboardModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L.overviewKickerHistory).dsKicker()
+            HistoryRestartNotice(model: model)
+            HistoryCard(model: model)
+        }
+    }
+}
 
 MainActor.assumeIsolated {
     guard CommandLine.arguments.count > 1 else {
@@ -33,6 +46,21 @@ MainActor.assumeIsolated {
     let ivan = IPhoneModel.fixtureIvanKey
     let vic = IPhoneModel.fixtureVictoriaKey
     let longArchive = "sysdiagnose_2026.01.15_09-15-02+0300_iPhone-OS_iPhone_23E254.tar.gz"
+    // NEWMAC-HISTORY-EMPTY: the same fixture with only `history` replaced. One model per
+    // state, because a view reads `model.history` when it renders, not when the closure is
+    // built. `DashboardModel()` only reads the real history file at init; nothing is written.
+    @MainActor func fixtureHistory(_ entries: [MacHistoryEntry], backup: String? = nil) -> DashboardModel {
+        let h = DashboardModel()
+        h.applyVisualFixture()
+        h.history = HistoryState(last_run: entries.last?.date, mac_history: entries, unreadable_backup: backup)
+        return h
+    }
+    let fixtureDays = m.history.mac_history
+    let historyNoDays = fixtureHistory([])
+    let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
+    let historyRestarted = fixtureHistory(Array(fixtureDays.suffix(1)),
+                                          backup: "mac_check_state.json.unreadable-20260115-103000")
+    let historyTwoDays = fixtureHistory(Array(fixtureDays.suffix(2)))
 
     for mode in ["dark", "light"] {
         NSApplication.shared.appearance = NSAppearance(named: mode == "dark" ? .darkAqua : .aqua)
@@ -72,6 +100,22 @@ MainActor.assumeIsolated {
         }
         harnessRender(width: 1150, to: "\(outDir)/content-history-disk-all-\(mode).png") {
             HistoryCard(model: m, initialMetric: .disk, initialRange: .all)
+        }
+        harnessRender(width: 1150, to: "\(outDir)/content-history-fresh-\(mode).png") {
+            VStack(alignment: .leading, spacing: 24) {
+                HarnessSection(label: "History: no days recorded (new Mac)") {
+                    HistorySectionSpecimen(model: historyNoDays)
+                }
+                HarnessSection(label: "History: one day recorded") {
+                    HistorySectionSpecimen(model: historyOneDay)
+                }
+                HarnessSection(label: "History: started over, one day recorded (notice + placeholder)") {
+                    HistorySectionSpecimen(model: historyRestarted)
+                }
+                HarnessSection(label: "History: two days recorded (full card)") {
+                    HistorySectionSpecimen(model: historyTwoDays)
+                }
+            }
         }
         harnessRender(width: 1134, to: "\(outDir)/content-iphone-tiles-\(mode).png") {
             let ip = fixtureIPhone()
