@@ -104,7 +104,10 @@ enum DS3Motion {
     static let page: Animation = .spring(response: 0.5, dampingFraction: 0.75)
     static let pageOffsetX: CGFloat = 28
 
-    static let rim: Animation = .spring(response: 0.6, dampingFraction: 0.9)
+    /// Rim re-aim spring; fed to CASpringAnimation as mass/stiffness/damping (same curve as the former .spring(response: 0.6, dampingFraction: 0.9)).
+    static let rimSpring = Spring(response: 0.6, dampingRatio: 0.9)
+    /// Quiet time after the last scroll event before rims re-aim once.
+    static let rimScrollSettle: Double = 0.15
     static let rimResting: Double = RimAngle.resting
 
     /// Kept under Reduce Motion.
@@ -117,6 +120,7 @@ enum DS3Motion {
     static let pulseScale: CGFloat = 2.6
     static let pulseOpacityFrom: Double = 0.55
 
+    /// Orb drift frame rate hint (12 Hz) for the Core Animation drift.
     static let orbTick: Double = 1.0 / 12
 
     /// Ambient motion is frozen in `-visualFixture` runs so captures are deterministic (D24).

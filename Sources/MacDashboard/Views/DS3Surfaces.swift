@@ -3,14 +3,90 @@
 // drifting orbs, entrance motion). Used by iPhone mode; APP-REDESIGN will reuse them later.
 
 import SwiftUI
+import AppKit
 
 // MARK: - Pointer tracker
 
 /// The pointer position in `DS3.windowSpace`, written by one `.onContinuousHover` on the window root
-/// (`ds3PointerTracking`) and read by every `DS3Rim`.
-@MainActor @Observable
+/// (`ds3PointerTracking`). It is deliberately not observable (D6): rims register with it and are re-aimed
+/// imperatively, so no SwiftUI body reads the pointer. Re-aims are gated while any scroll event stream is
+/// active and happen once, 0.15 s after the last scroll event.
+@MainActor
 final class DS3PointerTracker {
-    var location: CGPoint?
+    /// Window-space pointer location, nil outside the window.
+    private(set) var location: CGPoint?
+
+    private var rims: [ObjectIdentifier: DS3RimModel] = [:]
+    private var isScrolling = false
+    private var scrollEnd: DispatchWorkItem?
+    private var monitor: Any?
+
+    func start() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] e in
+            self?.scrolled()
+            return e
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        scrollEnd?.cancel()
+    }
+
+    func register(_ m: DS3RimModel) { rims[ObjectIdentifier(m)] = m }
+    func unregister(_ m: DS3RimModel) { rims[ObjectIdentifier(m)] = nil }
+
+    /// Reports the pointer; re-aims only when the location actually changed (D7) and no scroll is in flight.
+    func pointer(_ p: CGPoint?) {
+        guard p != location else { return }
+        location = p
+        guard !isScrolling else { return }
+        aimAll()
+    }
+
+    private func scrolled() {
+        isScrolling = true
+        scrollEnd?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.scrollEnded() }
+        scrollEnd = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + DS3Motion.rimScrollSettle, execute: work)
+    }
+
+    private func scrollEnded() {
+        isScrolling = false
+        scrollEnd = nil
+        aimAll()
+    }
+
+    private func aimAll() {
+        for m in rims.values { m.aim(at: location) }
+    }
+}
+
+/// One rim's window-space frame and its layer view; the tracker calls `aim(at:)` directly.
+@MainActor
+final class DS3RimModel {
+    var rect = CGRect.zero
+    weak var view: DS3RimView?
+
+    func aim(at p: CGPoint?) {
+        guard let view else { return }
+        let target = p.map { RimAngle.target(pointer: $0, center: CGPoint(x: rect.midX, y: rect.midY)) } ?? RimAngle.resting
+        view.aim(to: target)
+    }
+}
+
+private struct DS3PointerTrackerKey: EnvironmentKey {
+    static let defaultValue: DS3PointerTracker? = nil
+}
+
+extension EnvironmentValues {
+    var ds3PointerTracker: DS3PointerTracker? {
+        get { self[DS3PointerTrackerKey.self] }
+        set { self[DS3PointerTrackerKey.self] = newValue }
+    }
 }
 
 // MARK: - View modifiers
@@ -86,16 +162,19 @@ extension View {
         .ds3Elevation(.card, in: RoundedRectangle(cornerRadius: r, style: .continuous))
     }
 
-    /// One `.onContinuousHover` on the window root feeds the tracker; rims read it from the environment.
+    /// One `.onContinuousHover` on the window root feeds the tracker; rims reach it through the environment.
+    /// The tracker also owns the app-local scroll monitor, started and stopped with this view.
     func ds3PointerTracking(_ t: DS3PointerTracker) -> some View {
         coordinateSpace(.named(DS3.windowSpace))
             .onContinuousHover(coordinateSpace: .named(DS3.windowSpace)) { phase in
                 switch phase {
-                case .active(let p): t.location = p
-                case .ended: t.location = nil
+                case .active(let p): t.pointer(p)
+                case .ended: t.pointer(nil)
                 }
             }
-            .environment(t)
+            .environment(\.ds3PointerTracker, t)
+            .onAppear { t.start() }
+            .onDisappear { t.stop() }
     }
 
     /// State-driven entrance (D23): a transition would not fire for content present at first render.
@@ -134,58 +213,47 @@ private struct DS3Appear: ViewModifier {
 
 // MARK: - Rim
 
-/// Pointer-following edge highlight. The rim keeps its window-space frame in a non-observed box (D6) and
-/// only re-aims on pointer movement (D7).
+/// Pointer-following edge highlight, dark appearance only. The gradient is a pre-rendered image rotated by a
+/// Core Animation transform (`DS3RimLayer`); the tracker re-aims it imperatively, only when the pointer location
+/// changes (D7) and once after a scroll ends. No body here reads the pointer (D6). Without a tracker (offscreen
+/// harness renders) it is the static stroke at the resting angle.
+@MainActor
 struct DS3Rim: View {
     let cornerRadius: CGFloat
 
-    @Environment(DS3PointerTracker.self) private var tracker: DS3PointerTracker?
+    @Environment(\.ds3PointerTracker) private var tracker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
-    @State private var angle = RimAngle.resting
-    @State private var box = FrameBox()
-
-    private final class FrameBox { var rect = CGRect.zero }
+    @State private var model = DS3RimModel()
 
     var body: some View {
-        // Light appearance draws no pointer rim (the white highlight is invisible on the light glass). The
-        // stroke and its geometry/pointer observers exist only in dark, so light pays nothing per pointer move.
+        // Light appearance draws no pointer rim (the white highlight is invisible on the light glass).
         if colorScheme == .dark {
-            DS3RimStroke(angle: angle, cornerRadius: cornerRadius)
-                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(DS3.windowSpace)) }) { box.rect = $0 }
-                .onChange(of: tracker?.location) { _, p in update(p) }
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            Group {
+                if let tracker {
+                    DS3RimLayer(cornerRadius: cornerRadius, model: model, isStatic: reduceMotion || DS3Motion.isFrozen)
+                        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(DS3.windowSpace)) }) { model.rect = $0 }
+                        .onAppear { tracker.register(model) }
+                        .onDisappear { tracker.unregister(model) }
+                } else {
+                    DS3RimStroke(angle: RimAngle.resting, cornerRadius: cornerRadius)
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
-    }
-
-    private func update(_ p: CGPoint?) {
-        guard !reduceMotion, !DS3Motion.isFrozen else { return }
-        let target = p.map { RimAngle.target(pointer: $0, center: CGPoint(x: box.rect.midX, y: box.rect.midY)) } ?? RimAngle.resting
-        withAnimation(DS3Motion.rim) { angle = RimAngle.continuing(from: angle, to: target) }
     }
 }
 
-struct DS3RimStroke: View, Animatable {
-    var angle: Double
+struct DS3RimStroke: View {
+    let angle: Double
     let cornerRadius: CGFloat
-
-    var animatableData: Double {
-        get { angle }
-        set { angle = newValue }
-    }
 
     var body: some View {
         // CSS conic 0 deg = up; SwiftUI 0 deg = trailing.
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).strokeBorder(
             AngularGradient(
-                stops: [
-                    .init(color: DS3.rimHi, location: 0),
-                    .init(color: DS3.rimLo, location: 0.22),
-                    .init(color: DS3.rimMid, location: 0.5),
-                    .init(color: DS3.rimLo, location: 0.78),
-                    .init(color: DS3.rimHi, location: 1),
-                ],
+                stops: DS3.rimStops(hi: DS3.rimHi, mid: DS3.rimMid, lo: DS3.rimLo),
                 center: .center,
                 startAngle: .degrees(angle - 90),
                 endAngle: .degrees(angle + 270)
@@ -195,45 +263,29 @@ struct DS3RimStroke: View, Animatable {
     }
 }
 
+extension DS3 {
+    /// One stop list for the SwiftUI stroke and `DS3RimImage`. CSS conic 0 deg = up.
+    static func rimStops(hi: Color, mid: Color, lo: Color) -> [Gradient.Stop] {
+        [
+            .init(color: hi, location: 0),
+            .init(color: lo, location: 0.22),
+            .init(color: mid, location: 0.5),
+            .init(color: lo, location: 0.78),
+            .init(color: hi, location: 1),
+        ]
+    }
+}
+
 // MARK: - Orbs
 
-/// Three large soft colour glows that drift very slowly (D3). Static under Reduce Motion and in
-/// `-visualFixture` runs.
+/// Three soft colour glows drifting by Core Animation at 12 Hz (`DS3OrbLayer`), static under Reduce Motion and
+/// in `-visualFixture` runs.
 struct DS3OrbField: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var start = Date()
-
-    private static let periods: [Double] = [26, 34, 42]
 
     var body: some View {
-        if reduceMotion || DS3Motion.isFrozen {
-            orbs(k: [0, 0, 0])
-        } else {
-            TimelineView(.periodic(from: .now, by: DS3Motion.orbTick)) { ctx in
-                let t = ctx.date.timeIntervalSince(start)
-                orbs(k: Self.periods.map { (1 - cos(2 * .pi * t / $0)) / 2 })
-            }
-        }
-    }
-
-    private func orbs(k: [Double]) -> some View {
-        GeometryReader { g in
-            ZStack {
-                orb(DS3.orbA, d: 640, centre: CGPoint(x: g.size.width - 180, y: 100), dx: -60, dy: 50, s: 1.08, k: k[0])
-                orb(DS3.orbB, d: 560, centre: CGPoint(x: 40, y: 640), dx: 70, dy: -40, s: 0.94, k: k[1])
-                orb(DS3.orbC, d: 520, centre: CGPoint(x: g.size.width * 0.82 - 260, y: g.size.height), dx: -40, dy: 60, s: 1.10, k: k[2])
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private func orb(_ c: Color, d: CGFloat, centre: CGPoint, dx: CGFloat, dy: CGFloat, s: CGFloat, k: Double) -> some View {
-        Circle()
-            .fill(RadialGradient(colors: [c, c.opacity(0)], center: .center, startRadius: 0, endRadius: 0.495 * d))
-            .frame(width: d, height: d)
-            .scaleEffect(1 + (s - 1) * k)
-            .offset(x: dx * k, y: dy * k)
-            .position(centre)
+        DS3OrbLayer(animated: !(reduceMotion || DS3Motion.isFrozen))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
