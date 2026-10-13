@@ -284,15 +284,6 @@ private struct IPhoneHistoryTableRow: View {
 /// Health chart: monotone line + area down to the y-domain floor, trailing percent labels, month or week
 /// labels below, hover rule/point and a fixed-size tooltip snapped to the nearest day.
 private struct IPhoneHealthChart: View {
-    let points: [BatteryPoint]
-    @State private var hovered: Int?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    init(points: [BatteryPoint], initialHover: Int?) {
-        self.points = points
-        _hovered = State(initialValue: initialHover)
-    }
-
     private struct P {
         let day: String
         let date: Date
@@ -301,19 +292,43 @@ private struct IPhoneHealthChart: View {
         let live: Bool
     }
 
-    private var pts: [P] {
-        points.compactMap { p in
+    private struct Series {
+        let pts: [P]
+        let dates: [Date]
+        let scale: IPhoneData.HealthChartScale
+        let xDomain: ClosedRange<Date>
+        let ticks: [IPhoneData.ChartTickMark]
+    }
+
+    // Parsed once per data change (IPHONE-SCROLL-LAG C2): never in body.
+    private let series: Series?
+    private let initialHover: Int?
+
+    init(points: [BatteryPoint], initialHover: Int?) {
+        self.initialHover = initialHover
+        let pts: [P] = points.compactMap { p in
             guard let h = p.healthPercent, let d = IPhoneData.historyDate(p.day) else { return nil }
             return P(day: p.day, date: d, health: h, cycles: p.cycles, live: p.source == "live")
         }
+        guard let first = pts.first, let last = pts.last else {
+            series = nil
+            return
+        }
+        let t0 = first.date
+        let t1 = last.date
+        series = Series(
+            pts: pts,
+            dates: pts.map(\.date),
+            scale: IPhoneData.healthChartScale(pts.map(\.health))!,
+            xDomain: pts.count == 1 ? t0.addingTimeInterval(-86_400)...t0.addingTimeInterval(86_400) : t0...t1,
+            ticks: IPhoneData.chartTicks(from: t0, to: t1, calendar: .current))
     }
 
     var body: some View {
-        let pts = self.pts
-        if pts.isEmpty {
-            IPhoneMessagePanel(text: L.iphoneHistoryEmpty)
+        if let series {
+            plot(series)
         } else {
-            plot(pts)
+            IPhoneMessagePanel(text: L.iphoneHistoryEmpty)
         }
     }
 
@@ -324,23 +339,16 @@ private struct IPhoneHealthChart: View {
         }
     }
 
-    @ViewBuilder private func plot(_ pts: [P]) -> some View {
-        let scale = IPhoneData.healthChartScale(pts.map(\.health))!
-        let t0 = pts.first!.date
-        let t1 = pts.last!.date
-        let xDomain: ClosedRange<Date> = pts.count == 1
-            ? t0.addingTimeInterval(-86_400)...t0.addingTimeInterval(86_400)
-            : t0...t1
-        let ticks = IPhoneData.chartTicks(from: t0, to: t1, calendar: .current)
+    @ViewBuilder private func plot(_ s: Series) -> some View {
         Chart {
-            ForEach(Array(pts.enumerated()), id: \.offset) { i, p in
-                marks(i, p, count: pts.count, floor: scale.lower)
+            ForEach(Array(s.pts.enumerated()), id: \.offset) { i, p in
+                marks(i, p, count: s.pts.count, floor: s.scale.lower)
             }
         }
-        .chartXScale(domain: xDomain)
-        .chartYScale(domain: scale.lower...scale.upper)
+        .chartXScale(domain: s.xDomain)
+        .chartYScale(domain: s.scale.lower...s.scale.upper)
         .chartYAxis {
-            AxisMarks(position: .trailing, values: scale.gridValues) { v in
+            AxisMarks(position: .trailing, values: s.scale.gridValues) { v in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 1)).foregroundStyle(DS3.line)
                 AxisValueLabel {
                     if let n = v.as(Int.self) {
@@ -350,16 +358,16 @@ private struct IPhoneHealthChart: View {
             }
         }
         .chartXAxis {
-            AxisMarks(values: ticks.map(\.date)) { v in
+            AxisMarks(values: s.ticks.map(\.date)) { v in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 1, dash: [3, 3])).foregroundStyle(DS3.lineStrong)
                 AxisValueLabel(anchor: .topLeading) {
-                    if let d = v.as(Date.self), let m = ticks.first(where: { $0.date == d }) {
+                    if let d = v.as(Date.self), let m = s.ticks.first(where: { $0.date == d }) {
                         Text(label(m.tick)).font(.system(size: 12)).foregroundStyle(DS3.muted)
                     }
                 }
             }
         }
-        .chartOverlay { proxy in overlay(proxy, pts) }
+        .chartOverlay { proxy in Hover(proxy: proxy, pts: s.pts, dates: s.dates, initialHover: initialHover) }
         .frame(height: 220)
     }
 
@@ -380,40 +388,80 @@ private struct IPhoneHealthChart: View {
             PointMark(x: .value("day", p.date), y: .value("health", p.health))
                 .symbol { Circle().fill(DS3.accent).frame(width: 9, height: 9) }
         }
-        if hovered == i {
-            RuleMark(x: .value("day", p.date))
-                .foregroundStyle(DS3.accent.opacity(0.45))
-                .lineStyle(StrokeStyle(lineWidth: 1))
-            PointMark(x: .value("day", p.date), y: .value("health", p.health))
-                .symbol {
-                    ZStack {
-                        Circle().fill(DS3.glassStrong).frame(width: 18, height: 18)
-                        Circle().fill(DS3.accent.opacity(0.24)).frame(width: 15, height: 15)
-                        Circle().fill(DS3.accent).frame(width: 9, height: 9)
+    }
+
+    /// Owns the hover state so the Chart's marks are never rebuilt on hover (D14). Draws the rule, the point and
+    /// the tooltip.
+    private struct Hover: View {
+        let proxy: ChartProxy
+        let pts: [P]
+        let dates: [Date]
+        @State private var hovered: Int?
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        init(proxy: ChartProxy, pts: [P], dates: [Date], initialHover: Int?) {
+            self.proxy = proxy
+            self.pts = pts
+            self.dates = dates
+            _hovered = State(initialValue: initialHover)
+        }
+
+        var body: some View {
+            GeometryReader { geo in
+                ZStack(alignment: .topLeading) {
+                    hitArea(geo)
+                    marker(geo)
+                    tooltipLayer(geo)
+                }
+            }
+        }
+
+        private func hitArea(_ geo: GeometryProxy) -> some View {
+            Rectangle()
+                .fill(Color.clear)
+                .contentShape(Rectangle())
+                .onContinuousHover(coordinateSpace: .local) { phase in
+                    switch phase {
+                    case .active(let loc):
+                        guard let a = proxy.plotFrame else {
+                            if hovered != nil { hovered = nil }
+                            return
+                        }
+                        let plot = geo[a]
+                        let x = min(max(loc.x, plot.minX), plot.maxX) - plot.minX
+                        if let d: Date = proxy.value(atX: x) {
+                            let n = IPhoneData.nearestIndex(dates, to: d)
+                            if n != hovered { hovered = n }
+                        }
+                    case .ended:
+                        if hovered != nil { hovered = nil }
                     }
                 }
         }
-    }
 
-    private func overlay(_ proxy: ChartProxy, _ pts: [P]) -> some View {
-        GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
+        /// No animation modifier on this view or any ancestor inside `Hover`: the rule and the point jump, as the
+        /// Chart marks did.
+        @ViewBuilder private func marker(_ geo: GeometryProxy) -> some View {
+            if let i = hovered, i < pts.count, let a = proxy.plotFrame,
+               let px = proxy.position(forX: pts[i].date), let py = proxy.position(forY: pts[i].health) {
+                let plot = geo[a]
                 Rectangle()
-                    .fill(Color.clear)
-                    .contentShape(Rectangle())
-                    .onContinuousHover(coordinateSpace: .local) { phase in
-                        switch phase {
-                        case .active(let loc):
-                            guard let a = proxy.plotFrame else { hovered = nil; return }
-                            let plot = geo[a]
-                            let x = min(max(loc.x, plot.minX), plot.maxX) - plot.minX
-                            if let d: Date = proxy.value(atX: x) {
-                                hovered = IPhoneData.nearestIndex(pts.map(\.date), to: d)
-                            }
-                        case .ended:
-                            hovered = nil
-                        }
-                    }
+                    .fill(DS3.accent.opacity(0.45))
+                    .frame(width: 1, height: plot.height)
+                    .position(x: plot.minX + px, y: plot.midY)
+                    .allowsHitTesting(false)
+                ZStack {
+                    Circle().fill(DS3.glassStrong).frame(width: 18, height: 18)
+                    Circle().fill(DS3.accent.opacity(0.24)).frame(width: 15, height: 15)
+                    Circle().fill(DS3.accent).frame(width: 9, height: 9)
+                }
+                .position(x: plot.minX + px, y: plot.minY + py)
+                .allowsHitTesting(false)
+            }
+        }
+
+        private func tooltipLayer(_ geo: GeometryProxy) -> some View {
+            ZStack(alignment: .topLeading) {
                 if let i = hovered, i < pts.count, let a = proxy.plotFrame,
                    let px = proxy.position(forX: pts[i].date), let py = proxy.position(forY: pts[i].health) {
                     let plot = geo[a]
@@ -429,39 +477,39 @@ private struct IPhoneHealthChart: View {
                 }
             }
             .animation(reduceMotion ? .easeOut(duration: 0.12) : DS3Motion.popIn, value: hovered == nil)
+            .animation(DS3Motion.chartTracking, value: hovered)
         }
-        .animation(DS3Motion.chartTracking, value: hovered)
-    }
 
-    private func tooltip(_ p: P) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-        return VStack(alignment: .leading, spacing: 3) {
-            Text(p.day).font(.system(size: 12)).monospacedDigit().foregroundStyle(DS3.muted)
-            Text("\(p.health) %")
-                .font(.system(size: 17, weight: .bold))
-                .tracking(-0.17)
+        private func tooltip(_ p: P) -> some View {
+            let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+            return VStack(alignment: .leading, spacing: 3) {
+                Text(p.day).font(.system(size: 12)).monospacedDigit().foregroundStyle(DS3.muted)
+                Text("\(p.health) %")
+                    .font(.system(size: 17, weight: .bold))
+                    .tracking(-0.17)
+                    .monospacedDigit()
+                    .foregroundStyle(DS3.ink)
+                // spacing 0 + Spacer(minLength: 4): an HStack(spacing: 8) would add the gap on both sides of the Spacer (16 pt)
+                // Worst RU case: «150 циклов» + «sysdiagnose» = 142 pt of 144 pt with the 4 pt minimum gap.
+                HStack(spacing: 0) {
+                    Text(p.cycles.map { L.iphoneChartCycles($0) } ?? "")
+                        .layoutPriority(1)
+                    Spacer(minLength: 4)
+                    Text(p.live ? L.iphoneHistorySourceLive : L.iphoneChartSourceImport)
+                        .foregroundStyle(p.live ? DS3.accentInk : DS3.muted)
+                }
+                .lineLimit(1)
+                .font(.system(size: 12))
                 .monospacedDigit()
-                .foregroundStyle(DS3.ink)
-            // spacing 0 + Spacer(minLength: 4): an HStack(spacing: 8) would add the gap on both sides of the Spacer (16 pt)
-            // Worst RU case: «150 циклов» + «sysdiagnose» = 142 pt of 144 pt with the 4 pt minimum gap.
-            HStack(spacing: 0) {
-                Text(p.cycles.map { L.iphoneChartCycles($0) } ?? "")
-                    .layoutPriority(1)
-                Spacer(minLength: 4)
-                Text(p.live ? L.iphoneHistorySourceLive : L.iphoneChartSourceImport)
-                    .foregroundStyle(p.live ? DS3.accentInk : DS3.muted)
+                .foregroundStyle(DS3.inkSoft)
             }
-            .lineLimit(1)
-            .font(.system(size: 12))
-            .monospacedDigit()
-            .foregroundStyle(DS3.inkSoft)
+            .padding(.vertical, 9)
+            .padding(.horizontal, 12)
+            .frame(width: 168, height: 74, alignment: .topLeading)
+            .background(shape.fill(DS3.overlay))
+            .ds3InsetRims(shape, top: DS3.rimMid, ring: DS3.lineStrong)
+            .ds3Elevation(.pop, in: shape)
         }
-        .padding(.vertical, 9)
-        .padding(.horizontal, 12)
-        .frame(width: 168, height: 74, alignment: .topLeading)
-        .background(shape.fill(DS3.overlay))
-        .ds3InsetRims(shape, top: DS3.rimMid, ring: DS3.lineStrong)
-        .ds3Elevation(.pop, in: shape)
     }
 }
 
