@@ -61,3 +61,25 @@ func runCommand(_ path: String, _ args: [String], timeout: TimeInterval,
                 onLine: ((String, Bool) -> Void)? = nil) async -> CommandOutcome {
     await CommandRunner.run(path, args, timeout: timeout, environment: environment, onLine: onLine)
 }
+
+// V2-CRASH-REVEAL: the two real DiagnosticReports directories, by their production
+// priority order (per-user first). Used by every crash fixture below.
+let userCrashDir = FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Logs/DiagnosticReports"
+let systemCrashDir = "/Library/Logs/DiagnosticReports"
+
+// Battery presence varies by machine (MacBook vs. Mac mini/Mac Studio/CI runner) —
+// this mirrors how LiveCollector/ReportCollector already treat "no battery" as a
+// normal, fully-supported state (see StringsEN.reportNoBattery), not an error. Smoke
+// checks below use this to stay meaningful on battery-equipped machines while not
+// spuriously failing on desktop Macs or CI runners.
+// `collect(limit:)` takes the process-table length explicitly rather than reading
+// AppSettings.shared — checks must not depend on the user's saved preferences.
+// Battery comes from `collectFast()`, which avoids spawning processes.
+let hasBattery = LiveCollector().collectFast().battery != nil
+
+func memFixture(total: Int64, compressor: Int64 = 0) -> MemSnapshot {
+    MemSnapshot(total: total, pageSize: 16384,
+                free: total / 16, active: total / 4, inactive: total / 8,
+                speculative: total / 32, wired: total / 4,
+                compressor: compressor, purgeable: total / 64, fileBacked: total / 8)
+}
