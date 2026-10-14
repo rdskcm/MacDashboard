@@ -1,6 +1,7 @@
 // Tests/MacDashboardTests/DevProbeTests.swift
 // Opt-in developer probes (CHECKS-SWIFT-TESTING): skipped unless their environment variable is set.
 // sysdiagnoseProbe ports runSysdiagnoseProbe from Checks/SysdiagnoseExtractorChecks.swift.
+// liveCanary ports runLiveCanary from Checks/LiveCanary.swift.
 import Foundation
 import Testing
 @testable import MacDashboard
@@ -51,6 +52,34 @@ extension SerialTests {
             let path = ProcessInfo.processInfo.environment["MACDASH_SYSDIAGNOSE_ARCHIVE"] ?? ""
             let code = await MacDashboardTests.sysdiagnoseProbe(path)
             #expect(code == 0, "sysdiagnose probe exit code \(code) (2 = temp dir, 1 = extraction failed)")
+        }
+
+        /// Opt-in: MACDASH_LIVE=1 swift test --filter liveCanary
+        @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
+        func liveCanary() async {
+            let hasBattery = LiveCollector().collectFast().battery != nil
+            var ok = 0, rejected = 0, noOutput = 0, skipped = 0
+            for cmd in ParsedCommand.allCases {
+                let label = cmd.rawValue.padding(toLength: 24, withPad: " ", startingAt: 0)
+                if cmd.requiresBattery && !hasBattery {
+                    print("SKIP      \(label)no battery on this Mac"); skipped += 1; continue
+                }
+                let executable: String? = cmd == .smartctl ? ReportCollector.findSmartctl() : nil
+                if cmd == .smartctl && executable == nil {
+                    print("NO-OUTPUT \(label)smartctl not installed"); noOutput += 1; continue
+                }
+                let outcome = await cmd.run(executable: executable)
+                let line = cmd.commandLine(executable: executable)
+                guard let text = outcome.nonEmptyText else {
+                    print("NO-OUTPUT \(label)\(line) — \(outcome.termination)"); noOutput += 1; continue
+                }
+                if cmd.parses(text) { print("OK        \(label)\(line)"); ok += 1; continue }
+                print("NIL       \(label)\(line)"); rejected += 1
+                ParseFailure(cmd, executable: executable, stdout: text)?.excerpt.forEach { print("          | " + $0) }
+            }
+            print("")
+            print("live canary: \(ok) ok, \(rejected) nil, \(noOutput) no output, \(skipped) skipped")
+            #expect(rejected == 0, "live canary: \(rejected) parser(s) rejected real command output")
         }
     }
 }
