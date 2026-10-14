@@ -214,7 +214,7 @@ quarantine flag along the way, clear it exactly as in the first-launch step abov
 ## Structure
 
 - `Sources/MacDashboard/` — the app itself (SwiftUI, no external dependencies).
-- `Checks/` — parser/assessment checks (`swift run MacDashboardChecks`).
+- `Tests/MacDashboardTests/` — swift-testing suite: parser, assessment and engine tests (`swift test`, needs Xcode).
 - `Tests/Fixtures/` — captured command outputs the parser checks run against (see its README).
 - `tools/visual/run.sh` — visual baseline: captures the real app windows and compares them with reference screenshots (dev tool).
 - `build_app.sh` — Apple Silicon (arm64) build + `.app` packaging + codesign (the local signing identity if present, otherwise ad-hoc).

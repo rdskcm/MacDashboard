@@ -1,5 +1,5 @@
 // Engine/IPhoneModel.swift
-// App-only (talks to MobileDeviceTransport, which is not in Checks). Owns the iPhone
+// App-only (talks to MobileDeviceTransport, which is app-only). Owns the iPhone
 // mode state: remembered devices (persisted via IPhoneStore, R13), live connections and
 // per-device status. Everything here runs on the main actor; the transport completes
 // its callbacks on main.

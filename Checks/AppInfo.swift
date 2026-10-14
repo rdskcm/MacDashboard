@@ -1,1 +1,0 @@
-../Sources/MacDashboard/Engine/AppInfo.swift

@@ -119,14 +119,16 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
 > parallel agents of §11 phase 2; those agents finished long ago. The tree has since
 > grown to 30 files under `Engine/` and 26 under `Views/`, and none of
 > `ContentView.swift`, `Components.swift`, `Cards.swift` still exist. The real test
-> target is `Checks/` (an executable target, see §10's fallback), and
-> `Tests/MacDashboardTests/` was never created. Read the tree, not this block.
+> target is `Tests/MacDashboardTests/` (swift-testing, since CHECKS-SWIFT-TESTING; before that the
+> executable `Checks/` target of §10's fallback). Read the tree, not this block.
 >
 > One rule below **is** still live and is repeated here so it does not get lost with
 > the rest: `Models.swift` and `Package.swift` are frozen — if work genuinely requires
 > changing them, stop and report the conflict instead of editing. **Update:** the
 > `Models.swift` freeze was lifted for the v2 branch — it changed substantially and
-> deliberately across the V2 blocks, which own it. `Package.swift` stays frozen.
+> deliberately across the V2 blocks, which own it. `Package.swift` changes only by an
+> explicit decision for the block (as in CI-SWIFT-TESTING and CHECKS-SWIFT-TESTING);
+> without one, do not touch it.
 
 ```
 MacDashboard/
@@ -620,10 +622,11 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
 ## 10. Testing
 
 > **HISTORICAL — the plan, not the outcome.** The `import Testing` route in the first
-> bullet was tried and failed under bare Command Line Tools; the fallback it names is
-> what actually exists, as `Checks/` (target `MacDashboardChecks`, sources symlinked
-> into `Sources/MacDashboard/` so the checks exercise the same files as the app). See
-> the note in `Package.swift:17-23` and `Checks/README.md`.
+> bullet failed under bare Command Line Tools, so the fallback was built as `Checks/`
+> (target `MacDashboardChecks`, sources symlinked into `Sources/MacDashboard/`). Once
+> Xcode 27 was installed, CHECKS-SWIFT-TESTING ported every check to swift-testing in
+> `Tests/MacDashboardTests/` (`swift test`) and removed `Checks/`; its last state is kept under
+> the git tag `checks-runner-archive`.
 
 - Unit tests (swift-testing `import Testing`; if unavailable with CLT, make a separate
   `MacDashboardChecks` executable target run via `swift run` that asserts and exits
@@ -632,7 +635,7 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
   pass/fail Checks target): renders a SwiftUI scenario file off-screen to a PNG via
   `render.sh <scenario.swift> <out.png>` for visual verification of Views.
 - Parser fixtures (planned as inline string literals in Checks/main.swift; as built, real captured
-  outputs are files in Tests/Fixtures/<command>/ — see its README — alongside inline cases in Checks/):
+  outputs are files in Tests/Fixtures/<command>/ — see its README — alongside inline cases in Tests/MacDashboardTests/):
   top output (both stats orders, with +/- suffixes), vm.swapusage line, pmset -g batt (laptop AC/battery,
   desktop = no battery lines), system_profiler hardware (M3 Mac AND Intel with
   "Processor Name"/"Processor Speed"), tmutil destinationinfo (configured / "No

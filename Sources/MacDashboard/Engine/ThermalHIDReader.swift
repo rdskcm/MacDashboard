@@ -2,9 +2,8 @@
 // Block N7: app-only reader for Apple Silicon temperature sensors via the private
 // IOHIDEventSystemClient API (same technique as smctemp/Stats.app; the symbols are
 // exported by IOKit.framework but undeclared in its public headers). No sudo needed.
-// DELIBERATELY NOT symlinked into Checks: private IOKit calls are app-only per
-// Checks/README.md; the pure classification logic this feeds lives in
-// Engine/ThermalSensors.swift (which IS symlinked).
+// DELIBERATELY app-only, not covered by tests: private IOKit calls; the pure
+// classification logic this feeds lives in Engine/ThermalSensors.swift (which IS covered).
 //
 // Linkage: the six private symbols are resolved at RUNTIME via dlopen/dlsym and are
 // never linked against. This is load-bearing, not stylistic. An earlier version

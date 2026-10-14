@@ -3,7 +3,7 @@
 // crash-log header classification, AFC time conversion, battery-history merge, the
 // relay request builder, registry value extraction, the colour lookup and the
 // remembered-device store. Foundation + CryptoKit only (no SwiftUI), so the file is
-// symlinked into the Checks target. Everything is internal, not private: Checks sit in
+// covered by Tests/MacDashboardTests. Everything is internal, not private: tests sit in
 // a different file (checks-helper-visibility).
 //
 // R13: nothing here stores a serial, IMEI, part id or UDID. `IPhoneDeviceRecord` is the

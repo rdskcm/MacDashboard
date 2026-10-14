@@ -2,7 +2,7 @@
 // IPHONE-IMPORT-IOS27: extracts only the sysdiagnose members the import parses (D13) and
 // does not fail when one kind of member is absent. Two tar passes: list the archive, pick
 // the members in Swift, extract exactly those through a member-list file. Foundation +
-// CommandRunner only, so the file is symlinked into the Checks target; everything is
+// CommandRunner only, so the file is covered by Tests/MacDashboardTests; everything is
 // internal, not private (checks-helper-visibility).
 
 import Foundation

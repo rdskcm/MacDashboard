@@ -2,7 +2,7 @@
 
 Parser fixtures for R3-FIXTURES: one directory per `ParsedCommand` rawValue
 (`Sources/MacDashboard/Engine/ParsedCommands.swift`), found by
-`Checks/ParserFixtureChecks.swift` via `#filePath`, no Swift edit needed to add one.
+`Tests/MacDashboardTests/ParserFixtureTests.swift` via `#filePath`, no Swift edit needed to add one.
 
 ## Naming law
 - a real capture (scrubbed) is `<command>-macos<major.minor>.txt` or
@@ -43,7 +43,7 @@ Parser fixtures for R3-FIXTURES: one directory per `ParsedCommand` rawValue
 
 ## Captures with a fixed role
 `pmset-assertions/pmset-assertions-macos27.0-caffeinate.txt` is read by name in
-`Checks/WakeHoldersChecks.swift`, which asserts its exact assertions. Do not rename,
+`Tests/MacDashboardTests/WakeHoldersTests.swift`, which asserts its exact assertions. Do not rename,
 recapture or edit it.
 
 ## Provenance of `synthetic` files
@@ -74,7 +74,7 @@ command for the directory you're adding to (from `ParsedCommand`):
 - `socketfilterfw`: `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate`
 
 Scrub per the rules above, drop the file in the command's directory, then run
-`swift run MacDashboardChecks`.
+`swift test`.
 
 The 8-line excerpt that lands in `mac_report.txt` on a parse failure is diagnostic
 only: for structured or long outputs, ask the reporter for the full command output.

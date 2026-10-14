@@ -61,7 +61,7 @@ final class LiveCollector {
     }
 
     // Full snapshot: composed from the two halves above so existing callers (and the
-    // Checks target) keep working unchanged.
+    // tests) keep working unchanged.
     func collect(limit: Int) async -> LiveSnapshot {
         var s = collectFast()
         let p = await sampleProcesses(limit: limit)
@@ -264,8 +264,8 @@ private func procTieBreak(_ a: ProcEntry, _ b: ProcEntry) -> Bool {
 }
 
 // Separate, non-private extension (V2-FIX-ROWID Step 2): `reranked()` above lives in
-// a `private extension` (file-scope fileprivate), which `Checks/main.swift` — a
-// different file — cannot see. This helper needs Checks coverage, so it gets its
+// a `private extension` (file-scope fileprivate), which the test target — a
+// different file — cannot see. This helper needs test coverage, so it gets its
 // own non-private extension instead of joining that one.
 extension Array where Element == ProcEntry {
     /// Ranks by the CPU% the row actually DISPLAYS — tenths of a percent, matching

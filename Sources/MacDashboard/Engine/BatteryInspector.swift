@@ -3,7 +3,7 @@
 // its child entries, as XML plist) into a typed BatteryDetail. `-l` is required: macOS 27
 // moved several keys off the AppleSmartBattery entry into child entries, whose
 // properties ioreg prints only with -l. Foundation only — this file is also
-// compiled into the Checks target.
+// covered by Tests/MacDashboardTests.
 import Foundation
 
 /// One entry of `AdapterDetails.UsbHvcMenu`: a USB-PD profile the connected

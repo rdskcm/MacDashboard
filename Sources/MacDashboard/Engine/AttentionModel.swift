@@ -2,7 +2,7 @@
 // The v2 "attention" data model: compact chip-sized problems (AttentionItem) and
 // actionable tip capsules (TipCapsule) that Assess.assess() builds alongside the
 // legacy Problem/Tip arrays, plus the shared summary-title and verb-mapping logic
-// the v2 UI reads from. Pure and Foundation-only — compiled into Checks.
+// the v2 UI reads from. Pure and Foundation-only — covered by Tests/MacDashboardTests.
 
 import Foundation
 

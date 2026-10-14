@@ -3,7 +3,7 @@
 // from "this folder isn't there". macOS exposes no supported API for asking
 // whether the app holds Full Disk Access (and TCC.db is itself FDA-gated), so the
 // app never asks — it probes the exact directories it needs and reports the ones
-// that exist but refuse to open. Pure + Foundation-only — compiled into Checks.
+// that exist but refuse to open. Pure + Foundation-only — covered by Tests/MacDashboardTests.
 
 import Foundation
 

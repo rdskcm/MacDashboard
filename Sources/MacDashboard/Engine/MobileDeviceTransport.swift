@@ -10,7 +10,7 @@
 // gate commands G1-G3 (forbidden-symbol grep, one-open-site count, request-string grep)
 // are in the Verification section of the IPHONE-MODULE spec; run them after every change.
 //
-// Not symlinked into Checks: private framework, app-only (same as ThermalHIDReader).
+// Not covered by tests: private framework, app-only (same as ThermalHIDReader).
 // The pure parts (relay request shapes, value extraction, key hashing) are in
 // IPhoneData.swift, which Checks cover.
 //

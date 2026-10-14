@@ -1,6 +1,6 @@
 // Engine/Formatting.swift
 // Deterministic Russian number/byte formatting — relocated out of Views/Theme.swift
-// (Block H) so it's Foundation-only and can be symlinked into MacDashboardChecks;
+// (Block H) so it's Foundation-only and can be unit-tested by Tests/MacDashboardTests;
 // HistorySeries.swift's formattedSwap needs it and Checks must stay SwiftUI-free.
 // Views/Theme.swift keeps the Color/palette helpers; this file owns the numeric
 // formatters that any Engine or View code may call.

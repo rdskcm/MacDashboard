@@ -1,6 +1,6 @@
 // Engine/Advice.swift
 // A clickable follow-up for an assessment row: what the Рекомендации card should DO
-// when the user clicks the recommendation. Foundation-only — compiled into Checks.
+// when the user clicks the recommendation. Foundation-only — covered by Tests/MacDashboardTests.
 import Foundation
 
 /// All x-apple.systempreferences URLs and app paths below were empirically verified

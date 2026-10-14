@@ -45,17 +45,13 @@ jobs:
         uses: ./.github/actions/select-xcode
 
       - name: swift build (all targets, including tests)
-        # CI-SPEED: the only compile in this run. --build-tests builds MacDashboard,
-        # MacDashboardChecks and MacDashboardTests; the two steps below reuse it via
-        # --skip-build and never compile.
+        # CI-SPEED: the only compile in this run. --build-tests builds MacDashboard and
+        # MacDashboardTests; the test step below reuses it via --skip-build and never compiles.
         run: swift build --build-tests
 
-      - name: Run checks (MacDashboardChecks)
-        run: swift run --skip-build MacDashboardChecks
-
       - name: Run swift-testing suite (MacDashboardTests)
-        # CI-SWIFT-TESTING: the local gate is MacDashboardChecks above; this target needs
-        # the Testing module that ships with the Xcode selected in the first step.
+        # The only test gate (CHECKS-SWIFT-TESTING). Needs the Testing module that ships with
+        # the Xcode selected in the first step.
         # The count guard fails the step if swift-testing ran zero tests, so a toolchain
         # or manifest change that silently skips the suite cannot pass as green.
         run: |

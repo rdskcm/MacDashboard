@@ -1,5 +1,5 @@
 // Engine/AppSettings.swift
-// Non-language app settings. Foundation + Observation only — compiled into Checks.
+// Non-language app settings. Foundation + Observation only — covered by Tests/MacDashboardTests.
 import Foundation
 import Observation
 

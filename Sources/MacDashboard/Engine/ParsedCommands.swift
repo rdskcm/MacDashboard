@@ -1,9 +1,9 @@
 // Engine/ParsedCommands.swift
 // R3-FIXTURES: the single definition of every command whose stdout goes through a
 // `Parsers` function with an observable failure value — how production runs it and what
-// "parsed" means. Production call sites, the fixture table (Checks/ParserFixtureChecks.swift)
-// and the live canary (`MacDashboardChecks --live`) all read THIS table, so the canary can
-// never test a different invocation than the app runs. Pure Foundation; symlinked into Checks.
+// "parsed" means. Production call sites, the fixture table (Tests/MacDashboardTests/ParserFixtureTests.swift)
+// and the live canary (`swift test --filter liveCanary`) all read THIS table, so the canary can
+// never test a different invocation than the app runs. Pure Foundation; covered by Tests/MacDashboardTests.
 
 import Foundation
 

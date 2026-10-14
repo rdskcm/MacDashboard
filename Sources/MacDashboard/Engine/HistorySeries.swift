@@ -5,8 +5,8 @@
 // table formatting — no duplicated parsing logic between the two.
 // HISTORY-RANGE: also the chart's range window (HistoryRange) and point cap.
 //
-// Pure Foundation-only, no SwiftUI/Charts import, so it's symlinked into
-// MacDashboardChecks unchanged.
+// Pure Foundation-only, no SwiftUI/Charts import, so it's covered by
+// Tests/MacDashboardTests unchanged.
 
 import Foundation
 
@@ -15,7 +15,7 @@ enum HistoryMetric: CaseIterable {
 }
 
 /// The История chart's range switch (Месяц · 3 мес · Год · Всё). Case order
-/// IS the segment order. Pure — symlinked into MacDashboardChecks.
+/// IS the segment order. Pure — covered by Tests/MacDashboardTests.
 enum HistoryRange: CaseIterable {
     case month, quarter, year, all
 

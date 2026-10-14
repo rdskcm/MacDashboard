@@ -1,7 +1,7 @@
 // Engine/DashboardModel+VisualFixture.swift
 // VISUAL-COVERAGE: applies the fixed VisualFixture dataset to a fresh
-// DashboardModel instead of starting live collection. App-only (not symlinked
-// into Checks — DashboardModel is @MainActor/@Observable, out of scope there).
+// DashboardModel instead of starting live collection. App-only (not covered by
+// Tests/MacDashboardTests — DashboardModel is @MainActor/@Observable, out of scope there).
 
 import Foundation
 

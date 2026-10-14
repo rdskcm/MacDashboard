@@ -23,24 +23,23 @@ local self-signed signing identity in your login keychain; `build_app.sh` then s
 with it, so macOS keeps the app's permissions (Full Disk Access, Automation) across
 rebuilds. Without it the build is signed ad-hoc and prints a warning.
 
-## Checks
+## Tests
 
 ```
-swift run MacDashboardChecks
+swift test
 ```
 
-This must stay green before you open a PR.
+This must stay green before you open a PR. It needs Xcode (the `Testing` module ships
+with it, not with bare Command Line Tools).
 
-## The two-target symlink trap
-
-`MacDashboardChecks` is a separate SwiftPM executable target that runs the pure-logic
-("Engine") files under `Sources/MacDashboard/Engine/` as a plain assert-and-print check
-harness. Most files in `Checks/` are symlinks back into `Sources/MacDashboard/Engine/`,
-not real copies — see `Checks/README.md` for the exact mechanics. `Views/` files and
-`DashboardModel.swift` are app-only (SwiftUI / `@Observable`) and are never symlinked
-in. Practical consequence: if you add logic that both the app and `MacDashboardChecks`
-need to exercise, put it in a file that lives in (or gets symlinked into) `Checks/` —
-not in `Views/`, or the checks target simply won't see it.
+Tests live in `Tests/MacDashboardTests/` and reach the app's code through
+`@testable import MacDashboard`, so anything `internal` is testable; `private` and
+`fileprivate` helpers are not, so put a helper you want covered in a non-private
+declaration. Tests that touch process-wide state (the UI language, `UserDefaults`,
+wall-clock timing) go inside the `.serialized` root suite `SerialTests`
+(`TestSupport.swift`). Two opt-in probes: `MACDASH_LIVE=1 swift test --filter liveCanary`
+runs every parsed command for real; `MACDASH_SYSDIAGNOSE_ARCHIVE=<archive.tar.gz> swift
+test --filter sysdiagnoseProbe` runs the sysdiagnose extractor on a real archive.
 
 ## Code style
 

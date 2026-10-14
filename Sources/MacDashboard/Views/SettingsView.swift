@@ -503,7 +503,7 @@ struct SettingsView: View {
 
     /// Same write as `MacDashboardApp.syncAppleLanguages()` (duplicated rather
     /// than shared across files: that one is file-private by design, and Engine
-    /// must stay free of AppleLanguages writes since Checks links Engine too).
+    /// must stay free of AppleLanguages writes since the tests cover Engine too).
     private func syncAppleLanguages() {
         let want = [store.language == .en ? "en" : "ru"]
         if UserDefaults.standard.stringArray(forKey: "AppleLanguages") != want {
