@@ -1,0 +1,68 @@
+// Tests/MacDashboardTests/VisualFixtureTests.swift
+// Port of Checks/VisualFixtureChecks.swift (CHECKS-SWIFT-TESTING).
+// VISUAL-COVERAGE: pure-logic checks for VisualFixture (R2/R11) — the fixed
+// dataset used by the real app's `-visualFixture` launch argument and by the
+// offscreen content render stage. Real file (not a symlink) — main.swift owns
+// the single top-level-statements slot, so this exposes a plain function it
+// calls (see README.md).
+import Foundation
+import Testing
+@testable import MacDashboard
+
+extension SerialTests {
+    struct VisualFixtureTests {
+        @Test func visualFixture() async {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .en
+
+            let d1 = VisualFixture.make()
+            let d2 = VisualFixture.make()
+
+            // --- determinism ---
+            #expect(d1.assessment == d2.assessment, "VisualFixture: two make() calls -> equal assessment")
+            #expect(d1.history.mac_history == d2.history.mac_history, "VisualFixture: two make() calls -> equal history.mac_history")
+            #expect(VisualFixture.referenceDate < Date(), "VisualFixture: referenceDate is in the past")
+
+            // --- R2: attention items / tips ---
+            let kinds = Set(d1.assessment.items.map(\.kind))
+            #expect(kinds == [.firewallOff, .diskFullSoon, .timeMachine, .wakeHolders],
+                  "VisualFixture: attention item kinds == {firewallOff, diskFullSoon, timeMachine, wakeHolders} (got \(kinds))")
+            #expect(d1.assessment.items.count == 4, "VisualFixture: 4 attention items (got \(d1.assessment.items.count))")
+            #expect(d1.assessment.capsules.count == 5, "VisualFixture: 5 tip capsules (got \(d1.assessment.capsules.count))")
+
+            // --- VISUAL-HARNESS-STALE: fixed, fresh Claude backup ---
+            let expectedBackup = ClaudeBackupStatus.lastSuccess(VisualFixture.referenceDate.addingTimeInterval(-2 * 3600))
+            #expect(d1.claudeBackup == expectedBackup, "VisualFixture: claudeBackup == lastSuccess(referenceDate - 2 h) (got \(d1.claudeBackup))")
+            #expect(d1.claudeBackup == d2.claudeBackup, "VisualFixture: two make() calls -> equal claudeBackup")
+            #expect(!BackupLog.isStale(d1.claudeBackup, thresholdHours: AppSettings.defaultBackupStaleHours, now: VisualFixture.referenceDate),
+                  "VisualFixture: claudeBackup is fresh at referenceDate under the default limit")
+            #expect(!d1.assessment.items.contains { $0.kind == .claudeBackup },
+                  "VisualFixture: no claudeBackup attention item (assessment must use now: referenceDate)")
+
+            // --- R2: history ---
+            #expect(d1.history.mac_history.count == 500, "VisualFixture: 500 history entries (got \(d1.history.mac_history.count))")
+
+            // --- HistorySeries integration (R11) ---
+            let series = HistorySeries.series(d1.history.mac_history, metric: .disk)
+            let dayFormatter = DateFormatter()
+            dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dayFormatter.timeZone = .current
+            dayFormatter.dateFormat = "yyyy-MM-dd"
+
+            func pointsInRange(_ range: HistoryRange) -> Int {
+                guard let bounds = HistorySeries.dateRange(d1.history.mac_history, range) else { return series.count }
+                return series.filter { point in
+                    guard let date = dayFormatter.date(from: point.date) else { return false }
+                    return bounds.contains(date)
+                }.count
+            }
+            #expect(pointsInRange(.month) == 30, "VisualFixture: .disk points inside Month range == 30 (got \(pointsInRange(.month)))")
+            #expect(pointsInRange(.quarter) == 90, "VisualFixture: .disk points inside Quarter range == 90 (got \(pointsInRange(.quarter)))")
+            #expect(pointsInRange(.year) == 365, "VisualFixture: .disk points inside Year range == 365 (got \(pointsInRange(.year)))")
+
+            let thinnedAll = HistorySeries.thinned(series, maxCount: HistorySeries.maxChartPoints)
+            #expect(thinnedAll.count == 365, "VisualFixture: thinned(all, maxCount: 365).count == 365 (got \(thinnedAll.count))")
+        }
+    }
+}
