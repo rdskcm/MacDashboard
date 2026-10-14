@@ -1,9 +1,9 @@
 // Checks/main.swift
-// Assertion-based check harness for MacDashboardChecks (SPEC §10). No XCTest/
-// swift-testing available under Command Line Tools on this machine, so this is a
-// plain executable: every `check()` call prints PASS/FAIL, and the process exits
-// nonzero if anything failed. Run with `swift run MacDashboardChecks`.
-//
+// LEGACY assertion harness for MacDashboardChecks (SPEC §10): every `check()` call prints
+// PASS/FAIL and the process exits nonzero if anything failed (`swift run MacDashboardChecks`).
+// Xcode 27 is installed and `swift test` works, so CHECKS-SWIFT-TESTING ports these checks
+// to Tests/MacDashboardTests (swift-testing) and deletes this target at its last stage.
+// Add no new checks here.
 // This file is real (not symlinked); every other .swift file in this directory is a
 // symlink back into Sources/MacDashboard/... (see README.md) so these checks compile
 // and exercise the app's actual pure engine code.
