@@ -1,7 +1,7 @@
 // Engine/BrewProgress.swift
 // Live-progress model + pure line-reducer for `brew upgrade`, fed by
-// `CommandRunner.run`'s `onLine` callback. Foundation-only (this file is
-// symlinked into the Checks target — no AppKit/SwiftUI/L10n here).
+// `CommandRunner.run`'s `onLine` callback. Foundation-only (covered by
+// Tests/MacDashboardTests — no AppKit/SwiftUI/L10n here).
 //
 // Parsing rules are empirically grounded against non-TTY `brew upgrade` output on
 // current Homebrew (concurrent DownloadQueue): see BrewProgressParser.consume for

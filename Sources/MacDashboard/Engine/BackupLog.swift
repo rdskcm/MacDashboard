@@ -1,6 +1,6 @@
 // Engine/BackupLog.swift
 // BACKUP-AGE: parses and reads ~/Library/Logs/claude-backup.log (written by backup_auto.sh)
-// to find the newest successful snapshot. Foundation only; compiled into Checks.
+// to find the newest successful snapshot. Foundation only; covered by Tests/MacDashboardTests.
 import Foundation
 
 /// What the Claude backup log says about the newest successful snapshot (BACKUP-AGE).

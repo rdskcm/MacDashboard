@@ -1,5 +1,5 @@
 // Engine/AppInfo.swift
-// The app's own identity. Foundation only — compiled into Checks.
+// The app's own identity. Foundation only — covered by Tests/MacDashboardTests.
 import Foundation
 
 /// The single source of the user-visible app name.

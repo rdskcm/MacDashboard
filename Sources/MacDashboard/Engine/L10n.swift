@@ -1,7 +1,7 @@
 // Engine/L10n.swift
 // In-app localization core. AppStrings is the compile-enforced string table
 // protocol (a missing key on a future language struct is a compile error, unlike
-// dictionary lookups). Foundation-only: also compiled into the Checks target.
+// dictionary lookups). Foundation-only: also covered by Tests/MacDashboardTests.
 import Foundation
 import Observation
 

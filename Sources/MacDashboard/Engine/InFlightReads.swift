@@ -1,8 +1,8 @@
 // Engine/InFlightReads.swift
 // IPHONE-LOGS-REATTACH: per-device bookkeeping of the one current in-flight read (crash-log
 // listing, identity read). Bound to a request id and handle, not to the device, so a read
-// from a detached connection can neither block nor clear a newer one. Pure; symlinked into
-// Checks. Internal, not private (checks-helper-visibility).
+// from a detached connection can neither block nor clear a newer one. Pure; covered by
+// Tests/MacDashboardTests. Internal, not private (checks-helper-visibility).
 
 struct InFlightReads<Handle: Hashable> {
     private var current: [String: (id: Int, handle: Handle)] = [:]

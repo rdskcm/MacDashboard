@@ -1,13 +1,7 @@
 // Tests/MacDashboardTests/LaunchdPlistInspectorTests.swift
 // Port of Checks/LaunchdPlistInspectorChecks.swift (CHECKS-SWIFT-TESTING).
 // Pure-logic coverage for LaunchdPlistInspector: Program/ProgramArguments parsing,
-// orphan detection, curated description lookup and heuristic fallback. This file is
-// real check code (NOT a symlink — see README.md), split out of main.swift because
-// Swift executable targets only allow ONE file with top-level (script-mode)
-// statements — main.swift already owns that slot — so this file instead defines a
-// plain function that main.swift calls. `check()`/`total`/`failures` are the
-// top-level helpers declared in main.swift; they're visible here because both files
-// compile into the same MacDashboardChecks module.
+// orphan detection, curated description lookup and heuristic fallback.
 import Foundation
 import Testing
 @testable import MacDashboard

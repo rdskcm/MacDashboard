@@ -869,7 +869,7 @@ final class ReportCollector {
     /// The decision rule of `isSafeToRunViaSudo`, over facts already gathered — pure, so the
     /// two branches an unprivileged test cannot reach through the filesystem (no stock macOS
     /// file carries `schg`; a check process cannot create a root-owned file inside a
-    /// group-writable directory) are still covered by MacDashboardChecks (re-review 2 [N7]).
+    /// group-writable directory) are still covered by Tests/MacDashboardTests (re-review 2 [N7]).
     /// `mode` is the POSIX permission word; `ownerUID` the file's owner.
     static func sudoSafetyVerdict(isRegularFile: Bool,
                                   ownerUID: UInt32,

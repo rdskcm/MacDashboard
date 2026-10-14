@@ -1,6 +1,6 @@
 // Engine/AppleScriptResult.swift
 // Pure classification of one `NSAppleScript` execution result. Lives in Engine
-// (and is symlinked into Checks) so the rule that matters — AppleEvent -128 is
+// (and is covered by Tests/MacDashboardTests) so the rule that matters — AppleEvent -128 is
 // the user backing out, NOT a failure — is covered by a check instead of resting
 // on an `if` buried in a view-layer helper. Sole production caller:
 // `AdviceActionRunner.emptyTrash`.

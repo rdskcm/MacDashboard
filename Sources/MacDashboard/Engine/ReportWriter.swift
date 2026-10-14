@@ -421,8 +421,7 @@ enum ReportWriter {
     // NOTE: smartCriticalWarningRU lives at file scope below (not inside the enum) so it
     // stays a plain free function visible module-wide, matching the rest of this file's
     // top-level helpers. Kept here (Engine/ReportWriter.swift) rather than in Views/SharedUI.swift
-    // because this file is also symlinked into the headless Checks/ target (see Package.swift),
-    // which does not include the Views sources.
+    // so the Engine layer does not depend on Views.
 
     private static func renderSmart(_ smart: [SmartDisk]?) -> [String] {
         guard let disks = smart else { return [L.sharedUnavailable] }

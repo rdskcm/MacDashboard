@@ -1,5 +1,5 @@
 // Engine/RimAngle.swift
-// IPHONE-DESIGN: direction of the DS3 rim highlight. Pure, symlinked into Checks.
+// IPHONE-DESIGN: direction of the DS3 rim highlight. Pure, covered by Tests/MacDashboardTests.
 import Foundation
 
 /// Degrees in the CSS convention: 0 = up, clockwise.

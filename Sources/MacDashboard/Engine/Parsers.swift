@@ -6,7 +6,7 @@
 // parse only what matches, never throw, never index out of bounds, return nil/empty
 // on garbage or absent input rather than guessing. No I/O, no state — every function
 // here is a pure `String -> model` (or `String -> String -> model`) transform, which
-// is what makes them cheaply unit-testable from MacDashboardChecks.
+// is what makes them cheaply unit-testable from Tests/MacDashboardTests.
 // The file also holds structured (JSON/plist) decoders: they take the raw stdout bytes as
 // `Data`, are equally pure and total, and return nil, `[]` or `.undecodable` on any decode error.
 

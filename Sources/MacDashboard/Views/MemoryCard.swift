@@ -72,7 +72,7 @@ private func memoryBarSpans(_ segments: [MemSegment], total: Int64, hoveredKey: 
 /// + `.contentShape` siblings this replaced, which all shared one full-bar
 /// frame and let `.onHover`'s view/z-order resolution silently pick the
 /// topmost sibling — always "free" — instead of honoring `.contentShape`).
-/// The index math itself lives in `Engine/BarHitTest.swift` so the Checks target can cover it.
+/// The index math itself lives in `Engine/BarHitTest.swift` so Tests/MacDashboardTests can cover it.
 private func memorySegmentKey(at x: CGFloat, segments: [MemSegment], rects: [(x: CGFloat, width: CGFloat)]) -> String? {
     guard let idx = barSegmentIndex(at: x, rects: rects), idx < segments.count else { return nil }
     return segments[idx].key

@@ -4,7 +4,7 @@
 // public key of IOPMCopyAssertionsByProcess), keeps sleep-preventing assertions held for at
 // least `minimumAgeSeconds`, and attributes each one to its real requester. "System" is
 // decided by WHERE the executable lives (the sealed, SIP-protected OS locations), never by a
-// name list. Pure except `processRecord(pid:)` / `sample()`; symlinked into Checks.
+// name list. Pure except `processRecord(pid:)` / `sample()`; covered by Tests/MacDashboardTests.
 import Foundation
 import Darwin
 

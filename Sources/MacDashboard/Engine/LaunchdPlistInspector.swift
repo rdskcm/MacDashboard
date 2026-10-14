@@ -3,7 +3,7 @@
 // resolves the executable a plist points at, decides whether that executable is
 // orphaned (its backing app/binary was removed), and attaches a short human-readable
 // description of the agent (curated dictionary, falling back to a reverse-DNS
-// heuristic). Foundation-only — also compiled into Checks.
+// heuristic). Foundation-only — also covered by Tests/MacDashboardTests.
 import Foundation
 
 /// Everything the UI needs to render one launchd plist row.

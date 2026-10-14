@@ -1256,7 +1256,7 @@ struct RainbowCapsuleButton: View {
 }
 
 /// Human-readable one-liner for the live `brew upgrade` progress state.
-/// Views-layer helper (not in Checks) — reads `L` at call time so it follows
+/// Views-layer helper (app-only) — reads `L` at call time so it follows
 /// instant language switching.
 func brewProgressText(_ p: BrewProgress) -> String {
     switch p.phase {

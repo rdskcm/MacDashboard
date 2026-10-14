@@ -1,5 +1,5 @@
 // Engine/SysdiagnoseImporter.swift
-// App-only (temp dirs, file moves; not in Checks; tar runs in SysdiagnoseExtractor). Imports one sysdiagnose
+// App-only (temp dirs, file moves; app-only, not covered by tests; tar runs in SysdiagnoseExtractor). Imports one sysdiagnose
 // `.tar.gz`: copies it from the phone (read-only AFC, through the transport) or uses the
 // Mac file the user picked, extracts only the members the import parses (D13) into a
 // fresh temp dir, parses them, optionally keeps the archive under App Support, and ALWAYS

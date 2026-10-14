@@ -1,7 +1,7 @@
 // Engine/ThermalSensors.swift
 // Block N7: pure classification/aggregation logic for the SOC-temperature tile.
 // The actual private-IOKit read lives in Engine/ThermalHIDReader.swift (app-only,
-// NOT symlinked into Checks); this file is symlinked into MacDashboardChecks and
+// not covered by Tests/MacDashboardTests); this file is covered by them and
 // must stay Foundation-only.
 //
 // Hardware ground truth (spike, base M3 MacBook Air): no per-core CPU sensors

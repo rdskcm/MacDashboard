@@ -1,9 +1,8 @@
 // Views/DesignSystem.swift
 // Block V2-FOUND: v2.0 design-system surfaces/controls/motion, all values inlined
 // from the design handoff Spec §2–§4 so no later block re-derives layer geometry.
-// Pure SwiftUI Views code (not Foundation-only) — deliberately NOT symlinked into
-// Checks/ (see PLAN.md block spec: a symlink here would break the Foundation-only
-// MacDashboardChecks target).
+// Pure SwiftUI Views code (not Foundation-only) — deliberately app-only, not
+// covered by Tests/MacDashboardTests (see PLAN.md block spec: the tested Engine code stays Foundation-only).
 //
 // Reduce Motion contract (project-wide, wired here as a deliverable of this block):
 // keyframe-style/transform animations play once at ~0 ms (i.e. no animation) under
