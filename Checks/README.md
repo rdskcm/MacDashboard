@@ -1,11 +1,12 @@
 # MacDashboardChecks
 
 This directory is the source root of the `MacDashboardChecks` SwiftPM executable target
-(SPEC §10). XCTest and swift-testing (`import Testing`) are both unavailable under
-Command Line Tools without Xcode on this machine, so instead of a `.testTarget` this is
-a plain executable: `main.swift` runs a tiny assert-and-print harness and calls
-`exit(1)` if anything fails, so `swift run MacDashboardChecks` is a normal CI-style
-pass/fail check.
+(SPEC §10), a LEGACY gate being retired by CHECKS-SWIFT-TESTING. It was built as a plain
+executable because this Mac once had Command Line Tools only, where neither XCTest nor
+swift-testing was available. Xcode 27 is now installed and `swift test` works, so these
+checks are being ported to `Tests/MacDashboardTests/` and this target is deleted at the
+block's last stage. Until then `main.swift` runs a tiny assert-and-print harness and calls
+`exit(1)` if anything fails, so `swift run MacDashboardChecks` is still a pass/fail check.
 
 Every other file in this directory (`Models.swift`, `AppInfo.swift`, `AttentionModel.swift`,
 `Parsers.swift`, `Assessment.swift`,
@@ -47,11 +48,8 @@ canary (`LiveCanary.swift`): it runs every registry command for real and exits 1
 real command's output was rejected by its parser.
 `swift run MacDashboardChecks --sysdiagnose <archive.tar.gz>` runs the import's extractor on a real archive in a fresh temp dir and prints what it selected.
 
-**swift-testing sample target.** `Tests/MacDashboardTests/` is a `.testTarget`
-(`MacDashboardTests`) run with `swift test` — locally (needs Xcode) and in CI
-(`.github/workflows/ci.yml`, step "Run swift-testing suite"). It is not a second copy of
-this harness: it ports a small fixed set — the R3 fixture table as `@Test(arguments:)`,
-`Parsers.parseSize`/`swapUsage`, and the `ProcEntry` id/ordering rules — and reaches the
-engine through `@testable import MacDashboard`, not through symlinks. This directory stays
-the primary gate and the place new checks go; `swift build` and `build_app.sh` never compile
-the test target.
+**swift-testing target.** `Tests/MacDashboardTests/` is the `.testTarget`
+(`MacDashboardTests`) run with `swift test`, locally and in CI (`.github/workflows/ci.yml`).
+It reaches the engine through `@testable import MacDashboard`, not through symlinks, and it
+is where new checks go: add no new checks to this directory. `swift build` and
+`build_app.sh` never compile the test target.

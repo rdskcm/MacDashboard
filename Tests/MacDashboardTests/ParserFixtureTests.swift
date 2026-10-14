@@ -1,90 +1,174 @@
 // Tests/MacDashboardTests/ParserFixtureTests.swift
-// CI-SWIFT-TESTING: swift-testing port of the R3 fixture table
-// (Checks/ParserFixtureChecks.swift, runParserFixtureChecks). Runs via `swift test` locally
-// and in CI; the primary gate is still `swift run MacDashboardChecks`. Same Tests/Fixtures tree, same rules.
+// Port of Checks/ParserFixtureChecks.swift (CHECKS-SWIFT-TESTING).
+// R3-FIXTURES parts 2-5: table-driven checks over Tests/Fixtures/ (every command's
+// parser accepts its positives and rejects its negatives, empty input and garbage,
+// and structured positives truncated to half), plus the ParseFailure/writer unit
+// checks for the report-time recording of unparsed command output (part 5).
+// PARSER-FIXTURES: real captures carry the macOS version in their name.
 import Foundation
 import Testing
 @testable import MacDashboard
 
-private let fixturesRoot = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent()   // Tests/MacDashboardTests
-    .deletingLastPathComponent()   // Tests
-    .appendingPathComponent("Fixtures", isDirectory: true)
-
-private let garbage = "\u{FFFD}\u{FFFD} <<not command output>> }{ ;;; @@@\n\t~~~ ¿¿ ~~~\n"
-
-/// Same rule as `fixtureNameIsVersioned` in Checks/ParserFixtureChecks.swift:
-/// `<command>-macos<major>.<minor>[-<variant>].txt`, variant = lowercase words joined by `-`.
-private func isVersionedFixtureName(_ fname: String, command: String) -> Bool {
+/// PARSER-FIXTURES: a real capture's name is `<command>-macos<major>.<minor>[-<variant>].txt`,
+/// variant = lowercase words joined by `-`.
+func fixtureNameIsVersioned(_ fname: String, command: String) -> Bool {
     let pattern = "^" + NSRegularExpression.escapedPattern(for: command)
         + "-macos[0-9]+\\.[0-9]+(-[a-z0-9]+)*\\.txt$"
     return fname.range(of: pattern, options: .regularExpression) != nil
 }
 
-@Test(arguments: [
-    ("ps-macos26.3.txt", "ps"),
-    ("tmutil-destinationinfo-macos27.0-not-configured.txt", "tmutil-destinationinfo"),
-])
-func fixtureNameAccepted(fname: String, command: String) {
-    #expect(isVersionedFixtureName(fname, command: command))
-}
+extension SerialTests {
+    struct ParserFixtureTests {
+        @Test func parserFixtures() async {
+            #expect(fixtureNameIsVersioned("ps-macos26.3.txt", command: "ps"), "fixture name: ps-macos26.3.txt accepted")
+            #expect(fixtureNameIsVersioned("tmutil-destinationinfo-macos27.0-not-configured.txt", command: "tmutil-destinationinfo"),
+                  "fixture name: version + two-word variant accepted")
+            #expect(!fixtureNameIsVersioned("ps.txt", command: "ps"), "fixture name: no version rejected")
+            #expect(!fixtureNameIsVersioned("ps-laptop.txt", command: "ps"), "fixture name: variant without version rejected")
+            #expect(!fixtureNameIsVersioned("ps-macos26.txt", command: "ps"), "fixture name: major only rejected")
+            #expect(!fixtureNameIsVersioned("ps-macOS26.3.txt", command: "ps"), "fixture name: wrong case rejected")
+            #expect(!fixtureNameIsVersioned("top-macos26.3.txt", command: "ps"), "fixture name: other command rejected")
+            #expect(!fixtureNameIsVersioned("pmset-macos26.3-batt.txt", command: "pmset-batt"), "fixture name: partial command rejected")
+            #expect(!fixtureNameIsVersioned("ps-macos26.3-.txt", command: "ps"), "fixture name: empty variant rejected")
 
-@Test(arguments: [
-    ("ps.txt", "ps"),
-    ("ps-laptop.txt", "ps"),
-    ("ps-macos26.txt", "ps"),
-    ("ps-macOS26.3.txt", "ps"),
-    ("top-macos26.3.txt", "ps"),
-    ("pmset-macos26.3-batt.txt", "pmset-batt"),
-    ("ps-macos26.3-.txt", "ps"),
-])
-func fixtureNameRejected(fname: String, command: String) {
-    #expect(!isVersionedFixtureName(fname, command: command))
-}
+            let root = fixturesRoot
 
-@Test(arguments: ParsedCommand.allCases)
-func fixturesParseAsDeclared(_ cmd: ParsedCommand) throws {
-    let dir = fixturesRoot.appendingPathComponent(cmd.rawValue, isDirectory: true)
-    try #require(FileManager.default.fileExists(atPath: dir.path),
-                 "Tests/Fixtures/\(cmd.rawValue) is missing")
-    let files = try FileManager.default.contentsOfDirectory(
-        at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
-        .filter { $0.lastPathComponent != "README.md" }
-        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            #expect(FileManager.default.fileExists(atPath: root.path), "fixtures: Tests/Fixtures exists")
+            guard FileManager.default.fileExists(atPath: root.path) else { return }
 
-    var positives = 0
-    for file in files {
-        let fname = file.lastPathComponent
-        let label = "\(cmd.rawValue)/\(fname)"
-        #expect(fname.hasSuffix(".txt"), "\(label): fixture names must end in .txt")
-        guard fname.hasSuffix(".txt") else { continue }
-        let data = try Data(contentsOf: file)
-        let text = try #require(String(data: data, encoding: .utf8), "\(label): not readable as UTF-8")
-        if fname.hasPrefix("neg-") {
-            #expect(!cmd.parses(text), "\(label): negative fixture must be rejected")
-        } else {
-            positives += 1
-            if !fname.contains("synthetic") {
-                #expect(isVersionedFixtureName(fname, command: cmd.rawValue),
-                        "\(label): real capture must be named \(cmd.rawValue)-macos<major.minor>[-<variant>].txt")
+            let garbage = "\u{FFFD}\u{FFFD} <<not command output>> }{ ;;; @@@\n\t~~~ ¿¿ ~~~\n"
+
+            let entries = (try? FileManager.default.contentsOfDirectory(
+                at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
+
+            for entry in entries {
+                let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                guard isDir else { continue }
+                let name = entry.lastPathComponent
+                guard let cmd = ParsedCommand(rawValue: name) else {
+                    Issue.record( "fixtures: unknown directory \(name)")
+                    continue
+                }
+
+                let files = ((try? FileManager.default.contentsOfDirectory(
+                    at: entry, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? [])
+                    .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+                var positives: [URL] = []
+                for file in files {
+                    let fname = file.lastPathComponent
+                    guard fname != "README.md" else { continue }
+                    guard fname.hasSuffix(".txt") else {
+                        Issue.record( "fixtures \(name)/\(fname): naming (must end in .txt)")
+                        continue
+                    }
+                    if !fname.hasPrefix("neg-") {
+                        positives.append(file)
+                        if !fname.contains("synthetic") {
+                            #expect(fixtureNameIsVersioned(fname, command: cmd.rawValue),
+                                  "fixtures \(name)/\(fname): naming (real capture must be \(cmd.rawValue)-macos<major.minor>[-<variant>].txt)")
+                        }
+                    }
+                }
+
+                #expect(!positives.isEmpty, "fixtures \(cmd.rawValue): has a positive fixture")
+
+                for file in files {
+                    let fname = file.lastPathComponent
+                    guard fname != "README.md", fname.hasSuffix(".txt") else { continue }
+                    guard let data = try? Data(contentsOf: file), let text = String(data: data, encoding: .utf8) else {
+                        Issue.record( "fixtures \(cmd.rawValue)/\(fname): readable as UTF-8")
+                        continue
+                    }
+                    let label = "\(cmd.rawValue)/\(fname)"
+                    if fname.hasPrefix("neg-") {
+                        #expect(!cmd.parses(text), "fixtures \(label): rejected")
+                    } else {
+                        #expect(cmd.parses(text), "fixtures \(label): parses")
+                        if cmd.isStructured {
+                            let half = String(text.prefix(text.count / 2))
+                            #expect(!cmd.parses(half), "fixtures \(label): truncated to half ⇒ rejected")
+                        }
+                    }
+                }
+
+                #expect(!cmd.parses(""), "fixtures \(cmd.rawValue): empty ⇒ rejected")
+                #expect(!cmd.parses(garbage), "fixtures \(cmd.rawValue): garbage ⇒ rejected")
             }
-            #expect(cmd.parses(text), "\(label): positive fixture must parse")
-            if cmd.isStructured {
-                let half = String(text.prefix(text.count / 2))
-                #expect(!cmd.parses(half), "\(label): truncated to half must be rejected")
+
+            for cmd in ParsedCommand.allCases {
+                #expect(entries.contains { $0.lastPathComponent == cmd.rawValue },
+                      "fixtures \(cmd.rawValue): directory present")
             }
         }
-    }
-    #expect(positives > 0, "\(cmd.rawValue): needs at least one positive fixture")
-    #expect(!cmd.parses(""), "\(cmd.rawValue): empty input must be rejected")
-    #expect(!cmd.parses(garbage), "\(cmd.rawValue): garbage must be rejected")
-}
 
-@Test func everyFixtureDirectoryNamesACommand() throws {
-    let entries = try FileManager.default.contentsOfDirectory(
-        at: fixturesRoot, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
-    for entry in entries where (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
-        #expect(ParsedCommand(rawValue: entry.lastPathComponent) != nil,
-                "Tests/Fixtures/\(entry.lastPathComponent) is not a ParsedCommand rawValue")
+        @Test func parseFailures() async {
+            #expect(ParseFailure(.uptime, stdout: "  \n\t\n") == nil, "ParseFailure: blank stdout ⇒ nil")
+
+            do {
+                let lines = (1...10).map { "line \($0)" }
+                let stdout = lines.joined(separator: "\n\n")  // blank lines between each
+                let f = ParseFailure(.uptime, stdout: stdout)
+                #expect(f?.excerpt.count == 8, "ParseFailure: excerpt capped at 8 lines")
+                #expect(f?.omittedLineCount == 2, "ParseFailure: omittedLineCount == 2")
+                #expect(f?.excerpt.first == "line 1", "ParseFailure: excerpt[0] is the first line")
+            }
+
+            do {
+                let long = String(repeating: "x", count: 200)
+                let f = ParseFailure(.uptime, stdout: long)
+                #expect(f?.excerpt.first?.count == 160, "ParseFailure: clipped line count == 160")
+                #expect(f?.excerpt.first?.hasSuffix("…") == true, "ParseFailure: clipped line ends with …")
+            }
+
+            #expect(ParsedCommand.spHardware.commandLine() == "system_profiler -json SPHardwareDataType",
+                  "ParsedCommand.commandLine: sp-hardware")
+            #expect(ParsedCommand.diskutilInfo.commandLine(device: "/dev/disk4") == "diskutil info -plist /dev/disk4",
+                  "ParsedCommand.commandLine: diskutil-info with device")
+            #expect(ParsedCommand.smartctl.commandLine(executable: "/opt/homebrew/sbin/smartctl") == "smartctl -A -j disk0",
+                  "ParsedCommand.commandLine: smartctl with executable override")
+
+            // masking
+            #expect(ParseFailure.maskIdentifiers(["\"serial_number\" : \"C02XYZ\","]) ==
+                  ["\"serial_number\" : <masked>"], "mask: serial_number JSON line")
+            #expect(ParseFailure.maskIdentifiers(["          Serial Number: F8Y123"]) ==
+                  ["          Serial Number: <masked>"], "mask: Serial Number prose line")
+            #expect(ParseFailure.maskIdentifiers(["<key>IOPlatformUUID</key>", "<string>ABC</string>", "<key>Name</key>"]) ==
+                  ["<key>IOPlatformUUID</key>", "<masked>", "<key>Name</key>"], "mask: plist key/value pair")
+            #expect(ParseFailure.maskIdentifiers(["<key>SerialNumber</key><string>X</string>"]) ==
+                  ["<masked>"], "mask: plist key+value on one line")
+            #expect(ParseFailure.maskIdentifiers(["<string>0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0</string>"]) ==
+                  ["<string><uuid></string>"], "mask: UUID-shaped token")
+            #expect(ParseFailure.maskIdentifiers(["Firewall is enabled. (State = 1)"]) ==
+                  ["Firewall is enabled. (State = 1)"], "mask: unrelated line unchanged")
+
+            // registry
+            #expect(ParsedCommand.allCases.filter { $0.path == nil } == [.smartctl],
+                  "ParsedCommand: only smartctl has a nil path")
+            #expect(ParsedCommand.allCases.allSatisfy { $0.path == nil || $0.path!.hasPrefix("/") },
+                  "ParsedCommand: every non-nil path is absolute")
+            #expect(Set(ParsedCommand.allCases.map(\.rawValue)).count == ParsedCommand.allCases.count,
+                  "ParsedCommand: rawValues are unique")
+
+            // writer
+            do {
+                var r = FullReport()
+                r.parseFailures = [ParseFailure(.spHardware, stdout: "{\n\"SPHardwareDataType\" : 5\n}")!]
+                let out = ReportWriter.render(report: r, live: LiveSnapshot(), history: HistoryState())
+                #expect(out.contains("===== \(L.reportSectionUnparsed) ====="), "writer: unparsed section header present")
+                #expect(out.contains("$ system_profiler -json SPHardwareDataType"), "writer: command line present")
+                #expect(out.contains("\n  \"SPHardwareDataType\" : 5\n"), "writer: excerpt line present")
+            }
+            do {
+                let out = ReportWriter.render(report: FullReport(), live: LiveSnapshot(), history: HistoryState())
+                #expect(!out.contains(L.reportSectionUnparsed), "writer: no failures ⇒ no unparsed section")
+            }
+            do {
+                var live = LiveSnapshot()
+                live.parseFailures = [ParseFailure(.ps, stdout: "garbage")!]
+                let out = ReportWriter.render(report: FullReport(), live: live, history: HistoryState())
+                #expect(out.contains("$ ps -axww -o pid=,rss=,time=,comm="), "writer: live-only parse failure rendered")
+            }
+        }
     }
 }
