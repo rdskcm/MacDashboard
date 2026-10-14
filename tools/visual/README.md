@@ -29,9 +29,10 @@ use the Mac while it runs.
 **Main window height.** `1150 x H` pt, `H = min(780, screen_frame_h - 150)`,
 refuses (exit 70) if `vw < 1260`, `H < 620` or `H > vh - 40`.
 
-**Exit codes**: `0` all alpha ok and every diff ≤ threshold · `1` at least
-one alpha FAIL (wins over 2) · `2` no alpha FAIL but ≥1 state is `CHANGED`,
-`SIZE-CHANGED` or `NO-REF` · `64` usage error · `65` precondition refused ·
+**Exit codes**: `0` all alpha ok, every diff ≤ threshold and no text change ·
+`1` at least one alpha FAIL (wins over 2) · `2` no alpha FAIL but ≥1 state is
+`CHANGED`, `SIZE-CHANGED`, `TEXT-CHANGED` or `NO-REF` (or its `text` column
+reads `changed`) · `64` usage error · `65` precondition refused ·
 `70` runtime error — restoration still ran. `--bless`/`--selftest` exit 0 on
 success, 1 on refusal/failure.
 
@@ -53,10 +54,10 @@ frontmost/AXMain/bounds failed.
 `dark`/`light`. Window id via `vbtool windows --pid P`; the Settings window
 must be 680±2 pt wide or the run aborts.
 
-**Offscreen content (22 states, `tools/visual/content_states.swift` via
+**Offscreen content (24 states, `tools/visual/content_states.swift` via
 `tools/harness/render.sh`):** `content-processes-{cpu,mem}`,
 `content-folders-{home,service}`, `content-history-{disk,battery,cycles,swap}`
-(range Month), `content-history-disk-{quarter,year,all}`, each `dark`/`light`
+(range Month), `content-history-disk-{quarter,year,all}`, `content-history-fresh` (the History section at 0, 1 and 2 recorded days: placeholder, placeholder, full card), each `dark`/`light`
 — cards below the fold of the real window, which would need fragile
 scroll/click driving to reach there.
 
@@ -73,6 +74,22 @@ and `hole_px`/`bbox_pt`/`regions` read `0`/`-`/`-`.
 exceeds `pixel_tolerance` (24, `thresholds.txt`). A state is `CHANGED` when
 `diff_pct` exceeds its threshold (`default 0.5`, per-state overrides and the
 noise measurement behind them live in `thresholds.txt`, not duplicated here).
+
+`vbtool text-diff` reads the visible text of the reference and of the 1x
+capture with Apple Vision (on-device `VNRecognizeTextRequest`; accurate,
+language correction off, en-US, minimum text height 6 px). All whitespace is
+removed from each line (Vision reads the same label as «3 d» or «3d» when
+pixels elsewhere in the image change slightly), and the lines are compared as
+multisets, ignoring order. A change that only adds or removes a space is
+therefore not reported. Any line
+on only one side sets the `text` column (9th in `results.tsv`) to `changed`;
+a state whose pixel verdict was `same` becomes `TEXT-CHANGED` (exit 2). There
+is no text threshold. Differing lines: `<run-dir>/text/<state>.txt`; every
+state's summary line: `<run-dir>/text/summary.txt`; and the `text differences`
+section of the report. The reference text is recognized afresh on every run —
+no text is stored, so `--bless` is unchanged. Text the recognizer does not
+read (very small or low-contrast glyphs, icons) is not covered; the
+`ref_lines` count in `summary.txt` shows how much each state yielded.
 
 ## 6. References
 

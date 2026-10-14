@@ -16,7 +16,7 @@ done
 
 APP_NAME="MacDashboard"
 DIST="dist.noindex/$APP_NAME.app"
-VERSION="2.3.2"
+VERSION="2.3.3"
 # Codename names the whole 2.x branch, not the point release — stays "Krieg" until 3.0.
 # Only a NON-empty codename is appended to CFBundleShortVersionString — an empty one must not
 # leave "2.1 ()".
@@ -233,7 +233,10 @@ if [ "$INSTALL" = "1" ]; then
   OLD_APP="$INSTALL_DIR/.$APP_NAME.app.old"
   # An --install interrupted between the two renames below left the previous app only at OLD_APP.
   if [ ! -e "$INSTALLED_APP" ] && [ -d "$OLD_APP" ]; then
-    mv "$OLD_APP" "$INSTALLED_APP"
+    if ! mv "$OLD_APP" "$INSTALLED_APP"; then
+      echo "!! could not restore the previous install from $OLD_APP to $INSTALLED_APP — nothing was installed and $OLD_APP was kept; the new build is still at $DIST. Move it back by hand, then run ./build_app.sh --install again" >&2
+      exit 1
+    fi
     echo "restored the previous install left at $OLD_APP by an interrupted --install"
   fi
   rm -rf "$NEW_APP" "$OLD_APP"
@@ -246,14 +249,23 @@ if [ "$INSTALL" = "1" ]; then
     exit 1
   fi
   if [ -e "$INSTALLED_APP" ] && ! mv "$INSTALLED_APP" "$OLD_APP"; then
-    mv "$NEW_APP" "$DIST" 2>/dev/null || true
-    echo "!! could not move $INSTALLED_APP aside — the installed app is unchanged" >&2
+    NEW_BUILD_AT="$NEW_APP"
+    if mv "$NEW_APP" "$DIST" 2>/dev/null; then NEW_BUILD_AT="$DIST"; fi
+    echo "!! could not move $INSTALLED_APP aside — the installed app is unchanged; the new build is at $NEW_BUILD_AT" >&2
     exit 1
   fi
   if ! mv "$NEW_APP" "$INSTALLED_APP"; then
-    if [ -d "$OLD_APP" ]; then mv "$OLD_APP" "$INSTALLED_APP" || true; fi
-    mv "$NEW_APP" "$DIST" 2>/dev/null || true
-    echo "!! could not move the new build to $INSTALLED_APP — the previous install was put back" >&2
+    PREVIOUS=none
+    if [ -e "$OLD_APP" ]; then
+      if mv "$OLD_APP" "$INSTALLED_APP"; then PREVIOUS=restored; else PREVIOUS=stranded; fi
+    fi
+    NEW_BUILD_AT="$NEW_APP"
+    if mv "$NEW_APP" "$DIST" 2>/dev/null; then NEW_BUILD_AT="$DIST"; fi
+    case "$PREVIOUS" in
+      restored) echo "!! could not move the new build to $INSTALLED_APP — the previous install was put back; the new build is at $NEW_BUILD_AT" >&2 ;;
+      none) echo "!! could not move the new build to $INSTALLED_APP — there was no previous install, so $INSTALLED_APP does not exist; the new build is at $NEW_BUILD_AT" >&2 ;;
+      stranded) echo "!! could not move the new build to $INSTALLED_APP, and the previous install could not be put back: it is still at $OLD_APP and $INSTALLED_APP does not exist — move it back by hand. The new build is at $NEW_BUILD_AT" >&2 ;;
+    esac
     exit 1
   fi
   rm -rf "$OLD_APP"

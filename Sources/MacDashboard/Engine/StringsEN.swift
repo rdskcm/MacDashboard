@@ -282,6 +282,7 @@ struct StringsEN: AppStrings {
     var historyMetricYLabelCycles: String { "cycles" }
     var historyMetricYLabelSwap: String { "GB" }
     var historyMetricInsufficientData: String { "Not enough data for this metric's chart" }
+    var historyNotEnoughDays: String { "History will appear here once the app has checked this Mac on two different days — it saves one snapshot per day." }
     var historyRangeMonth: String { "Month" }
     var historyRangeQuarter: String { "3 mo" }
     var historyRangeYear: String { "Year" }

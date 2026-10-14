@@ -60,6 +60,9 @@ struct HistoryCard: View {
         return tableShowAll ? newestFirst : Array(newestFirst.prefix(Self.tableCollapsedRows))
     }
 
+    // Below 2 days (a new Mac, or History just restarted) there is nothing to chart:
+    // show the same card chrome with one calm line instead of an empty section
+    // under the История kicker (NEWMAC-HISTORY-EMPTY).
     var body: some View {
         if entries.count >= 2 {
             ChartOrTableCard(
@@ -69,6 +72,13 @@ struct HistoryCard: View {
                 chart: { chart },
                 table: { table }
             )
+        } else {
+            CardChrome(title: L.historyTitle) {
+                Text(L.historyNotEnoughDays)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(DS.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -94,7 +104,8 @@ struct HistoryCard: View {
     // a trip to the table and back.
     private var rangeControl: some View {
         DSSlidingSegmented(options: HistoryRange.allCases, selection: $range,
-                           groupLabel: L.historyRangeA11y) { r in
+                           groupLabel: L.historyRangeA11y,
+                           identifier: { r in "history-range-\(r)" }) { r in
             rangeLabel(for: r)
         }
     }
@@ -248,14 +259,27 @@ private struct HistoryTrendChart: View {
     let points: [HistoryChartPoint]
     let metric: HistoryMetric
     let yLabel: String
+    /// Y-domain padded ~9.52% of the value span above/below the actual
+    /// min/max (prototype: `lo/hi/span` then bars mapped into an effective
+    /// [8,92]-of-100 band — algebraically equivalent to padding each side by
+    /// `span * 2/21`; see Overview Screen.dc.html:1459-1494). A zero-based or
+    /// unpadded auto domain visually flattens real variation near the top of
+    /// the plot for value ranges that sit well above zero (e.g. 96-140 GB).
+    private let yDomain: ClosedRange<Double>
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var tracked: HistoryChartPoint?
-    @State private var tooltipSize: CGSize = .zero
 
-    private var trackedIndex: Int? {
-        guard let tracked else { return nil }
-        return points.firstIndex(where: { $0.id == tracked.id })
+    init(points: [HistoryChartPoint], metric: HistoryMetric, yLabel: String) {
+        self.points = points
+        self.metric = metric
+        self.yLabel = yLabel
+        // Computed once: the padded domain depends on `points` only, never on hover state.
+        let values = points.map(\.value)
+        let lo = values.min() ?? 0
+        let hi = values.max() ?? 0
+        let span = max(hi - lo, 1)
+        let pad = span * (2.0 / 21.0)
+        self.yDomain = (lo - pad)...(hi + pad)
     }
 
     private var areaGradient: LinearGradient {
@@ -268,25 +292,6 @@ private struct HistoryTrendChart: View {
         )
     }
 
-    private var trackingAnimation: Animation {
-        reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.fillHover
-    }
-
-    /// Y-domain padded ~9.52% of the value span above/below the actual
-    /// min/max (prototype: `lo/hi/span` then bars mapped into an effective
-    /// [8,92]-of-100 band — algebraically equivalent to padding each side by
-    /// `span * 2/21`; see Overview Screen.dc.html:1459-1494). A zero-based or
-    /// unpadded auto domain visually flattens real variation near the top of
-    /// the plot for value ranges that sit well above zero (e.g. 96-140 GB).
-    private var yDomain: ClosedRange<Double> {
-        let values = points.map(\.value)
-        let lo = values.min() ?? 0
-        let hi = values.max() ?? 0
-        let span = max(hi - lo, 1)
-        let pad = span * (2.0 / 21.0)
-        return (lo - pad)...(hi + pad)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             plot
@@ -295,26 +300,8 @@ private struct HistoryTrendChart: View {
                 .chartXAxis(.hidden)
                 .chartYAxis(.hidden)
                 .chartOverlay { proxy in
-                    GeometryReader { geo in
-                        ZStack(alignment: .topLeading) {
-                            Rectangle()
-                                .fill(Color.clear)
-                                .contentShape(Rectangle())
-                                .onContinuousHover(coordinateSpace: .local) { phase in
-                                    switch phase {
-                                    case .active(let location):
-                                        updateTracked(at: location, proxy: proxy, geo: geo)
-                                    case .ended:
-                                        tracked = nil
-                                    }
-                                }
-                            if let tracked, let trackedIndex {
-                                tooltip(for: tracked, index: trackedIndex, proxy: proxy, geo: geo)
-                            }
-                        }
-                    }
+                    Hover(proxy: proxy, points: points, metric: metric)
                 }
-                .animation(trackingAnimation, value: tracked?.id)
             footer
         }
     }
@@ -347,133 +334,181 @@ private struct HistoryTrendChart: View {
                     .foregroundStyle(DS.accent)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                     .interpolationMethod(.monotone)
-                if let tracked, tracked.id == point.id {
-                    RuleMark(x: .value("i", Double(index)))
-                        .foregroundStyle(DS.muted.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1))
-                    PointMark(x: .value("i", Double(index)), y: .value(yLabel, point.value))
-                        .symbol {
-                            ZStack {
-                                Circle()
-                                    .stroke(DS.accent.opacity(0.24), lineWidth: 3)
-                                    .frame(width: 13.5, height: 13.5)
-                                Circle()
-                                    .fill(DS.accent)
-                                    .frame(width: 9, height: 9)
-                            }
-                        }
-                }
             }
         }
     }
 
-    /// Nearest daily point to the hover/tap location, tracked anywhere over
-    /// the plot area (not just directly over the line/a mark). Mirrors the
-    /// prototype's `histMove` exactly now that x is index-based: cursor
-    /// fraction across the plot width → nearest ordinal index, clamped to
-    /// `[0, n-1]` (Overview Screen.dc.html:1509-1513) — no `Date`/timezone
-    /// math needed.
-    private func updateTracked(at location: CGPoint, proxy: ChartProxy, geo: GeometryProxy) {
-        guard let plotFrameAnchor = proxy.plotFrame, !points.isEmpty else {
-            tracked = nil
-            return
-        }
-        let plotFrame = geo[plotFrameAnchor]
-        guard plotFrame.width > 0 else {
-            tracked = nil
-            return
-        }
-        let fraction = (location.x - plotFrame.origin.x) / plotFrame.width
-        let rawIndex = Int((fraction * Double(points.count - 1)).rounded())
-        let index = max(0, min(points.count - 1, rawIndex))
-        tracked = points[index]
-    }
+    /// Owns the hover state so the Chart's marks are never rebuilt on hover (GPU-RENDER-AUDIT C2, same shape as
+    /// `IPhoneHealthChart.Hover`). Draws the rule, the point and the tooltip.
+    private struct Hover: View {
+        let proxy: ChartProxy
+        let points: [HistoryChartPoint]
+        let metric: HistoryMetric
+        @State private var hovered: Int?
+        @State private var tooltipSize: CGSize = .zero
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Tooltip placement (authoritative rule, no fixed-pixel clamp):
-    /// vertically BELOW the point when it falls in the top 38% of the plot's
-    /// height (no room to show it above without going off the card), else
-    /// ABOVE (prototype: `yAt(hs[hv]) > 38 ? bottom: ... : top: ...`, where
-    /// `yAt` is fraction-from-top and CSS `bottom:` positioning renders the
-    /// tooltip visually ABOVE the point — OS:1504); horizontally pinned to
-    /// the plot's left/right edge near either end of the plotted range
-    /// (index ≤ 3 / ≥ n−4), else centred on the point's x.
-    @ViewBuilder
-    private func tooltip(for point: HistoryChartPoint, index: Int, proxy: ChartProxy, geo: GeometryProxy) -> some View {
-        if let plotFrameAnchor = proxy.plotFrame,
-           let px = proxy.position(forX: Double(index)), let py = proxy.position(forY: point.value) {
-            let plotFrame = geo[plotFrameAnchor]
-            let anchor = CGPoint(x: plotFrame.origin.x + px, y: plotFrame.origin.y + py)
-            let n = points.count
-            let gap: CGFloat = 8
-            let isTopZone = (anchor.y - plotFrame.minY) <= plotFrame.height * 0.38
-
-            let x: CGFloat = {
-                if index <= 3 { return plotFrame.minX + tooltipSize.width / 2 }
-                if index >= n - 4 { return plotFrame.maxX - tooltipSize.width / 2 }
-                return anchor.x
-            }()
-            let y: CGFloat = isTopZone
-                ? anchor.y + gap + tooltipSize.height / 2
-                : anchor.y - gap - tooltipSize.height / 2
-
-            tooltipContent(for: point)
-                .onGeometryChange(for: CGSize.self, of: { $0.size }) { newSize in
-                    tooltipSize = newSize
+        var body: some View {
+            GeometryReader { geo in
+                ZStack(alignment: .topLeading) {
+                    hitArea(geo)
+                    marker(geo)
+                    tooltipLayer(geo)
                 }
-                .position(x: x, y: y)
+            }
         }
-    }
 
-    private func tooltipContent(for point: HistoryChartPoint) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(point.id)
-                .font(.system(size: 11))
-                .foregroundStyle(DS.muted)
-            let parts = valueParts(for: point)
-            if let unit = parts.unit {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text(parts.value)
-                    Text(unit)
-                        .padding(.leading, 1.5)
+        /// Nearest daily point to the hover/tap location, tracked anywhere over
+        /// the plot area (not just directly over the line/a mark). Mirrors the
+        /// prototype's `histMove` exactly now that x is index-based: cursor
+        /// fraction across the plot width → nearest ordinal index, clamped to
+        /// `[0, n-1]` (Overview Screen.dc.html:1509-1513) — no `Date`/timezone
+        /// math needed. Writes `hovered` only when the index changes.
+        private func hitArea(_ geo: GeometryProxy) -> some View {
+            Rectangle()
+                .fill(Color.clear)
+                .contentShape(Rectangle())
+                .onContinuousHover(coordinateSpace: .local) { phase in
+                    switch phase {
+                    case .active(let location):
+                        guard let plotFrameAnchor = proxy.plotFrame, !points.isEmpty else {
+                            if hovered != nil { hovered = nil }
+                            return
+                        }
+                        let plotFrame = geo[plotFrameAnchor]
+                        guard plotFrame.width > 0 else {
+                            if hovered != nil { hovered = nil }
+                            return
+                        }
+                        let fraction = (location.x - plotFrame.origin.x) / plotFrame.width
+                        let rawIndex = Int((fraction * Double(points.count - 1)).rounded())
+                        let index = max(0, min(points.count - 1, rawIndex))
+                        if index != hovered { hovered = index }
+                    case .ended:
+                        if hovered != nil { hovered = nil }
+                    }
                 }
-                .font(.system(size: 12.5, weight: .regular))
-                .monospacedDigit()
-                .foregroundStyle(DS.ink)
-            } else {
-                Text(parts.value)
+        }
+
+        /// No animation modifier on this view or any ancestor inside `Hover`: the rule and the point jump.
+        @ViewBuilder private func marker(_ geo: GeometryProxy) -> some View {
+            if let i = hovered, i < points.count, let a = proxy.plotFrame,
+               let px = proxy.position(forX: Double(i)), let py = proxy.position(forY: points[i].value) {
+                let plot = geo[a]
+                Rectangle()
+                    .fill(DS.muted.opacity(0.5))
+                    .frame(width: 1, height: plot.height)
+                    .position(x: plot.minX + px, y: plot.midY)
+                    .allowsHitTesting(false)
+                ZStack {
+                    Circle()
+                        .stroke(DS.accent.opacity(0.24), lineWidth: 3)
+                        .frame(width: 13.5, height: 13.5)
+                    Circle()
+                        .fill(DS.accent)
+                        .frame(width: 9, height: 9)
+                }
+                .position(x: plot.minX + px, y: plot.minY + py)
+                .allowsHitTesting(false)
+            }
+        }
+
+        private func tooltipLayer(_ geo: GeometryProxy) -> some View {
+            ZStack(alignment: .topLeading) {
+                if let i = hovered, i < points.count {
+                    tooltip(for: points[i], index: i, geo: geo)
+                }
+            }
+            .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.fillHover, value: hovered)
+        }
+
+        /// Tooltip placement (authoritative rule, no fixed-pixel clamp):
+        /// vertically BELOW the point when it falls in the top 38% of the plot's
+        /// height (no room to show it above without going off the card), else
+        /// ABOVE (prototype: `yAt(hs[hv]) > 38 ? bottom: ... : top: ...`, where
+        /// `yAt` is fraction-from-top and CSS `bottom:` positioning renders the
+        /// tooltip visually ABOVE the point — OS:1504); horizontally pinned to
+        /// the plot's left/right edge near either end of the plotted range
+        /// (index ≤ 3 / ≥ n−4), else centred on the point's x.
+        @ViewBuilder
+        private func tooltip(for point: HistoryChartPoint, index: Int, geo: GeometryProxy) -> some View {
+            if let plotFrameAnchor = proxy.plotFrame,
+               let px = proxy.position(forX: Double(index)), let py = proxy.position(forY: point.value) {
+                let plotFrame = geo[plotFrameAnchor]
+                let anchor = CGPoint(x: plotFrame.origin.x + px, y: plotFrame.origin.y + py)
+                let n = points.count
+                let gap: CGFloat = 8
+                let isTopZone = (anchor.y - plotFrame.minY) <= plotFrame.height * 0.38
+
+                let x: CGFloat = {
+                    if index <= 3 { return plotFrame.minX + tooltipSize.width / 2 }
+                    if index >= n - 4 { return plotFrame.maxX - tooltipSize.width / 2 }
+                    return anchor.x
+                }()
+                let y: CGFloat = isTopZone
+                    ? anchor.y + gap + tooltipSize.height / 2
+                    : anchor.y - gap - tooltipSize.height / 2
+
+                tooltipContent(for: point)
+                    .onGeometryChange(for: CGSize.self, of: { $0.size }) { newSize in
+                        tooltipSize = newSize
+                    }
+                    .geometryGroup()
+                    .position(x: x, y: y)
+            }
+        }
+
+        private func tooltipContent(for point: HistoryChartPoint) -> some View {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(point.id)
+                    .font(.system(size: 11))
+                    .foregroundStyle(DS.muted)
+                let parts = valueParts(for: point)
+                if let unit = parts.unit {
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Text(parts.value)
+                        Text(unit)
+                            .padding(.leading, 1.5)
+                    }
                     .font(.system(size: 12.5, weight: .regular))
                     .monospacedDigit()
                     .foregroundStyle(DS.ink)
+                } else {
+                    Text(parts.value)
+                        .font(.system(size: 12.5, weight: .regular))
+                        .monospacedDigit()
+                        .foregroundStyle(DS.ink)
+                }
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 6).fill(DS.ground2))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 6).fill(DS.ground2))
-    }
 
-    /// Value + unit, reusing the same formatting the table already uses for
-    /// disk/battery/cycles, plus the existing byte unit string (no new
-    /// localization keys needed). V2-FIX-UNITS follow-up: this monospaced
-    /// tooltip renders a literal space as a full glyph advance, so disk/swap
-    /// split value and unit into two `Text` views with a tight
-    /// `.padding(.leading, 1.5)` gap, matching TMRow.valueParts and
-    /// LegendItem elsewhere in this block. Battery/cycles don't have the
-    /// gap defect (`%` touches the number directly; cycles is a count + word
-    /// label, not a byte/capacity unit) so they stay single strings.
-    private func valueParts(for point: HistoryChartPoint) -> (value: String, unit: String?) {
-        switch metric {
-        case .disk:
-            return (String(Int(point.value.rounded())), L.byteUnitGB)
-        case .battery:
-            return ("\(Int(point.value.rounded()))%", nil)
-        case .cycles:
-            // V21-RU-PLURAL amendment: `historyMetricYLabelCycles` is the Y-AXIS
-            // caption ("циклы"), one fixed form that cannot agree with a numeral.
-            // `kpiBatteryCycles` is the existing localized "N + noun" form and
-            // inflects correctly in RU (ruPlural) and EN (1 vs. other).
-            return (L.kpiBatteryCycles(Int(point.value.rounded())), nil)
-        case .swap:
-            return (String(format: "%.1f", point.value), L.byteUnitGB)
+        /// Value + unit, reusing the same formatting the table already uses for
+        /// disk/battery/cycles, plus the existing byte unit string (no new
+        /// localization keys needed). V2-FIX-UNITS follow-up: this monospaced
+        /// tooltip renders a literal space as a full glyph advance, so disk/swap
+        /// split value and unit into two `Text` views with a tight
+        /// `.padding(.leading, 1.5)` gap, matching TMRow.valueParts and
+        /// LegendItem elsewhere in this block. Battery/cycles don't have the
+        /// gap defect (`%` touches the number directly; cycles is a count + word
+        /// label, not a byte/capacity unit) so they stay single strings.
+        private func valueParts(for point: HistoryChartPoint) -> (value: String, unit: String?) {
+            switch metric {
+            case .disk:
+                return (String(Int(point.value.rounded())), L.byteUnitGB)
+            case .battery:
+                return ("\(Int(point.value.rounded()))%", nil)
+            case .cycles:
+                // V21-RU-PLURAL amendment: `historyMetricYLabelCycles` is the Y-AXIS
+                // caption ("циклы"), one fixed form that cannot agree with a numeral.
+                // `kpiBatteryCycles` is the existing localized "N + noun" form and
+                // inflects correctly in RU (ruPlural) and EN (1 vs. other).
+                return (L.kpiBatteryCycles(Int(point.value.rounded())), nil)
+            case .swap:
+                return (String(format: "%.1f", point.value), L.byteUnitGB)
+            }
         }
     }
 }

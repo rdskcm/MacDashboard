@@ -1,40 +1,57 @@
 name: CI
 
 on:
+  # CI-SPEED: one run per PR commit. Branch pushes are covered by the pull_request
+  # event (which tests the merge result); push runs only on main, after a merge.
   push:
+    branches: [main]
   pull_request:
 
+# A new commit on a PR cancels that PR's run still in progress. Pushes to main are
+# grouped by commit SHA, so a run on main is never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
+  backport-only:
+    # RELEASE-FEATURE-GATING: guards PRs into a maintenance branch (release/X.Y); see the
+    # script header. Required by the protect-release ruleset; skipped on every other PR.
+    if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Only backports of main commits and release prep
+        run: >-
+          .github/scripts/backport-only.sh
+          "${{ github.event.pull_request.base.sha }}"
+          "${{ github.event.pull_request.head.sha }}"
+          origin/main
+
   build-and-check:
-    # Must match release.yml: the app uses SwiftUI API from the macOS 26 SDK
-    # (e.g. .onGeometryChange), which a macos-14 runner cannot compile.
+    # Same runner and Xcode rule as release.yml, via the shared select-xcode action:
+    # the newest release Xcode >= 26 on the current macos-latest image, so CI builds
+    # with the toolchain the release would use.
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Use the macOS 26 (Tahoe) SDK
-        run: |
-          set -euo pipefail
-          xc="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)"
-          [ -n "$xc" ] || { echo "::error::no Xcode 26 on this runner"; exit 1; }
-          sudo xcode-select -s "$xc/Contents/Developer"
-          swift --version
-          sdk="$(xcrun --show-sdk-version)"
-          echo "macOS SDK: $sdk"
-          case "$sdk" in
-            26.*) echo "SDK 26 OK — app will get the Tahoe appearance" ;;
-            *) echo "::error::selected SDK is $sdk, expected 26.x"; exit 1 ;;
-          esac
+      - name: Select the newest Xcode (>= 26)
+        uses: ./.github/actions/select-xcode
 
-      - name: swift build (default, AI off)
-        run: swift build
-
-      - name: swift build (AI opt-in build)
-        run: swift build -Xswiftc -DAI_ENABLED
+      - name: swift build (all targets, including tests)
+        # CI-SPEED: the only compile in this run. --build-tests builds MacDashboard,
+        # MacDashboardChecks and MacDashboardTests; the two steps below reuse it via
+        # --skip-build and never compile.
+        run: swift build --build-tests
 
       - name: Run checks (MacDashboardChecks)
-        run: swift run MacDashboardChecks
+        run: swift run --skip-build MacDashboardChecks
 
       - name: Run swift-testing suite (MacDashboardTests)
         # CI-SWIFT-TESTING: the local gate is MacDashboardChecks above; this target needs
@@ -44,7 +61,10 @@ jobs:
         run: |
           set -euo pipefail
           log="${RUNNER_TEMP}/swift-test.log"
-          swift test 2>&1 | tee "$log"
+          swift test --skip-build 2>&1 | tee "$log"
           n="$(grep -Eo 'Test run with [0-9]+ test' "$log" | grep -Eo '[0-9]+' | tail -1 || true)"
           echo "swift-testing tests run: ${n:-none}"
           [ "${n:-0}" -gt 0 ] || { echo "::error::swift test ran no swift-testing tests"; exit 1; }
+
+      - name: swift build (AI opt-in build; last, so the two --skip-build steps above run the default build)
+        run: swift build -Xswiftc -DAI_ENABLED

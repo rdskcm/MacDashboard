@@ -19,7 +19,8 @@
 #   unregister: REMOVED (unregistered) | RUNNING (left registered) | STILL (survived);
 #               nothing is printed when there was nothing to remove.
 # Exit: 0 ok, 1 a registration survived unregistering, 2 lsregister or /usr/bin/perl missing,
-#       3 an lsregister call timed out (killed after LSREG_TIMEOUT seconds; the script stopped there), 64 usage.
+#       3 an lsregister call timed out (it and every process it started were killed after LSREG_TIMEOUT
+#         seconds; the script stopped there), 64 usage.
 # Callers (build_app.sh, tools/visual/run.sh, backup_auto.sh) treat non-zero as a warning.
 set -uo pipefail
 
@@ -38,15 +39,29 @@ fi
 [ -x "$LSREG" ] || { echo "ls-prune: lsregister not found at $LSREG" >&2; exit 2; }
 [ -x /usr/bin/perl ] || { echo "ls-prune: /usr/bin/perl not found (needed for the lsregister timeout)" >&2; exit 2; }
 
-# Run lsregister with a time limit. macOS ships no timeout(1): perl forks, execs lsregister,
-# and on SIGALRM kills it with SIGKILL and exits 124. Otherwise returns lsregister's status.
+# Run lsregister with a time limit. macOS ships no timeout(1): perl forks; the child moves
+# into a new process group of its own (never the caller's: a script runs all its commands in
+# one group), takes stdin from /dev/null and execs lsregister. On SIGALRM perl SIGKILLs that
+# whole group — lsregister and everything it forked — and exits 124; a process that calls
+# setsid/setpgid itself leaves the group and is not reached. HUP/INT/TERM to perl (Ctrl-C:
+# the group is no longer the terminal's foreground group) also kill the group, then perl
+# dies of the same signal. Otherwise returns lsregister's status.
 lsreg() {
   /usr/bin/perl -e '
     my $t = shift @ARGV;
     my $pid = fork();
     defined $pid or exit 125;
-    if ($pid == 0) { exec { $ARGV[0] } @ARGV; exit 127; }
-    $SIG{ALRM} = sub { kill "KILL", $pid; waitpid($pid, 0); exit 124; };
+    if ($pid == 0) {
+      setpgrp(0, 0);
+      open(STDIN, "<", "/dev/null");
+      exec { $ARGV[0] } @ARGV;
+      exit 127;
+    }
+    setpgrp($pid, $pid);
+    $SIG{ALRM} = sub { kill "-KILL", $pid; waitpid($pid, 0); exit 124; };
+    for my $s (qw(HUP INT TERM)) {
+      $SIG{$s} = sub { kill "-KILL", $pid; waitpid($pid, 0); $SIG{$s} = "DEFAULT"; kill $s, $$; };
+    }
     alarm $t;
     waitpid($pid, 0);
     alarm 0;
