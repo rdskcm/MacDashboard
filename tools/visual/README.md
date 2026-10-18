@@ -48,19 +48,20 @@ frontmost/AXMain/bounds failed. The screen must be unlocked: a locked session sh
 
 ## 4. States captured
 
-**Real window (16 states, `screencapture -x -o -l <windowid>`):** `main`,
+**Real window (18 states, `screencapture -x -o -l <windowid>`):** `main`,
 `main-report` (Report tab, via an AX press on the tab button — see §8),
 `settings-general`, `settings-monitoring`, `settings-titlebar-hover`,
 `settings-backup` (Backups section, third sidebar row), `main-iphone` (iPhone mode device list, fixture data),
-`main-iphone-device` (the first tile opened via its AX identifier `iphone-tile-0`; the Back button is `iphone-back`), each
+`main-iphone-device` (the first tile opened via its AX identifier `iphone-tile-0`; the Back button is `iphone-back`),
+`main-page-system` (Home's System tile opened via `home-tile-system`; the page's Back chip is `page-back`), each
 `dark`/`light`. Window id via `vbtool windows --pid P`; the Settings window
 must be 680±2 pt wide or the run aborts.
 
-**Offscreen content (42 states, `tools/visual/content_states.swift` via
-`tools/harness/render.sh`; `run.sh` aborts below 42):** `content-processes-{cpu,mem}`,
+**Offscreen content (46 states, `tools/visual/content_states.swift` via
+`tools/harness/render.sh`; `run.sh` aborts below 46):** `content-processes-{cpu,mem}`,
 `content-folders-{home,service}`, `content-claude-backup` (the Claude backup
 card), `content-history-{disk,battery,cycles,swap}`
-(range Month), `content-history-disk-{quarter,year,all}`, `content-history-fresh` (the History section at 0, 1 and 2 recorded days and after a restart: notice + placeholder), and the iPhone cards
+(range Month), `content-home-{attention,sections}` (Home: attention card collapsed / expanded, All good, first scan, scan failed; section tiles normal / skeleton / last check / no battery; rendered with `animatesEntrance: false` because the offscreen host has no window and never fires `onAppear`), `content-history-disk-{quarter,year,all}`, `content-history-fresh` (the History section at 0, 1 and 2 recorded days and after a restart: notice + placeholder), and the iPhone cards
 `content-iphone-{tiles,notices,battery,history,logs,import,identity,dialogs}`
 (`history`: chart with the hover tooltip pinned, table, empty), each `dark`/`light`
 — cards below the fold of the real window, which would need fragile

@@ -239,7 +239,16 @@ stop_app() {
 route_mac()    { ax_press id main-mode-mac; sleep 2; }
 route_iphone() { ax_press id main-mode-iphone; sleep 2; ax_press id iphone-tile-0; sleep 3; }
 route_table()  { route_iphone; ax_press title 'Таблица|Table'; sleep 2; }
-route_hist()   { route_mac; "$BIN/drv" scroll 500 450 3 -15 >/dev/null 2>&1; sleep 1; ax_press id history-range-all; sleep 3; }
+# History page: candidate = Home -> History tile (short page, chart plot at y ~310-415); baseline = Overview scrolled
+# to the bottom (chart plot at y ~595-700). HIST_SWEEP_Y puts the G4 pointer sweep (scen-hist-all.sh) on the plot.
+# Not 'home-tile-history|main-tab-overview' in one press: ui.applescript presses the first match in AX order and
+# the header tab comes before the tile, so that pressed the tab (a no-op on Home) and the History page never opened.
+route_hist() {
+  route_mac
+  if [ "$(ax id home-tile-history)" = pressed ]; then HIST_SWEEP_Y=360; else HIST_SWEEP_Y=650; fi
+  export HIST_SWEEP_Y
+  sleep 2; "$BIN/drv" scroll 500 450 3 -15 >/dev/null 2>&1; sleep 1; ax_press id history-range-all; sleep 3
+}
 
 topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" for the app and WindowServer
   # exec: always called as a background job, so the tracked PID is perl itself (it forwards TERM to top)

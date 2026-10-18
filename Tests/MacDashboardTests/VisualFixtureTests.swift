@@ -29,7 +29,7 @@ extension SerialTests {
             #expect(kinds == [.firewallOff, .diskFullSoon, .timeMachine, .wakeHolders, .batteryCapacity, .brewOutdated],
                   "VisualFixture: attention item kinds == {firewallOff, diskFullSoon, timeMachine, wakeHolders, batteryCapacity, brewOutdated} (got \(kinds))")
             #expect(d1.assessment.items.count == 6, "VisualFixture: 6 attention items (got \(d1.assessment.items.count))")
-            #expect(d1.assessment.capsules.count == 3, "VisualFixture: 3 tip capsules (got \(d1.assessment.capsules.count))")
+            #expect(d1.assessment.capsules.count == 4, "VisualFixture: 4 tip capsules (got \(d1.assessment.capsules.count))")
 
             // --- VISUAL-HARNESS-STALE: fixed, fresh Claude backup ---
             let expectedBackup = ClaudeBackupStatus.lastSuccess(VisualFixture.referenceDate.addingTimeInterval(-2 * 3600))

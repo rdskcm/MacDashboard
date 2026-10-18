@@ -1,13 +1,7 @@
 // Views/MainDashboardView.swift
-// Header (title/sub/chips/refresh) + Обзор|Отчёт tab picker. Обзор = ScrollView
-// opening with Рекомендации (the user's stated top-priority card), then the live
-// KPI tile row and the card layout: "wide" cards —
-// Память, История — sit in their own full-width rows; below that,
-// three side-by-side pair rows (each an HStack of two equal-width cards) group
-// related cards instead of a row-aligning LazyVGrid or a height-imbalanced
-// two-column masonry: Процессы (CPU | память) | Папки (домашняя | служебные),
-// and Система (Безопасность/Автозапуск/Энергия/Обслуживание |
-// Диски (SMART)/Time Machine/Бэкап Claude).
+// Header (title/sub/chips/refresh) + Overview|Report tab control. Under the header the This Mac
+// content is the Home page (HomeView.swift) with section pages shown in place over it
+// (InterimSectionPage.swift, REDESIGN-HOME); the Report tab replaces both.
 
 import SwiftUI
 import Charts
@@ -42,16 +36,11 @@ struct MainDashboardView: View {
     /// REDESIGN-FOUNDATION: mode, report tab and (later) pages go through the router.
     @State private var router = NavigationRouter()
     @State private var pointer = DS3PointerTracker()
-
-    // Процессы/Папки pair (V2-DRIFT-FIX): the pair is an `HStack` (the fix for
-    // the live-resize overlap, proven 2/2 in the hunt). Two follow-up attempts
-    // at an even 50/50 split under narrow widths (measuring the ScrollView, then
-    // measuring the true window via a root GeometryReader) each introduced a
-    // worse regression — see `specs/V2-DRIFT-FIX.md` HANDOFF and
-    // `specs/V2-DRIFT-FIX-B.md` — and were reverted. This file intentionally
-    // ships the plain `.frame(maxWidth: .infinity)` split: it does not guarantee
-    // an even 50/50 at narrow widths (tracked as anomaly B, NEEDS-HUMAN), but it
-    // does not reintroduce the card-over-card overlap either.
+    /// Window width, measured once at the window root (REDESIGN-HOME D18): column counts and text tiers of
+    /// Home and the section pages read it. Safe under `no-measured-size-feedback`: the number of columns
+    /// cannot change the window's own width.
+    @State private var windowWidth: CGFloat = 1150
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -68,7 +57,7 @@ struct MainDashboardView: View {
                 // Only the content branches; both segmented controls live in `toolbar`
                 // outside this branch (control-identity-branch).
                 if router.mode == .mac {
-                    if router.isReportShown { ReportTab(model: model) } else { overview }
+                    content
                 } else {
                     IPhoneModeView(model: iphone)
                 }
@@ -78,9 +67,31 @@ struct MainDashboardView: View {
                 if router.canGoBack && router.mode == .mac { BackShortcuts { _ = router.back() } }
             }
         }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
         .ignoresSafeArea()
         .ds3PointerTracking(pointer)
     }
+
+    /// This Mac content. Home stays mounted under an open page or report (opacity 0, no hits, hidden from
+    /// accessibility) so Back does not replay its entrance (REDESIGN-HOME D7). `body` reads no live model field:
+    /// `HomeView` and its slots do the reading (keep `KPIRowView`'s rule, below).
+    private var content: some View {
+        ZStack {
+            HomeView(model: model, router: router, windowWidth: windowWidth)
+                .opacity(homeVisible ? 1 : 0)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: homeVisible)   // opacity only — no size depends on it
+                .allowsHitTesting(homeVisible)
+                .accessibilityHidden(!homeVisible)
+            if router.isReportShown {
+                ReportTab(model: model)
+            } else if router.destination.page != .home {
+                InterimSectionPage(model: model, page: router.destination.page, windowWidth: windowWidth) { _ = router.back() }
+                    .id(router.destination.page)
+            }
+        }
+    }
+
+    private var homeVisible: Bool { !router.isReportShown && router.destination.page == .home }
 
     /// The tab control's selection, stored in the router.
     private var tabSelection: Binding<Tab> {
@@ -250,98 +261,6 @@ struct MainDashboardView: View {
         }
         return tiers.isEmpty ? [L.mainCollectingInfo] : tiers
     }
-
-    // MARK: Обзор
-
-    private var overview: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                AttentionSummaryCard(model: model)
-
-                Text(L.overviewKickerMetrics).dsKicker()
-                KPIRowView(model: model)
-
-                Text(L.overviewKickerMemory).dsKicker()
-                MemoryCard(model: model)
-
-                LazyVGrid(columns: Self.twoColumns, spacing: 12) {
-                    Text(L.overviewKickerProcesses).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
-                    Text(L.overviewKickerFolders).dsKicker().frame(maxWidth: .infinity, alignment: .leading)
-                }
-                HStack(alignment: .top, spacing: 12) {
-                    ProcessListCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-                    FoldersCard(model: model).frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                Text(L.overviewKickerSystem).dsKickerCentered()
-                systemBand
-
-                Text(L.overviewKickerHistory).dsKicker()
-                HistoryRestartNotice(model: model)
-                HistoryCard(model: model)
-            }
-            .padding(20)
-        }
-    }
-
-    // MARK: System band (Security/Autostart/Energy/Maintenance | SMART/Time Machine/Бэкап Claude)
-
-    /// Security and Updates/Crashes move out of their fixed left-column slots
-    /// once quiet (nothing to report) and collapse into `QuietStrip` rows
-    /// instead — a loud card only occupies column space while it has something
-    /// to say. The two columns intentionally do NOT match heights: each
-    /// `VStack` sizes to its own content only (no `maxHeight: .infinity`), so
-    /// expanding/collapsing a card in one column never resizes the other
-    /// (V2-FIX-COLUMN-COUPLING — an earlier version of this fix stretched the
-    /// shorter column to match, which re-introduced visible coupling: growing
-    /// Energy on the left visibly stretched the SMART card on the right).
-    private var systemBand: some View {
-        let q = QuietState.quiet(report: model.report)
-        let sections = quietSections(q)
-
-        return LazyVGrid(columns: Self.twoColumns, spacing: 12) {
-            VStack(alignment: .leading, spacing: 12) {
-                AutostartCard(model: model)
-                EnergyCard(model: model)
-                MaintenanceCard(model: model)
-                if q.security != .quiet { SecurityCard(model: model, state: q) }
-                if q.updates != .quiet { UpdatesCrashesCard(model: model, state: q) }
-                if !sections.isEmpty { QuietStrip(sections: sections) }
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
-
-            VStack(alignment: .leading, spacing: 12) {
-                SmartDisksCard(model: model)
-                TimeMachineCard(model: model)
-                ClaudeBackupCard(model: model)
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
-        }
-    }
-
-    private func quietSections(_ q: QuietState) -> [QuietSection] {
-        var sections: [QuietSection] = []
-        if q.security == .quiet {
-            sections.append(QuietSection(id: "sec", title: L.securityTitle, status: L.quietStatusAllEnabled,
-                                          rows: securityRows(model.report.security ?? SecurityState())))
-        }
-        if q.updates == .quiet {
-            sections.append(QuietSection(id: "maint", title: L.quietUpdatesTitle, status: L.quietStatusAllClear,
-                                          rows: updatesRows(updates: model.report.updates ?? [], crashes: model.report.crashes ?? []),
-                                          checkedAt: model.report.updatesCheckedAt))
-        }
-        return sections
-    }
-
-    /// Two truly equal columns. `.frame(maxWidth:.infinity)` inside an HStack only
-    /// splits leftovers AFTER each child's minimum is honoured, so a dense card
-    /// (ProcessListCard) starves its neighbour; `GridItem(.flexible())` divides the
-    /// row width equally regardless of content — same reasoning as `KPIRowView`.
-    private static let twoColumns = [
-        GridItem(.flexible(), spacing: 12, alignment: .top),
-        GridItem(.flexible(), spacing: 12, alignment: .top),
-    ]
-
 }
 
 /// Esc and ⌘[ = Back (handoff 00 §5), installed only while a section page is shown
@@ -433,7 +352,7 @@ struct HeaderChipsView: View {
     // Status chip is bound to the live assessment — never a static severity/text
     // pair — so it can never disagree with `model.assessment`. Tone comes from
     // the SAME shared `tone(for:)` (SharedUI.swift) applied to the SAME
-    // `summarySev` that AttentionSummaryCard's title dot reads, instead of a
+    // `summarySev` that the Home attention card's hero reads, instead of a
     // second parallel "is this bad" computation — the two can no longer
     // disagree because they're reading one computed value through one function.
     private var statusIsGood: Bool { model.assessment.problems.isEmpty }

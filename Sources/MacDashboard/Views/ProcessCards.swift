@@ -766,7 +766,7 @@ private struct ProcessOutlineHotButton: View {
 
 /// Outlined neutral "Отмена" for the inline force-quit confirmation — transparent
 /// fill at rest, a faint neutral hover fill, no destructive tint (mirrors the
-/// outline-capsule idiom `AttentionSummaryCard.swift`'s `OverflowCapsuleButton`
+/// outline-capsule idiom the former attention card's overflow button
 /// uses for its own non-destructive "+N"/"Свернуть" toggle: clear fill, `DS.row`
 /// on hover, hairline border).
 private struct ProcessOutlineNeutralButton: View {

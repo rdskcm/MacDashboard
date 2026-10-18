@@ -49,10 +49,10 @@ All run on the synthetic bench home with the window pinned to 1000x733 pt at (0,
 
 | id | what | instrument | numbers |
 |---|---|---|---|
-| G1 | This Mac Overview idle: 22 s, then `top -l 41` | none | app %, WindowServer % |
-| G2 | Overview idle, 30 s, record 20 s | CA Commits, CA Server, Time Profiler | commits, server intervals, server ms, render passes per 20 s |
-| G3 | scroll to the bottom, `t0` 2 s after the scroll, 9 s quiet | Time Profiler, Hitches | main busy ms/s over [t0, t0+7), app % there |
-| G4 | History range «Всё» (365+ points), pointer sweep 5 s | Time Profiler, Hitches | hitches/s, main busy ms/s, `HistoryTrendChart.plot` samples/s |
+| G1 | This Mac Home idle (baseline build: Overview): 22 s, then `top -l 41` | none | app %, WindowServer % |
+| G2 | Home idle, 30 s, record 20 s | CA Commits, CA Server, Time Profiler | commits, server intervals, server ms, render passes per 20 s |
+| G3 | scroll to the bottom of Home, `t0` 2 s after the scroll, 9 s quiet | Time Profiler, Hitches | main busy ms/s over [t0, t0+7), app % there |
+| G4 | History page (Home → History tile; baseline build: Overview bottom), range «Всё» (365+ points), pointer sweep 5 s | Time Profiler, Hitches | hitches/s, main busy ms/s, `HistoryTrendChart.plot` samples/s |
 | G5 | pointer held 4 s on a plain card (ctrl) and on two rainbow-ring buttons; traced and untraced runs | CA Commits, CA Server (+TP, Hitches) | commits/s median, server passes/s; untraced app %, WS % per window |
 | G6 | iPhone page, Table and hover scenarios (3 runs) | Time Profiler, Hitches | hitches, ms, main busy total, `rgba64_shade_conic` samples |
 | G7 | This Mac scroll | Time Profiler, Hitches | hitches, ms, main busy total |

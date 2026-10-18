@@ -1,9 +1,9 @@
 # state	blessed	macos	sdk	commit
-main-dark	2026-10-11	27.0.1	27	dcfd0a0-dirty
+main-dark	2026-10-18	27.0.1	27	7c51c27-dirty
 settings-general-dark	2026-10-12	27.0.1	27	38c50c2-dirty
 settings-monitoring-dark	2026-10-18	27.0.1	27	09b8f7a-dirty
 settings-titlebar-hover-dark	2026-10-18	27.0.1	27	09b8f7a-dirty
-main-light	2026-10-11	27.0.1	27	dcfd0a0-dirty
+main-light	2026-10-18	27.0.1	27	7c51c27-dirty
 settings-general-light	2026-10-12	27.0.1	27	38c50c2-dirty
 settings-monitoring-light	2026-10-18	27.0.1	27	09b8f7a-dirty
 settings-titlebar-hover-light	2026-10-18	27.0.1	27	09b8f7a-dirty
@@ -11,7 +11,7 @@ main-report-dark	2026-10-11	27.0.1	27	dcfd0a0-dirty
 main-report-light	2026-10-11	27.0.1	27	dcfd0a0-dirty
 content-processes-cpu-dark	2026-09-28	27.0	27	24cf194-dirty
 content-processes-mem-dark	2026-09-28	27.0	27	24cf194-dirty
-content-folders-home-dark	2026-09-28	27.0	27	24cf194-dirty
+content-folders-home-dark	2026-10-18	27.0.1	27	7c51c27-dirty
 content-folders-service-dark	2026-09-28	27.0	27	24cf194-dirty
 content-history-disk-dark	2026-09-28	27.0	27	24cf194-dirty
 content-history-battery-dark	2026-09-28	27.0	27	24cf194-dirty
@@ -22,7 +22,7 @@ content-history-disk-year-dark	2026-09-28	27.0	27	24cf194-dirty
 content-history-disk-all-dark	2026-09-28	27.0	27	24cf194-dirty
 content-processes-cpu-light	2026-09-28	27.0	27	24cf194-dirty
 content-processes-mem-light	2026-09-28	27.0	27	24cf194-dirty
-content-folders-home-light	2026-09-28	27.0	27	24cf194-dirty
+content-folders-home-light	2026-10-18	27.0.1	27	7c51c27-dirty
 content-folders-service-light	2026-09-28	27.0	27	24cf194-dirty
 content-history-disk-light	2026-09-28	27.0	27	24cf194-dirty
 content-history-battery-light	2026-09-28	27.0	27	24cf194-dirty
@@ -57,3 +57,9 @@ main-iphone-device-light	2026-10-13	27.0.1	27	63f1d57-dirty
 main-iphone-light	2026-10-13	27.0.1	27	63f1d57-dirty
 content-history-fresh-dark	2026-10-13	27.0.1	27	45b8c38-dirty
 content-history-fresh-light	2026-10-13	27.0.1	27	45b8c38-dirty
+main-page-system-dark	2026-10-18	27.0.1	27	7c51c27-dirty
+main-page-system-light	2026-10-18	27.0.1	27	7c51c27-dirty
+content-home-attention-dark	2026-10-18	27.0.1	27	7c51c27-dirty
+content-home-attention-light	2026-10-18	27.0.1	27	7c51c27-dirty
+content-home-sections-dark	2026-10-18	27.0.1	27	7c51c27-dirty
+content-home-sections-light	2026-10-18	27.0.1	27	7c51c27-dirty

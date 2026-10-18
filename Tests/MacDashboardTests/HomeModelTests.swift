@@ -202,6 +202,16 @@ extension SerialTests {
             let rate = HomeModel.monthlyRate(rising) { $0.disk_used_gb }
             #expect(rate != nil && abs(rate! - 30) < 0.01, "1 GB/day = +30 per month (got \(String(describing: rate)))")
             #expect(HomeModel.monthlyRate(rising) { $0.battery_pct } == nil, "no values")
+            let digest = HomeModel.historyDigest(rising)
+            #expect(digest.count == 91 && digest.diskPerMonth == rate && digest.batteryPerMonth == nil)
+            var (report, live) = homeBadFixture(diskPct: 0.80)
+            report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true)
+            var withDigest = homeInput(report, live)
+            withDigest.historyDigest = digest
+            let fromEntries = homeInput(report, live, history: rising)
+            let t1 = HomeModel.tiles(withDigest, tasks: [], scan: .ok(at: base)).first { $0.page == .history }!
+            let t2 = HomeModel.tiles(fromEntries, tasks: [], scan: .ok(at: base)).first { $0.page == .history }!
+            #expect(t1.tagText == t2.tagText && t1.kvs.map(\.value) == t2.kvs.map(\.value), "cached digest == derived")
             let close = [rising[0], rising[10]]
             #expect(HomeModel.monthlyRate(close) { $0.disk_used_gb } == nil, "10 days apart")
             #expect(HomeModel.monthlyRate([rising[0]]) { $0.disk_used_gb } == nil, "one entry")
@@ -211,6 +221,14 @@ extension SerialTests {
             #expect(HomeModel.signed(0, decimals: 0) == "0")
             L10nStore.shared.language = .ru
             #expect(HomeModel.signed(-1.23, decimals: 1) == "\u{2212}1,2")
+        }
+
+        @Test func dayNumber() {
+            #expect(HomeModel.dayNumber("1970-01-01") == 0)
+            #expect(HomeModel.dayNumber("2026-03-01")! - HomeModel.dayNumber("2026-02-28")! == 1)
+            #expect(HomeModel.dayNumber("2024-03-01")! - HomeModel.dayNumber("2024-02-28")! == 2)   // leap year
+            #expect(HomeModel.dayNumber("2027-01-01")! - HomeModel.dayNumber("2026-01-01")! == 365)
+            #expect(HomeModel.dayNumber("2026-1-01") == nil && HomeModel.dayNumber("2026-13-01") == nil && HomeModel.dayNumber("x") == nil)
         }
 
         @Test func plurals() {
