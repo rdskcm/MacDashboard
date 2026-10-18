@@ -78,9 +78,10 @@ buttons above, the app never changes anything.
 
 ## Privacy
 
-MacDashboard sends none of your data anywhere. There is no telemetry, no
-analytics, no crash reporting, no auto-update check, and no account of any
-kind.
+MacDashboard does not upload your diagnostic data, reports or history. The
+few network requests it makes are all listed below, each with exactly what it
+sends. There is no telemetry, no analytics, no crash reporting, no
+auto-update check, and no account of any kind.
 
 Every report and history file MacDashboard writes stays in
 `~/Library/Application Support/MacDashboard/` on this Mac. Nothing is
