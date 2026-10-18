@@ -59,7 +59,7 @@ enum DS3 {
 /// Hand-drawn shadow stacks (see `ds3Elevation`). `radius` is the SwiftUI blur radius (CSS blur / 2),
 /// `inset` is the negated CSS spread.
 enum DS3Shadow {
-    case card, pop, lens, primaryGlow
+    case card, pop, lens, primaryGlow, header
 
     struct Layer {
         let color: Color
@@ -89,6 +89,9 @@ enum DS3Shadow {
             return [
                 Layer(color: DS3.accentSolid, y: 4, radius: 5, inset: 6),
             ]
+        case .header:
+            // 01-window-chrome: y 10, blur 24, spread −18, black .35 (both appearances).
+            return [Layer(color: Color.black.opacity(0.35), y: 10, radius: 12, inset: 18)]
         }
     }
 }
@@ -127,9 +130,6 @@ enum DS3Motion {
     static let pulseHold: Double = 1.12
     static let pulseScale: CGFloat = 2.6
     static let pulseOpacityFrom: Double = 0.55
-
-    /// Orb drift frame rate hint (12 Hz) for the Core Animation drift.
-    static let orbTick: Double = 1.0 / 12
 
     /// Ambient motion is frozen in `-visualFixture` runs so captures are deterministic (D24).
     static var isFrozen: Bool { VisualFixture.isRequested }

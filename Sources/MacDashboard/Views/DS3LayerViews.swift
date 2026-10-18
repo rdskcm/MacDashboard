@@ -183,17 +183,9 @@ final class DS3RimView: NSView {
 // MARK: - Orbs
 
 struct DS3OrbLayer: NSViewRepresentable {
-    let animated: Bool
+    func makeNSView(context: Context) -> DS3OrbView { DS3OrbView() }
 
-    func makeNSView(context: Context) -> DS3OrbView {
-        let v = DS3OrbView()
-        v.setAnimated(animated)
-        return v
-    }
-
-    func updateNSView(_ nsView: DS3OrbView, context: Context) {
-        nsView.setAnimated(animated)
-    }
+    func updateNSView(_ nsView: DS3OrbView, context: Context) {}
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: DS3OrbView, context: Context) -> CGSize? {
         func finite(_ v: CGFloat?) -> CGFloat {
@@ -211,22 +203,17 @@ final class DS3OrbView: NSView {
     private struct Orb {
         let color: Color
         let d: CGFloat
-        let dx: CGFloat
-        let dy: CGFloat
-        let s: CGFloat
-        let period: Double
         let centre: (CGSize) -> CGPoint
     }
 
     private static let orbs: [Orb] = [
-        Orb(color: DS3.orbA, d: 640, dx: -60, dy: 50, s: 1.08, period: 26, centre: { CGPoint(x: $0.width - 180, y: 100) }),
-        Orb(color: DS3.orbB, d: 560, dx: 70, dy: -40, s: 0.94, period: 34, centre: { _ in CGPoint(x: 40, y: 640) }),
-        Orb(color: DS3.orbC, d: 520, dx: -40, dy: 60, s: 1.10, period: 42, centre: { CGPoint(x: $0.width * 0.82 - 260, y: $0.height) }),
+        Orb(color: DS3.orbA, d: 640, centre: { CGPoint(x: $0.width - 180, y: 100) }),
+        Orb(color: DS3.orbB, d: 560, centre: { _ in CGPoint(x: 40, y: 640) }),
+        Orb(color: DS3.orbC, d: 520, centre: { CGPoint(x: $0.width * 0.82 - 260, y: $0.height) }),
     ]
 
     private let container = CALayer()
     private let orbLayers: [CALayer] = (0..<3).map { _ in CALayer() }
-    private var animated = false
     private var renderedAppearance: NSAppearance.Name?
     private var renderedScale: CGFloat?
 
@@ -261,7 +248,6 @@ final class DS3OrbView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         renderImagesIfNeeded()
-        updateAnimations()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -296,39 +282,5 @@ final class DS3OrbView: NSView {
             l.contentsScale = scale
         }
         CATransaction.commit()
-    }
-
-    func setAnimated(_ a: Bool) {
-        animated = a
-        updateAnimations()
-    }
-
-    private func updateAnimations() {
-        for (l, o) in zip(orbLayers, Self.orbs) {
-            if animated && window != nil {
-                if l.animation(forKey: "drift") == nil { l.add(drift(o), forKey: "drift") }
-            } else {
-                l.removeAnimation(forKey: "drift")
-            }
-        }
-    }
-
-    /// Today's cosine easing, k = (1 - cos(2 pi t / P)) / 2, sampled at 121 points per period.
-    private func drift(_ o: Orb) -> CAKeyframeAnimation {
-        let n = 120
-        let a = CAKeyframeAnimation(keyPath: "transform")
-        a.values = (0...n).map { i -> NSValue in
-            let k = (1 - cos(2 * Double.pi * Double(i) / Double(n))) / 2
-            let sc = 1 + (o.s - 1) * CGFloat(k)
-            let t = CATransform3DConcat(
-                CATransform3DMakeScale(sc, sc, 1),
-                CATransform3DMakeTranslation(o.dx * CGFloat(k), o.dy * CGFloat(k), 0))
-            return NSValue(caTransform3D: t)
-        }
-        a.calculationMode = .linear
-        a.duration = o.period
-        a.repeatCount = .infinity
-        a.preferredFrameRateRange = CAFrameRateRange(minimum: 8, maximum: 15, preferred: Float(1 / DS3Motion.orbTick))
-        return a
     }
 }

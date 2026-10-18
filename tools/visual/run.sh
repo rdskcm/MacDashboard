@@ -664,11 +664,12 @@ press_section() {
   "$CLICLICK" "c:$cx,$cy" >/dev/null 2>&1 || runtime_error "press_section: cliclick failed for $label"
 }
 
-# Switch the main window's Overview/Report tab via an AX press on the tab
-# button (VISUAL-COVERAGE, R4; Amendment 1) — never a coordinate click or
-# keystroke. `.accessibilityLabel` lands in AXAttributedDescription, which
-# System Events cannot read (-10000); `AXIdentifier` (`main-tab-overview` /
-# `main-tab-report`, set via `.accessibilityIdentifier`) is the
+# Drive the main window via an AX press on a button (VISUAL-COVERAGE, R4;
+# Amendment 1; REDESIGN-HOME: the header Report button `main-report` toggles
+# the report, `home-tile-*` / `page-back` open and close a section page) — never
+# a coordinate click or keystroke. `.accessibilityLabel` lands in
+# AXAttributedDescription, which System Events cannot read (-10000);
+# `AXIdentifier` (set via `.accessibilityIdentifier`) is the
 # language-independent, script-readable handle instead. Searches
 # `entire contents of window 1` for the first button whose AXIdentifier
 # equals $1; presses it, or reports the identifiers it saw.
@@ -884,12 +885,12 @@ for mode in dark light; do
   sleep 1.5
 
   assert_key "$MAIN_ID" "main-report-$mode"
-  press_main_tab main-tab-report
+  press_main_tab main-report
   park_cursor
   sleep 1.5
   assert_key "$MAIN_ID" "main-report-$mode"
   capture_state "main-report-$mode" "$MAIN_ID"
-  press_main_tab main-tab-overview
+  press_main_tab main-report
   sleep 1
   assert_key "$MAIN_ID" "main-iphone-$mode"
   press_main_tab main-mode-iphone

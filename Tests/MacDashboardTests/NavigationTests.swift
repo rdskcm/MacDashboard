@@ -53,6 +53,23 @@ struct NavigationTests {
         #expect(!r.canGoBack, "no back on home")
     }
 
+    @Test func reportBack() {
+        let r = NavigationRouter()
+        r.isReportShown = true
+        #expect(r.canGoBack, "report on Home can go back")
+        #expect(r.back() == true, "back closes the report")
+        #expect(!r.isReportShown, "report hidden")
+        #expect(r.destination == .home, "still home")
+        #expect(!r.canGoBack, "nothing left to go back to")
+        r.navigate(to: Destination(.storage))
+        r.isReportShown = true
+        #expect(r.back() == true, "back closes the report over a page")
+        #expect(!r.isReportShown, "report hidden over storage")
+        #expect(r.destination.page == .storage, "the page underneath stays")
+        #expect(r.back() == true, "second back leaves the page")
+        #expect(r.destination == .home, "home after the second back")
+    }
+
     @Test func cardMap() {
         for c in CardID.allCases {
             #expect(Page.allCases.contains { $0.cards.contains(c) }, "card \(c) is on a page")

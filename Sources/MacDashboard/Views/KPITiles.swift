@@ -119,7 +119,7 @@ struct CPUTile: View {
     let model: DashboardModel
 
     /// All three load averages (1/5/15) — the core count is NOT repeated here,
-    /// it already lives in the header's load chip (see `HeaderChipsView`).
+    /// it is shown on the Now card.
     private var footer: String {
         guard let l = model.load, l.count >= 3 else { return L.kpiLoadUnavailable }
         return L.kpiCpuLoadFooter(fmtNum(l[0], decimals: 2), fmtNum(l[1], decimals: 2), fmtNum(l[2], decimals: 2))

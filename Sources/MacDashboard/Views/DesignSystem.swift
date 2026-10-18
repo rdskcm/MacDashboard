@@ -312,6 +312,9 @@ enum DSSegmentedSize {
     /// Toolbar-level tabs (e.g. the Overview/Report switch): larger type, more
     /// breathing room.
     case tabs
+    /// The shared window header's «This Mac | iPhone» switch (capsule table S5, 01-window-chrome.md):
+    /// 13 / 600, segment padding 8 × 16.
+    case header
     /// In-card controls (metric pickers, folder tabs): the default, tighter fit.
     case card
     /// Settings ▸ Monitoring interval switch (spec §2.3/§7.3, SW:92): monospaced
@@ -321,6 +324,7 @@ enum DSSegmentedSize {
     var font: Font {
         switch self {
         case .tabs: return .system(size: 12.5, weight: .semibold)
+        case .header: return .system(size: 13, weight: .semibold)
         case .card: return .system(size: 11, weight: .semibold)
         case .settingsInterval: return .system(size: 12, weight: .semibold, design: .monospaced)
         }
@@ -328,6 +332,7 @@ enum DSSegmentedSize {
     var hPad: CGFloat {
         switch self {
         case .tabs: return 16
+        case .header: return 16
         case .card: return 11
         case .settingsInterval: return 11
         }
@@ -335,6 +340,7 @@ enum DSSegmentedSize {
     var vPad: CGFloat {
         switch self {
         case .tabs: return 6
+        case .header: return 8
         case .card: return 5
         case .settingsInterval: return 6
         }
@@ -344,6 +350,7 @@ enum DSSegmentedSize {
     var gap: CGFloat {
         switch self {
         case .tabs: return 2
+        case .header: return 2
         case .card: return 2
         case .settingsInterval: return 3
         }
@@ -435,15 +442,19 @@ struct DSSlidingSegmented<T: Hashable>: View {
     /// instead of matching the label row. Uniform across segments (same font/
     /// `vPad` per size variant), so the last write wins.
     @State private var rowHeight: CGFloat = 0
+    /// Called when the already-selected segment is clicked again (selection does not change).
+    private let onReselect: ((T) -> Void)?
 
     init(options: [T], selection: Binding<T>, size: DSSegmentedSize = .card,
          groupLabel: String? = nil,
-         identifier: @escaping (T) -> String? = { _ in nil }, label: @escaping (T) -> String) {
+         identifier: @escaping (T) -> String? = { _ in nil },
+         onReselect: ((T) -> Void)? = nil, label: @escaping (T) -> String) {
         self.options = options
         self._selection = selection
         self.size = size
         self.groupLabel = groupLabel
         self.identifier = identifier
+        self.onReselect = onReselect
         self.label = label
     }
 
@@ -569,7 +580,10 @@ struct DSSlidingSegmented<T: Hashable>: View {
     }
 
     private func select(_ option: T) {
-        guard option != selection else { return }
+        guard option != selection else {
+            onReselect?(option)
+            return
+        }
         let oldIndex = selectedIndex
         let newIndex = options.firstIndex(of: option) ?? oldIndex
         // Anchor at the side the thumb is moving TO, so it visually smears

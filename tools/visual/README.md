@@ -136,8 +136,8 @@ file; that is harmless when `cmp` shows the file equal to its backup copy.
 ## 8. Driving routes
 
 **Main tab / Settings open/close.** AX press only, no keystrokes (intermittent
-here). `press_main_tab` matches `AXIdentifier` (`main-tab-overview`/
-`main-tab-report`, `.accessibilityIdentifier` — `.accessibilityLabel` lands in
+here). `press_main_tab` matches `AXIdentifier` (`main-report` — the header Report button, which
+toggles the report — `home-tile-*`, `page-back`, `.accessibilityIdentifier` — `.accessibilityLabel` lands in
 AXAttributedDescription, unreadable here); `open_settings`/`close_settings`
 match name/menu item/subrole; all three abort and report what they saw if
 not found — never a coordinate click.

@@ -29,8 +29,6 @@ struct StringsEN: AppStrings {
     var settingsWindowTitle: String { "Settings" }
 
     // MARK: Main dashboard (header + tab picker)
-    var mainTabOverview: String { "Overview" }
-    var mainTabReport: String { "Report" }
     var mainCollectingInfo: String { "Collecting system information…" }
 
     // MARK: Overview page section kickers

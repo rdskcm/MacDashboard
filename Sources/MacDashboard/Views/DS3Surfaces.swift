@@ -1,6 +1,6 @@
 // Views/DS3Surfaces.swift
 // IPHONE-DESIGN: DS v3 surfaces (hand-drawn shadows, inset rims, glass card, pointer-following rim,
-// drifting orbs, entrance motion). Used by iPhone mode; APP-REDESIGN will reuse them later.
+// static orbs, entrance motion). Used by iPhone mode; APP-REDESIGN will reuse them later.
 
 import SwiftUI
 import AppKit
@@ -278,13 +278,11 @@ extension DS3 {
 
 // MARK: - Orbs
 
-/// Three soft colour glows drifting by Core Animation at 12 Hz (`DS3OrbLayer`), static under Reduce Motion and
-/// in `-visualFixture` runs.
+/// Three soft static colour glows (`DS3OrbLayer`). Static by decision in HOME-D: the 12 Hz drift kept
+/// WindowServer at ~10% CPU at idle (static: ~2.7%); motion returns only with the v2 orbs and their own perf A/B.
 struct DS3OrbField: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
-        DS3OrbLayer(animated: !(reduceMotion || DS3Motion.isFrozen))
+        DS3OrbLayer()
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
