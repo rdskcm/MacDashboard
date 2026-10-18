@@ -432,7 +432,7 @@ enum HomeModel {
             return (.green, L.homeTagHealthy, L.homeStorageSub,
                     [kv(L.homeKVPurgeable, i.disk?.purgeable.map { fmtCapacity($0) }), smart])
         case .battery:
-            let b = r.battery ?? i.battery
+            let b = BatteryInfo.merged(live: i.battery, report: r.battery)
             let cond = has(.batteryCondition)
             let capTone: HomeTone? = cond ? .hot : (has(.batteryCapacity) ? .amber : nil)
             return (.green, L.homeTagHealthy, L.homeBatterySub,
@@ -614,7 +614,7 @@ extension HomeModel {
         // Battery
         if input.hasBattery {
             let battDest = Destination(.battery, focus: .bathero)
-            if let b = input.battery ?? input.report.battery, let cap = b.maxCapacity {
+            if let b = BatteryInfo.merged(live: input.battery, report: input.report.battery), let cap = b.maxCapacity {
                 let svc = task(.batteryCondition), worn = task(.batteryCapacity)
                 let tone: HomeTone
                 let chipTone: HomeTone, chipText: String

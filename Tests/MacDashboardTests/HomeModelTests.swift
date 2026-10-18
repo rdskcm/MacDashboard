@@ -294,6 +294,28 @@ extension SerialTests {
             #expect(short[1].legend[0].text == "act. 4")
         }
 
+        @Test func nowCellsBatteryMergesReportStatics() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            var (report, live) = nowFixture()
+            report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: 300, condition: "Normal", maxCapacity: 86)
+            live.battery = BatteryInfo(source: nil, charge: 55, state: "charging", cycles: nil, condition: nil, maxCapacity: nil)
+            let cell = nowCells(report, live, pressure: .normal)[3]
+            #expect(cell.loading == false && cell.big == "86%")
+            #expect(cell.foot.contains("300 cycles") && cell.foot.contains("now 55%"), "foot \(cell.foot)")
+        }
+
+        @Test func batteryMergedHelper() {
+            let live = BatteryInfo(source: "ac", charge: 50, state: "charging", cycles: nil, condition: nil, maxCapacity: nil)
+            let rep = BatteryInfo(source: "old", charge: 10, state: "old", cycles: 300, condition: "Normal", maxCapacity: 86)
+            #expect(BatteryInfo.merged(live: nil, report: nil) == nil)
+            #expect(BatteryInfo.merged(live: live, report: nil) == live)
+            #expect(BatteryInfo.merged(live: nil, report: rep) == rep)
+            #expect(BatteryInfo.merged(live: live, report: rep) ==
+                    BatteryInfo(source: "ac", charge: 50, state: "charging", cycles: 300, condition: "Normal", maxCapacity: 86))
+        }
+
         @Test func nowCellsTones() {
             let saved = L10nStore.shared.language
             defer { L10nStore.shared.language = saved }
