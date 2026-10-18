@@ -1056,4 +1056,38 @@ struct StringsEN: AppStrings {
     var homeKVUpToDate: String { "up to date" }
     var homeKVDiskPerMonth: String { "Disk per month" }
     var homeBackA11y: String { "Back to This Mac" }
+    // HOME-C: the Now card
+    func homeEverySeconds(_ n: Int) -> String { "every \(n) s" }
+    func homeLoadCores(_ load: String, _ cores: Int) -> String { "load \(load) · \(cores) cores" }
+    func homeOf(_ s: String) -> String { "of \(s)" }
+    var homePressureLow: String { "pressure low" }
+    var homePressureMedium: String { "pressure medium" }
+    var homePressureHigh: String { "pressure high" }
+    func homeLegendActive(_ v: String, short: Bool) -> String { short ? "act. \(v)" : "active \(v)" }
+    func homeLegendWired(_ v: String) -> String { "wired \(v)" }
+    func homeLegendInactive(_ v: String, short: Bool) -> String { short ? "inact. \(v)" : "inactive \(v)" }
+    func homeMemFoot(_ used: String, _ total: String, _ compressed: String) -> String { "swap \(used) of \(total) · compressed \(compressed)" }
+    func homeMemFootNoSwap(_ compressed: String) -> String { "compressed \(compressed)" }
+    var homeFreeWord: String { "free" }
+    var homeChipHealthy: String { "healthy" }
+    var homeChipLowSpace: String { "low space" }
+    func homeChipDriveFailing(short: Bool) -> String { "drive failing" }
+    var homeChipWorn: String { "worn" }
+    var homeChipService: String { "service" }
+    func homeLegendData(_ v: String) -> String { "data \(v)" }
+    func homeLegendSystem(_ v: String, short: Bool) -> String { short ? "sys. \(v)" : "system \(v)" }
+    func homeLegendOther(_ v: String, short: Bool) -> String { short ? "oth. \(v)" : "other \(v)" }
+    func homeStorageFoot(size: String, purgeable: String?, short: Bool) -> String {
+        "of \(size)" + (purgeable.map { short ? " · free up \($0)" : " · purgeable \($0)" } ?? "")
+    }
+    var homeCapacityWord: String { "capacity" }
+    var homeOfNew: String { "of new" }
+    var homeWearThreshold: String { "wear threshold 80%" }
+    var homeWearThresholdHelp: String { "80% — Apple’s wear threshold" }
+    func homeBatteryFoot(cycles: Int?, charge: Int?, state: String?, short: Bool) -> String {
+        var parts: [String] = []
+        if let n = cycles { parts.append(n == 1 ? "1 cycle" : "\(n) cycles") }
+        if let c = charge { parts.append(short ? "charge \(c)%" : "now \(c)%" + (state.map { ", \($0)" } ?? "")) }
+        return parts.joined(separator: " · ")
+    }
 }

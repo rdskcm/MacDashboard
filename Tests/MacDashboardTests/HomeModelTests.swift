@@ -249,5 +249,114 @@ extension SerialTests {
             let r = await LiveCollector().sampleProcesses(limit: 8)
             #expect(r.processCount > 0 && r.processCount >= r.topCPU.count, "processCount \(r.processCount)")
         }
+
+        // MARK: HOME-C: the Now card
+
+        private func nowFixture() -> (FullReport, LiveSnapshot) {
+            var report = FullReport()
+            report.battery = BatteryInfo(source: nil, charge: 64, state: "discharging", cycles: 1, condition: "Normal", maxCapacity: 76)
+            var live = LiveSnapshot()
+            live.disk = DiskInfo(size: 256 * GIB, avail: 150 * GIB, dataUsed: nil, sysUsed: nil)
+            live.swap = SwapInfo(total: 8 * GIB, used: 1 * GIB, free: 7 * GIB)
+            live.mem = memFixture(total: 16 * GIB, compressor: GIB + GIB / 2)
+            live.battery = report.battery
+            return (report, live)
+        }
+
+        private func nowCells(_ report: FullReport, _ live: LiveSnapshot, pressure: MemoryPressureLevel?,
+                              tasks: [HomeTask]? = nil, hasBattery: Bool = true, cpu: CPUUsage? = CPUUsage(user: 20.2, sys: 5.5, idle: 74.3),
+                              short: Bool = false) -> [HomeNowCell] {
+            let a = Assess.assess(report: report, live: live, memPressure: pressure)
+            let input = homeInput(report, live, assessment: a, hasBattery: hasBattery)
+            let t = tasks ?? HomeModel.tasks(a, report: report, disk: live.disk, battery: live.battery)
+            return HomeModel.nowCells(input, tasks: t, memPressure: pressure, socTempC: 48, cpu: cpu, short: short, narrow: false)
+        }
+
+        @Test func nowCellsValues() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            let (report, live) = nowFixture()
+            let cells = nowCells(report, live, pressure: .normal)
+            #expect(cells.map(\.kind) == [.cpu, .memory, .storage, .battery])
+            #expect(cells[0].big == "25.7%" && cells[0].chipText == "48 °C" && cells[0].chipTone == .green)
+            #expect(cells[0].foot == "load 2.10 · 8 cores")
+            #expect(cells[1].big == "9.5 GB" && cells[1].tone == .neutral && cells[1].chipText == "pressure low")
+            #expect(cells[1].of == "of 16" && cells[1].foot == "swap 1 GB of 8 GB · compressed 1.5 GB")
+            #expect(cells[2].big == fmtCapacity(150 * GIB) && cells[2].of == "free" && cells[2].chipText == "healthy")
+            #expect(cells[3].big == "76%" && cells[3].mark == 0.8 && cells[3].foot == "1 cycle · now 64%, discharging")
+            // 76 % with 1 cycle is an early-wear (warn) task: amber cell, "worn" chip, amber fill.
+            #expect(cells[3].tone == .amber && cells[3].chipText == "worn")
+            #expect(cells[3].segments == [HomeNowSegment(series: .amber, value: 76), HomeNowSegment(series: .track, value: 24)])
+            #expect(HomeModel.nowCells(homeInput(report, live), tasks: [], memPressure: nil, socTempC: nil, cpu: CPUUsage(user: 1, sys: 1, idle: 98),
+                                       short: false, narrow: false)[0].chipText == nil)
+            let short = nowCells(report, live, pressure: .normal, short: true)
+            #expect(short[1].legend[0].text == "act. 4")
+        }
+
+        @Test func nowCellsBatteryMergesReportStatics() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            var (report, live) = nowFixture()
+            report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: 300, condition: "Normal", maxCapacity: 86)
+            live.battery = BatteryInfo(source: nil, charge: 55, state: "charging", cycles: nil, condition: nil, maxCapacity: nil)
+            let cell = nowCells(report, live, pressure: .normal)[3]
+            #expect(cell.loading == false && cell.big == "86%")
+            #expect(cell.foot.contains("300 cycles") && cell.foot.contains("now 55%"), "foot \(cell.foot)")
+        }
+
+        @Test func batteryMergedHelper() {
+            let live = BatteryInfo(source: "ac", charge: 50, state: "charging", cycles: nil, condition: nil, maxCapacity: nil)
+            let rep = BatteryInfo(source: "old", charge: 10, state: "old", cycles: 300, condition: "Normal", maxCapacity: 86)
+            #expect(BatteryInfo.merged(live: nil, report: nil) == nil)
+            #expect(BatteryInfo.merged(live: live, report: nil) == live)
+            #expect(BatteryInfo.merged(live: nil, report: rep) == rep)
+            #expect(BatteryInfo.merged(live: live, report: rep) ==
+                    BatteryInfo(source: "ac", charge: 50, state: "charging", cycles: 300, condition: "Normal", maxCapacity: 86))
+        }
+
+        @Test func nowCellsTones() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            var (report, live) = nowFixture()
+            // Critical pressure with a serious swapHigh task: memory tinted hot.
+            live.swap = SwapInfo(total: 8 * GIB, used: 7 * GIB, free: 1 * GIB)
+            let crit = nowCells(report, live, pressure: .critical)
+            #expect(crit[1].tone == .hot && crit[1].chipText == "pressure high" && crit[1].chipTone == .hot)
+            // SMART errors: storage hot, focus smart. Battery service: hot, chip "service".
+            report.smart = [SmartDisk(device: "internal", title: "Boot SSD", status: "SMART: errors",
+                                      attrs: [("Media and Data Integrity Errors", "3")], severity: .crit)]
+            report.battery?.condition = "Service Recommended"
+            live.battery = report.battery
+            let bad = nowCells(report, live, pressure: .normal)
+            #expect(bad[2].tone == .hot && bad[2].chipText == "drive failing" && bad[2].destination.focus == .smart)
+            #expect(bad[3].tone == .hot && bad[3].chipText == "service")
+        }
+
+        @Test func nowCellsMissing() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            let (report, live) = nowFixture()
+            #expect(nowCells(report, live, pressure: nil, hasBattery: false).count == 3)
+            let cells = nowCells(report, live, pressure: nil, cpu: nil)
+            #expect(cells[0].loading && cells[0].big == "—" && cells[0].foot == "Collecting data…" && cells[0].chipText == nil)
+            #expect(cells[0].segments == [HomeNowSegment(series: .track, value: 1)] && cells[0].legend.isEmpty)
+            #expect(cells[1].chipText == nil, "no pressure level, no chip")
+        }
+
+        @Test func nowRuAndSparkline() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .ru
+            #expect(L.homeLoadCores(fmtFixed(2.1, decimals: 2), 8) == "нагрузка 2,10 · 8 ядер")
+            #expect(L.homeBatteryFoot(cycles: 21, charge: nil, state: nil, short: false) == "21 цикл")
+            let pts = (0..<60).map { (Date(timeIntervalSince1970: Double($0)), Double($0) * 2) }
+            let sp = HomeModel.sparkline(pts)
+            #expect(sp.count == 24 && sp.last == 100 && sp.first == 72)
+            #expect(HomeModel.sparkline([(Date(), 150), (Date(), -3)]) == [100, 0])
+        }
     }
 }

@@ -1,7 +1,7 @@
 // Views/HomeView.swift
 // REDESIGN-HOME (stage B): the Home page of This Mac — scan banner, attention slot, Now slot,
 // Sections grid. Each slot is its own struct that reads only what it renders (the observation
-// split of `KPIRowView`), so a live tick re-runs the slot it affects and not the whole page.
+// split the old KPI row used), so a live tick re-runs the slot it affects and not the whole page.
 
 import SwiftUI
 
@@ -107,8 +107,7 @@ struct HomeView: View {
         }
     }
 
-    /// HOME-B: the existing KPI row; HOME-C replaces it with the Now card.
     private var nowSlot: some View {
-        KPIRowView(model: model).ds3Appear(delay: 0.12)
+        HomeNowCard(model: model, router: router, windowWidth: windowWidth)
     }
 }

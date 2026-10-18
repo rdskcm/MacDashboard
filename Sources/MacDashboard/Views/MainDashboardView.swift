@@ -74,7 +74,7 @@ struct MainDashboardView: View {
 
     /// This Mac content. Home stays mounted under an open page or report (opacity 0, no hits, hidden from
     /// accessibility) so Back does not replay its entrance (REDESIGN-HOME D7). `body` reads no live model field:
-    /// `HomeView` and its slots do the reading (keep `KPIRowView`'s rule, below).
+    /// `HomeView` and its slots do the reading (the Now card and the tiles keep the rule of reading live fields in their own structs).
     private var content: some View {
         ZStack {
             HomeView(model: model, router: router, windowWidth: windowWidth)
@@ -277,40 +277,6 @@ private struct BackShortcuts: View {
         .frame(width: 0, height: 0)
         .opacity(0)
         .accessibilityHidden(true)
-    }
-}
-
-// Extracted from MainDashboardView for the same reason as `HeaderChipsView` below
-// (V2-RELAYOUT-FIX): `SwapTile.isVisible(model)` / `BatteryTile.isVisible(model)` read
-// `model.swap` / `model.battery`, which the ~2 s fast tick rewrites. Evaluated inside
-// `MainDashboardView.body` those two reads made the ENTIRE overview tree — every card,
-// the toolbar, the whole scroll content — an observer of the live tick, so one changed
-// swap byte re-ran the whole body and forced a full-tree SwiftUI layout pass
-// (~30 % of Main Thread time per tick). Kept here they invalidate only this row.
-// Do NOT move these calls back up into MainDashboardView.
-//
-// Fixed 3-5 tile single row, non-lazy (V2-FIX-BARFLY): a `LazyVGrid` here bought
-// nothing — it's never actually lazy at this size — and caused the tiles to remount on
-// ordinary scrolling, replaying MeterBar's first-layout pass and making the Memory/Swap
-// bar visibly "fly in". `.frame(maxWidth: .infinity)` per tile inside the `HStack`
-// splits the row equally rather than sizing to content, same reasoning
-// `MemoryFolderRow`'s two-column swap used (see `twoColumns`) — equal width still
-// depends on every tile's content being shrinkable: KPITileView's nowrap+ellipsis label
-// and ellipsizable "из N" slot.
-@MainActor
-struct KPIRowView: View {
-    let model: DashboardModel
-
-    var body: some View {
-        let showSwap = SwapTile.isVisible(model)
-        let showBattery = BatteryTile.isVisible(model)
-        return HStack(alignment: .top, spacing: 12) {
-            CPUTile(model: model).frame(maxWidth: .infinity)
-            MemoryTile(model: model).frame(maxWidth: .infinity)
-            if showSwap { SwapTile(model: model).frame(maxWidth: .infinity) }
-            DiskTile(model: model).frame(maxWidth: .infinity)
-            if showBattery { BatteryTile(model: model).frame(maxWidth: .infinity) }
-        }
     }
 }
 

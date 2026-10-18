@@ -269,20 +269,7 @@ struct BatteryTile: View {
     static func isVisible(_ model: DashboardModel) -> Bool { (model.battery ?? model.report.battery) != nil }
 
     private var battery: BatteryInfo? {
-        guard let live = model.battery ?? model.report.battery else { return nil }
-        // For static fields (maxCapacity, cycles, condition), prefer report; for dynamic fields, use live
-        let maxCapacity = model.report.battery?.maxCapacity ?? model.battery?.maxCapacity
-        let cycles = model.report.battery?.cycles ?? model.battery?.cycles
-        let condition = model.report.battery?.condition ?? model.battery?.condition
-
-        return BatteryInfo(
-            source: live.source,
-            charge: live.charge,
-            state: live.state,
-            cycles: cycles,
-            condition: condition,
-            maxCapacity: maxCapacity
-        )
+        BatteryInfo.merged(live: model.battery, report: model.report.battery)
     }
 
     var body: some View {

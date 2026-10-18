@@ -51,6 +51,21 @@ struct BatteryInfo: Equatable {
     var cycles: Int?
     var condition: String?      // raw pmset/system_profiler value, e.g. "Normal"
     var maxCapacity: Int?       // %
+
+    /// Live sample merged with the full report: static fields (maxCapacity, cycles, condition) come from the
+    /// report first, then the live sample; dynamic fields (source, charge, state) come from the live sample,
+    /// falling back to the report. `nil` when neither exists.
+    static func merged(live: BatteryInfo?, report: BatteryInfo?) -> BatteryInfo? {
+        guard let dynamic = live ?? report else { return nil }
+        return BatteryInfo(
+            source: dynamic.source,
+            charge: dynamic.charge,
+            state: dynamic.state,
+            cycles: report?.cycles ?? live?.cycles,
+            condition: report?.condition ?? live?.condition,
+            maxCapacity: report?.maxCapacity ?? live?.maxCapacity
+        )
+    }
 }
 
 struct LiveSnapshot {

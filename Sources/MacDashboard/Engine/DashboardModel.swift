@@ -385,6 +385,9 @@ final class DashboardModel {
     /// Visual fixture only (DashboardModel+VisualFixture, tools/visual/content_states.swift): sets the scan block directly; live code never calls this.
     func applyFixtureScan(_ state: BlockState) { scanBlock = state }
 
+    /// Visual fixture only: sets the memory-pressure level the Now card's Memory chip reads.
+    func applyFixturePressure(_ p: MemoryPressureLevel?) { memPressure = p }
+
     /// Starts an attempt and arms its watchdog: still in flight after `id.timeout` → `.failed(.timedOut)`.
     private func beginBlock(_ id: BlockID, showsLoading: Bool = false) {
         updateBlock(id) { $0.begin(at: Date(), showsLoading: showsLoading) }

@@ -976,6 +976,33 @@ protocol AppStrings {
     var homeKVUpToDate: String { get }
     var homeKVDiskPerMonth: String { get }
     var homeBackA11y: String { get }
+    // HOME-C: the Now card
+    func homeEverySeconds(_ n: Int) -> String
+    func homeLoadCores(_ load: String, _ cores: Int) -> String
+    func homeOf(_ s: String) -> String
+    var homePressureLow: String { get }
+    var homePressureMedium: String { get }
+    var homePressureHigh: String { get }
+    func homeLegendActive(_ v: String, short: Bool) -> String
+    func homeLegendWired(_ v: String) -> String
+    func homeLegendInactive(_ v: String, short: Bool) -> String
+    func homeMemFoot(_ used: String, _ total: String, _ compressed: String) -> String
+    func homeMemFootNoSwap(_ compressed: String) -> String
+    var homeFreeWord: String { get }
+    var homeChipHealthy: String { get }
+    var homeChipLowSpace: String { get }
+    func homeChipDriveFailing(short: Bool) -> String
+    var homeChipWorn: String { get }
+    var homeChipService: String { get }
+    func homeLegendData(_ v: String) -> String
+    func homeLegendSystem(_ v: String, short: Bool) -> String
+    func homeLegendOther(_ v: String, short: Bool) -> String
+    func homeStorageFoot(size: String, purgeable: String?, short: Bool) -> String
+    var homeCapacityWord: String { get }
+    var homeOfNew: String { get }
+    var homeWearThreshold: String { get }
+    var homeWearThresholdHelp: String { get }
+    func homeBatteryFoot(cycles: Int?, charge: Int?, state: String?, short: Bool) -> String
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",

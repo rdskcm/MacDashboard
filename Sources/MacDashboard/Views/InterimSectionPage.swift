@@ -61,7 +61,7 @@ struct InterimSectionPage: View {
 }
 
 /// Memory and (when there is swap) Swap tiles. Own struct: `SwapTile.isVisible` reads the live `model.swap`,
-/// which must not make the whole page an observer of the 2 s tick (see `KPIRowView`).
+/// which must not make the whole page an observer of the 2 s tick (see `HomeNowCard`).
 @MainActor
 private struct InterimMemoryTiles: View {
     let model: DashboardModel
