@@ -25,12 +25,8 @@ protocol AppStrings {
     func settingsIntervalOption(_ seconds: Int) -> String
     /// Per-value note below the interval segmented control (§7.3, SW:96-99),
     /// switching with the current `fastIntervalSeconds` selection.
-    var settingsIntervalNoteFast: String { get }
     var settingsIntervalNoteBalanced: String { get }
     var settingsIntervalNoteEconomy: String { get }
-    var settingsProcessLimitLabel: String { get }
-    func settingsProcessLimitOption(_ count: Int) -> String
-    var settingsProcessLimitApply: String { get }
     /// Settings → Мониторинг, SLEEP-IGNORE-APP card.
     var settingsWakeIgnoredLabel: String { get }
     var settingsWakeIgnoredEmpty: String { get }
@@ -810,6 +806,56 @@ protocol AppStrings {
     var iphoneImportChoiceBody: String { get }
     var iphoneImportInArchive: String { get }
     var iphoneIdentitySerials: String { get }
+    // MARK: Common (strings.json › Shared + 00 §4.16/§7; REDESIGN-FOUNDATION)
+    var commonShowInFinder: String { get }
+    var commonFirewall: String { get }
+    var commonEnable: String { get }
+    var commonDisk: String { get }
+    var commonSetUp: String { get }
+    var commonShow: String { get }
+    var commonMacCantSleep: String { get }
+    var commonBattery: String { get }
+    var commonInstall: String { get }
+    var commonServiceRecommended: String { get }
+    var commonClaudeBackup: String { get }
+    var commonCPU: String { get }
+    var commonMemory: String { get }
+    var commonStorage: String { get }
+    var commonSecurity: String { get }
+    var commonBackups: String { get }
+    var commonSystem: String { get }
+    var commonHistory: String { get }
+    var commonLocalSnapshots: String { get }
+    var commonFullDiskAccessNeeded: String { get }
+    var commonCompressed: String { get }
+    var commonOK: String { get }
+    var commonCycles: String { get }
+    var commonProtection: String { get }
+    var commonUpdates: String { get }
+    var commonCollectingData: String { get }
+    var commonAllGood: String { get }
+    var commonNeedsAttention: String { get }
+    var commonThisMac: String { get }
+    var commonReport: String { get }
+    var commonRefresh: String { get }
+    var commonRefreshReport: String { get }
+    var commonNow: String { get }
+    var commonTryAgain: String { get }
+    var commonShowLess: String { get }
+    var commonSetting: String { get }
+    var commonOnBattery: String { get }
+    var commonACPower: String { get }
+    var commonNormal: String { get }
+    var commonFree: String { get }
+    var commonChart: String { get }
+    var commonTable: String { get }
+    var commonRefreshing: String { get }
+    var commonCancel: String { get }
+    var commonOpenPrivacySettings: String { get }
+    func commonUpdated(_ time: String) -> String
+    var commonChecking: String { get }
+    var commonCritical: String { get }
+    func commonLastData(_ time: String) -> String
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",

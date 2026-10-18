@@ -8,19 +8,28 @@ import Observation
 final class AppSettings {
     static let shared = AppSettings()
     static let fastIntervalKey = "fastIntervalSeconds"
-    /// Allowed fast-loop polling intervals, seconds. 2 = historical default.
-    static let allowedIntervals = [1, 2, 3, 5, 10]
-    static let processLimitKey = "processListLimit"
-    /// Rows shown in the process list. The pre-V2-SETTINGS-PROCLIMIT hardcoded value was
-    /// 12, which is no longer offered; 10 is the new default, and existing installs
-    /// silently move 12 → 10 on first launch (see `resolveProcessLimit` below).
-    static let allowedProcessLimits = [5, 10, 15]
+    /// Allowed fast-loop polling intervals, seconds (handoff 11:23). 1 and 3 were retired in
+    /// REDESIGN-FOUNDATION; `migrateLegacyValues` moves a stored 1 or 3 to the default.
+    static let allowedIntervals = [2, 5, 10]
+    static let defaultInterval = 2
 
-    /// Pure resolution rule used by `init()` to clamp a raw UserDefaults value into
-    /// range. Exposed so Checks can exercise the real logic instead of reimplementing
-    /// it (the singleton's `private init()` can't be re-triggered mid-process).
-    static func resolveProcessLimit(raw: Int) -> Int {
-        allowedProcessLimits.contains(raw) ? raw : 10
+    /// Pure resolution rule used by `init()`: any value outside `allowedIntervals` is the default.
+    static func resolveFastInterval(raw: Int) -> Int {
+        allowedIntervals.contains(raw) ? raw : defaultInterval
+    }
+
+    /// Key of the retired process-count setting (the process lists are a fixed top 8,
+    /// `LiveCollector.topProcessCount`). Kept only so the migration can remove it.
+    static let legacyProcessLimitKey = "processListLimit"
+
+    /// REDESIGN-FOUNDATION migration, run first in `init()`. Idempotent: after one run there is
+    /// no 1 s / 3 s interval and no process-count key, so a later run changes nothing. Any other
+    /// stored interval is left to `resolveFastInterval`.
+    static func migrateLegacyValues(in defaults: UserDefaults) {
+        if let raw = defaults.object(forKey: fastIntervalKey) as? Int, raw == 1 || raw == 3 {
+            defaults.set(defaultInterval, forKey: fastIntervalKey)
+        }
+        defaults.removeObject(forKey: legacyProcessLimitKey)
     }
 
     static let ignoredWakeHoldersKey = "ignoredWakeHolders"
@@ -53,12 +62,6 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(fastIntervalSeconds, forKey: Self.fastIntervalKey) }
     }
 
-    /// Length of the CPU-/memory-sorted process tables. Read by LiveCollector on
-    /// every slow sample, so a change applies on the next tick without a restart.
-    var processListLimit: Int {
-        didSet { UserDefaults.standard.set(processListLimit, forKey: Self.processLimitKey) }
-    }
-
     /// Wake holders the Sleep attention item no longer warns about (SLEEP-IGNORE-APP),
     /// in the order the user added them. Mutate through `DashboardModel.setWakeHolderIgnored`
     /// so the assessment updates at once.
@@ -73,11 +76,8 @@ final class AppSettings {
     }
 
     private init() {
-        let raw = UserDefaults.standard.integer(forKey: Self.fastIntervalKey) // 0 if unset
-        fastIntervalSeconds = Self.allowedIntervals.contains(raw) ? raw : 2
-
-        let rawLimit = UserDefaults.standard.integer(forKey: Self.processLimitKey) // 0 if unset
-        processListLimit = Self.resolveProcessLimit(raw: rawLimit)
+        Self.migrateLegacyValues(in: .standard)
+        fastIntervalSeconds = Self.resolveFastInterval(raw: UserDefaults.standard.integer(forKey: Self.fastIntervalKey)) // 0 if unset
         ignoredWakeHolders = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
         backupStaleHours = Self.resolveBackupStaleHours(raw: UserDefaults.standard.integer(forKey: Self.backupStaleHoursKey))
     }

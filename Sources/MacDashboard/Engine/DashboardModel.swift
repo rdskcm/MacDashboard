@@ -31,6 +31,13 @@ final class DashboardModel {
     var topCPU: [ProcEntry] = []
     var topMem: [ProcEntry] = []
     var lastSampleAt: Date = .init()
+    /// REDESIGN-FOUNDATION: per-block loading / ok / failed state (Engine/BlockState.swift), read
+    /// through `blockState(_:)`. One property per block so a view observing one is not
+    /// re-rendered by another. Not rendered yet — the page stages consume it.
+    private(set) var cpuBlock = BlockState(.cpu)
+    private(set) var memoryBlock = BlockState(.memory)
+    private(set) var foldersBlock = BlockState(.folders)
+    private(set) var scanBlock = BlockState(.scan)
     let ncpu = ProcessInfo.processInfo.activeProcessorCount   // constant → not tracked
 
     /// Timestamp of the last SMART collection — launch report, manual refresh, or the
@@ -159,6 +166,9 @@ final class DashboardModel {
     private var procParseFailures: [ParseFailure] = []
     /// The system's own memory-pressure verdict (TIPS-MEMORY), read on the fast tick.
     private var memPressure: MemoryPressureLevel? = nil
+    /// False until the fast task's first sample after start(): that sample only primes the CPU
+    /// tick delta (`cpu == nil` by design), so it is no verdict on the cpu block.
+    @ObservationIgnored private var fastSamplePrimed = false
     /// Top apps by memory footprint, from the most recent process sample (TIPS-MEMORY).
     private var topApps: [AppMemory] = []
     /// Non-system programs holding a sleep assertion ≥ 5 min, from the slow task (WAKE-HOLDERS).
@@ -195,6 +205,8 @@ final class DashboardModel {
     private var smartTask: Task<Void, Never>?
     private var brewUpgradeTask: Task<Void, Never>?
     private var brewUpgradeRun: Task<String?, Never>?   // the `brew upgrade` step only; user Stop cancels this
+    /// One watchdog per armed block (`beginBlock`); cancelled when the block gets a verdict.
+    @ObservationIgnored private var blockWatchdogs: [BlockID: Task<Void, Never>] = [:]
 
     /// Session cache for the brew section (Block N5): last collected
     /// (status, outdated) and when. Reused by refreshReport() within
@@ -274,6 +286,7 @@ final class DashboardModel {
         folderSizesURL = url.deletingLastPathComponent().appendingPathComponent("folder_sizes_cache.json")
         folderSizes = FolderSizesCacheStore.load(from: folderSizesURL)
         smartToolsState = Self.recomputeSmartToolsState()
+        if let countedAt = folderSizes?.countedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
     }
 
     // MARK: - History restart notice (HISTORY-UNREADABLE-NOTICE)
@@ -331,6 +344,63 @@ final class DashboardModel {
         setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
     }
 
+    // MARK: - Block states (REDESIGN-FOUNDATION)
+
+    /// Loading / ok / failed state of one data block (handoff 00 §4.16).
+    func blockState(_ id: BlockID) -> BlockState {
+        switch id {
+        case .cpu: return cpuBlock
+        case .memory: return memoryBlock
+        case .folders: return foldersBlock
+        case .scan: return scanBlock
+        }
+    }
+
+    /// Applies `change` and assigns only when the state actually changed (one notification per change).
+    private func updateBlock(_ id: BlockID, _ change: (inout BlockState) -> Void) {
+        var next = blockState(id)
+        change(&next)
+        guard next != blockState(id) else { return }
+        switch id {
+        case .cpu: cpuBlock = next
+        case .memory: memoryBlock = next
+        case .folders: foldersBlock = next
+        case .scan: scanBlock = next
+        }
+    }
+
+    /// Starts an attempt and arms its watchdog: still in flight after `id.timeout` → `.failed(.timedOut)`.
+    private func beginBlock(_ id: BlockID, showsLoading: Bool = false) {
+        updateBlock(id) { $0.begin(at: Date(), showsLoading: showsLoading) }
+        blockWatchdogs[id]?.cancel()
+        let timeout = id.timeout
+        blockWatchdogs[id] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(timeout))
+            guard !Task.isCancelled, let self else { return }
+            self.updateBlock(id) { $0.expire(now: Date()) }
+        }
+    }
+
+    private func succeedBlock(_ id: BlockID) {
+        disarmBlockWatchdog(id)
+        updateBlock(id) { $0.succeed(at: Date()) }
+    }
+
+    private func failBlock(_ id: BlockID, _ failure: BlockFailure) {
+        disarmBlockWatchdog(id)
+        updateBlock(id) { $0.fail(failure) }
+    }
+
+    private func endBlockWithoutVerdict(_ id: BlockID) {
+        disarmBlockWatchdog(id)
+        updateBlock(id) { $0.endWithoutVerdict() }
+    }
+
+    private func disarmBlockWatchdog(_ id: BlockID) {
+        blockWatchdogs[id]?.cancel()
+        blockWatchdogs[id] = nil
+    }
+
     // MARK: - Lifecycle (SPEC §4 contract)
 
     func start() {
@@ -348,6 +418,7 @@ final class DashboardModel {
 
         // Fast task (~2s cadence, user-configurable — default 2 s, see AppSettings):
         // all-native gauges only. Never touches topCPU/topMem.
+        fastSamplePrimed = false   // a new fastBox collector primes again
         fastTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -360,6 +431,8 @@ final class DashboardModel {
                 // collectFast() blocks briefly on syscalls — hop off the main actor for
                 // it, then resume back on the main actor (this Task inherited MainActor
                 // isolation from start(), so resuming the continuation lands here).
+                self.beginBlock(.cpu)
+                self.beginBlock(.memory)
                 let (snap, socTempC, pressure): (LiveSnapshot, Int?, MemoryPressureLevel?) = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .userInitiated).async {
                         let s = fastBox.value.collectFast()
@@ -371,13 +444,20 @@ final class DashboardModel {
                     }
                 }
                 guard !Task.isCancelled else { return }
+                // Block verdicts. A failed read never blanks the last good value below (keep-last-good);
+                // the block's phase is what says the value is stale.
+                if snap.cpu != nil { self.succeedBlock(.cpu) }
+                else if self.fastSamplePrimed { self.failBlock(.cpu, .noReading) }
+                else { self.endBlockWithoutVerdict(.cpu) }
+                self.fastSamplePrimed = true
+                if snap.mem != nil { self.succeedBlock(.memory) } else { self.failBlock(.memory, .noReading) }
 
                 // Guarded per-field assignment: skip the set (and its @Observable
                 // notification) when the field is unchanged, so a card observing only
                 // one field re-renders only when THAT field actually changed.
                 if self.load    != snap.load    { self.load    = snap.load }
-                if self.cpu     != snap.cpu     { self.cpu     = snap.cpu }
-                if self.mem     != snap.mem     { self.mem     = snap.mem }
+                if let cpu = snap.cpu, self.cpu != cpu { self.cpu = cpu }
+                if let mem = snap.mem, self.mem != mem { self.mem = mem }
                 if self.swap    != snap.swap    { self.swap    = snap.swap }
                 if self.disk    != snap.disk    { self.disk    = snap.disk }
                 if self.battery != snap.battery { self.battery = snap.battery }
@@ -417,11 +497,8 @@ final class DashboardModel {
 
                 // sampleProcesses() is async and suspends while `/bin/ps` and `/usr/bin/top`
                 // run (and, on the FIRST tick only, while it sleeps 0.6 s to prime its CPU
-                // baseline) — it runs on the global executor, not the main thread. Read the
-                // setting HERE, on the main actor, and pass it across: the collector must not
-                // touch AppSettings.shared from a background queue.
-                let limit = AppSettings.shared.processListLimit
-                let procs = await CommandRunner.$qos.withValue(.utility) { await procBox.value.sampleProcesses(limit: limit) }
+                // baseline) — it runs on the global executor, not the main thread.
+                let procs = await CommandRunner.$qos.withValue(.utility) { await procBox.value.sampleProcesses(limit: LiveCollector.topProcessCount) }
                 guard !Task.isCancelled else { return }
                 let wake = await CommandRunner.$qos.withValue(.utility) { await WakeHolders.sample() }
                 guard !Task.isCancelled else { return }
@@ -528,6 +605,8 @@ final class DashboardModel {
         sizeCountTask?.cancel(); sizeCountTask = nil
         sizeScheduleTask?.cancel(); sizeScheduleTask = nil
         sizeCountGeneration += 1; isCountingSizes = false
+        for watchdog in blockWatchdogs.values { watchdog.cancel() }
+        blockWatchdogs.removeAll()
         for observer in activityObservers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -553,6 +632,7 @@ final class DashboardModel {
         // fast tick assesses for the duration of the pass (V2-HONEST-READINGS).
         lastCommittedReport = report
         isCollectingReport = true
+        beginBlock(.scan, showsLoading: trigger == .button)
 
         reportTask = Task(priority: trigger.taskPriority) { [weak self] in
             guard let self else { return }
@@ -577,6 +657,12 @@ final class DashboardModel {
                     // launch/manual report too, not only the periodic sampler.
                     if partial.progress["smart"] == true, self.report.progress["smart"] != true {
                         self.smartUpdatedAt = Date()
+                    }
+                    // Scan block (D14): decided by the system section — system_profiler — of this pass.
+                    let systemKey = ReportSection.system.rawValue
+                    if partial.progress[systemKey] == true, self.report.progress[systemKey] != true {
+                        if partial.system?.modelName != nil { self.succeedBlock(.scan) }
+                        else { self.failBlock(.scan, .noReading) }
                     }
                     var shown = partial
                     self.applyBackground(to: &shown)
@@ -685,6 +771,7 @@ final class DashboardModel {
                                                    failedAt: sizeCountFailedAt,
                                                    inFlight: isCountingSizes, now: Date()) else { return }
         isCountingSizes = true
+        beginBlock(.folders, showsLoading: trigger == .button)
         sizeCountGeneration += 1
         let gen = sizeCountGeneration
         applyFolderSizes(to: &report)                   // display only: spinner if no cache yet
@@ -694,10 +781,12 @@ final class DashboardModel {
             self.isCountingSizes = false
             guard !Task.isCancelled else { return }
             if let result {
+                self.succeedBlock(.folders)
                 self.folderSizes = result
                 self.sizeCountFailedAt = nil
                 try? FolderSizesCacheStore.save(result, to: self.folderSizesURL)   // a failed write costs one recount next launch
             } else {
+                self.failBlock(.folders, .noReading)
                 self.sizeCountFailedAt = Date()          // automatic triggers back off 1 h; the button still forces
             }
             self.mergeBackgroundIntoCommitted()         // also on failure: spinner -> "unavailable" when no cache
@@ -782,10 +871,10 @@ final class DashboardModel {
         }
     }
 
-    /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up),
-    /// triggered by the «Применить» button next to the process-limit setting so a
-    /// limit change is visible immediately instead of waiting for the next ~6s slow
-    /// tick. One-shot, independent of the periodic slowTask sampler — a fresh
+    /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up).
+    /// Its caller, the «Применить» button of the retired process-limit setting, was
+    /// removed in REDESIGN-FOUNDATION; the CPU page's Refresh (REDESIGN-CPU, 03-cpu) is
+    /// its intended caller. One-shot, independent of the periodic slowTask sampler — a fresh
     /// LiveCollector instance is created per call, never shared with a concurrent
     /// sampler pass (see the fastBox/procBox/smartBox comment in start()). Because
     /// this path builds a fresh LiveCollector (and therefore a fresh ProcessSampler)
@@ -802,9 +891,7 @@ final class DashboardModel {
             defer { self.processesRefreshing = false }
 
             let collectorBox = UncheckedSendableBox(LiveCollector())
-            // Same rule as the slow task: read the setting on the main actor, pass it in.
-            let limit = AppSettings.shared.processListLimit
-            let procs = await collectorBox.value.sampleProcesses(limit: limit)
+            let procs = await collectorBox.value.sampleProcesses(limit: LiveCollector.topProcessCount)
             guard !Task.isCancelled else { return }
 
             if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }

@@ -37,10 +37,10 @@ struct MainDashboardView: View {
     var model: DashboardModel
     var iphone: IPhoneModel = .shared
 
-    private enum Mode { case mac, iphone }
-    @State private var mode: Mode = .mac
+    /// Option type of the Overview | Report tab control; the state lives in `router.isReportShown`.
     private enum Tab { case overview, report }
-    @State private var tab: Tab = .overview
+    /// REDESIGN-FOUNDATION: mode, report tab and (later) pages go through the router.
+    @State private var router = NavigationRouter()
     @State private var pointer = DS3PointerTracker()
 
     // Процессы/Папки pair (V2-DRIFT-FIX): the pair is an `HStack` (the fix for
@@ -55,7 +55,7 @@ struct MainDashboardView: View {
 
     var body: some View {
         ZStack {
-            if mode == .iphone {
+            if router.mode == .iphone {
                 DS3.ground
                 DS3OrbField()
             } else {
@@ -67,19 +67,25 @@ struct MainDashboardView: View {
 
                 // Only the content branches; both segmented controls live in `toolbar`
                 // outside this branch (control-identity-branch).
-                if mode == .mac {
-                    switch tab {
-                    case .overview: overview
-                    case .report: ReportTab(model: model)
-                    }
+                if router.mode == .mac {
+                    if router.isReportShown { ReportTab(model: model) } else { overview }
                 } else {
                     IPhoneModeView(model: iphone)
                 }
             }
             .onChange(of: L10nStore.shared.language) { model.refreshReport(trigger: .automatic) }
+            .background {
+                if router.canGoBack && router.mode == .mac { BackShortcuts { _ = router.back() } }
+            }
         }
         .ignoresSafeArea()
         .ds3PointerTracking(pointer)
+    }
+
+    /// The tab control's selection, stored in the router.
+    private var tabSelection: Binding<Tab> {
+        Binding(get: { router.isReportShown ? .report : .overview },
+                set: { router.isReportShown = ($0 == .report) })
     }
 
     // MARK: Toolbar (single row: title block · leading-anchored tab control · flexible gap · chips/status/refresh)
@@ -100,13 +106,13 @@ struct MainDashboardView: View {
             // Anchored immediately after the title at a fixed gap (spacing: 16 above) —
             // this control's x position must never depend on window width. All slack
             // and all shrink pressure live to its right, past the flexible Spacer below.
-            DSSlidingSegmented(options: [Mode.mac, .iphone], selection: $mode, size: .tabs, identifier: { m in
+            DSSlidingSegmented(options: [AppMode.mac, .iphone], selection: $router.mode, size: .tabs, identifier: { m in
                 m == .mac ? "main-mode-mac" : "main-mode-iphone"
             }) { m in
                 m == .mac ? L.mainModeMac : L.mainModeIPhone
             }
             .layoutPriority(2)
-            DSSlidingSegmented(options: [Tab.overview, .report], selection: $tab, size: .tabs, identifier: { t in
+            DSSlidingSegmented(options: [Tab.overview, .report], selection: tabSelection, size: .tabs, identifier: { t in
                 switch t {
                 case .overview: return "main-tab-overview"
                 case .report: return "main-tab-report"
@@ -120,13 +126,13 @@ struct MainDashboardView: View {
             .layoutPriority(2)
             // Stays mounted in iPhone mode (D14): hidden, not removable, so the header
             // geometry is identical across modes.
-            .opacity(mode == .mac ? 1 : 0)
-            .allowsHitTesting(mode == .mac)
-            .accessibilityHidden(mode != .mac)
+            .opacity(router.mode == .mac ? 1 : 0)
+            .allowsHitTesting(router.mode == .mac)
+            .accessibilityHidden(router.mode != .mac)
             Spacer(minLength: 12)
             // No layoutPriority here (default 0): chips own the progressive-hiding
             // ViewThatFits tiers and must be the first child to lose space.
-            if mode == .mac {
+            if router.mode == .mac {
                 HeaderChipsView(model: model)
             } else {
                 // Above the title (1): the title block claims its whole ideal width (the full
@@ -188,7 +194,7 @@ struct MainDashboardView: View {
                 // iPhone mode ranks the actions above the title (see `toolbar`), so the name is
                 // pinned to its width there and only the subtitle tiers give way. In This Mac mode
                 // the title keeps its original truncating behaviour (`false` is a no-op).
-                .fixedSize(horizontal: mode == .iphone, vertical: false)
+                .fixedSize(horizontal: router.mode == .iphone, vertical: false)
             subtitleView
         }
     }
@@ -336,6 +342,23 @@ struct MainDashboardView: View {
         GridItem(.flexible(), spacing: 12, alignment: .top),
     ]
 
+}
+
+/// Esc and ⌘[ = Back (handoff 00 §5), installed only while a section page is shown
+/// (REDESIGN-FOUNDATION D8). Zero-size and hidden from accessibility: the visible Back chip
+/// (REDESIGN-HOME) carries the label.
+private struct BackShortcuts: View {
+    let action: () -> Void
+    var body: some View {
+        ZStack {
+            Button("", action: action).keyboardShortcut(.escape, modifiers: [])
+            Button("", action: action).keyboardShortcut("[", modifiers: .command)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
 }
 
 // Extracted from MainDashboardView for the same reason as `HeaderChipsView` below

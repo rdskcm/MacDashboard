@@ -13,9 +13,9 @@ extension SerialTests {
 
             do {
                 let collector = LiveCollector()
-                _ = await collector.collect(limit: 10)
+                _ = await collector.collect(limit: LiveCollector.topProcessCount)
                 Thread.sleep(forTimeInterval: 1.3)
-                let snap2 = await collector.collect(limit: 10)
+                let snap2 = await collector.collect(limit: LiveCollector.topProcessCount)
                 #expect(snap2.cpu != nil, "smoke LiveCollector: 2nd sample cpu != nil")
                 #expect((snap2.mem?.total ?? 0) > 4 * GIB, "smoke LiveCollector: mem.total > 4 GiB")
                 #expect((snap2.disk?.size ?? 0) > 0, "smoke LiveCollector: disk.size > 0")
@@ -31,27 +31,17 @@ extension SerialTests {
                 #expect(snap2.topCPU.first?.pid != nil, "smoke LiveCollector: live pid parsed through ps snapshot path")
                 #expect(!snap2.topMem.isEmpty, "smoke LiveCollector: topMem non-empty")
                 // sample() may legitimately return fewer rows than the limit, so <= not ==.
-                #expect(snap2.topCPU.count <= 10,
-                      "smoke LiveCollector: topCPU.count <= processListLimit")
-                #expect(snap2.topMem.count <= 10,
-                      "smoke LiveCollector: topMem.count <= processListLimit")
+                #expect(snap2.topCPU.count <= LiveCollector.topProcessCount,
+                      "smoke LiveCollector: topCPU.count <= topProcessCount")
+                #expect(snap2.topMem.count <= LiveCollector.topProcessCount,
+                      "smoke LiveCollector: topMem.count <= topProcessCount")
                 #expect(snap2.topCPU.allSatisfy { $0.cpu != nil },
                       "smoke LiveCollector: every topCPU row has a cpu value (sampler primed itself)")
             }
         }
 
-        @Test func processLimitResolution() async {
-            do {
-                #expect(AppSettings.allowedProcessLimits.allSatisfy { AppSettings.resolveProcessLimit(raw: $0) == $0 },
-                      "AppSettings: every offered process limit resolves to itself")
-                #expect(AppSettings.allowedProcessLimits.contains(AppSettings.resolveProcessLimit(raw: 0)),
-                      "AppSettings: the fallback process limit is one of the offered values")
-                #expect(AppSettings.resolveProcessLimit(raw: 12) == 10, "AppSettings: the retired hard-coded 12 migrates to 10")
-                // Re-check of the resolution formula via the real product function (AppSettings.init()
-                // calls the same one — see AppSettings.resolveProcessLimit).
-                #expect(AppSettings.resolveProcessLimit(raw: 0) == 10, "AppSettings: fresh default (unset) resolves to 10")
-                #expect(AppSettings.resolveProcessLimit(raw: 999) == 10, "AppSettings: out-of-range stored value resolves to 10")
-            }
+        @Test func fixedProcessCount() {
+            #expect(LiveCollector.topProcessCount == 8, "LiveCollector: process tables are a fixed top 8 (handoff 03:22)")
         }
 
         @Test func reportCollectorSmoke() async {
