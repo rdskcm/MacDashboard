@@ -145,7 +145,7 @@ private struct DS3TileButtonBody: View {
 // MARK: - Tag
 
 struct DS3Tag: View {
-    enum Tone { case accent, neutral, amber, hot }
+    enum Tone { case accent, neutral, amber, hot, green }
 
     let tone: Tone
     let text: String
@@ -180,6 +180,7 @@ struct DS3Tag: View {
         case .neutral: return DS3.inkSoft
         case .amber: return DS3.amberInk
         case .hot: return DS3.hotInk
+        case .green: return DS3.greenInk
         }
     }
 
@@ -189,6 +190,7 @@ struct DS3Tag: View {
         case .neutral: return DS3.muted
         case .amber: return DS3.amber
         case .hot: return DS3.hot
+        case .green: return DS3.green
         }
     }
 
@@ -204,6 +206,8 @@ struct DS3Tag: View {
             content.ds3TintPanel(DS3.amber, from: 0.26, to: 0.11, ring: 0.45, cornerRadius: 999, top: .white.opacity(0.40))
         case .hot:
             content.ds3TintPanel(DS3.hot, from: 0.26, to: 0.11, ring: 0.45, cornerRadius: 999, top: .white.opacity(0.40))
+        case .green:
+            content.ds3TintPanel(DS3.green, from: 0.26, to: 0.11, ring: 0.45, cornerRadius: 999, top: .white.opacity(0.40))
         }
     }
 

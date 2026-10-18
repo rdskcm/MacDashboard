@@ -30,6 +30,8 @@ final class DashboardModel {
     var socTempC: Int? = nil
     var topCPU: [ProcEntry] = []
     var topMem: [ProcEntry] = []
+    /// REDESIGN-HOME: rows of the last full ps snapshot (Home CPU tile «Processes»); nil before the first slow sample.
+    var processCount: Int? = nil
     var lastSampleAt: Date = .init()
     /// REDESIGN-FOUNDATION: per-block loading / ok / failed state (Engine/BlockState.swift), read
     /// through `blockState(_:)`. One property per block so a view observing one is not
@@ -165,7 +167,7 @@ final class DashboardModel {
     /// ps/top output the parser rejected on the most recent process sample (R3-FIXTURES).
     private var procParseFailures: [ParseFailure] = []
     /// The system's own memory-pressure verdict (TIPS-MEMORY), read on the fast tick.
-    private var memPressure: MemoryPressureLevel? = nil
+    private(set) var memPressure: MemoryPressureLevel? = nil
     /// False until the fast task's first sample after start(): that sample only primes the CPU
     /// tick delta (`cpu == nil` by design), so it is no verdict on the cpu block.
     @ObservationIgnored private var fastSamplePrimed = false
@@ -369,6 +371,9 @@ final class DashboardModel {
         }
     }
 
+    /// Visual fixture only (DashboardModel+VisualFixture, tools/visual/content_states.swift): sets the scan block directly; live code never calls this.
+    func applyFixtureScan(_ state: BlockState) { scanBlock = state }
+
     /// Starts an attempt and arms its watchdog: still in flight after `id.timeout` → `.failed(.timedOut)`.
     private func beginBlock(_ id: BlockID, showsLoading: Bool = false) {
         updateBlock(id) { $0.begin(at: Date(), showsLoading: showsLoading) }
@@ -505,6 +510,7 @@ final class DashboardModel {
 
                 if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
                 if self.topMem != procs.topMem { self.topMem = procs.topMem }
+                if procs.processCount > 0, self.processCount != procs.processCount { self.processCount = procs.processCount }
                 if self.topApps != procs.topApps { self.topApps = procs.topApps }
                 if self.procParseFailures != procs.parseFailures { self.procParseFailures = procs.parseFailures }
                 if self.wakeHolders != wake.holders { self.wakeHolders = wake.holders }
@@ -896,6 +902,7 @@ final class DashboardModel {
 
             if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
             if self.topMem != procs.topMem { self.topMem = procs.topMem }
+            if procs.processCount > 0, self.processCount != procs.processCount { self.processCount = procs.processCount }
             if self.topApps != procs.topApps { self.topApps = procs.topApps }
             if self.procParseFailures != procs.parseFailures { self.procParseFailures = procs.parseFailures }
         }

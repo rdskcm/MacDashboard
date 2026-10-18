@@ -973,4 +973,87 @@ struct StringsEN: AppStrings {
     func ipswDownloading(_ done: String, _ total: String) -> String { "Downloading \(done) of \(total)" }
     var ipswVerifying: String { "Verifying checksums…" }
     var ipswFinished: String { "Saved to Downloads" }
+
+    // MARK: Home (REDESIGN-HOME; strings.json › This Mac Home + 02-home.md)
+    var homeMacStatus: String { "Mac status" }
+    func homeTaskCount(_ n: Int) -> String { n == 1 ? "1 task" : "\(n) tasks" }
+    func homeNeedAttention(_ n: Int) -> String { n == 1 ? "needs attention" : "need attention" }
+    var homeCriticalCount: String { "Critical" }
+    var homeWarnings: String { "Warnings" }
+    func homeCheckedAt(_ t: String) -> String { "checked at \(t)" }
+    func homeLastCheck(_ t: String) -> String { "last check \(t)" }
+    func homeTileLastCheck(_ t: String) -> String { "last check \(t)" }
+    func homeShowAll(_ n: Int) -> String { "Show all (\(n))" }
+    var homeYouCan: String { "You can" }
+    var homeFreeUpSpace: String { "Free up space" }
+    func homeBrewOutdatedShort(_ n: Int) -> String { "\(n) outdated" }
+    var homeNothingNeedsAttention: String { "Nothing needs your attention" }
+    var homeFirstScanTitle: String { "Scanning this Mac for the first time…" }
+    var homeFirstScanCaption: String { "usually under 30 s" }
+    func homeScanFailed(timedOut: Bool, lastGood: String?) -> String { (timedOut ? "Couldn’t scan this Mac: system_profiler didn’t respond within 30 s." : "Couldn’t scan this Mac: system_profiler returned no data.") + (lastGood.map { " Showing data from \($0)." } ?? "") }
+    var homeSipHelp: String { "SIP can only be turned on from macOS Recovery." }
+    var homeStateOff: String { "off" }
+    var homeDiskHealth: String { "Disk health" }
+    var homeStateFailing: String { "failing" }
+    var homeStateFailingShort: String { "failing" }
+    func homeStateDiskFull(_ pct: Int) -> String { "\(pct)% full" }
+    var homeStateNotSetUp: String { "not set up" }
+    var homeStateKeepsAwake: String { "keeps the Mac awake" }
+    func homeStateWorn(_ pct: Int) -> String { "\(pct)% worn" }
+    func homeStatePackagesOutdated(_ n: Int) -> String { n == 1 ? "1 package outdated" : "\(n) packages outdated" }
+    var homeStateUpdateAvailable: String { "update available" }
+    func homeStateUpdatesAvailable(_ n: Int) -> String { "\(n) updates available" }
+    var homeMemoryObject: String { "Memory" }
+    var homeStateRunningLow: String { "running low" }
+    var homeStateRunningOut: String { "running out" }
+    var homeCrashes: String { "Crashes" }
+    func homeStateReports(_ n: Int) -> String { n == 1 ? "1 report" : "\(n) reports" }
+    var homeDiskWear: String { "Disk wear" }
+    func homePercent(_ s: String) -> String { "\(s)%" }
+    func homeGB(_ s: String) -> String { "\(s) GB" }
+    var homeVerbDetails: String { "Details" }
+    var homeVerbFreeUp: String { "Free up" }
+    var homeVerbUpdate: String { "Update" }
+    var homeVerbSettings: String { "Settings…" }
+    var homeTagFirewallOff: String { "Firewall off" }
+    var homeTagDriveFailing: String { "drive failing" }
+    var homeTagTMNotSetUp: String { "TM not set up" }
+    var homeTagWorn: String { "Worn" }
+    var homeTagBrewOutdated: String { "Homebrew outdated" }
+    var homeTagUpdateAvailable: String { "Update available" }
+    var homeTagLowMemory: String { "Low memory" }
+    var homeTagService: String { "Service" }
+    var homeTagFileVaultOff: String { "FileVault off" }
+    var homeTagGatekeeperOff: String { "Gatekeeper off" }
+    var homeTagSipOff: String { "SIP off" }
+    var homeTagDiskWorn: String { "Worn" }
+    var homeTagClaudeStale: String { "Claude stale" }
+    var homeTagNormal: String { "Normal" }
+    var homeTagHealthy: String { "Healthy" }
+    var homeTagAllOn: String { "All on" }
+    var homeTagUpToDate: String { "Up to date" }
+    func homeHistoryDays(_ n: Int) -> String { n == 1 ? "1 day" : "\(n) days" }
+    var homeSections: String { "Sections" }
+    func homeSectionCount(_ n: Int) -> String { "\(n) sections" }
+    func homeCPUSub(_ chip: String, _ cores: Int) -> String { "\(chip) · \(cores) cores" }
+    func homeCoresOnly(_ cores: Int) -> String { "\(cores) cores" }
+    var homeStorageSub: String { "disk, folders, SMART" }
+    var homeBatterySub: String { "built-in" }
+    var homeSecuritySub: String { "protection, updates, crashes" }
+    var homeBackupsSub: String { "Time Machine, Claude" }
+    var homeSystemSub: String { "sleep, login items, Homebrew" }
+    var homeHistorySub: String { "daily samples" }
+    var homeKVLoad: String { "Load" }
+    var homeKVProcesses: String { "Processes" }
+    var homeKVPurgeable: String { "Purgeable" }
+    var homeKVFailing: String { "failing" }
+    func homeKVWorn(_ pct: Int) -> String { "\(pct)% worn" }
+    var homeKVCapacity: String { "Capacity" }
+    func homeKVProtection(_ on: Int) -> String { "\(on) of 4" }
+    var homeKVNone: String { "none" }
+    var homeKVSnapshots: String { "Snapshots" }
+    var homeKVLoginItems: String { "Login items" }
+    var homeKVUpToDate: String { "up to date" }
+    var homeKVDiskPerMonth: String { "Disk per month" }
+    var homeBackA11y: String { "Back to This Mac" }
 }

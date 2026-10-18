@@ -51,11 +51,11 @@ final class LiveCollector {
     // the native gauges.
     //
     // `limit` is a parameter (callers pass `topProcessCount`; tests pass their own), so this method never reads global UI state off the main actor.
-    func sampleProcesses(limit: Int) async -> (topCPU: [ProcEntry], topMem: [ProcEntry], topApps: [AppMemory], parseFailures: [ParseFailure]) {
+    func sampleProcesses(limit: Int) async -> (topCPU: [ProcEntry], topMem: [ProcEntry], topApps: [AppMemory], parseFailures: [ParseFailure], processCount: Int) {
         let procs = await procSampler.sample()
         let topCPU = Array(procs.rankedByCPU().prefix(limit)).reranked()
         let topMem = Array(procs.rankedByMem().prefix(limit)).reranked()
-        return (topCPU, topMem, procSampler.lastTopApps, procSampler.lastParseFailures)
+        return (topCPU, topMem, procSampler.lastTopApps, procSampler.lastParseFailures, procs.count)
     }
 
     // Full snapshot: composed from the two halves above so existing callers (and the
