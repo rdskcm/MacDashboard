@@ -6,13 +6,13 @@
 
 import Foundation
 
-/// The 16 attention conditions the v2 model recognizes, in the fixed order the
-/// spec assigns them (also the order `Assess.assess` evaluates their branches).
+/// The 17 attention kinds (the design's 16 keys; `diskFull`/`diskFullSoon` are both key `disk`),
+/// in the fixed order the spec assigns them (also the order `Assess.assess` evaluates their branches).
 enum AttentionKind: String, CaseIterable {
     case diskFull, diskFullSoon,
          swapHigh, // memory pressure (name kept for id stability)
          batteryCapacity, batteryCondition, fileVaultOff,
-         gatekeeperOff, sipOff, firewallOff, updates, crashes, timeMachine, claudeBackup, smartErrors, smartWear,
+         gatekeeperOff, sipOff, firewallOff, updates, brewOutdated, crashes, timeMachine, claudeBackup, smartErrors, smartWear,
          wakeHolders
 }
 

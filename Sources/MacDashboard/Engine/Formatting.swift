@@ -18,6 +18,9 @@ func fmtNum(_ v: Double, decimals: Int = 1) -> String {
     return s.replacingOccurrences(of: ".", with: L.decimalSeparator)
 }
 
+/// Fixed decimals, never trimmed ("2.10", "25.0"): load averages and the CPU percentage.
+func fmtFixed(_ v: Double, decimals: Int) -> String { String(format: "%.\(decimals)f", v).replacingOccurrences(of: ".", with: L.decimalSeparator) }
+
 /// Deterministic decimal capacity formatter: ГБ/ТБ (GB/TB), matching how macOS
 /// reports disk sizes (decimal, 10^9/10^12) — unlike `fmtBytes`, which is binary
 /// and used for memory/swap. One decimal place under 1000 GB; two decimals from

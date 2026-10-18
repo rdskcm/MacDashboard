@@ -26,10 +26,10 @@ extension SerialTests {
 
             // --- R2: attention items / tips ---
             let kinds = Set(d1.assessment.items.map(\.kind))
-            #expect(kinds == [.firewallOff, .diskFullSoon, .timeMachine, .wakeHolders],
-                  "VisualFixture: attention item kinds == {firewallOff, diskFullSoon, timeMachine, wakeHolders} (got \(kinds))")
-            #expect(d1.assessment.items.count == 4, "VisualFixture: 4 attention items (got \(d1.assessment.items.count))")
-            #expect(d1.assessment.capsules.count == 5, "VisualFixture: 5 tip capsules (got \(d1.assessment.capsules.count))")
+            #expect(kinds == [.firewallOff, .diskFullSoon, .timeMachine, .wakeHolders, .batteryCapacity, .brewOutdated],
+                  "VisualFixture: attention item kinds == {firewallOff, diskFullSoon, timeMachine, wakeHolders, batteryCapacity, brewOutdated} (got \(kinds))")
+            #expect(d1.assessment.items.count == 6, "VisualFixture: 6 attention items (got \(d1.assessment.items.count))")
+            #expect(d1.assessment.capsules.count == 3, "VisualFixture: 3 tip capsules (got \(d1.assessment.capsules.count))")
 
             // --- VISUAL-HARNESS-STALE: fixed, fresh Claude backup ---
             let expectedBackup = ClaudeBackupStatus.lastSuccess(VisualFixture.referenceDate.addingTimeInterval(-2 * 3600))

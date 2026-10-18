@@ -943,4 +943,87 @@ struct StringsRU: AppStrings {
     var commonChecking: String { "Проверка…" }
     var commonCritical: String { "Критично" }
     func commonLastData(_ time: String) -> String { "последние данные — \(time)" }
+
+    // MARK: Home (REDESIGN-HOME; strings.json › This Mac Home + 02-home.md)
+    var homeMacStatus: String { "Состояние Mac" }
+    func homeTaskCount(_ n: Int) -> String { "\(n) " + ruPlural(n, "задача", "задачи", "задач") }
+    func homeNeedAttention(_ n: Int) -> String { ruPlural(n, "требует внимания", "требуют внимания", "требуют внимания") }
+    var homeCriticalCount: String { "Серьёзные" }
+    var homeWarnings: String { "Предупреждения" }
+    func homeCheckedAt(_ t: String) -> String { "проверено в \(t)" }
+    func homeLastCheck(_ t: String) -> String { "последняя проверка \(t)" }
+    func homeTileLastCheck(_ t: String) -> String { "проверка в \(t)" }
+    func homeShowAll(_ n: Int) -> String { "Показать все (\(n))" }
+    var homeYouCan: String { "Можно сделать" }
+    var homeFreeUpSpace: String { "Освободить место" }
+    func homeBrewOutdatedShort(_ n: Int) -> String { "\(n) устар." }
+    var homeNothingNeedsAttention: String { "Ничего не требует внимания" }
+    var homeFirstScanTitle: String { "Первая проверка Mac…" }
+    var homeFirstScanCaption: String { "обычно до 30 с" }
+    func homeScanFailed(timedOut: Bool, lastGood: String?) -> String { (timedOut ? "Не удалось проверить Mac: system_profiler не ответил за 30 с." : "Не удалось проверить Mac: system_profiler не вернул данных.") + (lastGood.map { " Показаны данные проверки в \($0)." } ?? "") }
+    var homeSipHelp: String { "SIP включается только из режима восстановления macOS." }
+    var homeStateOff: String { "выключен" }
+    var homeDiskHealth: String { "Здоровье диска" }
+    var homeStateFailing: String { "сбой диска" }
+    var homeStateFailingShort: String { "сбой" }
+    func homeStateDiskFull(_ pct: Int) -> String { "заполнен на \(pct) %" }
+    var homeStateNotSetUp: String { "не настроена" }
+    var homeStateKeepsAwake: String { "не даёт уснуть" }
+    func homeStateWorn(_ pct: Int) -> String { "износ \(pct) %" }
+    func homeStatePackagesOutdated(_ n: Int) -> String { "\(n) " + ruPlural(n, "пакет устарел", "пакета устарели", "пакетов устарели") }
+    var homeStateUpdateAvailable: String { "доступно обновление" }
+    func homeStateUpdatesAvailable(_ n: Int) -> String { "доступно обновлений: \(n)" }
+    var homeMemoryObject: String { "Памяти" }
+    var homeStateRunningLow: String { "мало" }
+    var homeStateRunningOut: String { "не хватает" }
+    var homeCrashes: String { "Сбои" }
+    func homeStateReports(_ n: Int) -> String { "\(n) " + ruPlural(n, "отчёт", "отчёта", "отчётов") }
+    var homeDiskWear: String { "Износ диска" }
+    func homePercent(_ s: String) -> String { "\(s) %" }
+    func homeGB(_ s: String) -> String { "\(s) ГБ" }
+    var homeVerbDetails: String { "Подробнее" }
+    var homeVerbFreeUp: String { "Освободить" }
+    var homeVerbUpdate: String { "Обновить" }
+    var homeVerbSettings: String { "Настройки…" }
+    var homeTagFirewallOff: String { "брандмауэр выключен" }
+    var homeTagDriveFailing: String { "сбой диска" }
+    var homeTagTMNotSetUp: String { "TM не настроена" }
+    var homeTagWorn: String { "износ" }
+    var homeTagBrewOutdated: String { "Homebrew устарел" }
+    var homeTagUpdateAvailable: String { "есть обновление" }
+    var homeTagLowMemory: String { "Мало памяти" }
+    var homeTagService: String { "Сервис" }
+    var homeTagFileVaultOff: String { "FileVault выключен" }
+    var homeTagGatekeeperOff: String { "Gatekeeper выключен" }
+    var homeTagSipOff: String { "SIP выключен" }
+    var homeTagDiskWorn: String { "Износ" }
+    var homeTagClaudeStale: String { "Бэкап устарел" }
+    var homeTagNormal: String { "в норме" }
+    var homeTagHealthy: String { "в норме" }
+    var homeTagAllOn: String { "всё включено" }
+    var homeTagUpToDate: String { "в норме" }
+    func homeHistoryDays(_ n: Int) -> String { "\(n) " + ruPlural(n, "день", "дня", "дней") }
+    var homeSections: String { "Разделы" }
+    func homeSectionCount(_ n: Int) -> String { "\(n) " + ruPlural(n, "раздел", "раздела", "разделов") }
+    func homeCPUSub(_ chip: String, _ cores: Int) -> String { "\(chip) · \(cores) " + ruPlural(cores, "ядро", "ядра", "ядер") }
+    func homeCoresOnly(_ cores: Int) -> String { "\(cores) " + ruPlural(cores, "ядро", "ядра", "ядер") }
+    var homeStorageSub: String { "диск, папки, SMART" }
+    var homeBatterySub: String { "встроенная" }
+    var homeSecuritySub: String { "защита, обновления, сбои" }
+    var homeBackupsSub: String { "Time Machine, Claude" }
+    var homeSystemSub: String { "сон, автозагрузка, Homebrew" }
+    var homeHistorySub: String { "ежедневные замеры" }
+    var homeKVLoad: String { "Нагрузка" }
+    var homeKVProcesses: String { "Процессов" }
+    var homeKVPurgeable: String { "Очищаемое" }
+    var homeKVFailing: String { "сбой диска" }
+    func homeKVWorn(_ pct: Int) -> String { "износ \(pct) %" }
+    var homeKVCapacity: String { "Ёмкость" }
+    func homeKVProtection(_ on: Int) -> String { "\(on) из 4" }
+    var homeKVNone: String { "нет" }
+    var homeKVSnapshots: String { "Снимки" }
+    var homeKVLoginItems: String { "Автозагрузка" }
+    var homeKVUpToDate: String { "актуален" }
+    var homeKVDiskPerMonth: String { "Диск за месяц" }
+    var homeBackA11y: String { "Назад к разделу «Этот Mac»" }
 }

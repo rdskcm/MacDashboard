@@ -109,9 +109,11 @@ enum Assess {
             } else if cap < 80, (batt?.cycles ?? 0) < batteryEarlyWearCycles {
                 a.battSev = .warn
                 let action = AdviceAction.settingsPane(AdvicePanes.battery)
-                tips.append(Tip(text: L.assessBatteryCapacityWarn(cap), action: action))
-                capsules.append(TipCapsule(object: L.attnCapBattery, value: L.attnCapBatteryValue(cap), verb: verb(action),
-                                            explanation: L.attnExplainBattery, action: action))
+                let text = L.assessBatteryCapacityWarn(cap)
+                pairs.append((Problem(sev: .warn, text: text, action: action),
+                               AttentionItem(kind: .batteryCapacity, sev: .warn, label: L.attnLabelBatteryCapacity,
+                                             detail: L.attnDetailBatteryCapacity(cap), fullText: text,
+                                             verb: verb(action), action: action)))
             }
         }
         if let cond = batt?.condition, !cond.isEmpty, cond != "Normal" {
@@ -172,9 +174,11 @@ enum Assess {
         // --- homebrew ---
         if let outdated = report.brewOutdated, !outdated.isEmpty {
             let action = AdviceAction.brewUpgrade
-            tips.append(Tip(text: L.assessBrewOutdatedTip(outdated.count), action: action))
-            capsules.append(TipCapsule(object: L.attnCapBrew, value: L.attnCapBrewValue(outdated.count), verb: verb(action),
-                                        explanation: L.attnExplainBrew, action: action))
+            let text = L.assessBrewOutdatedTip(outdated.count)
+            pairs.append((Problem(sev: .warn, text: text, action: action),
+                           AttentionItem(kind: .brewOutdated, sev: .warn, label: L.attnCapBrew,
+                                         detail: L.attnCapBrewValue(outdated.count), fullText: text,
+                                         verb: verb(action), action: action)))
         }
 
         // --- crashes ---
