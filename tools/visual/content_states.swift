@@ -1,7 +1,7 @@
 // tools/visual/content_states.swift
 // VISUAL-COVERAGE: offscreen content stage — cards that sit below the fold of
 // the real 1150xH window (Processes/Folders segments, История metrics/ranges and its 0/1/2-day states,
-// the Claude backup card, the Home states (content-home-attention / content-home-sections: attention card,
+// the Claude backup card, the Home states (content-home-attention / content-home-sections / content-home-now: attention card,
 // All good, first scan, scan failed, section tiles with skeleton / last-check / no-battery variants),
 // the iPhone states: content-iphone-tiles / notices / battery / history / logs / import / identity / dialogs)
 // rendered directly from the fixed VisualFixture dataset, dark+light, via the
@@ -184,6 +184,43 @@ MainActor.assumeIsolated {
                         HomeSectionsHeader(model: noBattery)
                         HomeSectionsGrid(model: noBattery, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
                     }
+                }
+            }
+        }
+        harnessRender(width: 1300, to: "\(outDir)/content-home-now-\(mode).png") {
+            VStack(alignment: .leading, spacing: 24) {
+                HarnessSection(label: "Now, 1150") {
+                    HomeNowCard(model: m, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                }
+                HarnessSection(label: "Now, 1280") {
+                    HomeNowCard(model: m, router: NavigationRouter(), windowWidth: 1280, animatesEntrance: false)
+                        .frame(width: 1224)
+                }
+                HarnessSection(label: "Now, 900 (2×2)") {
+                    HomeNowCard(model: m, router: NavigationRouter(), windowWidth: 900, animatesEntrance: false)
+                        .frame(width: 844)
+                }
+                HarnessSection(label: "No battery (3 columns)") {
+                    HomeNowCard(model: fixtureHome { $0.battery = nil; $0.report.battery = nil },
+                                router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                }
+                HarnessSection(label: "Collecting (—)") {
+                    HomeNowCard(model: fixtureHome {
+                        $0.cpu = nil; $0.mem = nil; $0.disk = nil
+                        $0.battery?.maxCapacity = nil; $0.report.battery?.maxCapacity = nil
+                    }, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                }
+                HarnessSection(label: "Task tones") {
+                    HomeNowCard(model: fixtureHome {
+                        $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "SMART: errors",
+                                                     attrs: [("Media and Data Integrity Errors", "3")], severity: .crit)]
+                        $0.report.battery?.condition = "Service Recommended"
+                        $0.applyFixturePressure(.critical)
+                        $0.assessment = Assess.assess(report: $0.report,
+                                                      live: LiveSnapshot(t: VisualFixture.referenceDate, load: $0.load, cpu: $0.cpu, mem: $0.mem,
+                                                                         swap: $0.swap, disk: $0.disk, battery: $0.battery),
+                                                      memPressure: .critical, now: VisualFixture.referenceDate)
+                    }, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
                 }
             }
         }

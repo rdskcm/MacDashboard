@@ -1063,4 +1063,40 @@ struct StringsRU: AppStrings {
     var homeKVUpToDate: String { "актуален" }
     var homeKVDiskPerMonth: String { "Диск за месяц" }
     var homeBackA11y: String { "Назад к разделу «Этот Mac»" }
+    // HOME-C: the Now card
+    func homeEverySeconds(_ n: Int) -> String { "каждые \(n) с" }
+    func homeLoadCores(_ load: String, _ cores: Int) -> String {
+        "нагрузка \(load) · \(cores) " + ruPlural(cores, "ядро", "ядра", "ядер")
+    }
+    func homeOf(_ s: String) -> String { "из \(s)" }
+    var homePressureLow: String { "давление низкое" }
+    var homePressureMedium: String { "давление среднее" }
+    var homePressureHigh: String { "давление высокое" }
+    func homeLegendActive(_ v: String, short: Bool) -> String { short ? "акт. \(v)" : "активная \(v)" }
+    func homeLegendWired(_ v: String) -> String { "ядро \(v)" }
+    func homeLegendInactive(_ v: String, short: Bool) -> String { short ? "неакт. \(v)" : "неактивная \(v)" }
+    func homeMemFoot(_ used: String, _ total: String, _ compressed: String) -> String { "swap \(used) из \(total) · сжатая \(compressed)" }
+    func homeMemFootNoSwap(_ compressed: String) -> String { "сжатая \(compressed)" }
+    var homeFreeWord: String { "свободно" }
+    var homeChipHealthy: String { "в норме" }
+    var homeChipLowSpace: String { "мало места" }
+    func homeChipDriveFailing(short: Bool) -> String { short ? "сбой" : "сбой диска" }
+    var homeChipWorn: String { "износ" }
+    var homeChipService: String { "сервис" }
+    func homeLegendData(_ v: String) -> String { "данные \(v)" }
+    func homeLegendSystem(_ v: String, short: Bool) -> String { short ? "сист. \(v)" : "система \(v)" }
+    func homeLegendOther(_ v: String, short: Bool) -> String { short ? "проч. \(v)" : "прочее \(v)" }
+    func homeStorageFoot(size: String, purgeable: String?, short: Bool) -> String {
+        "из \(size)" + (purgeable.map { " · очищаемое \($0)" } ?? "")
+    }
+    var homeCapacityWord: String { "ёмкость" }
+    var homeOfNew: String { "от новой" }
+    var homeWearThreshold: String { "порог износа 80 %" }
+    var homeWearThresholdHelp: String { "80 % — порог износа по Apple" }
+    func homeBatteryFoot(cycles: Int?, charge: Int?, state: String?, short: Bool) -> String {
+        var parts: [String] = []
+        if let n = cycles { parts.append("\(n) " + ruPlural(n, "цикл", "цикла", "циклов")) }
+        if let c = charge { parts.append(short ? "заряд \(c) %" : "сейчас \(c) %" + (state.map { ", \($0)" } ?? "")) }
+        return parts.joined(separator: " · ")
+    }
 }

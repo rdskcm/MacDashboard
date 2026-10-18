@@ -481,3 +481,165 @@ enum HomeModel {
         }
     }
 }
+
+// MARK: - HOME-C: the Now card
+
+/// Views map: s1…s4 / sfree → DS3.s1…s4 / DS3.sfree, track → DS3.track, green/amber/hot → DS3.green/amber/hot.
+enum HomeSeries: Equatable { case s1, s2, s3, s4, sfree, track, green, amber, hot }
+enum HomeNowKind: String, Equatable { case cpu, memory, storage, battery }
+struct HomeNowSegment: Equatable { let series: HomeSeries; let value: Double }
+/// `isRule` = the 2-pt mark swatch.
+struct HomeLegendItem: Equatable { let series: HomeSeries; let text: String; let isRule: Bool }
+
+struct HomeNowCell: Identifiable, Equatable {
+    var id: HomeNowKind { kind }
+    let kind: HomeNowKind
+    let label: String
+    let tone: HomeTone                 // .neutral / .amber / .hot = cell tint
+    let chipTone: HomeTone?
+    let chipText: String?              // nil = no chip
+    let big: String
+    let of: String
+    let loading: Bool
+    let segments: [HomeNowSegment]     // memory/storage stack, battery bar; CPU: []
+    let mark: Double?                  // battery 0.8
+    let legend: [HomeLegendItem]
+    let foot: String
+    let destination: Destination
+}
+
+extension HomeModel {
+    private static let gib: Double = Double(1 << 30)
+
+    /// The Now card cells (battery omitted when the Mac has none).
+    static func nowCells(_ input: HomeInput, tasks: [HomeTask], memPressure: MemoryPressureLevel?, socTempC: Int?,
+                         cpu: CPUUsage?, short: Bool, narrow: Bool) -> [HomeNowCell] {
+        func task(_ k: AttentionKind) -> HomeTask? { tasks.first { $0.kind == k } }
+        func loadingCell(_ kind: HomeNowKind, _ label: String, _ dest: Destination) -> HomeNowCell {
+            HomeNowCell(kind: kind, label: label, tone: .neutral, chipTone: nil, chipText: nil, big: "—", of: "",
+                        loading: true, segments: [HomeNowSegment(series: .track, value: 1)], mark: nil, legend: [],
+                        foot: L.commonCollectingData, destination: dest)
+        }
+        func g(_ x: Int64) -> String { fmtNum(Double(x) / gib, decimals: 1) }
+        func gb(_ x: Int64) -> String { fmtNum(Double(x) / 1e9, decimals: 0) }
+
+        var cells: [HomeNowCell] = []
+
+        // CPU
+        let cpuDest = Destination(.cpu, focus: .cpu)
+        if let cpu {
+            var chipTone: HomeTone? = nil, chipText: String? = nil
+            if let t = socTempC {
+                chipText = "\(t) °C"
+                chipTone = t >= 95 ? .hot : (t >= 85 ? .amber : .green)
+            }
+            let foot: String
+            if let l = input.load, let l0 = l.first { foot = L.homeLoadCores(fmtFixed(l0, decimals: 2), input.ncpu) }
+            else { foot = L.homeCoresOnly(input.ncpu) }
+            cells.append(HomeNowCell(kind: .cpu, label: L.commonCPU, tone: .neutral, chipTone: chipTone, chipText: chipText,
+                                     big: L.homePercent(fmtFixed(cpu.user + cpu.sys, decimals: 1)), of: "", loading: false,
+                                     segments: [], mark: nil, legend: [], foot: foot, destination: cpuDest))
+        } else {
+            cells.append(loadingCell(.cpu, L.commonCPU, cpuDest))
+        }
+
+        // Memory
+        let memDest = Destination(.memory, focus: .usage)
+        if let mem = input.mem, mem.total > 0 {
+            var chipTone: HomeTone? = nil, chipText: String? = nil
+            switch memPressure {
+            case .normal?: (chipTone, chipText) = (.green, L.homePressureLow)
+            case .warn?: (chipTone, chipText) = (.amber, L.homePressureMedium)
+            case .critical?: (chipTone, chipText) = (.hot, L.homePressureHigh)
+            case nil: break
+            }
+            let rest = max(0, mem.total - mem.active - mem.wired - mem.compressor - mem.inactive)
+            let foot: String
+            if let s = input.swap, s.total > 0 { foot = L.homeMemFoot(fmtBytes(s.used), fmtBytes(s.total), fmtBytes(mem.compressor)) }
+            else { foot = L.homeMemFootNoSwap(fmtBytes(mem.compressor)) }
+            cells.append(HomeNowCell(
+                kind: .memory, label: L.commonMemory, tone: task(.swapHigh)?.tone ?? .neutral,
+                chipTone: chipTone, chipText: chipText,
+                big: fmtBytes(mem.usedBytes), of: L.homeOf("\(Int((Double(mem.total) / gib).rounded()))"), loading: false,
+                segments: [HomeNowSegment(series: .s1, value: Double(mem.active)),
+                           HomeNowSegment(series: .s2, value: Double(mem.wired)),
+                           HomeNowSegment(series: .s3, value: Double(mem.compressor)),
+                           HomeNowSegment(series: .s4, value: Double(mem.inactive)),
+                           HomeNowSegment(series: .track, value: Double(rest))],
+                mark: nil,
+                legend: [HomeLegendItem(series: .s1, text: L.homeLegendActive(g(mem.active), short: short), isRule: false),
+                         HomeLegendItem(series: .s2, text: L.homeLegendWired(g(mem.wired)), isRule: false),
+                         HomeLegendItem(series: .s4, text: L.homeLegendInactive(g(mem.inactive), short: short), isRule: false)],
+                foot: foot, destination: memDest))
+        } else {
+            cells.append(loadingCell(.memory, L.commonMemory, memDest))
+        }
+
+        // Storage
+        if let disk = input.disk, disk.size > 0 {
+            let smart = task(.smartErrors)
+            let diskT = task(.diskFull) ?? task(.diskFullSoon)
+            let wear = task(.smartWear)
+            let tone: HomeTone
+            let chipTone: HomeTone, chipText: String
+            if smart != nil { tone = .hot; (chipTone, chipText) = (.hot, L.homeChipDriveFailing(short: narrow)) }
+            else if let d = diskT { tone = d.tone; (chipTone, chipText) = (d.tone, L.homeChipLowSpace) }
+            else if wear != nil { tone = .amber; (chipTone, chipText) = (.amber, L.homeChipWorn) }
+            else { tone = .neutral; (chipTone, chipText) = (.green, L.homeChipHealthy) }
+            let used = disk.usedTotal
+            let segments: [HomeNowSegment]
+            let legend: [HomeLegendItem]
+            if let data = disk.dataUsed, let system = disk.sysUsed {
+                let other = max(0, used - data - system)
+                segments = [HomeNowSegment(series: .s1, value: Double(data)), HomeNowSegment(series: .sfree, value: Double(system)),
+                            HomeNowSegment(series: .s3, value: Double(other)), HomeNowSegment(series: .track, value: Double(disk.avail))]
+                legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(data)), isRule: false),
+                          HomeLegendItem(series: .sfree, text: L.homeLegendSystem(gb(system), short: short), isRule: false),
+                          HomeLegendItem(series: .s3, text: L.homeLegendOther(gb(other), short: short), isRule: false)]
+            } else {
+                segments = [HomeNowSegment(series: .s1, value: Double(used)), HomeNowSegment(series: .track, value: Double(disk.avail))]
+                legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(used)), isRule: false)]
+            }
+            let size = short ? L.homeGB(fmtNum(Double(disk.size) / 1e9, decimals: 0)) : fmtCapacity(disk.size)
+            let focus: CardID = (smart != nil || (wear != nil && diskT == nil)) ? .smart : .disk
+            cells.append(HomeNowCell(
+                kind: .storage, label: L.commonStorage, tone: tone, chipTone: chipTone, chipText: chipText,
+                big: fmtCapacity(disk.avail), of: L.homeFreeWord, loading: false, segments: segments, mark: nil, legend: legend,
+                foot: L.homeStorageFoot(size: size, purgeable: disk.purgeable.map { fmtCapacity($0) }, short: short),
+                destination: Destination(.storage, focus: focus)))
+        } else {
+            cells.append(loadingCell(.storage, L.commonStorage, Destination(.storage, focus: .disk)))
+        }
+
+        // Battery
+        if input.hasBattery {
+            let battDest = Destination(.battery, focus: .bathero)
+            if let b = input.battery ?? input.report.battery, let cap = b.maxCapacity {
+                let svc = task(.batteryCondition), worn = task(.batteryCapacity)
+                let tone: HomeTone
+                let chipTone: HomeTone, chipText: String
+                let fill: HomeSeries
+                if svc != nil { tone = .hot; (chipTone, chipText) = (.hot, L.homeChipService); fill = .hot }
+                else if let w = worn { tone = w.tone; (chipTone, chipText) = (w.tone, L.homeChipWorn); fill = w.tone == .hot ? .hot : .amber }
+                else { tone = .neutral; (chipTone, chipText) = (.green, L.homeChipHealthy); fill = .green }
+                cells.append(HomeNowCell(
+                    kind: .battery, label: L.commonBattery, tone: tone, chipTone: chipTone, chipText: chipText,
+                    big: L.homePercent("\(cap)"), of: L.homeCapacityWord, loading: false,
+                    segments: [HomeNowSegment(series: fill, value: Double(cap)), HomeNowSegment(series: .track, value: Double(100 - cap))],
+                    mark: 0.8,
+                    legend: [HomeLegendItem(series: fill, text: L.homeOfNew, isRule: false),
+                             HomeLegendItem(series: .track, text: L.homeWearThreshold, isRule: true)],
+                    foot: L.homeBatteryFoot(cycles: b.cycles, charge: b.charge, state: b.state, short: short),
+                    destination: battDest))
+            } else {
+                cells.append(loadingCell(.battery, L.commonBattery, battDest))
+            }
+        }
+        return cells
+    }
+
+    /// The last 24 values of the CPU history, clamped to 0…100 (fewer when fewer exist).
+    static func sparkline(_ history: [(Date, Double)]) -> [Double] {
+        history.suffix(24).map { min(100, max(0, $0.1)) }
+    }
+}
