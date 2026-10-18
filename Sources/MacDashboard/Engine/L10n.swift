@@ -856,6 +856,43 @@ protocol AppStrings {
     var commonChecking: String { get }
     var commonCritical: String { get }
     func commonLastData(_ time: String) -> String
+    // MARK: IPSW (IPHONE-IPSW). Button and a11y labels arrive with the UI step.
+    var ipswSigned: String { get }
+    var ipswNotSigned: String { get }
+    var ipswNotListed: String { get }
+    var ipswIsAppleTarget: String { get }
+    var ipswNotAppleTarget: String { get }
+    func ipswAskSends(_ identifier: String) -> String
+    func ipswVerified(_ list: String) -> String
+    var ipswVerifiedSizeOnly: String { get }
+    var ipswUnknown: String { get }
+    var ipswChecking: String { get }
+    func ipswCheckedAgo(_ rel: String) -> String
+    var ipswErrNoIdentifier: String { get }
+    var ipswErrUnknownDevice: String { get }
+    var ipswErrOffline: String { get }
+    var ipswErrTimedOut: String { get }
+    func ipswErrHTTP(_ code: Int) -> String
+    var ipswErrBadResponse: String { get }
+    func ipswSourceFailed(_ source: String, _ reason: String) -> String
+    var ipswErrNotDownloadable: String { get }
+    var ipswNoSecureAppleLink: String { get }
+    var ipswNotFromApple: String { get }
+    var ipswErrNoChecksum: String { get }
+    var ipswErrNoSize: String { get }
+    var ipswErrSourcesDisagree: String { get }
+    func ipswErrNotEnoughSpace(_ needed: String, _ free: String) -> String
+    var ipswErrDownloadsDenied: String { get }
+    var ipswErrSizeMismatch: String { get }
+    var ipswErrChecksumMismatch: String { get }
+    func ipswErrTransfer(_ detail: String) -> String
+    func ipswErrFileSystem(_ detail: String) -> String
+    var ipswBusy: String { get }
+    var ipswCancelled: String { get }
+    var ipswPreparing: String { get }
+    func ipswDownloading(_ done: String, _ total: String) -> String
+    var ipswVerifying: String { get }
+    var ipswFinished: String { get }
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",

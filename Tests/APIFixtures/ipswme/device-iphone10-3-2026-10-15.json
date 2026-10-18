@@ -1,0 +1,57 @@
+{
+ "name": "iPhone X (Global)",
+ "identifier": "iPhone10,3",
+ "boards": [
+  {
+   "boardconfig": "D22AP",
+   "platform": "t8015",
+   "cpid": 32789,
+   "bdid": 6
+  }
+ ],
+ "boardconfig": "D22AP",
+ "platform": "t8015",
+ "cpid": 32789,
+ "bdid": 6,
+ "firmwares": [
+  {
+   "identifier": "iPhone10,3",
+   "version": "16.7.16",
+   "buildid": "20H392",
+   "sha1sum": "5606c298c1d908f8a48f617f0ceaf71f2a9f0193",
+   "md5sum": "edd545f3e99a9751e989da9c681cbe30",
+   "sha256sum": "ece1194f7e233e9109c5790a8d23a4564a10a254e15ec5b09978a343265568fb",
+   "filesize": 6171035648,
+   "url": "https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw",
+   "releasedate": "2026-05-11T17:47:42Z",
+   "uploaddate": "2026-05-01T20:37:41Z",
+   "signed": true
+  },
+  {
+   "identifier": "iPhone10,3",
+   "version": "12.1.4",
+   "buildid": "16D57",
+   "sha1sum": "6d21d7cf9bd387d9817a194ae74b803130dbe1cd",
+   "md5sum": "1d45bce66b2e18a51b558b82f0092f2e",
+   "sha256sum": "",
+   "filesize": 3570056754,
+   "url": "http://updates-http.cdn-apple.com/2019WinterFCS/fullrestores/041-38807/31EDA816-292C-11E9-825E-2D11412B0A59/iPhone10,3,iPhone10,6_12.1.4_16D57_Restore.ipsw",
+   "releasedate": "2019-02-07T18:35:54Z",
+   "uploaddate": "2019-02-05T10:05:55Z",
+   "signed": false
+  },
+  {
+   "identifier": "iPhone10,3",
+   "version": "11.1",
+   "buildid": "15B93",
+   "sha1sum": "b940d16bde925488b70dcf7d09d87e02430a6569",
+   "md5sum": "2ea5538ea44258ddd8974f0b900ed1ef",
+   "sha256sum": "b31f8e2ca46ec29788ab3f6bbe9ca27a99ea0e8a549fa29573479233f663cc42",
+   "filesize": 2944000487,
+   "url": "http://appldnld.apple.com/ios11.1seed/091-41194-20171023-8AEAD654-B5F2-11E7-8655-C76EBEA7E146/iPhone10,6_11.1_15B93_Restore.ipsw",
+   "releasedate": "2017-10-31T17:46:04Z",
+   "uploaddate": "2017-10-21T00:01:49Z",
+   "signed": false
+  }
+ ]
+}
