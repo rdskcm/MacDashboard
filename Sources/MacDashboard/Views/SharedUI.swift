@@ -147,7 +147,7 @@ struct MeterBar: View {
 
 /// crit/serious -> DS.hot, warn/info -> DS.amber, good -> DS.green. Never the
 /// legacy `Severity.color` (Theme.swift) — that palette belongs to the v1 UI.
-/// Hoisted here (V2-TILES) from `AttentionSummaryCard.swift`, its original
+/// Hoisted here (V2-TILES) from the former attention card, its original
 /// (private) home, since KPITiles.swift now needs the same mapping for the
 /// swap/disk/battery meter-bar tints — single source of truth, no second copy.
 func tone(for sev: Severity) -> Color {
@@ -1291,7 +1291,7 @@ func brewProgressText(_ p: BrewProgress) -> String {
 /// `hovering` is optional: sites that keep their own hover visual pass a binding,
 /// sites that only need the cursor pass nothing. While `isEnabled` is false the
 /// binding is left alone entirely, so a non-interactive element shows no hover
-/// visual either — that gating is load-bearing for AttentionSummaryCard's plates.
+/// visual either — that gating is load-bearing for the former attention card's plates.
 ///
 /// `.pointerStyle(.link)` would replace all of this but is macOS 15+, and
 /// Package.swift pins `.macOS(.v14)`.

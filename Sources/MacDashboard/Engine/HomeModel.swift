@@ -80,6 +80,17 @@ struct HomeInput {
     var backupStaleHours: Int
     var history: [MacHistoryEntry]
     var now: Date
+    /// Precomputed history figures. The app passes the model's cached digest (recomputed only when the history
+    /// changes) and leaves `history` empty; when nil, the digest is derived from `history`.
+    var historyDigest: HomeHistoryDigest? = nil
+}
+
+/// The history-derived figures of the History tile: entry count and the two quarter-window monthly slopes.
+struct HomeHistoryDigest: Equatable {
+    var count: Int
+    var diskPerMonth: Double?
+    var batteryPerMonth: Double?
+    static let empty = HomeHistoryDigest(count: 0, diskPerMonth: nil, batteryPerMonth: nil)
 }
 
 extension Page {
@@ -305,22 +316,43 @@ enum HomeModel {
         return [s.fileVault, s.gatekeeper, s.sip, s.firewall].filter { $0 == true }.count
     }
 
+    static func historyDigest(_ entries: [MacHistoryEntry]) -> HomeHistoryDigest {
+        HomeHistoryDigest(count: entries.count,
+                          diskPerMonth: monthlyRate(entries) { $0.disk_used_gb },
+                          batteryPerMonth: monthlyRate(entries) { $0.battery_pct })
+    }
+
     /// Slope per 30 days between the oldest and newest entry carrying the value inside the
     /// quarter window (D14); nil with fewer than two such entries or less than 14 days between them.
     static func monthlyRate(_ entries: [MacHistoryEntry], _ value: (MacHistoryEntry) -> Int?) -> Double? {
-        guard let range = HistorySeries.dateRange(entries, .quarter) else { return nil }
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.timeZone = .current
-        df.dateFormat = "yyyy-MM-dd"
-        let points: [(Date, Int)] = entries.compactMap { e in
-            guard let date = df.date(from: e.date), range.contains(date), let v = value(e) else { return nil }
-            return (date, v)
+        // Calendar days as integers: this runs on every Home refresh over up to ~500 entries, where
+        // DateFormatter parsing cost tens of milliseconds per pass. Same window as `HistorySeries.dateRange(.quarter)`.
+        guard let last = entries.last, let endDay = dayNumber(last.date),
+              let windowDays = HistoryRange.quarter.days else { return nil }
+        let startDay = endDay - (windowDays - 1)
+        let points: [(day: Int, value: Int)] = entries.compactMap { e in
+            guard let day = dayNumber(e.date), day >= startDay, day <= endDay, let v = value(e) else { return nil }
+            return (day, v)
         }
         guard points.count >= 2, let o = points.first, let n = points.last else { return nil }
-        let days = Calendar.current.dateComponents([.day], from: o.0, to: n.0).day ?? 0
+        let days = n.day - o.day
         guard days >= 14 else { return nil }
-        return Double(n.1 - o.1) / Double(days) * 30
+        return Double(n.value - o.value) / Double(days) * 30
+    }
+
+    /// Days since 1970-01-01 of a "yyyy-MM-dd" string (proleptic Gregorian, no time zone); nil if malformed.
+    static func dayNumber(_ s: String) -> Int? {
+        let parts = s.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+              let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]),
+              (1...12).contains(m), (1...31).contains(d) else { return nil }
+        // days-from-civil (H. Hinnant)
+        let yy = m <= 2 ? y - 1 : y
+        let era = (yy >= 0 ? yy : yy - 399) / 400
+        let yoe = yy - era * 400
+        let doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        return era * 146097 + doe - 719468
     }
 
     /// "+" for v > 0 (after rounding to `decimals`), U+2212 for v < 0, no sign for 0.
@@ -438,9 +470,10 @@ enum HomeModel {
             return (.green, L.homeTagNormal, L.homeSystemSub,
                     [kv(L.homeKVLoginItems, r.autostart?.loginItems.map { "\($0.count)" }), brew])
         case .history:
-            let disk = monthlyRate(i.history) { $0.disk_used_gb }
-            let batt = monthlyRate(i.history) { $0.battery_pct }
-            return (.neutral, L.homeHistoryDays(i.history.count), L.homeHistorySub,
+            let d = i.historyDigest ?? historyDigest(i.history)
+            let disk = d.diskPerMonth
+            let batt = d.batteryPerMonth
+            return (.neutral, L.homeHistoryDays(d.count), L.homeHistorySub,
                     [kv(L.homeKVDiskPerMonth, disk.map { L.homeGB(signed($0, decimals: 0)) }),
                      kv(L.homeKVCapacity, batt.map { L.homePercent(signed($0, decimals: 1)) })])
         case .home:

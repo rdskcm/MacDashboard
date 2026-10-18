@@ -155,6 +155,11 @@ final class DashboardModel {
     /// What the HEADER shows. Cards keep reading `report.system` directly.
     var headerSystem: SystemInfo? { report.system ?? lastKnownSystem }
 
+    /// What Home derives its wording from: the report the current assessment was computed from
+    /// (`assessed(isCollectingReport ? lastCommittedReport : report)`), so task text and tile figures
+    /// do not blank out while a pass wipes `report` section by section (`assessment-complete-collect`).
+    var homeReport: FullReport { isCollectingReport ? lastCommittedReport : report }
+
     /// The report as it stood when the current collect started — i.e. the last fully
     /// collected one plus any out-of-band section writes (SMART task, firewall action).
     /// `refreshReport()` rebuilds from a blank FullReport, so `report` itself is a partial
@@ -180,7 +185,11 @@ final class DashboardModel {
     private var wakeParseFailures: [ParseFailure] = []
 
     var assessment: Assessment
-    var history: HistoryState
+    var history: HistoryState {
+        didSet { homeHistoryDigest = HomeModel.historyDigest(history.mac_history) }
+    }
+    /// History figures for the Home History tile, recomputed only when `history` changes (not on live ticks).
+    private(set) var homeHistoryDigest = HomeHistoryDigest.empty
     var reportText: String?           // rendered text report (for Отчёт tab)
 
     /// Timestamp of the report currently shown in the Отчёт tab: the on-disk file's
@@ -282,7 +291,9 @@ final class DashboardModel {
         // appears (empty HistoryState on first run is fine — HistoryStore.load()
         // never throws).
         historyStore = HistoryStore(url: historyURL)
-        history = historyStore.load()
+        let loadedHistory = historyStore.load()
+        history = loadedHistory
+        homeHistoryDigest = HomeModel.historyDigest(loadedHistory.mac_history)
         updatesCacheURL = url.deletingLastPathComponent().appendingPathComponent("updates_cache.json")
         updatesCache = UpdatesCacheStore.load(from: updatesCacheURL)
         folderSizesURL = url.deletingLastPathComponent().appendingPathComponent("folder_sizes_cache.json")

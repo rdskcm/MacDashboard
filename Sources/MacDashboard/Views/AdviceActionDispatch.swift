@@ -2,7 +2,7 @@
 // Stateful counterpart to `AdviceActionRunner` (stateless system calls, reused
 // as-is): confirmations, busy/done bookkeeping and the `AdviceAction` switch,
 // moved verbatim out of the legacy Рекомендации card (Block V2-SUMMARY) so the
-// new AttentionSummaryCard owns no dialog logic of its own.
+// Home attention card (HomeAttentionCard) owns no dialog logic of its own.
 //
 // Shaped as an `@Observable` reference type (the codebase's established idiom
 // for shared mutable UI state — see DashboardModel/AppSettings/L10nStore)

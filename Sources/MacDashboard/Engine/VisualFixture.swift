@@ -121,6 +121,11 @@ enum VisualFixture {
         report.crashes = []
         report.brewStatus = .installed(version: "Homebrew 4.6.0")
         report.brewOutdated = ["git", "node", "python@3.13"]
+        // REDESIGN-HOME: the Home "You can" chips — local snapshots (Backups) and the Full Disk Access notice.
+        report.snapshots = ["com.apple.TimeMachine.2026-01-15-090000.local",
+                            "com.apple.TimeMachine.2026-01-15-080000.local",
+                            "com.apple.TimeMachine.2026-01-15-070000.local"]
+        report.homeDirsUnreadable = [home + "/Library/Mail"]
         report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED")]
         report.progress = ["homeDirs": true, "serviceDirs": true]
         report.battery = battery

@@ -30,5 +30,13 @@ extension DashboardModel {
         smartUpdatedAt = VisualFixture.referenceDate
         lastSampleAt = VisualFixture.referenceDate
         isCollectingReport = false
+        // REDESIGN-HOME: Home's CPU tile «Processes» and the scan state («checked at 10:30»).
+        processCount = 412
+        applyFixtureScan({
+            var s = BlockState(.scan, createdAt: VisualFixture.referenceDate)
+            s.begin(at: VisualFixture.referenceDate.addingTimeInterval(-20), showsLoading: false)
+            s.succeed(at: VisualFixture.referenceDate)
+            return s
+        }())
     }
 }

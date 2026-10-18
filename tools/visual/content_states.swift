@@ -1,7 +1,9 @@
 // tools/visual/content_states.swift
 // VISUAL-COVERAGE: offscreen content stage — cards that sit below the fold of
 // the real 1150xH window (Processes/Folders segments, История metrics/ranges and its 0/1/2-day states,
-// the Claude backup card, the iPhone states: content-iphone-tiles / notices / battery / history / logs / import / identity / dialogs)
+// the Claude backup card, the Home states (content-home-attention / content-home-sections: attention card,
+// All good, first scan, scan failed, section tiles with skeleton / last-check / no-battery variants),
+// the iPhone states: content-iphone-tiles / notices / battery / history / logs / import / identity / dialogs)
 // rendered directly from the fixed VisualFixture dataset, dark+light, via the
 // harness (tools/harness/render.sh). Pattern: scenario_ds_specimen.swift.
 // argv[1] = the output DIRECTORY (run.sh's raw/); each state writes
@@ -10,7 +12,7 @@
 import AppKit
 import SwiftUI
 
-/// The История section exactly as `MainDashboardView.overview` stacks it: kicker, restart
+/// The История section as the old Overview stacked it: kicker, restart
 /// notice, card (NEWMAC-HISTORY-EMPTY).
 struct HistorySectionSpecimen: View {
     let model: DashboardModel
@@ -55,6 +57,24 @@ MainActor.assumeIsolated {
         h.history = HistoryState(last_run: entries.last?.date, mac_history: entries, unreadable_backup: backup)
         return h
     }
+    // REDESIGN-HOME: the same fixture with one thing changed per Home state (one model per state).
+    @MainActor func fixtureHome(_ tweak: (DashboardModel) -> Void) -> DashboardModel {
+        let h = DashboardModel()
+        h.applyVisualFixture()
+        tweak(h)
+        return h
+    }
+    let homeRef = VisualFixture.referenceDate
+    let homeFirstScan = BlockState(.scan, createdAt: homeRef)
+    /// Scan that answered at 09:12 (ref − 78 min), then a user-pressed pass that timed out.
+    let homeFailedScan: BlockState = {
+        var s = BlockState(.scan, createdAt: homeRef.addingTimeInterval(-3600 * 2))
+        s.begin(at: homeRef.addingTimeInterval(-80 * 60), showsLoading: false)
+        s.succeed(at: homeRef.addingTimeInterval(-78 * 60))
+        s.begin(at: homeRef.addingTimeInterval(-31), showsLoading: true)
+        s.fail(.timedOut)
+        return s
+    }()
     let fixtureDays = m.history.mac_history
     let historyNoDays = fixtureHistory([])
     let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -114,6 +134,56 @@ MainActor.assumeIsolated {
                 }
                 HarnessSection(label: "History: two days recorded (full card)") {
                     HistorySectionSpecimen(model: historyTwoDays)
+                }
+            }
+        }
+        harnessRender(width: 1094, to: "\(outDir)/content-home-attention-\(mode).png") {
+            VStack(alignment: .leading, spacing: 24) {
+                HarnessSection(label: "Home: critical, 6 tasks") {
+                    HomeAttentionCard(model: m, router: NavigationRouter(), windowWidth: 1150)
+                }
+                HarnessSection(label: "Home: Show all expanded") {
+                    HomeAttentionCard(model: m, router: NavigationRouter(), windowWidth: 1150, initialShowAll: true)
+                }
+                HarnessSection(label: "Home: all good") {
+                    HomeAttentionSlot(model: fixtureHome { $0.assessment = Assessment() },
+                                      router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                }
+                HarnessSection(label: "Home: first scan") {
+                    HomeAttentionSlot(model: fixtureHome { $0.applyFixtureScan(homeFirstScan) },
+                                      router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                }
+                HarnessSection(label: "Home: scan failed (banner + kept tasks)") {
+                    let failed = fixtureHome { $0.applyFixtureScan(homeFailedScan) }
+                    VStack(alignment: .leading, spacing: 18) {
+                        HomeScanBannerSlot(model: failed)
+                        HomeAttentionSlot(model: failed, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                    }
+                }
+            }
+        }
+        harnessRender(width: 1094, to: "\(outDir)/content-home-sections-\(mode).png") {
+            VStack(alignment: .leading, spacing: 24) {
+                HarnessSection(label: "Home: sections") {
+                    VStack(alignment: .leading, spacing: 18) {
+                        HomeSectionsHeader(model: m)
+                        HomeSectionsGrid(model: m, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                    }
+                }
+                HarnessSection(label: "Home: first scan (skeleton)") {
+                    HomeSectionsGrid(model: fixtureHome { $0.applyFixtureScan(homeFirstScan) },
+                                     router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                }
+                HarnessSection(label: "Home: scan failed (last check)") {
+                    HomeSectionsGrid(model: fixtureHome { $0.applyFixtureScan(homeFailedScan) },
+                                     router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                }
+                HarnessSection(label: "Home: no battery (7 tiles)") {
+                    VStack(alignment: .leading, spacing: 18) {
+                        let noBattery = fixtureHome { $0.battery = nil; $0.report.battery = nil }
+                        HomeSectionsHeader(model: noBattery)
+                        HomeSectionsGrid(model: noBattery, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                    }
                 }
             }
         }
