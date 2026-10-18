@@ -11,12 +11,8 @@ struct StringsRU: AppStrings {
     var settingsLanguageLabel: String { "Язык интерфейса" }
     var settingsIntervalLabel: String { "Интервал обновления (процессор/память)" }
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) с" }
-    var settingsIntervalNoteFast: String { "1 с — самый отзывчивый график, заметная фоновая нагрузка." }
     var settingsIntervalNoteBalanced: String { "Рабочий диапазон: живые графики без заметной нагрузки." }
     var settingsIntervalNoteEconomy: String { "Экономный режим: значения обновляются реже, батарея живёт дольше." }
-    var settingsProcessLimitLabel: String { "Процессов в списке" }
-    func settingsProcessLimitOption(_ count: Int) -> String { "\(count)" }
-    var settingsProcessLimitApply: String { "Применить" }
     var settingsWakeIgnoredLabel: String { "Сон: не предупреждать про эти приложения" }
     var settingsWakeIgnoredEmpty: String { "Список пуст. Чтобы добавить приложение, щёлкните правой кнопкой по предупреждению «Сон» в главном окне." }
     var settingsWakeIgnoredRestore: String { "Снова предупреждать" }
@@ -897,4 +893,54 @@ struct StringsRU: AppStrings {
     var iphoneImportChoiceBody: String { "Разбор читает из архива историю батареи и журналы. «Сохранить» также оставляет копию архива на этом Mac." }
     var iphoneImportInArchive: String { "В архиве" }
     var iphoneIdentitySerials: String { "Серийные номера" }
+    // MARK: Common (strings.json › Shared + 00 §4.16/§7; REDESIGN-FOUNDATION)
+    var commonShowInFinder: String { "Показать в Finder" }
+    var commonFirewall: String { "Брандмауэр" }
+    var commonEnable: String { "Включить…" }
+    var commonDisk: String { "Диск" }
+    var commonSetUp: String { "Настроить…" }
+    var commonShow: String { "Показать" }
+    var commonMacCantSleep: String { "Mac не засыпает" }
+    var commonBattery: String { "Батарея" }
+    var commonInstall: String { "Установить…" }
+    var commonServiceRecommended: String { "нужен сервис" }
+    var commonClaudeBackup: String { "Бэкап Claude" }
+    var commonCPU: String { "Процессор" }
+    var commonMemory: String { "Память" }
+    var commonStorage: String { "Хранилище" }
+    var commonSecurity: String { "Безопасность" }
+    var commonBackups: String { "Резервные копии" }
+    var commonSystem: String { "Система" }
+    var commonHistory: String { "История" }
+    var commonLocalSnapshots: String { "Локальные снимки" }
+    var commonFullDiskAccessNeeded: String { "Нужен полный доступ к диску" }
+    var commonCompressed: String { "Сжатая" }
+    var commonOK: String { "в норме" }
+    var commonCycles: String { "Циклы" }
+    var commonProtection: String { "Защита" }
+    var commonUpdates: String { "Обновления" }
+    var commonCollectingData: String { "Сбор данных…" }
+    var commonAllGood: String { "Всё в порядке" }
+    var commonNeedsAttention: String { "Требует внимания" }
+    var commonThisMac: String { "Этот Mac" }
+    var commonReport: String { "Отчёт" }
+    var commonRefresh: String { "Обновить" }
+    var commonRefreshReport: String { "Обновить отчёт" }
+    var commonNow: String { "Сейчас" }
+    var commonTryAgain: String { "Повторить" }
+    var commonShowLess: String { "Свернуть" }
+    var commonSetting: String { "Параметр" }
+    var commonOnBattery: String { "От батареи" }
+    var commonACPower: String { "От сети" }
+    var commonNormal: String { "норма" }
+    var commonFree: String { "Свободно" }
+    var commonChart: String { "График" }
+    var commonTable: String { "Таблица" }
+    var commonRefreshing: String { "Обновление…" }
+    var commonCancel: String { "Отмена" }
+    var commonOpenPrivacySettings: String { "Открыть «Конфиденциальность»…" }
+    func commonUpdated(_ time: String) -> String { "обновлено \(time)" }
+    var commonChecking: String { "Проверка…" }
+    var commonCritical: String { "Критично" }
+    func commonLastData(_ time: String) -> String { "последние данные — \(time)" }
 }

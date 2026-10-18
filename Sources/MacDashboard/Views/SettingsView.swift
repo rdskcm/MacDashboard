@@ -262,7 +262,6 @@ struct SettingsView: View {
         case .monitoring:
             VStack(alignment: .leading, spacing: 12) {
                 monitoringIntervalCard
-                monitoringProcessCard
                 monitoringWakeIgnoreCard
             }
             .padding(.horizontal, 20)
@@ -362,7 +361,7 @@ struct SettingsView: View {
 
             HStack(alignment: .center, spacing: 8) {
                 Circle()
-                    .fill(intervalNoteTone)
+                    .fill(DS.green)
                     .frame(width: 6, height: 6)
                 Text(intervalNoteText)
                     .font(.system(size: 11.5))
@@ -380,43 +379,7 @@ struct SettingsView: View {
         .dsCardSurface()
     }
 
-    private var monitoringProcessCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(L.settingsProcessLimitLabel)
-                .font(.system(size: 14))
-                .lineSpacing(14 * 0.3)
-                .foregroundStyle(DS.inkSoft)
-
-            HStack(alignment: .center, spacing: 12) {
-                DSSlidingSegmented(
-                    options: AppSettings.allowedProcessLimits,
-                    selection: $settings.processListLimit,
-                    size: .settingsInterval,
-                    groupLabel: L.settingsProcessLimitLabel
-                ) { n in L.settingsProcessLimitOption(n) }
-
-                Spacer(minLength: 0)
-
-                RainbowCapsuleButton(
-                    title: L.settingsProcessLimitApply,
-                    busy: model.processesRefreshing,
-                    size: .card
-                ) {
-                    model.refreshProcessesNow()
-                }
-                .accessibilityLabel(L.settingsProcessLimitApply)
-            }
-        }
-        // Top padding is 10, not 14: the label's own line box carries ~3.5 pt of
-        // internal leading above its cap height, so an equal 14 reads as a
-        // larger gap than the flat 14 under the capsule row below.
-        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .dsCardSurface()
-    }
-
-    /// BACKUP-AGE: stale limit of the Claude backup age. Same recipe as the process card
-    /// minus the button; the change applies at once through the model. No animation
+    /// BACKUP-AGE: stale limit of the Claude backup age. Same card recipe as the interval card; the change applies at once through the model. No animation
     /// (animation-value-size-coupling).
     private var backupStaleCard: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -485,20 +448,10 @@ struct SettingsView: View {
         .dsCardSurface()
     }
 
-    /// Per-value note under the interval control (SW:96-99, SW:234-255): text
-    /// switches at the 1 / 2-3 / 5-10 s bands; the leading dot's tint follows
-    /// the same band (amber at 1 s — the responsive-but-loaded end, green
-    /// otherwise), per the prototype (`Settings Window.dc.html:288`) rather
-    /// than a flat accent tint.
+    /// Per-value note under the interval control (SW:96-99): 2 s reads balanced, 5-10 s economy.
+    /// The 1 s band and its amber dot went with the 1 s option (REDESIGN-FOUNDATION).
     private var intervalNoteText: String {
-        switch settings.fastIntervalSeconds {
-        case ...1: return L.settingsIntervalNoteFast
-        case 2...3: return L.settingsIntervalNoteBalanced
-        default: return L.settingsIntervalNoteEconomy
-        }
-    }
-    private var intervalNoteTone: Color {
-        settings.fastIntervalSeconds <= 1 ? DS.amber : DS.green
+        settings.fastIntervalSeconds <= 3 ? L.settingsIntervalNoteBalanced : L.settingsIntervalNoteEconomy
     }
 
     /// Same write as `MacDashboardApp.syncAppleLanguages()` (duplicated rather

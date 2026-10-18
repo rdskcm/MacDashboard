@@ -39,6 +39,10 @@ final class LiveCollector {
         return snap
     }
 
+    /// Rows in each process table (CPU- and memory-sorted): a fixed top 8 (handoff 03:22-23;
+    /// the user-chosen count was retired in REDESIGN-FOUNDATION).
+    static let topProcessCount = 8
+
     // Slow sample: a non-sleeping `/bin/ps` snapshot plus a `/usr/bin/top` memory-footprint
     // snapshot, feeding the CPU- and memory-sorted
     // process tables (prefix(limit) + reranked()). CPU% is a delta over the interval
@@ -46,13 +50,7 @@ final class LiveCollector {
     // 0.6 s (see ProcessSampler). Split out so it can run on a slower cadence than
     // the native gauges.
     //
-    // `limit` is a PARAMETER, not a read of AppSettings.shared. This method runs off
-    // the main actor, while the setting is written from Settings on the main actor
-    // (@Bindable, SettingsView) — reading it here raced with that write, and not only
-    // over the Int: @Observable's accessors register the observer on read, so a
-    // background read mutates shared bookkeeping. The caller now reads the setting on
-    // the main actor and passes the value in, which also stops the collector reaching
-    // into global UI state at all.
+    // `limit` is a parameter (callers pass `topProcessCount`; tests pass their own), so this method never reads global UI state off the main actor.
     func sampleProcesses(limit: Int) async -> (topCPU: [ProcEntry], topMem: [ProcEntry], topApps: [AppMemory], parseFailures: [ParseFailure]) {
         let procs = await procSampler.sample()
         let topCPU = Array(procs.rankedByCPU().prefix(limit)).reranked()

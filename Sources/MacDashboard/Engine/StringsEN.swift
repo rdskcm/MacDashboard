@@ -11,12 +11,8 @@ struct StringsEN: AppStrings {
     var settingsLanguageLabel: String { "Interface language" }
     var settingsIntervalLabel: String { "Refresh interval (CPU/RAM)" }
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) s" }
-    var settingsIntervalNoteFast: String { "1 s — the most responsive chart, noticeable background load." }
     var settingsIntervalNoteBalanced: String { "The working range: live charts with no noticeable load." }
     var settingsIntervalNoteEconomy: String { "Economy: values update less often, the battery lasts longer." }
-    var settingsProcessLimitLabel: String { "Processes listed" }
-    func settingsProcessLimitOption(_ count: Int) -> String { "\(count)" }
-    var settingsProcessLimitApply: String { "Apply" }
     var settingsWakeIgnoredLabel: String { "Sleep: don't warn about these apps" }
     var settingsWakeIgnoredEmpty: String { "The list is empty. To add an app, right-click the Sleep warning in the main window." }
     var settingsWakeIgnoredRestore: String { "Warn again" }
@@ -890,4 +886,54 @@ struct StringsEN: AppStrings {
     var iphoneImportChoiceBody: String { "Parse reads battery history and log files from the archive. Keep also stores a copy of the archive on this Mac." }
     var iphoneImportInArchive: String { "In the archive" }
     var iphoneIdentitySerials: String { "Serial numbers" }
+    // MARK: Common (strings.json › Shared + 00 §4.16/§7; REDESIGN-FOUNDATION)
+    var commonShowInFinder: String { "Show in Finder" }
+    var commonFirewall: String { "Firewall" }
+    var commonEnable: String { "Enable…" }
+    var commonDisk: String { "Disk" }
+    var commonSetUp: String { "Set up…" }
+    var commonShow: String { "Show" }
+    var commonMacCantSleep: String { "Mac can’t sleep" }
+    var commonBattery: String { "Battery" }
+    var commonInstall: String { "Install…" }
+    var commonServiceRecommended: String { "service recommended" }
+    var commonClaudeBackup: String { "Claude backup" }
+    var commonCPU: String { "CPU" }
+    var commonMemory: String { "Memory" }
+    var commonStorage: String { "Storage" }
+    var commonSecurity: String { "Security" }
+    var commonBackups: String { "Backups" }
+    var commonSystem: String { "System" }
+    var commonHistory: String { "History" }
+    var commonLocalSnapshots: String { "Local snapshots" }
+    var commonFullDiskAccessNeeded: String { "Full Disk Access needed" }
+    var commonCompressed: String { "Compressed" }
+    var commonOK: String { "OK" }
+    var commonCycles: String { "Cycles" }
+    var commonProtection: String { "Protection" }
+    var commonUpdates: String { "Updates" }
+    var commonCollectingData: String { "Collecting data…" }
+    var commonAllGood: String { "All good" }
+    var commonNeedsAttention: String { "Needs attention" }
+    var commonThisMac: String { "This Mac" }
+    var commonReport: String { "Report" }
+    var commonRefresh: String { "Refresh" }
+    var commonRefreshReport: String { "Refresh report" }
+    var commonNow: String { "Now" }
+    var commonTryAgain: String { "Try again" }
+    var commonShowLess: String { "Show less" }
+    var commonSetting: String { "Setting" }
+    var commonOnBattery: String { "Battery" }
+    var commonACPower: String { "AC power" }
+    var commonNormal: String { "normal" }
+    var commonFree: String { "Free" }
+    var commonChart: String { "Chart" }
+    var commonTable: String { "Table" }
+    var commonRefreshing: String { "Refreshing…" }
+    var commonCancel: String { "Cancel" }
+    var commonOpenPrivacySettings: String { "Open Privacy settings…" }
+    func commonUpdated(_ time: String) -> String { "updated \(time)" }
+    var commonChecking: String { "Checking…" }
+    var commonCritical: String { "Critical" }
+    func commonLastData(_ time: String) -> String { "last data — \(time)" }
 }
