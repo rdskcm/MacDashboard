@@ -684,6 +684,25 @@ struct IPSWDownloaderTests {
         #expect(phases.first == .preparing)
         #expect(phases.last == .failed(.cancelled))
     }
+
+    @Test func cancelDuringPrepareLeavesNoStagingDirectory() async throws {
+        let dir = try tempDir("cancel-prepare")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let downloader = IPSWDownloader()
+        // Cancel while the HEAD is in flight, then let it succeed: prepare must stop before Downloads.
+        let stub = IPSWStubFetch { _ in
+            downloader.cancel()
+            return (Data(), 200, ["Content-Length": "1000"])
+        }
+        let appleOnly = IPSWData.merge(apple: try appleTarget("iPhone18,2"), ipswMe: nil)[0]
+        var phases: [IPSWDownloadPhase] = []
+        downloader.start(appleOnly, downloadsDir: dir, sources: stub.sources) { phases.append($0) }
+        for _ in 0..<200 where !phases.contains(where: \.isTerminal) { try await Task.sleep(nanoseconds: 10_000_000) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(phases.last == .failed(.cancelled))
+        #expect(!downloader.isBusy)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty, "no hidden staging directory")
+    }
 }
 
 // MARK: - model (stubbed sources)

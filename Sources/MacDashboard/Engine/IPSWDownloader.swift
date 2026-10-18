@@ -141,6 +141,8 @@ final class IPSWDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sen
         case .missing: return finish(id, .failed(.fileSystem(downloadsDir.path)))
         }
 
+        // Nothing touches Downloads once this run was cancelled or has ended.
+        guard !isCancelled(id) else { return finish(id, .failed(.cancelled)) }
         Self.sweepStaleStaging(downloadsDir: downloadsDir)
         let staging: URL
         do {
@@ -148,12 +150,14 @@ final class IPSWDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sen
         } catch {
             return finish(id, .failed(Self.fileSystemError(error)))
         }
+        // Recorded at once, so finish removes the empty hidden dir on cancel or any later failure.
+        locked { if run?.id == id { run?.staging = staging } }
+        guard !isCancelled(id) else { return finish(id, .failed(.cancelled)) }
 
         var volumes = [staging]
         if !Self.sameVolume(staging, downloadsDir) { volumes.append(downloadsDir) }
         for v in volumes {
             if let e = IPSWData.spaceCheck(needed: size, available: Self.availableCapacity(v)) {
-                locked { if run?.id == id { run?.staging = staging } }   // so finish removes an empty hidden dir
                 return finish(id, .failed(e))
             }
         }
@@ -384,8 +388,12 @@ final class IPSWDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sen
     }
 
     private func emit(_ id: UUID, _ phase: IPSWDownloadPhase) {
-        guard let handler: PhaseHandler = locked({ run?.id == id ? run?.onPhase : nil }) else { return }
-        Self.deliver(phase, to: handler)
+        // Id check and enqueue in one critical section: `finish` clears `run` under the same lock,
+        // so nothing for this run can be enqueued after its terminal phase.
+        locked {
+            guard let r = run, r.id == id else { return }
+            Self.deliver(phase, to: r.onPhase)
+        }
     }
 
     /// Ends the run (once; later calls for the same id are no-ops), cleans staging, delivers.
@@ -404,7 +412,7 @@ final class IPSWDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sen
             _ = rmdir(staging.path)
         }
         if !phase.isFinished { r.task?.cancel() }
-        Self.deliver(phase, to: r.onPhase)
+        Self.deliver(phase, to: r.onPhase)   // run is already nil: no emit can enqueue after this
     }
 
     private static func deliver(_ phase: IPSWDownloadPhase, to handler: @escaping PhaseHandler) {
