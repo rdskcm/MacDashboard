@@ -54,7 +54,8 @@ struct Chip: View {
 }
 
 /// Header status chip — bound to the live assessment, never a static label
-/// (see `HeaderChipsView` in MainDashboardView.swift, its one call site).
+/// (its only call site, the old `HeaderChipsView`, went with REDESIGN-HOME D; kept as the
+/// `animation-value-size-coupling` reference).
 /// `tone` drives the dot + 14%/32% fill/stroke; `isGood` only swaps the label's
 /// ink (green-ink text on the all-clear state, plain `DS.ink` otherwise — the
 /// "otherwise" tones (`DS.hot`/`DS.amber`) are containers/dot colors only, per

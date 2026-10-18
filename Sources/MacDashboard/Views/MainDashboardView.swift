@@ -1,61 +1,47 @@
 // Views/MainDashboardView.swift
-// Header (title/sub/chips/refresh) + Overview|Report tab control. Under the header the This Mac
+// One window chrome for both modes (REDESIGN-HOME, 01-window-chrome.md): the header (title block, mode switch,
+// per-mode actions) and the single background (`DS3.ground` + `DS3OrbField`). Under the header the This Mac
 // content is the Home page (HomeView.swift) with section pages shown in place over it
-// (InterimSectionPage.swift, REDESIGN-HOME); the Report tab replaces both.
+// (InterimSectionPage.swift); the Report view replaces both while `router.isReportShown`.
 
 import SwiftUI
 import Charts
 
 /// Vertical band the window's traffic-light buttons occupy, measured from the window's
-/// top edge. `.windowStyle(.hiddenTitleBar)` (MacDashboardApp.swift:26) keeps AppKit's
+/// top edge. `.windowStyle(.hiddenTitleBar)` (MacDashboardApp.swift) keeps AppKit's
 /// standard titlebar and lets it draw those buttons over our content — they are not
-/// SwiftUI views, so nothing in `toolbar`'s layout knows they are there. `toolbar`'s
-/// `.padding(.leading, 78)` is the app's acknowledgement of them on the horizontal axis
-/// for every child EXCEPT `titleBlock` (see `headerTitlePullLeft` below); this constant is
-/// the vertical counterpart, and it is why the title block is padded down instead of being
-/// left to centre itself against the window edge. Calibrated once from a screenshot — the
-/// acceptance test is equal INK gaps above and below the title block (see the block's
-/// verification), not this literal.
+/// SwiftUI views, so nothing in `toolbar`'s layout knows they are there. The header's
+/// `.padding(.leading, 20)` leaves the buttons their own column above the title block;
+/// this constant is the vertical counterpart: the title block is padded down by it
+/// (01-window-chrome: «pushed down 21 pt under the traffic lights») instead of being left to
+/// centre itself against the window edge. Calibrated once from a screenshot — the
+/// acceptance test is equal INK gaps above and below the title block, not this literal.
 private let headerTrafficLightBand: CGFloat = 21
-
-/// Once the title sits below the traffic lights rather than beside them (see
-/// `headerTrafficLightBand` above), it no longer needs the full `.padding(.leading, 78)`
-/// gutter that the tab control and the rest of the row still need — user decision
-/// 2026-08-26 (V2-UI-POLISH). Applied as an `.offset`, not a smaller padding, so ONLY the
-/// title's paint position moves; the tab control's x stays anchored to the row's shared
-/// leading padding exactly as before, undisturbed by the title's own position.
-private let headerTitlePullLeft: CGFloat = 58
 
 @MainActor
 struct MainDashboardView: View {
     var model: DashboardModel
     var iphone: IPhoneModel = .shared
 
-    /// Option type of the Overview | Report tab control; the state lives in `router.isReportShown`.
-    private enum Tab { case overview, report }
     /// REDESIGN-FOUNDATION: mode, report tab and (later) pages go through the router.
     @State private var router = NavigationRouter()
     @State private var pointer = DS3PointerTracker()
     /// Window width, measured once at the window root (REDESIGN-HOME D18): column counts and text tiers of
-    /// Home and the section pages read it. Safe under `no-measured-size-feedback`: the number of columns
-    /// cannot change the window's own width.
+    /// the header, Home and the section pages read it. Safe under `no-measured-size-feedback`: the number of
+    /// columns cannot change the window's own width.
     @State private var windowWidth: CGFloat = 1150
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            if router.mode == .iphone {
-                DS3.ground
-                DS3OrbField()
-            } else {
-                DS.ground
-                OrbLayer()
-            }
+            // One background owner for both modes (REDESIGN-HOME D13): nothing here depends on `router.mode`.
+            DS3.ground
+            DS3OrbField()
             VStack(spacing: 0) {
                 toolbar
 
-                // Only the content branches; both segmented controls live in `toolbar`
-                // outside this branch (control-identity-branch).
+                // Only the content branches; the mode switch lives in `toolbar` outside this branch
+                // (control-identity-branch).
                 if router.mode == .mac {
                     content
                 } else {
@@ -93,94 +79,59 @@ struct MainDashboardView: View {
 
     private var homeVisible: Bool { !router.isReportShown && router.destination.page == .home }
 
-    /// The tab control's selection, stored in the router.
-    private var tabSelection: Binding<Tab> {
-        Binding(get: { router.isReportShown ? .report : .overview },
-                set: { router.isReportShown = ($0 == .report) })
-    }
+    // MARK: Toolbar (single row: title block · mode switch · flexible gap · per-mode actions)
 
-    // MARK: Toolbar (single row: title block · leading-anchored tab control · flexible gap · chips/status/refresh)
+    /// Title block width by window width (01-window-chrome, width rules).
+    private var titleWidth: CGFloat { windowWidth >= 1200 ? 460 : windowWidth >= 1000 ? 400 : 280 }
 
     private var toolbar: some View {
-        HStack(alignment: .center, spacing: 16) {
+        HStack(alignment: .center, spacing: 12) {
+            // Pushes the title/subtitle clear of the traffic lights, so the toolbar's own `.padding(.top, 14)`
+            // reads as the gap between the buttons and the title. Padding, not `.offset`: the header has to
+            // actually grow, or the subtitle would ride into the bottom hairline. `titleBlock` is the tallest
+            // child, so the mode switch and the actions stay centred in the taller header.
             titleBlock
-                // Pushes the title/subtitle clear of the traffic lights, so the toolbar's
-                // own `.padding(.top, 14)` below reads as the gap between the buttons and
-                // the title — matching the 14 pt between the subtitle and the header's
-                // bottom hairline. Padding, not `.offset`: the header has to actually grow,
-                // or the subtitle would ride into that hairline. `titleBlock` is the
-                // tallest child, so the tab control and the chips stay exactly centred in
-                // the taller header rather than being dragged down with the title.
+                .frame(width: titleWidth, alignment: .leading)
                 .padding(.top, headerTrafficLightBand)
-                .offset(x: -headerTitlePullLeft)
-                .layoutPriority(1)
-            // Anchored immediately after the title at a fixed gap (spacing: 16 above) —
-            // this control's x position must never depend on window width. All slack
-            // and all shrink pressure live to its right, past the flexible Spacer below.
-            DSSlidingSegmented(options: [AppMode.mac, .iphone], selection: $router.mode, size: .tabs, identifier: { m in
+            // Outside the mode branch (control-identity-branch); its x depends only on the title block width.
+            DSSlidingSegmented(options: [AppMode.mac, .iphone], selection: $router.mode, size: .header, identifier: { m in
                 m == .mac ? "main-mode-mac" : "main-mode-iphone"
+            }, onReselect: { m in
+                // «This Mac» clicked again on a section page or over the report: back to Home.
+                if m == .mac && router.canGoBack { router.navigate(to: .home) }
             }) { m in
                 m == .mac ? L.mainModeMac : L.mainModeIPhone
             }
             .layoutPriority(2)
-            DSSlidingSegmented(options: [Tab.overview, .report], selection: tabSelection, size: .tabs, identifier: { t in
-                switch t {
-                case .overview: return "main-tab-overview"
-                case .report: return "main-tab-report"
-                }
-            }) { t in
-                switch t {
-                case .overview: return L.mainTabOverview
-                case .report: return L.mainTabReport
-                }
-            }
-            .layoutPriority(2)
-            // Stays mounted in iPhone mode (D14): hidden, not removable, so the header
-            // geometry is identical across modes.
-            .opacity(router.mode == .mac ? 1 : 0)
-            .allowsHitTesting(router.mode == .mac)
-            .accessibilityHidden(router.mode != .mac)
             Spacer(minLength: 12)
-            // No layoutPriority here (default 0): chips own the progressive-hiding
-            // ViewThatFits tiers and must be the first child to lose space.
             if router.mode == .mac {
-                HeaderChipsView(model: model)
+                MacHeaderActions(model: model, router: router, narrow: windowWidth < 1000)
+                    .layoutPriority(1.5)
             } else {
-                // Above the title (1): the title block claims its whole ideal width (the full
-                // subtitle tier) before any lower-priority sibling is sized, which left the buttons
-                // only what remained (compact icon below ~1230 pt, «Иск…» clipped at 900). Here the
-                // subtitle tiers yield first; `titleBlock`'s name is pinned in iPhone mode, so it never does.
                 IPhoneHeaderActions(model: iphone)
                     .layoutPriority(1.5)
             }
         }
-        .padding(.leading, 78)
+        .padding(.top, 14)
         .padding(.trailing, 18)
-        .padding(.vertical, 14)
+        .padding(.bottom, 14)
+        .padding(.leading, 20)
         .background(toolbarChrome)
     }
 
-    /// Fill `DS.glass2` layered over the same `.regularMaterial` blur backdrop
-    /// `dsCardSurface()` uses (DesignSystem.swift), a bottom hairline border, and
-    /// a 1 pt inset top highlight using the same fade-to-clear stroke technique
-    /// `dsCardSurface()` applies for its own sheen line — mirrored here on a
-    /// plain (unrounded) rectangle since the toolbar spans the full width.
+    /// `DS3.bar` over the `.regularMaterial` blur backdrop, a 1 pt inner top rim (`rimMid`, the same
+    /// fade-to-clear stroke the card sheen uses), a 1 pt bottom `line` and the `.header` shadow stack.
     private var toolbarChrome: some View {
         ZStack {
             Rectangle().fill(.regularMaterial)
-            Rectangle().fill(DS.glass2)
-            // Slightly darkens the header only (user request 2026-08-10) — a local
-            // tint on top of the shared `DS.glass2` fill rather than changing that
-            // token, since it's also shared with Settings' toolbar and the language
-            // dropdown's hover fill.
-            Rectangle().fill(Color(light: Color.black.opacity(0.035), dark: Color.black.opacity(0.12)))
+            Rectangle().fill(DS3.bar)
         }
         .overlay(
             Rectangle()
                 .strokeBorder(
                     LinearGradient(
                         gradient: Gradient(stops: [
-                            .init(color: DS.sheenLine, location: 0),
+                            .init(color: DS3.rimMid, location: 0),
                             .init(color: .clear, location: 0.15),
                         ]),
                         startPoint: .top,
@@ -190,8 +141,9 @@ struct MainDashboardView: View {
                 )
         )
         .overlay(alignment: .bottom) {
-            Rectangle().fill(DS.line).frame(height: 1)
+            Rectangle().fill(DS3.line).frame(height: 1)
         }
+        .ds3Elevation(.header, in: Rectangle())
     }
 
     private var titleBlock: some View {
@@ -202,68 +154,53 @@ struct MainDashboardView: View {
                 .lineSpacing(1.9) // 19 pt · 1.1 line-height
                 .lineLimit(1)
                 .truncationMode(.tail)
-                // iPhone mode ranks the actions above the title (see `toolbar`), so the name is
-                // pinned to its width there and only the subtitle tiers give way. In This Mac mode
-                // the title keeps its original truncating behaviour (`false` is a no-op).
-                .fixedSize(horizontal: router.mode == .iphone, vertical: false)
             subtitleView
         }
     }
 
-    /// Tiered subtitle: model · chip · RAM · macOS ver (build) → …ver → …RAM → …chip → model.
-    /// Mirrors `HeaderChipsView`'s `ViewThatFits` idiom — the row DROPS a trailing
-    /// segment when it doesn't fit rather than ellipsizing mid-string, so `.fixedSize`
-    /// on every tier forces `ViewThatFits` to measure intrinsic width and pick a tier,
-    /// not truncate one. `L.mainCollectingInfo` is a single segment, so it's one tier.
+    /// One line, tier picked from the window width (not by `ViewThatFits`, 00 §3); `.help` carries the full form.
     private var subtitleView: some View {
-        ViewThatFits(in: .horizontal) {
-            ForEach(subtitleTiers.indices, id: \.self) { i in
-                Text(subtitleTiers[i])
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(DS.muted)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .truncationMode(i == subtitleTiers.count - 1 ? .tail : .head)
-            }
-        }
+        let tiers = subtitleTiers
+        return Text(tiers.text)
+            .font(.system(size: 12))
+            .foregroundStyle(DS3.muted)
+            .monospacedDigit()
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .help(tiers.full)
     }
 
-    private var subtitleTiers: [String] {
-        guard let sys = model.headerSystem else { return [L.mainCollectingInfo] }
-        let modelName = sys.modelName
-        let chip = sys.chip
+    /// ≥ 1200 → model · chip · RAM · macOS ver (build) · uptime; 1000-1199 drops the build; < 1000 keeps model ·
+    /// chip · uptime. Missing parts drop out; uptime is never dropped. No system yet → `mainCollectingInfo`.
+    private var subtitleTiers: (text: String, full: String) {
+        guard let sys = model.headerSystem else { return (L.mainCollectingInfo, L.mainCollectingInfo) }
         let ram = sys.memBytes.map { tight(fmtBytesParts($0)) }
         let osFull: String? = sys.osVersion.map { ver in
             let build = sys.osBuild.map { " (\($0))" } ?? ""
             return "macOS \(ver)\(build)"
         }
         let osShort: String? = sys.osVersion.map { "macOS \($0)" }
+        let uptime = sys.uptime.map { L.headerUptimeChip($0) }
 
         func join(_ parts: [String?]) -> String? {
             let present = parts.compactMap { $0 }
             return present.isEmpty ? nil : present.joined(separator: " · ")
         }
 
-        let candidates: [String?] = [
-            join([modelName, chip, ram, osFull]),
-            join([modelName, chip, ram, osShort]),
-            join([modelName, chip, ram]),
-            join([modelName, chip]),
-            join([modelName]),
-        ]
-
-        // Optional fields collapse out of the join, so adjacent tiers can come out
-        // identical (e.g. no osBuild ⇒ tier 1 == tier 2; no chip ⇒ tier 3 == tier 4).
-        // Dedup consecutive duplicates so ViewThatFits never wastes a measurement slot.
-        var tiers: [String] = []
-        for t in candidates.compactMap({ $0 }) where tiers.last != t {
-            tiers.append(t)
+        let full = join([sys.modelName, sys.chip, ram, osFull, uptime]) ?? L.mainCollectingInfo
+        let text: String
+        if windowWidth >= 1200 {
+            text = full
+        } else if windowWidth >= 1000 {
+            text = join([sys.modelName, sys.chip, ram, osShort, uptime]) ?? L.mainCollectingInfo
+        } else {
+            text = join([sys.modelName, sys.chip, uptime]) ?? L.mainCollectingInfo
         }
-        return tiers.isEmpty ? [L.mainCollectingInfo] : tiers
+        return (text, full)
     }
 }
 
-/// Esc and ⌘[ = Back (handoff 00 §5), installed only while a section page is shown
+/// Esc and ⌘[ = Back (handoff 00 §5), installed only while a section page or the report is shown
 /// (REDESIGN-FOUNDATION D8). Zero-size and hidden from accessibility: the visible Back chip
 /// (REDESIGN-HOME) carries the label.
 private struct BackShortcuts: View {
@@ -280,56 +217,99 @@ private struct BackShortcuts: View {
     }
 }
 
-// Extracted from MainDashboardView so that only this small subtree re-executes
-// on live ticks / assessment changes — it's the only place in the header that
-// reads the model's live fields / assessment, so MainDashboardView.body itself no
-// longer depends on them (avoids re-running the whole overview tree on every
-// 3s live tick).
+// MARK: - This Mac header actions
+
+// Extracted from MainDashboardView so that only this small subtree re-executes on live ticks / assessment
+// changes — it is the only place in the header that reads the model's assessment and report state, so
+// MainDashboardView.body itself does not depend on them.
+
+/// Status pill · Report · Refresh report (01-window-chrome, «This Mac actions»).
 @MainActor
-struct HeaderChipsView: View {
+struct MacHeaderActions: View {
     let model: DashboardModel
+    let router: NavigationRouter
+    let narrow: Bool
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                if let load = model.load, !load.isEmpty {
-                    Chip(text: L.headerLoadChip(load.map { fmtNum($0, decimals: 2) }.joined(separator: " / "), model.ncpu))
-                }
-                if let uptime = model.headerSystem?.uptime {
-                    Chip(text: L.headerUptimeChip(uptime))
-                }
-                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
-                refreshButton
-            }
-            HStack(spacing: 8) {
-                if let uptime = model.headerSystem?.uptime {
-                    Chip(text: L.headerUptimeChip(uptime))
-                }
-                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
-                refreshButton
-            }
-            HStack(spacing: 8) {
-                SeverityChip(isGood: statusIsGood, tone: statusTone, label: statusLabel, hasCrit: statusHasCrit)
-                refreshButton
-            }
+        HStack(spacing: 8) {
+            HeaderStatusPill(model: model)
+            reportButton
+            refreshButton
         }
     }
 
-    // Status chip is bound to the live assessment — never a static severity/text
-    // pair — so it can never disagree with `model.assessment`. Tone comes from
-    // the SAME shared `tone(for:)` (SharedUI.swift) applied to the SAME
-    // `summarySev` that the Home attention card's hero reads, instead of a
-    // second parallel "is this bad" computation — the two can no longer
-    // disagree because they're reading one computed value through one function.
-    private var statusIsGood: Bool { model.assessment.problems.isEmpty }
-    private var statusHasCrit: Bool { model.assessment.summarySev == .crit || model.assessment.summarySev == .serious }
-    private var statusTone: Color { tone(for: model.assessment.summarySev) }
-    private var statusLabel: String { statusIsGood ? L.recommendationsAllGood : L.headerStatusNeedsAttention }
+    /// Narrow (< 1000 pt): a 34 pt circle with the icon only; otherwise the labelled secondary button.
+    @ViewBuilder private var reportButton: some View {
+        if narrow {
+            Button { router.isReportShown.toggle() } label: {
+                Image(systemName: "doc.text").font(.system(size: 13))
+            }
+            .buttonStyle(DS3CircleButtonStyle(diameter: 34, disabledOpacity: 0.5))
+            .reportActionTraits(busy: model.isCollectingReport)
+        } else {
+            Button { router.isReportShown.toggle() } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "doc.text").font(.system(size: 13))
+                    Text(L.commonReport)
+                }
+            }
+            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1, disabledOpacity: 0.5))
+            .reportActionTraits(busy: model.isCollectingReport)
+        }
+    }
 
     private var refreshButton: some View {
-        RainbowCapsuleButton(title: L.headerRefreshReport, busy: model.isCollectingReport, recipe: .overview, size: .primary) {
-            model.refreshReport(trigger: .button)
+        Button { model.refreshReport(trigger: .button) } label: {
+            // The hidden label keeps the width while the spinner shows (swap-in-place).
+            Text(narrow ? L.commonRefresh : L.commonRefreshReport)
+                .dsSwapInPlace(model.isCollectingReport) { ProgressView().controlSize(.small).tint(.white) }
         }
-        .accessibilityLabel(L.headerRefreshReport)
+        .buttonStyle(DS3ButtonStyle(kind: .primary, height: 34, hPad: 16, disabledOpacity: 0.5))
+        .disabled(model.isCollectingReport)
+        .accessibilityLabel(model.isCollectingReport ? L.commonRefreshing : L.commonRefreshReport)
+        .accessibilityIdentifier("main-refresh")
+        .layoutPriority(2)
+    }
+}
+
+/// The header status pill: not a button. Reads the same task list as the Attention card (same arguments as
+/// `HomeAttentionSlot`), so the two never disagree. No `.animation(_:value:)` (animation-value-size-coupling);
+/// the full text shows at every width.
+@MainActor
+private struct HeaderStatusPill: View {
+    let model: DashboardModel
+
+    var body: some View {
+        let tasks = HomeModel.tasks(model.assessment, report: model.homeReport, disk: model.disk, battery: model.battery)
+        let status = HomeModel.status(scan: HomeModel.scan(model.blockState(.scan)), tasks: tasks)
+        let (colour, ink, text) = look(status)
+        HStack(spacing: 8) {
+            Circle().fill(colour).frame(width: 7, height: 7)
+            Text(text).font(.system(size: 13, weight: .semibold)).foregroundStyle(ink).lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 34)
+        .ds3TintPanel(colour, from: 0.14, to: 0.14, ring: 0.45, cornerRadius: 999)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func look(_ status: HomeStatus) -> (Color, Color, String) {
+        switch status {
+        case .checking: return (DS3.muted, DS3.inkSoft, L.commonChecking)
+        case .good: return (DS3.green, DS3.greenInk, L.commonAllGood)
+        case .attention: return (DS3.amber, DS3.amberInk, L.commonNeedsAttention)
+        case .critical: return (DS3.hot, DS3.hotInk, L.commonCritical)
+        }
+    }
+}
+
+private extension View {
+    /// What both Report button forms share: tooltip, busy-disabled, label and identifier.
+    func reportActionTraits(busy: Bool) -> some View {
+        self.help(L.commonReport)
+            .disabled(busy)
+            .accessibilityLabel(L.commonReport)
+            .accessibilityIdentifier("main-report")
+            .layoutPriority(1)
     }
 }

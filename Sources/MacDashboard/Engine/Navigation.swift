@@ -71,7 +71,7 @@ final class NavigationRouter {
     /// re-run scroll + focus pulse for a second tap on the same deep link.
     private(set) var navigationSerial = 0
 
-    var canGoBack: Bool { destination.page != .home }
+    var canGoBack: Bool { destination.page != .home || isReportShown }
 
     /// Shows `destination` in This Mac mode, in place of an open report.
     func navigate(to destination: Destination) {
@@ -81,10 +81,15 @@ final class NavigationRouter {
         navigationSerial += 1
     }
 
-    /// Back chip, Esc, ⌘[: a section page returns to Home; on Home it does nothing.
+    /// Back chip, Esc, ⌘[: the report closes (the page underneath stays); a section page returns to Home;
+    /// on Home it does nothing.
     @discardableResult
     func back() -> Bool {
         guard canGoBack else { return false }
+        if isReportShown {
+            isReportShown = false
+            return true
+        }
         navigate(to: .home)
         return true
     }

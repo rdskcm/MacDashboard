@@ -44,8 +44,6 @@ protocol AppStrings {
     var settingsWindowTitle: String { get }
 
     // MARK: Main dashboard (header + tab picker)
-    var mainTabOverview: String { get }
-    var mainTabReport: String { get }
     var mainCollectingInfo: String { get }
 
     // MARK: Overview page section kickers
