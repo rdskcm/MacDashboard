@@ -19,6 +19,7 @@ private func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
                   attrs: [("Percentage Used", "85")], severity: .warn),
     ]
     report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: nil, condition: "Replace Now", maxCapacity: 60)
+    report.brewOutdated = ["pkg1"]
     var live = LiveSnapshot()
     let size: Int64 = 256 * GIB
     live.disk = DiskInfo(size: size, avail: Int64(Double(size) * (1 - diskPct)), dataUsed: nil, sysUsed: nil)
@@ -29,7 +30,7 @@ private func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
 }
 
 // A broader fixture that also trips tip/capsule-producing branches, for the verb,
-// parity and regression checks below (these don't need all 16 AttentionKinds, just
+// parity and regression checks below (these don't need all 17 AttentionKinds, just
 // a healthy mix of items+capsules with both nil and non-nil actions).
 private func attnMegaBadFixture() -> (FullReport, LiveSnapshot) {
     var (report, live) = attnFullBadFixture(diskPct: 0.90)
@@ -133,7 +134,7 @@ extension SerialTests {
             do {
                 // diskFull and diskFullSoon share one `if/else if` on the same live.disk.pct
                 // (Assessment.swift), so no single report can trip both; two fixtures that
-                // differ only in disk% cover all 16 kinds between them.
+                // differ only in disk% cover all 17 kinds between them.
                 let originalLang = L10nStore.shared.language
                 defer { L10nStore.shared.language = originalLang }
 

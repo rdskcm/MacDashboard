@@ -856,6 +856,89 @@ protocol AppStrings {
     var commonChecking: String { get }
     var commonCritical: String { get }
     func commonLastData(_ time: String) -> String
+
+    // MARK: Home (REDESIGN-HOME; strings.json › This Mac Home + 02-home.md)
+    var homeMacStatus: String { get }
+    func homeTaskCount(_ n: Int) -> String
+    func homeNeedAttention(_ n: Int) -> String
+    var homeCriticalCount: String { get }
+    var homeWarnings: String { get }
+    func homeCheckedAt(_ t: String) -> String
+    func homeLastCheck(_ t: String) -> String
+    func homeTileLastCheck(_ t: String) -> String
+    func homeShowAll(_ n: Int) -> String
+    var homeYouCan: String { get }
+    var homeFreeUpSpace: String { get }
+    func homeBrewOutdatedShort(_ n: Int) -> String
+    var homeNothingNeedsAttention: String { get }
+    var homeFirstScanTitle: String { get }
+    var homeFirstScanCaption: String { get }
+    func homeScanFailed(timedOut: Bool, lastGood: String?) -> String
+    var homeSipHelp: String { get }
+    var homeStateOff: String { get }
+    var homeDiskHealth: String { get }
+    var homeStateFailing: String { get }
+    var homeStateFailingShort: String { get }
+    func homeStateDiskFull(_ pct: Int) -> String
+    var homeStateNotSetUp: String { get }
+    var homeStateKeepsAwake: String { get }
+    func homeStateWorn(_ pct: Int) -> String
+    func homeStatePackagesOutdated(_ n: Int) -> String
+    var homeStateUpdateAvailable: String { get }
+    func homeStateUpdatesAvailable(_ n: Int) -> String
+    var homeMemoryObject: String { get }
+    var homeStateRunningLow: String { get }
+    var homeStateRunningOut: String { get }
+    var homeCrashes: String { get }
+    func homeStateReports(_ n: Int) -> String
+    var homeDiskWear: String { get }
+    func homePercent(_ s: String) -> String
+    func homeGB(_ s: String) -> String
+    var homeVerbDetails: String { get }
+    var homeVerbFreeUp: String { get }
+    var homeVerbUpdate: String { get }
+    var homeVerbSettings: String { get }
+    var homeTagFirewallOff: String { get }
+    var homeTagDriveFailing: String { get }
+    var homeTagTMNotSetUp: String { get }
+    var homeTagWorn: String { get }
+    var homeTagBrewOutdated: String { get }
+    var homeTagUpdateAvailable: String { get }
+    var homeTagLowMemory: String { get }
+    var homeTagService: String { get }
+    var homeTagFileVaultOff: String { get }
+    var homeTagGatekeeperOff: String { get }
+    var homeTagSipOff: String { get }
+    var homeTagDiskWorn: String { get }
+    var homeTagClaudeStale: String { get }
+    var homeTagNormal: String { get }
+    var homeTagHealthy: String { get }
+    var homeTagAllOn: String { get }
+    var homeTagUpToDate: String { get }
+    func homeHistoryDays(_ n: Int) -> String
+    var homeSections: String { get }
+    func homeSectionCount(_ n: Int) -> String
+    func homeCPUSub(_ chip: String, _ cores: Int) -> String
+    func homeCoresOnly(_ cores: Int) -> String
+    var homeStorageSub: String { get }
+    var homeBatterySub: String { get }
+    var homeSecuritySub: String { get }
+    var homeBackupsSub: String { get }
+    var homeSystemSub: String { get }
+    var homeHistorySub: String { get }
+    var homeKVLoad: String { get }
+    var homeKVProcesses: String { get }
+    var homeKVPurgeable: String { get }
+    var homeKVFailing: String { get }
+    func homeKVWorn(_ pct: Int) -> String
+    var homeKVCapacity: String { get }
+    func homeKVProtection(_ on: Int) -> String
+    var homeKVNone: String { get }
+    var homeKVSnapshots: String { get }
+    var homeKVLoginItems: String { get }
+    var homeKVUpToDate: String { get }
+    var homeKVDiskPerMonth: String { get }
+    var homeBackA11y: String { get }
 }
 
 /// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",

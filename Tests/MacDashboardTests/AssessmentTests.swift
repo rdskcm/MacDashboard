@@ -156,7 +156,8 @@ extension SerialTests {
             }
             do {
                 let a = Assess.assess(report: batteryReport(maxCapacity: 78), live: LiveSnapshot())
-                #expect(a.tips.contains { $0.text.contains("Ёмкость") }, "assess battery 78%, cycles == nil: tip (still warns)")
+                #expect(a.problems.contains { $0.sev == .warn && $0.text.contains("Ёмкость") } && a.items.contains { $0.kind == .batteryCapacity && $0.sev == .warn } && !a.tips.contains { $0.text.contains("Ёмкость") },
+                      "assess battery 78%, cycles == nil: warn item (still warns)")
             }
             do {
                 let a = Assess.assess(report: batteryReport(maxCapacity: 90), live: LiveSnapshot())
@@ -170,7 +171,8 @@ extension SerialTests {
             }
             do {
                 let a = Assess.assess(report: batteryReport(maxCapacity: 78, cycles: 350), live: LiveSnapshot())
-                #expect(a.tips.contains { $0.text.contains("Ёмкость") }, "assess battery 78%, cycles 350: tip (early wear, R8)")
+                #expect(a.problems.contains { $0.sev == .warn && $0.text.contains("Ёмкость") } && a.items.contains { $0.kind == .batteryCapacity && $0.sev == .warn } && !a.tips.contains { $0.text.contains("Ёмкость") },
+                      "assess battery 78%, cycles 350: warn item (early wear, R8)")
             }
             do {
                 let a = Assess.assess(report: batteryReport(maxCapacity: 78, cycles: 900), live: LiveSnapshot())
@@ -376,15 +378,18 @@ extension SerialTests {
                 var report = FullReport()
                 report.brewOutdated = ["pkg1", "pkg2"]
                 let a = Assess.assess(report: report, live: LiveSnapshot())
-                #expect(a.tips.first { $0.text.contains("Homebrew") }?.action == .brewUpgrade,
-                      "assess advice: brew outdated tip ⇒ action == .brewUpgrade")
+                #expect(a.items.first { $0.kind == .brewOutdated }?.action == .brewUpgrade
+                        && a.items.first { $0.kind == .brewOutdated }?.sev == .warn
+                        && !a.tips.contains { $0.action == .brewUpgrade },
+                      "assess advice: brew outdated ⇒ warn item with action == .brewUpgrade, no tip")
             }
             do {
                 var report = FullReport()
                 report.brewStatus = .installed(version: "Homebrew 4.6.0")
                 report.brewOutdated = nil
                 let a = Assess.assess(report: report, live: LiveSnapshot())
-                #expect(!a.tips.contains { $0.action == .brewUpgrade } && !a.capsules.contains { $0.action == .brewUpgrade },
+                #expect(!a.tips.contains { $0.action == .brewUpgrade } && !a.capsules.contains { $0.action == .brewUpgrade }
+                        && !a.items.contains { $0.kind == .brewOutdated },
                       "assess advice: brew outdated check failed ⇒ no brew tip or capsule")
             }
             do {

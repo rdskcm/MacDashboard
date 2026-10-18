@@ -33,6 +33,14 @@ enum DS3 {
     static let amberInk = Color(light: Color(hex: 0x8A5800), dark: Color(hex: 0xF0B45E))
     static let hot = Color(light: Color(hex: 0xD70015), dark: Color(hex: 0xFF453A))
     static let hotInk = Color(light: Color(hex: 0xB0000F), dark: Color(hex: 0xFF6B62))
+    static let green = Color(light: Color(hex: 0x0F9A70), dark: Color(hex: 0x2BBD8F))
+    static let greenInk = Color(light: Color(hex: 0x0A7454), dark: Color(hex: 0x4FD3A6))
+    // REDESIGN-HOME 00-shared §1 series colours
+    static let s1 = Color(light: Color(hex: 0x2A78D6), dark: Color(hex: 0x3987E5))      // active / data
+    static let s2 = Color(light: Color(hex: 0x1BAF7A), dark: Color(hex: 0x199E70))      // wired
+    static let s3 = Color(light: Color(hex: 0xEDA100), dark: Color(hex: 0xC98500))      // compressed / other
+    static let s4 = Color(light: Color(hex: 0x008300), dark: Color(hex: 0x1E9A1E))      // inactive
+    static let sfree = Color(light: Color(hex: 0x9A958C), dark: Color(hex: 0x6B665E))   // system
 
     static let rimHi = Color(light: Color.white.opacity(1), dark: Color.white.opacity(0.55))
     static let rimMid = Color(light: Color.white.opacity(0.5), dark: Color.white.opacity(0.2))
