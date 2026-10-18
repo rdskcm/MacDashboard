@@ -1,0 +1,57 @@
+{
+ "name": "iPhone 17 Pro Max",
+ "identifier": "iPhone18,2",
+ "boards": [
+  {
+   "boardconfig": "V54AP",
+   "platform": "t8150",
+   "cpid": 33104,
+   "bdid": 14
+  }
+ ],
+ "boardconfig": "V54AP",
+ "platform": "t8150",
+ "cpid": 33104,
+ "bdid": 14,
+ "firmwares": [
+  {
+   "identifier": "iPhone18,2",
+   "version": "27.0.1",
+   "buildid": "24A446",
+   "sha1sum": "861093bf5cd647f99099733133a5c5af9b6fde5d",
+   "md5sum": "78fd2f61f325894326853b274ce8a964",
+   "sha256sum": "b1535ded2e84bf1d7c716372e498bd10720b2b47374e7e1b4f885a6075b921eb",
+   "filesize": 12708916186,
+   "url": "https://updates.cdn-apple.com/2026FallFCS/3b7299da-a6a5-4bf6-82db-cd37f8c2d160/iPhone18,2_27.0.1_24A446_Restore.ipsw",
+   "releasedate": "2026-09-28T18:54:15Z",
+   "uploaddate": "2026-09-26T23:42:54Z",
+   "signed": true
+  },
+  {
+   "identifier": "iPhone18,2",
+   "version": "27.0",
+   "buildid": "24A437",
+   "sha1sum": "d24b1eff8c04abd2df16f23f561805a30743f428",
+   "md5sum": "2c36b167394076519e18d1b83cd54e51",
+   "sha256sum": "57f275b1e301d1d88716cfd3f2abac9b7ae8994faad5634a5fdfa1f9447b5e59",
+   "filesize": 12708960754,
+   "url": "https://updates.cdn-apple.com/2026FallFCS/8d2fc0d7-5c81-4712-ac4e-c4a88de4cef7/iPhone18,2_27.0_24A437_Restore.ipsw",
+   "releasedate": "2026-09-14T17:18:48Z",
+   "uploaddate": "2026-09-10T15:11:52Z",
+   "signed": false
+  },
+  {
+   "identifier": "iPhone18,2",
+   "version": "26.6.2",
+   "buildid": "23G90",
+   "sha1sum": "f38b4c3720e6cf35663503cb46f80c5834085f34",
+   "md5sum": "b8e2244038e757dec6a6c702f3d53858",
+   "sha256sum": "45c6942e20d8a4a40fe83084a23a9534fa038e266e74f38f4176d9f95f0f21aa",
+   "filesize": 11439109684,
+   "url": "https://updates.cdn-apple.com/2026SummerFCS/1a337b3d-ffd8-424a-abc4-092b64d551ab/iPhone18,2_26.6.2_23G90_Restore.ipsw",
+   "releasedate": "2026-09-08T18:13:37Z",
+   "uploaddate": "2026-09-03T14:52:30Z",
+   "signed": false
+  }
+ ]
+}

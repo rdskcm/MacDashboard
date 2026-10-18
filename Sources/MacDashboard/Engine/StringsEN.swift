@@ -936,6 +936,43 @@ struct StringsEN: AppStrings {
     var commonChecking: String { "Checking…" }
     var commonCritical: String { "Critical" }
     func commonLastData(_ time: String) -> String { "last data — \(time)" }
+    // MARK: IPSW (IPHONE-IPSW)
+    var ipswSigned: String { "Signed (per ipsw.me)" }
+    var ipswNotSigned: String { "Not signed (per ipsw.me)" }
+    var ipswNotListed: String { "Not in ipsw.me’s list" }
+    var ipswIsAppleTarget: String { "Apple’s current restore build" }
+    var ipswNotAppleTarget: String { "Not Apple’s current restore build" }
+    func ipswAskSends(_ identifier: String) -> String { "Sends the model identifier \(identifier) to ipsw.me" }
+    func ipswVerified(_ list: String) -> String { "Verified: \(list)" }
+    var ipswVerifiedSizeOnly: String { "and size" }
+    var ipswUnknown: String { "Unknown" }
+    var ipswChecking: String { "Checking…" }
+    func ipswCheckedAgo(_ rel: String) -> String { "Checked \(rel)" }
+    var ipswErrNoIdentifier: String { "The phone’s model is unknown — connect it once." }
+    var ipswErrUnknownDevice: String { "ipsw.me does not know this model." }
+    var ipswErrOffline: String { "No internet connection." }
+    var ipswErrTimedOut: String { "The server did not answer in time." }
+    func ipswErrHTTP(_ code: Int) -> String { "The server answered with error \(code)." }
+    var ipswErrBadResponse: String { "The server sent an answer the app cannot read." }
+    func ipswSourceFailed(_ source: String, _ reason: String) -> String { "\(source) unavailable: \(reason)" }
+    var ipswErrNotDownloadable: String { "This build is not offered from Apple’s secure download servers, so it is not downloaded." }
+    var ipswNoSecureAppleLink: String { "No secure Apple link exists for this build, so it cannot be downloaded here." }
+    var ipswNotFromApple: String { "MacDashboard downloads only the build Apple’s catalogue currently offers." }
+    var ipswErrNoChecksum: String { "No checksum is known for this build, so it is not downloaded." }
+    var ipswErrNoSize: String { "The file size is unknown, so it is not downloaded." }
+    var ipswErrSourcesDisagree: String { "Apple and ipsw.me disagree about this file, so it is not downloaded." }
+    func ipswErrNotEnoughSpace(_ needed: String, _ free: String) -> String { "Not enough space: needs \(needed), \(free) free." }
+    var ipswErrDownloadsDenied: String { "No access to the Downloads folder. Allow it in System Settings › Privacy & Security › Files and Folders." }
+    var ipswErrSizeMismatch: String { "The downloaded file has the wrong size and was deleted." }
+    var ipswErrChecksumMismatch: String { "The downloaded file failed the checksum and was deleted." }
+    func ipswErrTransfer(_ detail: String) -> String { "Download failed: \(detail)" }
+    func ipswErrFileSystem(_ detail: String) -> String { "Could not save the file: \(detail)" }
+    var ipswBusy: String { "Another download is in progress." }
+    var ipswCancelled: String { "Download cancelled." }
+    var ipswPreparing: String { "Preparing the download…" }
+    func ipswDownloading(_ done: String, _ total: String) -> String { "Downloading \(done) of \(total)" }
+    var ipswVerifying: String { "Verifying checksums…" }
+    var ipswFinished: String { "Saved to Downloads" }
 
     // MARK: Home (REDESIGN-HOME; strings.json › This Mac Home + 02-home.md)
     var homeMacStatus: String { "Mac status" }

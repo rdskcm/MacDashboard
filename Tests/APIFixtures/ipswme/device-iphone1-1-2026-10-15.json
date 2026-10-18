@@ -1,0 +1,31 @@
+{
+ "name": "iPhone 2G",
+ "identifier": "iPhone1,1",
+ "boards": [
+  {
+   "boardconfig": "m68ap",
+   "platform": "s5l8900x",
+   "cpid": 35072,
+   "bdid": 0
+  }
+ ],
+ "boardconfig": "m68ap",
+ "platform": "s5l8900x",
+ "cpid": 35072,
+ "bdid": 0,
+ "firmwares": [
+  {
+   "identifier": "iPhone1,1",
+   "version": "1.0",
+   "buildid": "1A543a",
+   "sha1sum": "fb8bb3ee2e9a997affbb97868599f2995c78209c",
+   "md5sum": "b479e640fb0af0fd068da0dba150d32b",
+   "sha256sum": "468d8b10061642b32f79046d6266a775cb26f02879839d8d445bdec82085c51a",
+   "filesize": 95604348,
+   "url": "https://secure-appldnld.apple.com/iPhone/061-3538.20070629.B7vXa/iPhone1,1_1.0_1A543a_Restore.ipsw",
+   "releasedate": null,
+   "uploaddate": "2007-06-28T05:39:13Z",
+   "signed": false
+  }
+ ]
+}

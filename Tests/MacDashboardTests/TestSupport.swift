@@ -37,6 +37,13 @@ let fixturesRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()   // Tests
     .appendingPathComponent("Fixtures", isDirectory: true)
 
+/// <package>/Tests/APIFixtures: recorded HTTP API answers (IPHONE-IPSW). A separate root because
+/// Tests/Fixtures only admits `ParsedCommand` directories (see its README).
+let apiFixturesRoot = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()   // Tests/MacDashboardTests
+    .deletingLastPathComponent()   // Tests
+    .appendingPathComponent("APIFixtures", isDirectory: true)
+
 let GIB: Int64 = 1 << 30
 let MIB: Int64 = 1 << 20
 

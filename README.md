@@ -78,9 +78,10 @@ buttons above, the app never changes anything.
 
 ## Privacy
 
-MacDashboard sends none of your data anywhere. There is no telemetry, no
-analytics, no crash reporting, no auto-update check, and no account of any
-kind.
+MacDashboard does not upload your diagnostic data, reports or history. The
+few network requests it makes are all listed below, each with exactly what it
+sends. There is no telemetry, no analytics, no crash reporting, no
+auto-update check, and no account of any kind.
 
 Every report and history file MacDashboard writes stays in
 `~/Library/Application Support/MacDashboard/` on this Mac. Nothing is
@@ -99,7 +100,26 @@ here is everything it does:
 - The two actions you have to click yourself — Homebrew upgrade and
   installing `smartmontools` — download through Homebrew as usual.
 
-Nothing else touches the network.
+The app's own code has no telemetry and uses the network only when you
+click a control that says what it does. Nothing goes out at launch, on a
+timer or when a phone is attached. The iPhone firmware feature (being
+built; not visible in the app yet) contacts exactly these hosts:
+
+- `itunes.apple.com`, when you click "Check with Apple": it downloads
+  Apple's public device-software catalogue. Nothing about your phone is sent.
+- `api.ipsw.me`, a third-party service, only when you click its own
+  "Ask ipsw.me" button: the request contains your phone's model identifier
+  (for example `iPhone18,2`) and nothing else.
+- `updates.cdn-apple.com` or `secure-appldnld.apple.com`, when you click
+  "Download": the restore image (`.ipsw`) Apple's catalogue names, over
+  https only, saved to `~/Downloads` after its size and checksums are
+  verified. The first save may make macOS ask whether MacDashboard may
+  access your Downloads folder; if you decline, the app says so and points
+  to System Settings › Privacy & Security › Files and Folders.
+
+Every request also shows the server your Mac's IP address and
+`MacDashboard/<version>` as its user agent. Your phone's UDID, ECID, serial
+number and name are never sent anywhere. Nothing else touches the network.
 
 **There is no AI assistant in the app.** An unfinished one, never part of a
 release, was removed from the code; its last state is kept under the git tag

@@ -943,6 +943,43 @@ struct StringsRU: AppStrings {
     var commonChecking: String { "Проверка…" }
     var commonCritical: String { "Критично" }
     func commonLastData(_ time: String) -> String { "последние данные — \(time)" }
+    // MARK: IPSW (IPHONE-IPSW)
+    var ipswSigned: String { "Подписывается (по данным ipsw.me)" }
+    var ipswNotSigned: String { "Не подписывается (по данным ipsw.me)" }
+    var ipswNotListed: String { "Нет в списке ipsw.me" }
+    var ipswIsAppleTarget: String { "Текущая сборка Apple для восстановления" }
+    var ipswNotAppleTarget: String { "Не текущая сборка Apple для восстановления" }
+    func ipswAskSends(_ identifier: String) -> String { "Отправит в ipsw.me идентификатор модели \(identifier)" }
+    func ipswVerified(_ list: String) -> String { "Проверено: \(list)" }
+    var ipswVerifiedSizeOnly: String { "и размер" }
+    var ipswUnknown: String { "Неизвестно" }
+    var ipswChecking: String { "Проверяем…" }
+    func ipswCheckedAgo(_ rel: String) -> String { "Проверено \(rel)" }
+    var ipswErrNoIdentifier: String { "Модель телефона неизвестна — подключите его хотя бы раз." }
+    var ipswErrUnknownDevice: String { "ipsw.me не знает эту модель." }
+    var ipswErrOffline: String { "Нет подключения к интернету." }
+    var ipswErrTimedOut: String { "Сервер не ответил вовремя." }
+    func ipswErrHTTP(_ code: Int) -> String { "Сервер ответил ошибкой \(code)." }
+    var ipswErrBadResponse: String { "Сервер прислал ответ, который приложение не может прочитать." }
+    func ipswSourceFailed(_ source: String, _ reason: String) -> String { "\(source) недоступен: \(reason)" }
+    var ipswErrNotDownloadable: String { "Эта сборка не раздаётся с защищённых серверов Apple, её не скачиваем." }
+    var ipswNoSecureAppleLink: String { "Защищённой ссылки Apple на эту сборку нет, здесь её не скачать." }
+    var ipswNotFromApple: String { "MacDashboard скачивает только ту сборку, которую сейчас предлагает каталог Apple." }
+    var ipswErrNoChecksum: String { "Для этой сборки нет контрольной суммы, её не скачиваем." }
+    var ipswErrNoSize: String { "Размер файла неизвестен, его не скачиваем." }
+    var ipswErrSourcesDisagree: String { "Apple и ipsw.me расходятся в данных об этом файле, его не скачиваем." }
+    func ipswErrNotEnoughSpace(_ needed: String, _ free: String) -> String { "Не хватает места: нужно \(needed), свободно \(free)." }
+    var ipswErrDownloadsDenied: String { "Нет доступа к папке «Загрузки». Разрешите его в Системных настройках › Конфиденциальность и безопасность › Файлы и папки." }
+    var ipswErrSizeMismatch: String { "Скачанный файл не того размера и удалён." }
+    var ipswErrChecksumMismatch: String { "Скачанный файл не прошёл проверку контрольной суммы и удалён." }
+    func ipswErrTransfer(_ detail: String) -> String { "Загрузка не удалась: \(detail)" }
+    func ipswErrFileSystem(_ detail: String) -> String { "Не удалось сохранить файл: \(detail)" }
+    var ipswBusy: String { "Уже идёт другая загрузка." }
+    var ipswCancelled: String { "Загрузка отменена." }
+    var ipswPreparing: String { "Готовим загрузку…" }
+    func ipswDownloading(_ done: String, _ total: String) -> String { "Загружено \(done) из \(total)" }
+    var ipswVerifying: String { "Проверяем контрольные суммы…" }
+    var ipswFinished: String { "Сохранено в «Загрузки»" }
 
     // MARK: Home (REDESIGN-HOME; strings.json › This Mac Home + 02-home.md)
     var homeMacStatus: String { "Состояние Mac" }

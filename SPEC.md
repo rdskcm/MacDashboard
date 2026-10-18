@@ -68,6 +68,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
    | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | yes — `Views/BrewUpgradeConfirm.swift:33`, opened from `Views/MaintenanceCard.swift:80` and `Views/AdviceActionDispatch.swift:60` |
    | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:590` | user | **no** — deliberate, see below |
    | 7 | Apply energy settings | `Views/EnergyCard.swift:363` (`pmset -b`/`-c`) | admin | yes — `Views/EnergyCard.swift:176` |
+   | 8 | Download an iOS restore image (IPSW) | `Engine/IPSWDownloader.swift` | user (+ Files & Folders prompt for Downloads) | yes — UI step: size, destination, source |
 
    Row 1 needs a second, separate macOS grant beyond the confirmation dialog: TCC
    Automation control of Finder, which the system asks for the first time the action
@@ -86,10 +87,31 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
    `rm`, not a move to the Trash — see the reasoning at `DashboardModel.swift:668-677`) and that 7
    now escalates privileges only after its confirmation.
 
+   Row 8 (block IPHONE-IPSW, 2026-10) ships Engine-only first; its confirmation dialog comes
+   with the UI step. Its first write to `~/Downloads` can show macOS's Files & Folders prompt
+   («"MacDashboard" would like to access files in your Downloads folder») unless Downloads
+   access or Full Disk Access was granted earlier; declining it surfaces as "no access to the
+   Downloads folder" with a pointer to System Settings › Privacy & Security › Files and Folders.
+
    Two further boundaries hold with no exceptions: the app writes file **content** only
-   inside `~/Library/Application Support/MacDashboard/` (rows 1, 3, 4 delete or move
-   files elsewhere but never author them), and the app contains no networking code
-   at all — see §12.
+   inside `~/Library/Application Support/MacDashboard/` and the verified `.ipsw` in
+   `~/Downloads` (row 8) (rows 1, 3, 4 delete or move files elsewhere but never author
+   them), and the app has **no telemetry; the network is used only on an explicit user
+   action** (`CONSTRAINTS-EVIDENCE.md` slug `network-stance` in the docs repo). Every host
+   the app's own code contacts:
+
+   | Host | When | Request | Sent beyond IP + `User-Agent: MacDashboard/<version>` |
+   |---|---|---|---|
+   | `itunes.apple.com` | click «Check with Apple» | GET the fixed version-catalogue URL | nothing device-specific |
+   | `api.ipsw.me` | click «Ask ipsw.me» (its own button) | GET `/v4/device/<ProductType>?type=ipsw` | the model identifier, e.g. `iPhone18,2` |
+   | `updates.cdn-apple.com`, `secure-appldnld.apple.com` | click «Download» | optional HEAD, then GET of one `.ipsw` | nothing device-specific |
+
+   Never sent: UDID, ECID, serial numbers, device or Mac names, Apple ID, file contents.
+   Sessions are ephemeral (no cookies, no disk cache) and use the system's certificate
+   trust. A download URL must be `https` on one of the two exact firmware hosts above, on
+   every redirect hop, and comes only from Apple's catalogue. Adding a host or a field is a
+   spec change here, in `network-stance` and in both READMEs. `softwareupdate -l` and the
+   Homebrew commands are separate tools the app runs, disclosed in the README.
 7. min deployment: **macOS 14** (needed for @Observable + Swift Charts). Build:
    SwiftPM, Apple Silicon (arm64) binary, hand-rolled .app bundle, codesign with the local signing identity if present, otherwise ad-hoc (§9).
 
@@ -666,8 +688,9 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
 
 ## 12. AI assistant (removed)
 
-The optional AI assistant was the only networking code the app ever had, and it was
-compiled only into opt-in builds — no released build contained it. It was removed from
+The optional AI assistant was the first networking code the app had, and it was
+compiled only into opt-in builds — no released build contained it. Since IPHONE-IPSW the
+only network use is the click-triggered table in §1.6. It was removed from
 the code in October 2026 (block AI-ARCHIVE). Its last state is preserved under the
 annotated git tag `ai-assistant-archive`; reviving it means a rework, not a re-merge of
 that tag.
