@@ -34,7 +34,7 @@ usage_error() { echo "usage error: $1" >&2; echo "$HELP" >&2; exit 64; }
 precondition_refused() { echo "REFUSED: $1" >&2; exit 65; }
 runtime_error() { echo "RUNTIME ERROR: $1" >&2; exit 70; }
 
-STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark settings-backup-dark main-report-dark main-page-system-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light settings-backup-light main-report-light main-page-system-light content-processes-cpu-dark content-processes-mem-dark content-folders-home-dark content-folders-service-dark content-claude-backup-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-history-fresh-dark content-home-attention-dark content-home-sections-dark content-home-now-dark content-processes-cpu-light content-processes-mem-light content-folders-home-light content-folders-service-light content-claude-backup-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light content-history-fresh-light content-home-attention-light content-home-sections-light content-home-now-light"
+STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark settings-backup-dark main-report-dark main-page-system-dark main-page-cpu-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light settings-backup-light main-report-light main-page-system-light main-page-cpu-light content-processes-cpu-dark content-processes-mem-dark content-cpu-live-dark content-cpu-high-dark content-cpu-failed-dark content-cpu-loading-dark content-cpu-bars-dark content-processes-cpu-open-dark content-processes-cpu-confirm-dark content-processes-cpu-quitting-dark content-folders-home-dark content-folders-service-dark content-claude-backup-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-history-fresh-dark content-home-attention-dark content-home-sections-dark content-home-now-dark content-processes-cpu-light content-processes-mem-light content-cpu-live-light content-cpu-high-light content-cpu-failed-light content-cpu-loading-light content-cpu-bars-light content-processes-cpu-open-light content-processes-cpu-confirm-light content-processes-cpu-quitting-light content-folders-home-light content-folders-service-light content-claude-backup-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light content-history-fresh-light content-home-attention-light content-home-sections-light content-home-now-light"
 
 # edge_inset_px is 0 by default (see README §5); only changed with measured
 # evidence, in a separate documented commit.
@@ -884,6 +884,16 @@ for mode in dark light; do
   press_main_tab page-back
   sleep 1.5
 
+  # REDESIGN-CPU: the CPU page opened from its Home tile, then Back.
+  assert_key "$MAIN_ID" "main-page-cpu-$mode"
+  press_main_tab home-tile-cpu
+  park_cursor
+  sleep 2
+  assert_key "$MAIN_ID" "main-page-cpu-$mode"
+  capture_state "main-page-cpu-$mode" "$MAIN_ID"
+  press_main_tab page-back
+  sleep 1.5
+
   assert_key "$MAIN_ID" "main-report-$mode"
   press_main_tab main-report
   park_cursor
@@ -999,8 +1009,8 @@ while IFS= read -r line; do
       ;;
   esac
 done < "$OUT/content-render.log"
-if [ "$CONTENT_COUNT" -lt 48 ]; then
-  runtime_error "content render produced only $CONTENT_COUNT states (expected 48, see content-render.log)"
+if [ "$CONTENT_COUNT" -lt 64 ]; then
+  runtime_error "content render produced only $CONTENT_COUNT states (expected 64, see content-render.log)"
 fi
 
 # ---------------------------------------------------------------------------

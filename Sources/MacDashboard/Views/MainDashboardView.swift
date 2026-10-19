@@ -50,7 +50,7 @@ struct MainDashboardView: View {
             }
             .onChange(of: L10nStore.shared.language) { model.refreshReport(trigger: .automatic) }
             .background {
-                if router.canGoBack && router.mode == .mac { BackShortcuts { _ = router.back() } }
+                if router.canGoBack && router.mode == .mac && !router.isInlineConfirmOpen { BackShortcuts { _ = router.back() } }
             }
         }
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
@@ -70,8 +70,11 @@ struct MainDashboardView: View {
                 .accessibilityHidden(!homeVisible)
             if router.isReportShown {
                 ReportTab(model: model)
+            } else if router.destination.page == .cpu {
+                CPUPage(model: model, router: router) { _ = router.back() }
+                    .id(router.destination.page)
             } else if router.destination.page != .home {
-                InterimSectionPage(model: model, page: router.destination.page, windowWidth: windowWidth) { _ = router.back() }
+                InterimSectionPage(model: model, page: router.destination.page, windowWidth: windowWidth, onConfirmShown: { router.isInlineConfirmOpen = $0 }) { _ = router.back() }
                     .id(router.destination.page)
             }
         }

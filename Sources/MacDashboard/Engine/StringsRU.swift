@@ -48,8 +48,6 @@ struct StringsRU: AppStrings {
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { "CPU" }
-    var kpiLoadUnavailable: String { "load —" }
-    func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String { "нагрузка \(l1) · \(l2) · \(l3)" }
     var kpiMemLabel: String { "Память" }
     func kpiMemUnit(_ total: String) -> String { "из \(total)" }
     func kpiMemSub(_ compressor: String, _ purgeable: String) -> String { "сжатая \(compressor) · выгружаемая \(purgeable)" }
@@ -151,19 +149,39 @@ struct StringsRU: AppStrings {
     var processSegCPU: String { "CPU" }
     var processSegMem: String { "Память" }
     var processesMetricA11y: String { "Метрика процессов" }
-    var processListCaption: String { "живой снимок" }
     var processLoadingDetails: String { "Загружаем детали…" }
-    var processDetailThreads: String { "Потоки" }
-    var processDetailMemory: String { "Память" }
     var processDetailPath: String { "Путь" }
     var processQuit: String { "Завершить" }
-    var processSignalError: String { "Не удалось отправить сигнал (нет прав)" }
-    var processForceQuit: String { "Снять принудительно" }
-    var processForceQuitConfirm: String { "Снять" }
-    var processForceQuitInlineQuestion: String { "Снять принудительно?" }
-    func processRevealA11y(_ name: String) -> String { "Показать „\(name)“ в Finder" }
+    var processForceQuit: String { "Снять принудительно…" }
+    var processForceQuitConfirm: String { "Снять принудительно" }
     func processTerminateA11y(_ name: String) -> String { "Завершить процесс „\(name)“" }
     func processKillA11y(_ name: String) -> String { "Принудительно снять процесс „\(name)“" }
+    // REDESIGN-CPU
+    var cpuLiveSnapshot: String { "живой снимок" }
+    var cpuUsage: String { "Загрузка" }
+    var cpuUser: String { "Пользователь" }
+    var cpuSystem: String { "Система" }
+    var cpuSocTemperature: String { "Температура SoC" }
+    var cpuSocHot: String { "горячо · возможен троттлинг" }
+    var cpuNoReading: String { "Нет текущих данных" }
+    func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String { "нагрузка \(a) · \(b) · \(c) · \(cores) " + ruPlural(cores, "ядро", "ядра", "ядер") }
+    func cpuHighLoadFor(_ min: Int) -> String { "Высокая нагрузка уже \(min) мин" }
+    var cpuTagHigh: String { "Высокая нагрузка" }
+    var cpuTagReadError: String { "Ошибка чтения" }
+    func cpuSubLive(_ cores: Int, _ seconds: Int) -> String { "\(cores) " + ruPlural(cores, "ядро", "ядра", "ядер") + " · обновляется каждые \(seconds) с" }
+    var cpuSubCollecting: String { "сбор данных…" }
+    var cpuFailTimedOut: String { "Не удалось прочитать счётчики CPU: нет ответа за 5 с." }
+    var cpuFailNoReading: String { "Не удалось прочитать счётчики CPU: система не вернула данных." }
+    var cpuRefreshA11y: String { "Обновить данные процессора" }
+    var cpuTryAgainA11y: String { "Повторить чтение счётчиков CPU" }
+    var procsTopByCPU: String { "топ по CPU" }
+    var procsTopByMemory: String { "топ по памяти" }
+    func procsCount(_ n: Int) -> String { "\(n) " + ruPlural(n, "процесс", "процесса", "процессов") }
+    var procsFoot: String { "нажмите на процесс, чтобы увидеть PID, путь и кнопки «Завершить» / «Снять принудительно»" }
+    var processOwner: String { "Владелец" }
+    var processQuitting: String { "Завершение…" }
+    func processForceQuitQuestion(_ name: String) -> String { "Снять «\(name)» принудительно? Несохранённые изменения будут потеряны." }
+    func processSignalFailed(_ name: String) -> String { "Не удалось завершить «\(name)»." }
 
     // MARK: Maintenance card
     var maintenanceTitle: String { "Обслуживание системы" }

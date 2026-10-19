@@ -70,6 +70,8 @@ final class NavigationRouter {
     /// +1 on every navigation, a repeat of the current destination included, so a page can
     /// re-run scroll + focus pulse for a second tap on the same deep link.
     private(set) var navigationSerial = 0
+    /// REDESIGN-CPU D17: true while an inline destructive confirm owns Esc; MainDashboardView then removes the Esc/⌘[ Back shortcuts.
+    var isInlineConfirmOpen = false
 
     var canGoBack: Bool { destination.page != .home || isReportShown }
 
@@ -77,6 +79,7 @@ final class NavigationRouter {
     func navigate(to destination: Destination) {
         mode = .mac
         isReportShown = false
+        isInlineConfirmOpen = false
         self.destination = destination
         navigationSerial += 1
     }

@@ -7,7 +7,7 @@ import SwiftUI
 // MARK: - Buttons
 
 struct DS3ButtonStyle: ButtonStyle {
-    enum Kind { case primary, secondary, danger, text }
+    enum Kind { case primary, secondary, danger, dangerSolid, text }
 
     var kind: Kind
     var height: CGFloat
@@ -53,6 +53,11 @@ private struct DS3ButtonBody: View {
             label(DS3.hotInk)
                 .background(Capsule().fill(DS3.hot.opacity(0.14)))
                 .ds3InsetRims(Capsule(), ring: DS3.hot.opacity(0.45))
+                .contentShape(Capsule())
+        case .dangerSolid:
+            label(.white)
+                .background(Capsule().fill(DS3.hot))
+                .ds3InsetRims(Capsule(), top: .white.opacity(0.35))
                 .contentShape(Capsule())
         case .text:
             label(DS3.accentInk)

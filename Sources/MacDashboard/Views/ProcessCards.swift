@@ -1,19 +1,14 @@
 // Views/ProcessCards.swift
-// Процессы card (LIVE): a single compact clickable process list, switchable
-// between CPU and memory ranking via a sliding segmented control, with a
-// single-expansion accordion (only rows with a known PID are expandable).
-// Expanding a row fetches on-demand detail (path, thread count) via
-// ProcessInspector and offers Reveal-in-Finder / Quit (SIGTERM) / Force Quit
-// (SIGKILL). No energy metric anywhere — CPU/mem only.
+// Processes card (LIVE), DS3 §8 Proc block (REDESIGN-CPU): a compact clickable process list, switchable
+// between CPU and memory ranking via a sliding segmented control, with a single-expansion accordion
+// (only rows with a known PID are expandable). Expanding a row fetches on-demand detail (PID, owner,
+// path) via ProcessInspector and offers Quit (SIGTERM) / Force quit… (SIGKILL after an inline confirm;
+// another user's process asks for administrator authentication). No energy metric anywhere — CPU/mem only.
 
 import SwiftUI
 import AppKit
 
-/// Which ProcEntry field drives a ProcessListCard's row gauge/bold value —
-/// `.cpu` reads CPU%, `.mem` reads memory bytes (the other field becomes the
-/// row's dimmer secondary annotation). `Hashable` so `DSSlidingSegmented<T>`
-/// (Views/DesignSystem.swift) can track the current selection.
-enum Metric: Hashable { case cpu, mem }
+// `Metric` (cpu | mem) lives in Engine/CPUPageModel.swift.
 
 /// Shared curve for the row gauge width transition AND row-reorder movement —
 /// deliberately the SAME `Animation` value for both, so a row and its own
@@ -22,49 +17,18 @@ enum Metric: Hashable { case cpu, mem }
 /// — V2-RELAYOUT-RESIDUAL, CPU cost is ~linear in duration).
 private let processRowMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.45)
 
-/// 5-stop CPU heat ramp for the CPU-sorted list's row gauge (Spec: value-based
-/// ramp, NOT the flat single-color fill the mem-sorted list uses). Evaluated at
-/// each row's OWN cpu%/100 — independent of `maxValue`, which only drives the
-/// gauge's WIDTH — so a busy row reads hot even when a busier row above it caps
-/// the bar's fill fraction. No ramp/interpolation helper exists elsewhere in the
-/// app to reuse: `Theme.swift`'s `SeriesPalette`/`tone(for:)` only pick one
-/// discrete color per severity bucket, they don't lerp between stops — this is
-/// a new, narrowly-scoped helper.
-private let cpuGaugeRampStops: [(at: Double, r: Double, g: Double, b: Double)] = [
-    (0.00, 74, 154, 232),
-    (0.45, 46, 196, 160),
-    (0.70, 224, 167, 46),
-    (0.88, 226, 112, 58),
-    (1.00, 220, 75, 62),
-]
-
-/// Linear-interpolates `cpuGaugeRampStops` at `fraction` (clamped 0...1) between
-/// the two nearest stops.
-private func cpuGaugeColor(_ fraction: Double) -> Color {
-    let f = min(max(fraction, 0), 1)
-    var lower = cpuGaugeRampStops[0]
-    var upper = cpuGaugeRampStops[cpuGaugeRampStops.count - 1]
-    for i in 0..<(cpuGaugeRampStops.count - 1) {
-        if f >= cpuGaugeRampStops[i].at && f <= cpuGaugeRampStops[i + 1].at {
-            lower = cpuGaugeRampStops[i]
-            upper = cpuGaugeRampStops[i + 1]
-            break
-        }
-    }
-    let span = upper.at - lower.at
-    let t = span > 0 ? (f - lower.at) / span : 0
-    return Color(
-        red: (lower.r + (upper.r - lower.r) * t) / 255,
-        green: (lower.g + (upper.g - lower.g) * t) / 255,
-        blue: (lower.b + (upper.b - lower.b) * t) / 255
-    )
-}
-
 // MARK: - Shared list card
 
-/// Single entry point (v2 restyle, Spec §6): one card, `CPU | Память` sliding
-/// segmented control in the header's trailing slot (mirrors how
-/// `ChartOrTableCard` places its trailing content in `CardChrome`). Rows are
+/// Visual fixture only (tools/visual/content_states.swift): one row shown expanded with a fixed detail.
+struct ProcessRowFixture {
+    enum Phase { case open, confirm, quitting }
+    let pid: Int32
+    let detail: ProcDetail
+    let phase: Phase
+}
+
+/// Single entry point (REDESIGN-CPU, §8 Proc block): one DS3 card, `CPU | Memory` sliding
+/// segmented control in the header's trailing slot. Rows are
 /// read live off `model.topCPU`/`model.topMem` inside the body every tick —
 /// never snapshotted into `@State` — so whichever metric is selected keeps
 /// ticking live.
@@ -72,13 +36,20 @@ struct ProcessListCard: View {
     let model: DashboardModel
 
     @State private var procMetric: Metric
+    private let rowFixture: ProcessRowFixture?
+    private let onConfirmShown: (Bool) -> Void
 
     /// `initialMetric` is default-valued only for the visual baseline's offscreen
-    /// content render (VISUAL-COVERAGE): every real call site keeps using the
-    /// implicit `.cpu` default.
-    init(model: DashboardModel, initialMetric: Metric = .cpu) {
+    /// content render (VISUAL-COVERAGE) and the Memory page: the CPU page and every other
+    /// call site use the implicit `.cpu` default. `rowFixture` is the visual fixture's seeded open row.
+    /// `onConfirmShown` reports the inline force-quit confirm to the page (it owns Esc while open).
+    init(model: DashboardModel, initialMetric: Metric = .cpu, rowFixture: ProcessRowFixture? = nil,
+         onConfirmShown: @escaping (Bool) -> Void = { _ in }) {
         self.model = model
+        self.rowFixture = rowFixture
+        self.onConfirmShown = onConfirmShown
         _procMetric = State(initialValue: initialMetric)
+        _expandedPID = State(initialValue: rowFixture?.pid)
     }
 
     // Single-expansion accordion: expanding one row collapses any other.
@@ -145,18 +116,26 @@ struct ProcessListCard: View {
         }
     }
 
-    // `CardChrome`/`metricControl` must sit OUTSIDE the rows.isEmpty branch
-    // (V2-FIX-PROCESS-SEGMENT): branching the whole card gave the CPU|Память
+    // `DS3Card`/`metricControl` must sit OUTSIDE the rows.isEmpty branch
+    // (V2-FIX-PROCESS-SEGMENT): branching the whole card gave the CPU|Memory
     // segmented control a fresh identity on every state flip, so
     // `DSSlidingSegmented`'s thumb spring never animated — the new instance
     // just mounted pre-selected. Only the row content varies.
     var body: some View {
-        CardChrome(
+        DS3Card(
             title: L.processesTitle,
-            caption: rows.isEmpty ? nil : L.processListCaption,
+            caption: CPUPageModel.procsCaption(metric: procMetric, processCount: model.processCount),
             trailing: { metricControl }
         ) {
-            content
+            VStack(alignment: .leading, spacing: 8) {
+                content
+                if !rows.isEmpty {
+                    Text(L.procsFoot)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(DS3.muted)
+                        .padding(.leading, 6)
+                }
+            }
         }
         .onChange(of: procMetric) { expandedPID = nil; frozenOrder = [] }
         // V2-FIX-ROWID Step 2 follow-up: release the freeze if the expanded process
@@ -179,7 +158,7 @@ struct ProcessListCard: View {
     @ViewBuilder
     private var content: some View {
         if rows.isEmpty {
-            SectionStateView(done: false)
+            SectionWait(text: L.commonCollectingData)
         } else {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(rows) { row in
@@ -209,7 +188,12 @@ struct ProcessListCard: View {
                         // `.transition` + this container's `.animation(value:
                         // expandedPID)`, matching `QuietStripRow`/
                         // `AutoSectionRow`/`OrphanRow`.
-                        ProcessDetailView(row: row, isOpen: isOpen)
+                        ProcessDetailView(
+                            row: row, isOpen: isOpen,
+                            fixture: rowFixture?.pid == row.pid ? rowFixture : nil,
+                            onConfirmShown: onConfirmShown,
+                            onSignalSent: { model.refreshProcessesNow() }
+                        )
                             // V2-FIX-PROCESS-ROWS wave 2 (`rowOrder` doc comment
                             // above has the full writeup, INCLUDING the NEEDS-HUMAN
                             // note — this does not fully resolve the defect either):
@@ -234,6 +218,13 @@ struct ProcessListCard: View {
                                 if !isOpen { t.animation = nil }
                             }
                     }
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(DS3.lens)
+                            .ds3Elevation(.lens, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .opacity(isOpen ? 1 : 0)
+                            .animation(.easeOut(duration: 0.25), value: isOpen)
+                    )
                 }
             }
             // Row reordering (a live tick re-sorting `rows`) moves with the
@@ -254,23 +245,20 @@ struct ProcessListCard: View {
             // CPU|Память control. A fresh identity per metric drops the old
             // subtree instead of interpolating into the new one, so the
             // switch is instant while tick-to-tick re-sorts keep the curve.
-            // The process-limit setting (V2-SETTINGS-PROCLIMIT) is folded into
-            // the same identity via `rows.count`, NOT `AppSettings.shared.processListLimit`
-            // directly — the setting changes the moment the segmented control moves, well
-            // before a resample (periodic tick or the Apply button) actually shortens
-            // `rows`; keying off the setting flipped identity too early (while `rows` was
-            // still the old length), so the ACTUAL shrink still landed inside the old
-            // identity and rode the 0.45 s `processRowMotion` reorder curve — visible as a
-            // sluggish "settle" after Apply instead of an instant cut. Keying off the
-            // count itself remounts exactly when the array actually changes length (e.g.
-            // 15 → 5 would otherwise animate ten rows out), while ordinary tick-to-tick
+            // The list length is folded into the same identity via `rows.count`: the list is
+            // fixed at `LiveCollector.topProcessCount` rows, but it is shorter while the
+            // first samples arrive or processes exit. Keying off the count remounts exactly
+            // when the array actually changes length (so rows appearing or leaving never ride
+            // the 0.45 s `processRowMotion` reorder curve), while ordinary tick-to-tick
             // re-sorts at a constant length still keep `processRowMotion` exactly as today.
             .id("\(procMetric)-\(rows.count)")
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(DS3.row))
         }
     }
 
     private var metricControl: some View {
-        DSSlidingSegmented(options: [Metric.cpu, .mem], selection: $procMetric,
+        DSSlidingSegmented(options: [Metric.cpu, .mem], selection: $procMetric, size: .section,
                            groupLabel: L.processesMetricA11y) { m in
             m == .cpu ? L.processSegCPU : L.processSegMem
         }
@@ -310,101 +298,77 @@ private struct ProcessRowView: View {
         case .mem: return Double(row.memBytes ?? 0)
         }
     }
-    private var primaryText: String {
-        switch primary {
-        case .cpu: return row.cpu.map { fmtNum($0, decimals: 1) + "%" } ?? "—"
-        case .mem: return fmtBytes(row.memBytes)
-        }
-    }
-    /// V2-FIX-UNITS follow-up: mem-primary mode splits value/unit so the
-    /// literal-space gap (a full glyph advance in this monospaced face) can be
-    /// tightened to `.padding(.leading, 1.5)` — see `fmtBytesParts`. (1.5pt,
-    /// not the 27pt-tile's 3pt: at this 13pt size 3pt reads proportionally
-    /// wide.)
-    private var primaryMemParts: (value: String, unit: String?)? {
-        primary == .mem ? fmtBytesParts(row.memBytes) : nil
-    }
-    private var secondaryText: String {
-        switch primary {
-        case .cpu: return "· " + tight(fmtBytesParts(row.memBytes))
-        case .mem: return "· CPU " + (row.cpu.map { fmtNum($0, decimals: 1) + "%" } ?? "—")
-        }
-    }
-    /// CPU list: per-row value-based ramp (see `cpuGaugeColor` above). Mem list:
-    /// still the flat `SeriesPalette.s2` — only the CPU list's gauge is a ramp.
+    /// Bar colour per `CPUPageModel.procBar` (D9): CPU mode amber / green / blue by share, memory one blue-grey.
     private var gaugeColor: Color {
-        switch primary {
-        case .cpu: return cpuGaugeColor((row.cpu ?? 0) / 100)
-        case .mem: return SeriesPalette.s2
+        switch CPUPageModel.procBar(row, metric: primary) {
+        case .amber: return DS3.amber
+        case .green: return DS3.green
+        case .accent: return DS3.accent
+        case .series: return DS3.s1
         }
-    }
-    /// CPU list stays at 0.22; mem list is a notch lighter at 0.18 — the two
-    /// lists are NOT the same opacity despite sharing this gauge shape.
-    private var gaugeOpacity: Double {
-        primary == .cpu ? 0.22 : 0.18
     }
     private var isExpandable: Bool { row.pid != nil }
 
     var body: some View {
-        HStack(spacing: 6) {
-            if isExpandable {
-                DSDisclosureBars(expanded: expanded)
-            }
-            Text(row.name)
-                .font(.system(size: 13.5))
-                .foregroundStyle(DS.inkSoft)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 8)
-            if let parts = primaryMemParts {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text(parts.value)
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .monospacedDigit()
-                        .foregroundStyle(DS.inkSoft)
-                    if let unit = parts.unit {
-                        Text(unit)
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .padding(.leading, 1.5)
-                            .foregroundStyle(DS.inkSoft)
-                    }
-                }
-            } else {
-                Text(primaryText)
+        let texts = CPUPageModel.procTexts(row, metric: primary)
+        Button(action: onTap) {
+            HStack(spacing: 10) {
+                chevron
+                Text(row.name)
+                    .font(.system(size: 14))
+                    .foregroundStyle(DS3.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 8)
+                Text(texts.secondary)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(DS3.muted)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text(texts.value)
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
-                    .foregroundStyle(DS.inkSoft)
+                    .foregroundStyle(DS3.ink)
+                    .lineLimit(1)
+                    .frame(minWidth: 64, alignment: .trailing)
+                    .layoutPriority(1)
             }
-            Text(secondaryText)
-                .font(.system(size: 11))
-                .foregroundStyle(DS.muted)
-        }
-        .padding(.horizontal, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 27)
-        .background(alignment: .leading) {
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 9).fill(DS.row)
-                if maxValue > 0 {
-                    BarFillLayer(spans: [BarSpan(key: "gauge",
-                                                 fraction: CGFloat(min(primaryValue / maxValue, 1)),
-                                                 alpha: gaugeOpacity,
-                                                 color: gaugeColor)],
-                                 layout: .single(minWidth: 0, cornerRadius: 9),
-                                 animated: !reduceMotion)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+            .background(alignment: .leading) {
+                ZStack(alignment: .leading) {
+                    // Flat text row hover class (`hover-surface-classes`): the container carries `row`, so hover is `row`.
+                    RoundedRectangle(cornerRadius: 16).fill(isExpandable && hovering ? DS3.row : Color.clear)
+                    if maxValue > 0 {
+                        BarFillLayer(spans: [BarSpan(key: "gauge",
+                                                     fraction: CGFloat(min(primaryValue / maxValue, 1)),
+                                                     alpha: CPUPageModel.procBarOpacity(primary),
+                                                     color: gaugeColor)],
+                                     layout: .single(minWidth: 0, cornerRadius: 16),
+                                     animated: !reduceMotion)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .contentShape(Rectangle())
         }
-        // Hover highlight only for expandable rows — DS.track token (prototype's
-        // `style-hover="background:var(--track)"`), 0.14 s ease transition
-        // (already Reduce-Motion-safe: color-only).
-        .background(isExpandable && hovering ? DS.track : Color.clear)
-        .animation(.easeInOut(duration: 0.14), value: hovering)
-        .clipShape(RoundedRectangle(cornerRadius: 9))
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .pointingHandOnHover(isEnabled: isExpandable, hovering: $hovering)
-        .onTapGesture { onTap() }
+        .accessibilityLabel("\(row.name), \(texts.value)")
+        .accessibilityAddTraits(isExpandable ? [] : .isStaticText)
+    }
+
+    /// Always laid out (space kept for rows without a PID), only drawn when the row can open.
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(DS3.muted)
+            .rotationEffect(.degrees(expanded ? 90 : 0))
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: expanded)
+            .frame(width: 12)
+            .opacity(isExpandable ? 1 : 0)
     }
 }
 
@@ -413,10 +377,24 @@ private struct ProcessRowView: View {
 private struct ProcessDetailView: View {
     let row: ProcEntry
     let isOpen: Bool
+    /// Visual fixture only: a fixed detail and phase, no fetch (`ProcessRowFixture`).
+    let fixture: ProcessRowFixture?
+    /// Reports the inline force-quit confirm to the page, which owns Esc while it is open (D17/D18).
+    let onConfirmShown: (Bool) -> Void
+    /// A signal was delivered: the card re-samples the process list.
+    let onSignalSent: () -> Void
 
-    init(row: ProcEntry, isOpen: Bool) {
+    init(row: ProcEntry, isOpen: Bool, fixture: ProcessRowFixture?,
+         onConfirmShown: @escaping (Bool) -> Void, onSignalSent: @escaping () -> Void) {
         self.row = row
         self.isOpen = isOpen
+        self.fixture = fixture
+        self.onConfirmShown = onConfirmShown
+        self.onSignalSent = onSignalSent
+        _detail = State(initialValue: fixture?.detail)
+        _loading = State(initialValue: fixture == nil)
+        _showForceQuitConfirm = State(initialValue: fixture?.phase == .confirm)
+        _quitting = State(initialValue: fixture?.phase == .quitting)
         // Seeds `openAmount` from the CURRENT `isOpen` (never true on first
         // mount here — a row is only ever mounted collapsed — but mirrors the
         // seeding idiom of `QuietStripRow`/`AutoSectionRow` so this stays
@@ -429,6 +407,8 @@ private struct ProcessDetailView: View {
     @State private var loading = true
     @State private var showForceQuitConfirm = false
     @State private var signalError: String? = nil
+    /// SIGTERM / SIGKILL was sent (or is being sent): «Quitting…» until the row leaves the list or 5 s pass.
+    @State private var quitting = false
 
     /// True once the CURRENT open/close disclosure transaction (driven by
     /// `.onChange(of: isOpen)` below) has actually finished animating — set
@@ -478,114 +458,147 @@ private struct ProcessDetailView: View {
             : DSMotion.expand
     }
 
+    private func kv(_ label: String, _ value: String, mono: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            Text(label).font(.system(size: 12.5)).foregroundStyle(DS3.muted)
+            Text(value)
+                .font(.system(size: 12.5, design: mono ? .monospaced : .default))
+                .foregroundStyle(DS3.ink)
+                .lineLimit(1)
+        }
+    }
+
+    /// Quit (SIGTERM) and Force quit… (opens the inline confirm). Quit swaps its label for «Quitting…»
+    /// with an opacity ZStack, so the button keeps its width (`swap-in-place`).
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            Button { quit(SIGTERM) } label: {
+                ZStack {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini)
+                        Text(L.processQuitting)
+                    }
+                    .opacity(quitting ? 1 : 0)
+                    Text(L.processQuit).opacity(quitting ? 0 : 1)
+                }
+            }
+            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
+            .disabled(quitting)
+            .accessibilityLabel(quitting ? L.processQuitting : L.processTerminateA11y(row.name))
+
+            Button(L.processForceQuit) { showForceQuitConfirm = true }
+                .buttonStyle(DS3ButtonStyle(kind: .danger, height: 30, hPad: 13, fontSize: 12.5))
+                .disabled(quitting)
+                .accessibilityLabel(L.processKillA11y(row.name))
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Inline force-quit confirm (D24: `overlay` fill, no popover shadow — it sits inside the `BleedRect` clips below).
+    /// Cancel owns Esc (`.cancelAction`); there is no default action, so Return does nothing.
+    private var confirmPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L.processForceQuitQuestion(row.name))
+                .font(.system(size: 13.5))
+                .foregroundStyle(DS3.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                Button(L.commonCancel) { showForceQuitConfirm = false }
+                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel(L.commonCancel)
+                Button(L.processForceQuitConfirm) {
+                    showForceQuitConfirm = false
+                    quit(SIGKILL)
+                }
+                .buttonStyle(DS3ButtonStyle(kind: .dangerSolid, height: 30, hPad: 13, fontSize: 12.5))
+                .accessibilityLabel(L.processKillA11y(row.name))
+            }
+        }
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(DS3.overlay))
+        .ds3InsetRims(RoundedRectangle(cornerRadius: 20, style: .continuous), top: DS3.rimMid, ring: DS3.lineStrong)
+    }
+
+    /// D8/D15/D16: the signal runs off the main actor (a privileged retry blocks on the administrator
+    /// dialog). After a send, the list re-samples 1 s later; «Quitting…» ends when the row leaves the list
+    /// (the card closes the panel) or after 5 s when the process ignored SIGTERM — no message either way.
+    private func quit(_ sig: Int32) {
+        quitting = true
+        signalError = nil
+        let expected = detail?.path
+        let p = pid
+        Task { @MainActor in
+            let outcome = await Task.detached { ProcessInspector.signal(sig, pid: p, expectedPath: expected) }.value
+            switch outcome {
+            case .sent, .gone:
+                try? await Task.sleep(for: .seconds(1))
+                onSignalSent()
+                try? await Task.sleep(for: .seconds(4))
+                quitting = false
+            case .cancelled:
+                quitting = false
+            case .failed:
+                quitting = false
+                withAnimation(disclosureCurve) { signalError = L.processSignalFailed(row.name) }
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if loading {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text(L.processLoadingDetails).font(.caption2).foregroundStyle(.secondary)
+                    Text(L.processLoadingDetails).font(.system(size: 12.5)).foregroundStyle(DS3.muted)
                 }
             } else {
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 5) {
-                    GridRow {
-                        Text("PID").font(.system(size: 11.5)).foregroundStyle(.secondary)
-                        Text(String(pid)).font(.system(size: 11.5))
+                VStack(alignment: .leading, spacing: 10) {
+                    FlowLayout(spacing: 18) {
+                        kv("PID", String(pid), mono: true)
+                        kv(L.processOwner, detail?.owner ?? "—")
                     }
-                    GridRow {
-                        Text(L.processDetailThreads).font(.system(size: 11.5)).foregroundStyle(.secondary)
-                        Text(detail?.threads.map(String.init) ?? "—").font(.system(size: 11.5))
-                    }
-                    GridRow {
-                        Text("CPU").font(.system(size: 11.5)).foregroundStyle(.secondary)
-                        Text(row.cpu.map { fmtNum($0, decimals: 1) + "%" } ?? "—").font(.system(size: 11.5))
-                    }
-                    GridRow {
-                        Text(L.processDetailMemory).font(.system(size: 11.5)).foregroundStyle(.secondary)
-                        Text(tight(fmtBytesParts(row.memBytes))).font(.system(size: 11.5))
-                    }
-                    GridRow {
-                        Text(L.processDetailPath).font(.system(size: 11.5)).foregroundStyle(.secondary)
-                        // `.frame(maxWidth: .infinity)` gives the grid cell a width
-                        // CEILING — without it this text proposes its own full ideal
-                        // width (a long path) and pushes the whole panel/card wider
-                        // than the window instead of truncating in place.
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(L.processDetailPath).font(.system(size: 12.5)).foregroundStyle(DS3.muted)
+                        // `.frame(maxWidth: .infinity)` gives the text a width CEILING — without
+                        // it a long path proposes its full ideal width and pushes the whole
+                        // panel/card wider than the window instead of truncating in place.
                         Text(detail?.path ?? "—")
-                            .font(.system(size: 11.5))
+                            .font(.system(size: 12.5, design: .monospaced))
+                            .foregroundStyle(DS3.ink)
                             .lineLimit(1)
-                            .truncationMode(.middle)
+                            .truncationMode(.tail)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .hoverTip(detail?.path ?? "")
+                            .help(detail?.path ?? "")
                     }
-                }
 
-                // Force-quit confirmation is INLINE (not a `.confirmationDialog` system
-                // sheet) — swaps the whole action row in place for the confirm/cancel
-                // pair, the same "click destructive action → inline line appears in
-                // its place" shape as `AutostartCard`'s orphan-plist delete flow (a
-                // single optional/boolean piece of state gates which row renders;
-                // `AutostartCard.pendingDeletePath`/`showOrphans` is the state-
-                // management idiom mirrored here as `showForceQuitConfirm`, though
-                // that flow itself still opens a system `.confirmationDialog` — this
-                // is the first genuinely inline instance of the pattern in the app).
-                if showForceQuitConfirm {
-                    HStack(spacing: 7) {
-                        Text(L.processForceQuitInlineQuestion)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(DS.inkSoft)
-                        Spacer(minLength: 8)
-                        ProcessOutlineNeutralButton(title: L.adviceCancel) {
-                            showForceQuitConfirm = false
+                    // Force-quit confirmation is INLINE (not a `.confirmationDialog` system
+                    // sheet): a single boolean gates whether the action row or the confirm
+                    // panel renders (the same "click destructive action → inline line appears
+                    // in its place" shape as `AutostartCard`'s orphan-plist delete flow).
+                    // No action buttons for pid <= 1 (kernel_task, launchd).
+                    if CPUPageModel.showsActions(pid: row.pid) {
+                        if showForceQuitConfirm {
+                            confirmPanel
+                        } else {
+                            actionRow
                         }
-                        ProcessFilledHotButton(title: L.processForceQuitConfirm) {
-                            signalError = ProcessInspector.sendSignal(SIGKILL, to: pid)
-                                ? nil : L.processSignalError
-                            showForceQuitConfirm = false
-                        }
-                        .accessibilityLabel(L.processKillA11y(row.name))
                     }
-                    .padding(.top, 2)
-                } else {
-                    HStack(spacing: 7) {
-                        ProcessCapsuleButton(title: L.reportShowInFinder, disabled: detail?.path == nil) {
-                            guard let path = detail?.path else { return }
-                            // Shared rule (AdviceActionRunner.reveal): plain folders open, files
-                            // and bundles are selected in their enclosing folder — `revealTarget`
-                            // returns the .app bundle for app-hosted executables, so the package
-                            // branch there is what keeps this from launching the app.
-                            AdviceActionRunner.reveal(ProcessInspector.revealTarget(for: path))
-                        }
-                        .accessibilityLabel(L.processRevealA11y(row.name))
 
-                        ProcessCapsuleButton(title: L.processQuit) {
-                            signalError = ProcessInspector.sendSignal(SIGTERM, to: pid)
-                                ? nil : L.processSignalError
-                        }
-                        .accessibilityLabel(L.processTerminateA11y(row.name))
-
-                        ProcessOutlineHotButton(title: L.processForceQuit) {
-                            showForceQuitConfirm = true
-                        }
-                        .accessibilityLabel(L.processKillA11y(row.name))
-                        // Matches the confirm branch's trailing `Spacer(minLength: 8)`
-                        // above so the action row's width doesn't shift when
-                        // `showForceQuitConfirm` toggles.
-                        Spacer(minLength: 8)
+                    if let signalError {
+                        Text(signalError).font(.system(size: 12.5)).foregroundStyle(DS3.hotInk)
                     }
-                    .padding(.top, 2)
-                }
-
-                if let signalError {
-                    Text(signalError).font(.caption2).foregroundStyle(.red)
                 }
             }
         }
-        .padding(EdgeInsets(top: 9, leading: 19, bottom: 8, trailing: 10))
+        .padding(EdgeInsets(top: 4, leading: 35, bottom: 12, trailing: 14))
         // Width tracked its widest child (long path → wide panel, short path →
         // narrow panel) before this — the background stopped short of the
         // card's right edge on short-path rows. Mirrors `ProcessRowView`'s own
         // `.frame(maxWidth: .infinity, alignment: .leading)`.
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
             measuredHeight = newHeight
         }
@@ -616,6 +629,7 @@ private struct ProcessDetailView: View {
                 if !new {
                     showForceQuitConfirm = false
                     signalError = nil
+                    quitting = false
                 }
                 // The fetch completion below buffers instead of writing
                 // straight to `detail`/`loading` while this transaction is
@@ -634,6 +648,8 @@ private struct ProcessDetailView: View {
                 }
             }
         }
+        .onChange(of: showForceQuitConfirm) { _, new in onConfirmShown(new) }
+        .onDisappear { if showForceQuitConfirm { onConfirmShown(false) } }
         // Keyed on (pid, isOpen), NOT just pid — the panel is now permanently
         // mounted for every row (see the always-mounted `ProcessDetailView`
         // call site above), so fetching on mount alone would fire path/thread
@@ -642,14 +658,14 @@ private struct ProcessDetailView: View {
         // triggers a fetch; re-opening a row refetches, same as the old
         // expandedPID-keyed behavior.
         .task(id: "\(row.pid ?? -1)-\(isOpen)") {
-            guard isOpen, let pid = row.pid else { return }
+            guard isOpen, let pid = row.pid, fixture == nil else { return }
             // Animated, not a bare assignment: this swaps the panel's rendered
             // content between the small "loading" spinner and the much taller
             // Grid + action row, which re-measures via `.onGeometryChange`
             // above and resizes this view's `.frame(height:)` — completely
             // independent of `openAmount`'s own open/close progress. `expand`
-            // (0.18s) reliably finishes well before this fetch resolves (real
-            // syscalls, plus a `ps -M` fallback that can run up to 3s), so
+            // (0.18s) can finish well before this fetch resolves (real
+            // syscalls on a busy Mac), so
             // WITHOUT this `withAnimation` the loading→loaded swap lands as a
             // plain, unanimated state write after the disclosure has already
             // settled at `openAmount == 1` (opacity already 1, no offset) —
@@ -666,9 +682,9 @@ private struct ProcessDetailView: View {
             // result, once it arrives, is what gets buffered/committed below.
             hasPendingFetch = false
             pendingDetail = nil
-            // Off the main actor: proc_pidpath/proc_pidinfo are cheap syscalls but
-            // the `ps -M` fallback shells out (up to 3s) — never block the UI on it.
-            let fetched = await Task.detached { await ProcessInspector.detail(pid: pid) }.value
+            // Off the main actor: proc_pidpath and the owner sysctl are cheap syscalls, but
+            // nothing here may ever block the UI.
+            let fetched = await Task.detached { ProcessInspector.detail(pid: pid) }.value
             // `.task(id:)` cancels the previous task the instant `isOpen`
             // flips (id includes it) — but `Task.detached` above is
             // unstructured and keeps running regardless, so without this
@@ -701,115 +717,5 @@ private struct ProcessDetailView: View {
                 hasPendingFetch = true
             }
         }
-    }
-}
-
-// MARK: - Expanded-row action buttons
-
-/// Small capsule chrome for the expanded row's non-destructive actions ("Показать
-/// в Finder", "Завершить"). Mirrors the app's existing small-capsule idiom for
-/// card-header-adjacent actions — `ChartOrTableCard`'s chart/table toggle
-/// (Views/SharedUI.swift, DS.glass3 fill + DS.lineStrong border) — minus that
-/// control's shimmering rainbow hover ring, at this spec's own size/padding/
-/// hover-tint numbers.
-private struct ProcessCapsuleButton: View {
-    let title: String
-    var disabled: Bool = false
-    let action: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(hovering ? DS.ink : DS.inkSoft)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 11)
-                .background(Capsule().fill(DS.glass3))
-                .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.45 : 1)
-        .pointingHandOnHover(isEnabled: !disabled, hovering: $hovering)
-        .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover, value: hovering)
-    }
-}
-
-/// Outlined (not filled) destructive trigger — "Снять принудительно" before the
-/// inline confirmation replaces it. Transparent fill at rest, `DS.hot` tint on
-/// hover, `DS.hot` text/border throughout (never system `.red`).
-private struct ProcessOutlineHotButton: View {
-    let title: String
-    let action: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(DS.hot)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 11)
-                .background(Capsule().fill(DS.hot.opacity(hovering ? 0.14 : 0)))
-                .overlay(Capsule().strokeBorder(DS.hot.opacity(0.45), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .pointingHandOnHover(hovering: $hovering)
-        .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover, value: hovering)
-    }
-}
-
-/// Outlined neutral "Отмена" for the inline force-quit confirmation — transparent
-/// fill at rest, a faint neutral hover fill, no destructive tint (mirrors the
-/// outline-capsule idiom the former attention card's overflow button
-/// uses for its own non-destructive "+N"/"Свернуть" toggle: clear fill, `DS.row`
-/// on hover, hairline border).
-private struct ProcessOutlineNeutralButton: View {
-    let title: String
-    let action: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(hovering ? DS.ink : DS.inkSoft)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 11)
-                .background(Capsule().fill(hovering ? DS.row : Color.clear))
-                .overlay(Capsule().strokeBorder(DS.lineStrong, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .pointingHandOnHover(hovering: $hovering)
-        .animation(reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover, value: hovering)
-    }
-}
-
-/// Filled destructive confirm — "Снять" in the inline force-quit confirmation.
-/// White text on solid `DS.hot` fill.
-private struct ProcessFilledHotButton: View {
-    let title: String
-    let action: () -> Void
-
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 11)
-                .background(Capsule().fill(DS.hot))
-        }
-        .buttonStyle(.plain)
-        .pointingHandOnHover(hovering: $hovering)
     }
 }

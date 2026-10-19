@@ -3,6 +3,7 @@
 // the real 1150xH window (Processes/Folders segments, История metrics/ranges and its 0/1/2-day states,
 // the Claude backup card, the Home states (content-home-attention / content-home-sections / content-home-now: attention card,
 // All good, first scan, scan failed, section tiles with skeleton / last-check / no-battery variants),
+// the REDESIGN-CPU states: content-cpu-live / high / failed / loading / bars and content-processes-cpu-open / confirm / quitting,
 // the iPhone states: content-iphone-tiles / notices / battery / history / logs / import / identity / dialogs)
 // rendered directly from the fixed VisualFixture dataset, dark+light, via the
 // harness (tools/harness/render.sh). Pattern: scenario_ds_specimen.swift.
@@ -75,6 +76,28 @@ MainActor.assumeIsolated {
         s.fail(.timedOut)
         return s
     }()
+    // REDESIGN-CPU: CPU page states (ok / failed with a last good reading / first sample pending).
+    let cpuOK: BlockState = {
+        var s = BlockState(.cpu, createdAt: homeRef.addingTimeInterval(-4))
+        s.begin(at: homeRef.addingTimeInterval(-2), showsLoading: false)
+        s.succeed(at: homeRef)
+        return s
+    }()
+    let cpuFailed: BlockState = {
+        var s = BlockState(.cpu, createdAt: homeRef.addingTimeInterval(-60))
+        s.begin(at: homeRef.addingTimeInterval(-40), showsLoading: false)
+        s.succeed(at: homeRef.addingTimeInterval(-38))
+        s.begin(at: homeRef.addingTimeInterval(-5), showsLoading: true)
+        s.fail(.timedOut)
+        return s
+    }()
+    let cpuHigh = fixtureHome {
+        $0.cpu = CPUUsage(user: 71, sys: 20, idle: 9)
+        $0.socTempC = 93
+        $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
+    }
+    let cpuFail = fixtureHome { $0.applyFixtureCPU(cpuFailed, highSince: nil) }
+    let cpuLoading = fixtureHome { $0.applyFixtureCPU(BlockState(.cpu, createdAt: homeRef), highSince: nil) }
     let fixtureDays = m.history.mac_history
     let historyNoDays = fixtureHistory([])
     let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -90,6 +113,39 @@ MainActor.assumeIsolated {
         }
         harnessRender(width: 589, to: "\(outDir)/content-processes-mem-\(mode).png") {
             ProcessListCard(model: m, initialMetric: .mem)
+        }
+        // 1094 = 1150 window - 2 x 28 page padding.
+        harnessRender(width: 1094, to: "\(outDir)/content-cpu-live-\(mode).png") {
+            CPUUsageCard(model: m)
+        }
+        harnessRender(width: 1094, to: "\(outDir)/content-cpu-high-\(mode).png") {
+            CPUUsageCard(model: cpuHigh)
+        }
+        harnessRender(width: 1094, to: "\(outDir)/content-cpu-failed-\(mode).png") {
+            CPUUsageCard(model: cpuFail)
+        }
+        harnessRender(width: 1094, to: "\(outDir)/content-cpu-loading-\(mode).png") {
+            CPUUsageCard(model: cpuLoading)
+        }
+        harnessRender(width: 1150, to: "\(outDir)/content-cpu-bars-\(mode).png") {
+            VStack(spacing: 12) {
+                CPUPageBar(model: m) {}
+                CPUPageBar(model: cpuHigh) {}
+                CPUPageBar(model: cpuFail) {}
+                CPUPageBar(model: cpuLoading) {}
+            }
+        }
+        harnessRender(width: 589, to: "\(outDir)/content-processes-cpu-open-\(mode).png") {
+            ProcessListCard(model: m, initialMetric: .cpu,
+                            rowFixture: ProcessRowFixture(pid: 101, detail: VisualFixture.procDetailWindowServer, phase: .open))
+        }
+        harnessRender(width: 589, to: "\(outDir)/content-processes-cpu-confirm-\(mode).png") {
+            ProcessListCard(model: m, initialMetric: .cpu,
+                            rowFixture: ProcessRowFixture(pid: 103, detail: VisualFixture.procDetailXcode, phase: .confirm))
+        }
+        harnessRender(width: 589, to: "\(outDir)/content-processes-cpu-quitting-\(mode).png") {
+            ProcessListCard(model: m, initialMetric: .cpu,
+                            rowFixture: ProcessRowFixture(pid: 103, detail: VisualFixture.procDetailXcode, phase: .quitting))
         }
         harnessRender(width: 589, to: "\(outDir)/content-folders-home-\(mode).png") {
             FoldersCard(model: m, initialTab: .home)

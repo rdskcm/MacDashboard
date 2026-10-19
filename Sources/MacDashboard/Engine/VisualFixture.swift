@@ -20,6 +20,10 @@ enum VisualFixture {
         from: DateComponents(year: 2026, month: 1, day: 15, hour: 10, minute: 30)
     )!
 
+    /// REDESIGN-CPU: fixed process details for the expanded-row states (fixture pids: WindowServer 101, Xcode 103).
+    static let procDetailWindowServer = ProcDetail(path: "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer", owner: "_windowserver")
+    static let procDetailXcode = ProcDetail(path: "/Applications/Xcode.app/Contents/MacOS/Xcode", owner: "ivan")
+
     private static let GiB: Int64 = 1 << 30
 
     /// One fixed, pure snapshot of everything a `DashboardModel` normally

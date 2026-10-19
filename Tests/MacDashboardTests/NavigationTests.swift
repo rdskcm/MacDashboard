@@ -70,6 +70,14 @@ struct NavigationTests {
         #expect(r.destination == .home, "home after the second back")
     }
 
+    @Test func inlineConfirmFlagResetsOnNavigate() {
+        let r = NavigationRouter()
+        #expect(!r.isInlineConfirmOpen, "closed by default")
+        r.isInlineConfirmOpen = true
+        r.navigate(to: .home)
+        #expect(!r.isInlineConfirmOpen, "navigate(to:) closes it")
+    }
+
     @Test func cardMap() {
         for c in CardID.allCases {
             #expect(Page.allCases.contains { $0.cards.contains(c) }, "card \(c) is on a page")

@@ -948,8 +948,8 @@ private struct OrphanCancelButton: View {
     }
 }
 
-/// Inline confirm-line destructive "Удалить" — mirrors `ProcessCards.swift`'s
-/// `ProcessFilledHotButton`, at this card's own padding (h11/v5).
+/// Inline confirm-line destructive "Удалить" (the former Processes card's filled-hot button
+/// shape), at this card's own padding (h11/v5).
 private struct OrphanConfirmDeleteButton: View {
     let title: String
     let action: () -> Void
