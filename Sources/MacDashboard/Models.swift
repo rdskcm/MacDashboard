@@ -143,6 +143,13 @@ struct AutostartInfo: Equatable {
         l.background.elementsEqual(r.background, by: { $0 == $1 })
     }
 }
+/// REDESIGN-STORAGE: typed NVMe health record parsed from the same `smartctl -A -j` output as `attrs`.
+struct SmartHealth: Equatable, Sendable {
+    var temperatureC: Int?; var percentageUsed: Int?; var availableSpare: Int?; var spareThreshold: Int?
+    var powerOnHours: UInt64?; var powerCycles: UInt64?; var unsafeShutdowns: UInt64?
+    var dataUnitsRead: UInt64?; var dataUnitsWritten: UInt64?
+    var mediaErrors: UInt64?; var errorLogEntries: UInt64?; var criticalWarning: UInt64?
+}
 struct SmartDisk: Identifiable, Equatable {
     var id: String { device }
     var device: String          // "/dev/disk4" or "internal"
@@ -150,9 +157,10 @@ struct SmartDisk: Identifiable, Equatable {
     var status: String          // "OK" | "VERIFIED" | "NO ACCESS" | "NOT SUPPORTED" | free text
     var attrs: [(String, String)] = []   // ordered SMART attributes (already human labels)
     var severity: Severity = .good
+    var health: SmartHealth? = nil
     static func == (l: Self, r: Self) -> Bool {
         l.device == r.device && l.title == r.title && l.status == r.status &&
-        l.severity == r.severity && l.attrs.elementsEqual(r.attrs, by: { $0 == $1 })
+        l.severity == r.severity && l.health == r.health && l.attrs.elementsEqual(r.attrs, by: { $0 == $1 })
     }
 }
 struct EnergySettings: Equatable { var battery: [(String, String)]; var ac: [(String, String)]
@@ -189,7 +197,8 @@ struct FullReport {
     var system: SystemInfo?
     var snapshots: [String]?            // TM local snapshot names
     var homeDirs: [DirSize]?            // top-20 of $HOME (depth 1), from the background size count
-    var serviceDirs: [DirSize]?         // caches etc.
+    var serviceDirs: [DirSize]?         // the System segment of the Storage page (REDESIGN-STORAGE D9)
+    var homeCaches: DirSize?            // ~/Library/Caches, from the home walk (depth 2)
     // Absolute paths of directories the collector could see but not read (no Full
     // Disk Access) — the same idea as TMDestination.lastBackupUnavailableReason:
     // an honest reason parked next to the value it explains. `[]` = nothing was

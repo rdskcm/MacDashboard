@@ -21,6 +21,22 @@ func fmtNum(_ v: Double, decimals: Int = 1) -> String {
 /// Fixed decimals, never trimmed ("2.10", "25.0"): load averages and the CPU percentage.
 func fmtFixed(_ v: Double, decimals: Int) -> String { String(format: "%.\(decimals)f", v).replacingOccurrences(of: ".", with: L.decimalSeparator) }
 
+/// Integers grouped by 3 with the language's separator (EN "1,204", RU "1\u{2009}204"); negatives keep the sign.
+func fmtGrouped<T: BinaryInteger>(_ v: T) -> String {
+    let digits = String(v.magnitude)
+    var out = ""
+    for (i, ch) in digits.reversed().enumerated() {
+        if i > 0 && i % 3 == 0 { out.append(contentsOf: L.groupingSeparator.reversed()) }
+        out.append(ch)
+    }
+    return (v < 0 ? "-" : "") + String(out.reversed())
+}
+
+/// NVMe data units (1 unit = 1000 x 512 bytes) as TB with one decimal.
+func fmtTB(dataUnits: UInt64) -> String {
+    fmtFixed(Double(dataUnits) * 512_000 / 1e12, decimals: 1) + " " + L.byteUnitTB
+}
+
 /// Deterministic decimal capacity formatter: ГБ/ТБ (GB/TB), matching how macOS
 /// reports disk sizes (decimal, 10^9/10^12) — unlike `fmtBytes`, which is binary
 /// and used for memory/swap. One decimal place under 1000 GB; two decimals from

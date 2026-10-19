@@ -131,15 +131,7 @@ protocol AppStrings {
     var storageTrashLabel: String { get }
     var storageAppsLabel: String { get }
 
-    // MARK: Storage — Домашняя папка
-    var storageHomeDirsTitle: String { get }
-    var storageHomeDirsCaption: String { get }
 
-    // MARK: Storage — Служебные папки
-    var storageServiceDirsTitle: String { get }
-    var storageServiceDirsCaption: String { get }
-    var folderTabHome: String { get }
-    var folderTabSvc: String { get }
 
     // MARK: Storage — folders that could not be read (V2-FDA-DEGRADE)
     func storageFoldersNoFDA(_ folders: String) -> String
@@ -149,17 +141,7 @@ protocol AppStrings {
     func storageFoldersNotMeasured(_ folders: String) -> String
 
     // MARK: Storage — Диски (SMART)
-    var storageSmartTitle: String { get }
     func storageSmartUpdatedCaption(_ time: String) -> String
-    var storageSmartRefreshButton: String { get }
-    var storageSmartColAttribute: String { get }
-    var storageSmartColValue: String { get }
-    var storageSmartInstallButton: String { get }
-    var storageSmartNeedsHomebrew: String { get }
-    func storageSmartInstallFailed(_ msg: String) -> String
-    // MARK: Storage — SMART disk capsule kind sublabel (V2-CARD-DISK)
-    var storageSmartKindInternal: String { get }
-    var storageSmartKindExternal: String { get }
 
     // MARK: Process cards
     var processesTitle: String { get }
@@ -199,6 +181,98 @@ protocol AppStrings {
     var memFailNoReading: String { get }
     var memTryAgainA11y: String { get }
     var memCompViewA11y: String { get }
+
+    // MARK: Storage page (REDESIGN-STORAGE)
+    var groupingSeparator: String { get }
+    var storageTagDriveFailing: String { get }
+    var storageTagAlmostFull: String { get }
+    var storageTagDriveWorn: String { get }
+    var storageTagLowSpace: String { get }
+    var storageDiskTitle: String { get }
+    var storageFree: String { get }
+    func storageHeroNote(_ size: String, _ pct: String) -> String
+    var storageData: String { get }
+    var storageSystem: String { get }
+    var storagePurgeable: String { get }
+    var storageNVMeTemp: String { get }
+    var storageTempNormal: String { get }
+    var storageTempHigh: String { get }
+    func storageCelsius(_ t: Int) -> String
+    var storageDownloads: String { get }
+    var storageCaches: String { get }
+    func storageFreeItem(_ name: String, _ size: String) -> String
+    func storageNoteLow(_ pct: String) -> String
+    func storageNoteLowItems(_ pct: String, _ list: String) -> String
+    func storageNoteCritical(_ pct: String) -> String
+    func storageNoteCriticalItems(_ pct: String, _ list: String) -> String
+    var storageSettingsButton: String { get }
+    var storageSettingsA11y: String { get }
+    var storageFoldersTitle: String { get }
+    var storageSegHome: String { get }
+    var storageSegSystem: String { get }
+    var storageSegA11y: String { get }
+    var storageCaptionTop: String { get }
+    func storageCaptionCounted(_ age: String) -> String
+    func storageAgo(_ m: Int) -> String
+    var storageJustNow: String { get }
+    var storageCaptionCounting: String { get }
+    var storageCaptionCountFailed: String { get }
+    func storageCaptionTrashEmptied(_ size: String) -> String
+    var storageCaptionSomeHidden: String { get }
+    var storageCounting: String { get }
+    var storageCountTimedOut: String { get }
+    var storageCountNoResult: String { get }
+    var storageCountTryAgainA11y: String { get }
+    var storageNoFolders: String { get }
+    func storageShowA11y(_ name: String) -> String
+    var storageEmptyTrashButton: String { get }
+    var storageEmptyTrashA11y: String { get }
+    var storageConfirmTitle: String { get }
+    func storageConfirmText(_ n: Int, _ size: String) -> String
+    func storageConfirmTextNoCount(_ size: String) -> String
+    var storageConfirmEmpty: String { get }
+    var storageConfirmCancel: String { get }
+    func storageFDANote(_ names: String) -> String
+    func storageFDANoteMore(_ names: String, _ n: Int) -> String
+    var storageFDAButtonA11y: String { get }
+    var storageSmartCardTitle: String { get }
+    var storageSmartRefreshA11y: String { get }
+    var storageSubInternalOK: String { get }
+    var storageSubExternalOK: String { get }
+    var storageSubInternalNoData: String { get }
+    var storageSubExternalNoData: String { get }
+    var storageSubInternalFailing: String { get }
+    var storageSubExternalFailing: String { get }
+    func storageSubInternalWorn(_ pct: String) -> String
+    func storageSubExternalWorn(_ pct: String) -> String
+    var storageStatusUnavailable: String { get }
+    var storageStatusFailing: String { get }
+    func storageWearNote(_ pct: String) -> String
+    var storageKVTemp: String { get }
+    var storageKVUsed: String { get }
+    var storageKVSpare: String { get }
+    var storageKVSpareThreshold: String { get }
+    var storageKVHours: String { get }
+    var storageKVCycles: String { get }
+    var storageKVUnsafe: String { get }
+    var storageKVRead: String { get }
+    var storageKVWritten: String { get }
+    var storageKVMediaErrors: String { get }
+    var storageKVErrorLog: String { get }
+    var storageKVCritical: String { get }
+    var storageYes: String { get }
+    var storageNo: String { get }
+    var storageToolsInstallable: String { get }
+    var storageToolsNeedsBrew: String { get }
+    var storageToolsInstall: String { get }
+    var storageToolsInstallA11y: String { get }
+    var storageToolsHowToBrew: String { get }
+    var storageToolsHowToBrewA11y: String { get }
+    func storageInstallFailedCode(_ c: Int32) -> String
+    var storageInstallTimedOut: String { get }
+    var storageInstallNoBrew: String { get }
+    var storageInstallRetryA11y: String { get }
+    var storageRefreshA11y: String { get }
 
     // MARK: CPU page + restyled Processes card (REDESIGN-CPU)
     var cpuLiveSnapshot: String { get }

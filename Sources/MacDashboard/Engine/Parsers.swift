@@ -598,6 +598,34 @@ enum Parsers {
         return rows
     }
 
+    /// REDESIGN-STORAGE: typed form of the same `smartctl -A -j` NVMe log `smartctlAttrs` reads.
+    /// nil in the cases where `smartctlAttrs` returns `[]`.
+    static func smartctlHealth(json data: Data) -> SmartHealth? {
+        struct Log: Decodable {
+            var critical_warning: UInt64?
+            var temperature: Int64?
+            var available_spare: UInt64?
+            var available_spare_threshold: UInt64?
+            var percentage_used: UInt64?
+            var data_units_read: UInt64?
+            var data_units_written: UInt64?
+            var power_cycles: UInt64?
+            var power_on_hours: UInt64?
+            var unsafe_shutdowns: UInt64?
+            var media_errors: UInt64?
+            var num_err_log_entries: UInt64?
+        }
+        struct Root: Decodable { var nvme_smart_health_information_log: Log? }
+        guard let root = try? JSONDecoder().decode(Root.self, from: data),
+              let log = root.nvme_smart_health_information_log else { return nil }
+        return SmartHealth(
+            temperatureC: log.temperature.map { Int($0) }, percentageUsed: log.percentage_used.map { Int($0) },
+            availableSpare: log.available_spare.map { Int($0) }, spareThreshold: log.available_spare_threshold.map { Int($0) },
+            powerOnHours: log.power_on_hours, powerCycles: log.power_cycles, unsafeShutdowns: log.unsafe_shutdowns,
+            dataUnitsRead: log.data_units_read, dataUnitsWritten: log.data_units_written,
+            mediaErrors: log.media_errors, errorLogEntries: log.num_err_log_entries, criticalWarning: log.critical_warning)
+    }
+
     /// Locale-independent "1,234,567" (smartctl's own form under LC_ALL=C).
     private static func groupedThousands(_ v: UInt64) -> String {
         let digits = Array(String(v))

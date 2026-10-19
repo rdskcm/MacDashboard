@@ -93,6 +93,24 @@ enum AdviceActionRunner {
         }) { deliver(.failed(detail: nil), to: completion) }
     }
 
+    /// Number of items Finder reports in the Trash (REDESIGN-STORAGE D10): `~/.Trash` is TCC-protected, so
+    /// `FileManager` cannot count it without Full Disk Access. Same thread rule as `emptyTrash`
+    /// (`applescript-thread-confinement`): the script is created and executed inside the thread block.
+    /// `nil` = Finder did not answer (Automation declined, script error); `completion` runs on the main actor once.
+    @MainActor
+    static func countTrashItems(completion: @escaping @MainActor (Int?) -> Void) {
+        func deliverCount(_ n: Int?) { Task { @MainActor in completion(n) } }
+        if !appleScriptThread.async({
+            guard let script = NSAppleScript(source: "tell application \"Finder\" to count items of trash") else {
+                deliverCount(nil)
+                return
+            }
+            var error: NSDictionary?
+            let result = script.executeAndReturnError(&error)
+            deliverCount(error == nil ? Int(result.int32Value) : nil)
+        }) { deliverCount(nil) }
+    }
+
     /// The only way `emptyTrash` ever calls its completion: one hop back to the
     /// main actor.
     private static func deliver(_ outcome: TrashOutcome,

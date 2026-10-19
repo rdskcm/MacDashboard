@@ -35,11 +35,12 @@ extension SerialTests {
             defer { VisualFixture.forced = false }
             // D8: Settings panes render with AppSettings at their unset defaults.
             let settings = AppSettings.shared
-            let saved = (settings.fastIntervalSeconds, settings.ignoredWakeHolders, settings.backupStaleHours)
+            let saved = (settings.fastIntervalSeconds, settings.ignoredWakeHolders, settings.backupStaleHours, settings.lowSpacePercent)
             settings.fastIntervalSeconds = AppSettings.resolveFastInterval(raw: 0)
             settings.ignoredWakeHolders = []
             settings.backupStaleHours = AppSettings.resolveBackupStaleHours(raw: 0)
-            defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolders, settings.backupStaleHours) = saved }
+            settings.lowSpacePercent = AppSettings.defaultLowSpacePercent
+            defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolders, settings.backupStaleHours, settings.lowSpacePercent) = saved }
             L10nStore.shared.language = .en
             let run = try SnapshotRun(out: outDir)
             let m = DashboardModel()
@@ -129,6 +130,84 @@ extension SerialTests {
             let memUnknown = fixtureHome { $0.applyFixturePressure(nil) }
             let memFail = fixtureHome { $0.applyFixtureMemory(memFailedBlock) }
             let memLoading = fixtureHome { $0.applyFixtureMemory(BlockState(.memory, createdAt: homeRef)) }
+            // REDESIGN-STORAGE: Storage page states. The fixture disk is 256 GB, 30 % free (ok); each state changes one thing.
+            let stBlockOK: BlockState = {
+                var s = BlockState(.folders, createdAt: homeRef.addingTimeInterval(-14))
+                s.begin(at: homeRef.addingTimeInterval(-12), showsLoading: false)
+                s.succeed(at: homeRef)
+                return s
+            }()
+            @MainActor func storageDisk(freePercent: Double) -> DiskInfo {
+                DiskInfo(size: 256_000_000_000, avail: Int64(2_560_000_000 * freePercent),
+                         dataUsed: 160_000_000_000, sysUsed: 18_000_000_000, purgeable: 3_100_000_000)
+            }
+            @MainActor func reassess(_ h: DashboardModel) {
+                h.assessment = Assess.assess(report: h.report,
+                                             live: LiveSnapshot(t: homeRef, load: h.load, cpu: h.cpu, mem: h.mem,
+                                                                swap: h.swap, disk: h.disk, battery: h.battery),
+                                             memPressure: .normal, now: homeRef)
+            }
+            /// Folder count done, no home folder refused (the plain `ok` page).
+            @MainActor func storageOK(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel {
+                fixtureHome {
+                    $0.applyFixtureFolders(VisualFixture.folderSizes(unreadable: []), block: stBlockOK)
+                    tweak($0)
+                }
+            }
+            let stOK = storageOK()
+            let stLow = storageOK { $0.disk = storageDisk(freePercent: 15) }
+            let stCritical = storageOK { $0.disk = storageDisk(freePercent: 8) }
+            let stNoDisk = storageOK { $0.disk = nil; $0.report.smart = nil }
+            let stCounting = fixtureHome { $0.applyFixtureFolders(nil, block: BlockState(.folders, createdAt: homeRef)) }
+            let stTimeout = fixtureHome {
+                var s = BlockState(.folders, createdAt: homeRef.addingTimeInterval(-12))
+                s.begin(at: homeRef.addingTimeInterval(-11), showsLoading: true)
+                s.fail(.timedOut)
+                $0.applyFixtureFolders(nil, block: s)
+            }
+            let stNoResult = fixtureHome {
+                var s = BlockState(.folders, createdAt: homeRef.addingTimeInterval(-12))
+                s.begin(at: homeRef.addingTimeInterval(-11), showsLoading: true)
+                s.fail(.noReading)
+                $0.applyFixtureFolders(nil, block: s)
+            }
+            let stFDA = storageOK { $0.applyFixtureFDA(denied: Array(ProtectedLocations.table.prefix(5))) }
+            let stWornHealth: SmartHealth = {
+                var h = VisualFixture.internalHealth
+                h.percentageUsed = 82
+                return h
+            }()
+            let stWorn = storageOK {
+                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED",
+                                             attrs: [("Percentage Used", "82%")], health: stWornHealth)]
+                reassess($0)
+            }
+            let stFailing = storageOK {
+                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED",
+                                             health: VisualFixture.internalHealth), VisualFixture.externalFailingDisk]
+                reassess($0)
+            }
+            /// smartmontools missing: no health anywhere, every drive «no data».
+            @MainActor func storageTools(_ state: ReportCollector.SmartToolsAvailability, installing: Bool = false,
+                                         failure: SmartInstallFailure? = nil) -> DashboardModel {
+                storageOK {
+                    $0.report.smartctlPresent = false
+                    $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED"),
+                                       SmartDisk(device: "/dev/disk4", title: "External SSD", status: "NO ACCESS")]
+                    $0.applyFixtureSmartTools(state, installing: installing, failure: failure)
+                }
+            }
+            let stInstallable = storageTools(.installable)
+            let stInstalling = storageTools(.installable, installing: true)
+            let stInstallFailed = storageTools(.installable, failure: .exitCode(1))
+            let stNeedsBrew = storageTools(.needsHomebrew)
+            /// smartctl present, the external bridge passes nothing through.
+            let stUnavailable = storageOK {
+                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED",
+                                             health: VisualFixture.internalHealth),
+                                   SmartDisk(device: "/dev/disk4", title: "External SSD", status: "NO ACCESS")]
+            }
+            let stNoDisks = storageOK { $0.report.smart = [] }
             let fixtureDays = m.history.mac_history
             let historyNoDays = fixtureHistory([])
             let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -226,11 +305,87 @@ extension SerialTests {
                     ProcessListCard(model: m, initialMetric: .cpu,
                                     rowFixture: ProcessRowFixture(pid: 103, detail: VisualFixture.procDetailXcode, phase: .quitting))
                 }
-                run.snap("content-folders-home", mode, width: 589) {
-                    FoldersCard(model: m, initialTab: .home)
+                // REDESIGN-STORAGE: Storage page states (1094 = 1150 window - 2 x 28 page padding; 924 = 980 - 56).
+                run.snap("content-storage-ok", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        StorageDiskCard(model: stOK)
+                        StorageFoldersCard(model: stOK, router: NavigationRouter())
+                        StorageSmartCard(model: stOK, windowWidth: 1150)
+                    }
                 }
-                run.snap("content-folders-service", mode, width: 589) {
-                    FoldersCard(model: m, initialTab: .service)
+                run.snap("content-storage-low", mode, width: 1094) {
+                    StorageDiskCard(model: stLow)
+                }
+                run.snap("content-storage-critical", mode, width: 1094) {
+                    StorageDiskCard(model: stCritical)
+                }
+                run.snap("content-storage-bars", mode, width: 1150) {
+                    VStack(spacing: 12) {
+                        StoragePageBar(model: stOK) {}
+                        StoragePageBar(model: stLow) {}
+                        StoragePageBar(model: stCritical) {}
+                        StoragePageBar(model: stWorn) {}
+                        StoragePageBar(model: stFailing) {}
+                        StoragePageBar(model: stNoDisk) {}
+                    }
+                }
+                run.snap("content-storage-loading", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        StorageDiskCard(model: stNoDisk)
+                        StorageSmartCard(model: stNoDisk, windowWidth: 1150)
+                        StorageSmartCard(model: stNoDisks, windowWidth: 1150)
+                    }
+                }
+                run.snap("content-storage-folders-counting", mode, width: 1094) {
+                    StorageFoldersCard(model: stCounting, router: NavigationRouter())
+                }
+                run.snap("content-storage-folders-timeout", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        StorageFoldersCard(model: stTimeout, router: NavigationRouter())
+                        StorageFoldersCard(model: stNoResult, router: NavigationRouter())
+                    }
+                }
+                run.snap("content-storage-folders-system", mode, width: 1094) {
+                    StorageFoldersCard(model: stOK, router: NavigationRouter(), initialSegment: .system)
+                }
+                run.snap("content-storage-fda-missing", mode, width: 1094) {
+                    StorageFoldersCard(model: stFDA, router: NavigationRouter())
+                }
+                run.snap("content-storage-trash-confirm", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        StorageFoldersCard(model: stOK, router: NavigationRouter(), initialConfirm: StorageTrashConfirmFixture(count: 37))
+                        StorageFoldersCard(model: stOK, router: NavigationRouter(), initialConfirm: StorageTrashConfirmFixture(count: nil))
+                    }
+                }
+                run.snap("content-storage-trash-counting", mode, width: 1094) {
+                    StorageFoldersCard(model: stOK, router: NavigationRouter(), initialCounting: true)
+                }
+                run.snap("content-storage-smart-wear", mode, width: 1094) {
+                    StorageSmartCard(model: stWorn, windowWidth: 1150)
+                }
+                run.snap("content-storage-smart-failing", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        StorageSmartCard(model: stFailing, windowWidth: 1150, initialSelection: "/dev/disk4")
+                        StorageSmartCard(model: stUnavailable, windowWidth: 1150, initialSelection: "/dev/disk4")
+                    }
+                }
+                run.snap("content-storage-tools-installable", mode, width: 1094) {
+                    StorageSmartCard(model: stInstallable, windowWidth: 1150)
+                }
+                run.snap("content-storage-tools-installing", mode, width: 1094) {
+                    StorageSmartCard(model: stInstalling, windowWidth: 1150)
+                }
+                run.snap("content-storage-tools-failed", mode, width: 1094) {
+                    StorageSmartCard(model: stInstallFailed, windowWidth: 1150)
+                }
+                run.snap("content-storage-tools-needsbrew", mode, width: 1094) {
+                    StorageSmartCard(model: stNeedsBrew, windowWidth: 1150)
+                }
+                run.snap("content-storage-narrow", mode, width: 924) {
+                    VStack(spacing: 16) {
+                        StorageSmartCard(model: stFailing, windowWidth: 980)
+                        StorageSmartCard(model: stInstallable, windowWidth: 980)
+                    }
                 }
                 run.snap("content-claude-backup", mode, width: 589) {
                     ClaudeBackupCard(model: m)

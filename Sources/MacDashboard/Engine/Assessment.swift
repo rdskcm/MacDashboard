@@ -27,16 +27,6 @@ enum Assess {
     // machine parameter it scales with. Values are fixed by the block spec; do not
     // re-tune them to make a fixture pass.
 
-    /// Free bytes at or below which the volume is critically full.
-    /// Mechanism: free space (`DiskInfo.avail`). Parameter: volume size, capped by the
-    /// fixed reserve macOS needs for a major upgrade (~24 GiB) — a reserve that does not
-    /// grow with the volume, which is why 15 % of a 4 TB disk is not a real shortage.
-    private static func diskCritFloor(_ size: Int64) -> Int64 { min(size * 15 / 100, 24 * GIB) }
-
-    /// Free bytes at or below which the volume is filling up. Upgrade reserve plus
-    /// ordinary working headroom; 30 % restates today's `pct >= 0.70` for small volumes.
-    private static func diskWarnFloor(_ size: Int64) -> Int64 { min(size * 30 / 100, 64 * GIB) }
-
     /// Cycles below which a capacity under 80 % counts as early wear. Mechanism:
     /// `BatteryInfo.maxCapacity` + `cycles`. Parameter: rated cycle life (1000 cycles to
     /// 80 % on modern Mac notebooks); 800 is 80 % of that life.
@@ -50,7 +40,7 @@ enum Assess {
         }
     }
 
-    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleHours, now: Date = Date()) -> Assessment {
+    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleHours, lowSpacePercent: Int = AppSettings.defaultLowSpacePercent, now: Date = Date()) -> Assessment {
         var a = Assessment()
         // Paired with its `Problem` so the final sort keeps `items` in lockstep
         // with `problems` (see §3 of the v2 attention spec — parity is structural,
@@ -63,7 +53,8 @@ enum Assess {
 
         // --- disk (live is the freshest source; report carries none) ---
         if let disk = live.disk, disk.size > 0 {
-            if disk.avail <= diskCritFloor(disk.size) {
+            switch StorageSpace.level(avail: disk.avail, size: disk.size, lowPercent: lowSpacePercent) {
+            case .critical:
                 a.diskSev = .crit
                 let action = AdviceAction.settingsPane(AdvicePanes.storage)
                 let text = L.assessDiskFull(pct(disk.pct))
@@ -71,7 +62,7 @@ enum Assess {
                                AttentionItem(kind: .diskFull, sev: .crit, label: L.attnLabelDiskFull,
                                              detail: L.attnDetailDiskFull(pct(disk.pct)), fullText: text,
                                              verb: verb(action), action: action)))
-            } else if disk.avail <= diskWarnFloor(disk.size) {
+            case .low:
                 a.diskSev = .warn
                 let action = AdviceAction.settingsPane(AdvicePanes.storage)
                 let text = L.assessDiskFullSoon(pct(disk.pct))
@@ -79,6 +70,8 @@ enum Assess {
                                AttentionItem(kind: .diskFullSoon, sev: .warn, label: L.attnLabelDiskFullSoon,
                                              detail: L.attnDetailDiskFullSoon(pct(disk.pct)), fullText: text,
                                              verb: verb(action), action: action)))
+            case .ok, nil:
+                break
             }
         }
 
@@ -315,13 +308,11 @@ enum Assess {
                 }
             }
         }
-        if let sdirs = report.serviceDirs {
-            for d in sdirs where d.path.hasSuffix("/Library/Caches") && d.path.hasPrefix(home) && d.bytes > 3 * GIB {
-                let action = AdviceAction.revealPath(d.path)
-                tips.append(Tip(text: L.assessCachesTip(fmt(d.bytes)), action: action))
-                capsules.append(TipCapsule(object: L.attnCapCaches, value: fmt(d.bytes), verb: verb(action),
-                                            explanation: L.attnExplainCaches, action: action))
-            }
+        if let d = report.homeCaches, d.bytes > 3 * GIB {
+            let action = AdviceAction.revealPath(d.path)
+            tips.append(Tip(text: L.assessCachesTip(fmt(d.bytes)), action: action))
+            capsules.append(TipCapsule(object: L.attnCapCaches, value: fmt(d.bytes), verb: verb(action),
+                                        explanation: L.attnExplainCaches, action: action))
         }
 
         // --- folders the collector was refused (V2-FDA-DEGRADE) ---

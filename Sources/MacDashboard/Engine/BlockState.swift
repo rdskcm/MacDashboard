@@ -11,7 +11,7 @@ enum BlockID: String, CaseIterable, Sendable {
     var timeout: TimeInterval {
         switch self {
         case .cpu, .memory: return 5                                   // 03-cpu, 04-memory
-        case .folders: return ReportCollector.folderSizesDeadline + 5  // the count's own deadline + assembly
+        case .folders: return 10   // 05-storage: the visible Counting wait times out at 10 s; du keeps its own 90 s deadline (D4)
         case .scan: return 30                                          // 02-home first scan, system_profiler
         }
     }

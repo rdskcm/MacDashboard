@@ -90,5 +90,19 @@ extension SerialTests {
                 }
             }
         }
+
+        @Test func groupedAndTB() async {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .en
+            #expect(fmtGrouped(1204) == "1,204", "fmtGrouped EN")
+            #expect(fmtGrouped(0) == "0", "fmtGrouped 0")
+            #expect(fmtGrouped(-1_234_567) == "-1,234,567", "fmtGrouped negative")
+            #expect(fmtGrouped(UInt64(999)) == "999", "fmtGrouped 3 digits")
+            #expect(fmtTB(dataUnits: 74_609_375) == "38.2 TB", "fmtTB EN")
+            L10nStore.shared.language = .ru
+            #expect(fmtGrouped(1204) == "1\u{2009}204", "fmtGrouped RU")
+            #expect(fmtTB(dataUnits: 74_609_375) == "38,2 ТБ", "fmtTB RU")
+        }
     }
 }

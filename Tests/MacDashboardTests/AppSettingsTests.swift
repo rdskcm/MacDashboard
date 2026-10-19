@@ -100,5 +100,12 @@ extension SerialTests {
             AppSettings.migrateLegacyValues(in: d)
             #expect(d.object(forKey: key) == nil, "migration: nothing written when unset")
         }
+
+        @Test func lowSpacePercentResolve() async {
+            #expect(AppSettings.resolveLowSpacePercent(raw: 0) == 20, "lowSpacePercent unset (0) -> 20")
+            #expect(AppSettings.resolveLowSpacePercent(raw: 15) == 15, "lowSpacePercent 15 kept")
+            #expect(AppSettings.resolveLowSpacePercent(raw: 10) == 10, "lowSpacePercent 10 kept")
+            #expect(AppSettings.resolveLowSpacePercent(raw: 25) == 20, "lowSpacePercent 25 -> 20")
+        }
     }
 }

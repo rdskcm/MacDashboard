@@ -276,6 +276,27 @@ extension SerialTests {
             }
         }
 
+        @Test func decodeSpaceUsed() async {
+            func buf(vol: UInt32, used: Int64, count: Int = 32) -> [UInt8] {
+                var b = [UInt8](repeating: 0, count: 32)
+                withUnsafeBytes(of: vol.littleEndian) { b.replaceSubrange(8..<12, with: $0) }
+                withUnsafeBytes(of: used.littleEndian) { b.replaceSubrange(24..<32, with: $0) }
+                return Array(b.prefix(count))
+            }
+            let bit = UInt32(ATTR_VOL_SPACEUSED)
+            #expect(LiveCollector.decodeSpaceUsed(buf(vol: bit | UInt32(ATTR_VOL_INFO), used: 13_654_294_528)) == 13_654_294_528, "valid buffer")
+            #expect(LiveCollector.decodeSpaceUsed(buf(vol: UInt32(ATTR_VOL_INFO), used: 5)) == nil, "SPACEUSED bit missing -> nil")
+            #expect(LiveCollector.decodeSpaceUsed(buf(vol: bit, used: 5, count: 31)) == nil, "short buffer -> nil")
+            #expect(LiveCollector.decodeSpaceUsed(buf(vol: bit, used: -1)) == nil, "negative value -> nil")
+        }
+
+        @Test func dataUsedExcludingPurgeable() async {
+            #expect(LiveCollector.dataUsedExcludingPurgeable(raw: 100, purgeable: 30) == 70, "raw minus purgeable")
+            #expect(LiveCollector.dataUsedExcludingPurgeable(raw: 100, purgeable: nil) == 100, "purgeable nil -> raw")
+            #expect(LiveCollector.dataUsedExcludingPurgeable(raw: 100, purgeable: 150) == 0, "purgeable > raw clamps at 0")
+            #expect(LiveCollector.dataUsedExcludingPurgeable(raw: nil, purgeable: 30) == nil, "nil raw -> nil")
+        }
+
         @Test func localSnapshotNames() async {
             // =====================================================================
             // MARK: - ReportCollector.localSnapshotNames
@@ -353,6 +374,22 @@ extension SerialTests {
                 #expect(Parsers.smartctlAttrs(json: Data("garbage".utf8)).isEmpty, "smartctlAttrs: garbage ⇒ []")
                 #expect(Parsers.smartctlAttrs(json: full.prefix(full.count / 2)).isEmpty, "smartctlAttrs: truncated ⇒ []")
             }
+        }
+
+        @Test func smartctlHealth() async {
+            func nvme(_ log: String) -> Data { Data("{\"nvme_smart_health_information_log\":{\(log)}}".utf8) }
+            let base = "\"percentage_used\":4,\"critical_warning\":0,\"power_on_hours\":1234,\"temperature\":39,"
+                + "\"media_errors\":0,\"available_spare\":100,\"num_err_log_entries\":0,\"power_cycles\":120,\"unsafe_shutdowns\":3"
+            let h = Parsers.smartctlHealth(json: nvme(base))
+            #expect(h?.temperatureC == 39 && h?.percentageUsed == 4, "smartctlHealth: temperature/percentage match smartctlAttrs")
+            #expect(h?.powerOnHours == 1234 && h?.powerCycles == 120 && h?.unsafeShutdowns == 3 && h?.availableSpare == 100,
+                  "smartctlHealth: counters")
+            #expect(h?.spareThreshold == nil && h?.dataUnitsRead == nil, "smartctlHealth: absent keys are nil")
+            let full = Parsers.smartctlHealth(json: nvme(base + ",\"available_spare_threshold\":10,\"data_units_read\":74609375,\"data_units_written\":1000"))
+            #expect(full?.spareThreshold == 10 && full?.dataUnitsRead == 74_609_375 && full?.dataUnitsWritten == 1000,
+                  "smartctlHealth: threshold and data units")
+            #expect(Parsers.smartctlHealth(json: Data("{\"ata_smart_attributes\":{\"table\":[]}}".utf8)) == nil, "smartctlHealth: ATA JSON ⇒ nil")
+            #expect(Parsers.smartctlHealth(json: Data("garbage".utf8)) == nil, "smartctlHealth: garbage ⇒ nil")
         }
 
         @Test func launchctlNonApple() async {

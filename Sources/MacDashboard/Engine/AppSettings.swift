@@ -42,6 +42,14 @@ final class AppSettings {
         allowedBackupStaleHours.contains(raw) ? raw : defaultBackupStaleHours
     }
 
+    /// REDESIGN-STORAGE: amber low-space line (% free); any other stored value resolves to the default.
+    static let lowSpacePercentKey = "lowSpacePercent"
+    static let allowedLowSpacePercents = [10, 15, 20]
+    static let defaultLowSpacePercent = 20
+    static func resolveLowSpacePercent(raw: Int) -> Int {
+        allowedLowSpacePercents.contains(raw) ? raw : defaultLowSpacePercent
+    }
+
     /// SLEEP-IGNORE-APP codec, exposed for Checks. Missing or unreadable data is an empty
     /// list: failing toward "warn" is the safe direction for this setting. Duplicate keys
     /// (only a hand-edited defaults value can hold them) are dropped, first occurrence kept,
@@ -75,10 +83,16 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(backupStaleHours, forKey: Self.backupStaleHoursKey) }
     }
 
+    /// REDESIGN-STORAGE: amber low-space line, % free. The Settings control arrives in REDESIGN-SETTINGS.
+    var lowSpacePercent: Int {
+        didSet { UserDefaults.standard.set(lowSpacePercent, forKey: Self.lowSpacePercentKey) }
+    }
+
     private init() {
         Self.migrateLegacyValues(in: .standard)
         fastIntervalSeconds = Self.resolveFastInterval(raw: UserDefaults.standard.integer(forKey: Self.fastIntervalKey)) // 0 if unset
         ignoredWakeHolders = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
         backupStaleHours = Self.resolveBackupStaleHours(raw: UserDefaults.standard.integer(forKey: Self.backupStaleHoursKey))
+        lowSpacePercent = Self.resolveLowSpacePercent(raw: UserDefaults.standard.integer(forKey: Self.lowSpacePercentKey)) // 0 if unset
     }
 }

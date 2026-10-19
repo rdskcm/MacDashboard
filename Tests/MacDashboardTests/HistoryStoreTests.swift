@@ -238,7 +238,7 @@ extension SerialTests {
                 s.upsertToday(from: report, live: live)
                 let e = hsEntry(s)
                 #expect(e?.cycles == 123 && e?.battery_pct == 91, "HistoryStore.upsertToday: report battery wins over live")
-                #expect(e?.disk_used_gb == 350, "HistoryStore.upsertToday: disk used prefers dataUsed")
+                #expect(e?.disk_used_gb == 400, "HistoryStore.upsertToday: disk used is size - avail, never dataUsed")
                 #expect(e?.disk_free_gb == 100, "HistoryStore.upsertToday: disk free from avail")
                 #expect(e?.swap == "512MB/2048MB", "HistoryStore.upsertToday: swap string used/total in MB")
                 #expect(e?.macos == "26.0 (25A354)", "HistoryStore.upsertToday: macos with build")

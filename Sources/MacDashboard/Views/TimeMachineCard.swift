@@ -7,8 +7,8 @@ import SwiftUI
 
 /// One label→value row (spec §5.10): 150 pt fixed label column (`DS.muted`,
 /// 11.5 pt) · value right, mono font family so numeric values (quota) read
-/// as tabular columns — a private, card-local row (same convention
-/// `DirBarRow`/`DirBarList` already use in StorageCards.swift).
+/// as tabular columns — a private, card-local row (the convention the old Storage
+/// folder rows used).
 /// Internal (not private) because `ClaudeBackupCard` reuses it (BACKUP-AGE).
 struct TMRow: View {
     let label: String
@@ -99,7 +99,7 @@ private struct TMStorageRows: View {
 struct TimeMachineCard: View {
     let model: DashboardModel
 
-    /// «обновлено HH:MM» — mirrors `SmartDisksCard.updatedCaption`: `tmDest` now rides
+    /// «обновлено HH:MM» — mirrors the Storage page's SMART card caption: `tmDest` now rides
     /// the same periodic SMART sampler (and the manual «Обновить» refresh), so its
     /// freshness timestamp is the same `smartUpdatedAt`.
     private var updatedCaption: String? {
