@@ -22,6 +22,8 @@ struct ReportTab: View {
                     .padding(16)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("report-page")
     }
 
     private var placeholder: String {

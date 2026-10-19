@@ -257,6 +257,7 @@ struct AutostartCard: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(orphans.isEmpty ? "autostart-check-outdated" : "autostart-outdated")
         // Drive the hover animation from the STATE MUTATION (`withAnimation` here)
         // rather than an `.animation(_:value:)` modifier on the label Text. This
         // button lives inside a card wrapped in `.dsHoverLift()`, which animates

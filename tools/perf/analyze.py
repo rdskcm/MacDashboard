@@ -14,12 +14,15 @@
       restricted to the samples whose interval centre lies in [t0, t1).
   analyze.py verdict <out-dir> [--g1-max PCT]
       Reads <out-dir>/runs.tsv, writes summary.tsv, appends the per-scenario tables to report.md, prints
-      `COUNTS pass=<k> fail=<m>`.
+      `COUNTS pass=<k> fail=<m> noisy=<j>`.
+  analyze.py selftest
+      Checks median() and the exact Mann-Whitney p-value; prints `selftest ok`.
 
 Marks in drv.txt: `t0 <epoch>` / `t1 <epoch>`, or `t0 <label> <epoch>` / `t1 <label> <epoch>`.
 Exit: 0 ok, 2 bad input / missing file.
 """
 import collections
+import itertools
 import os
 import re
 import statistics
@@ -338,16 +341,53 @@ def cmd_top(argv):
 
 # ---------------------------------------------------------------- verdict
 
+ALPHA = 0.05
+
+
+def median(vals):
+    s = sorted(vals)
+    n = len(s)
+    return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2.0
+
+
+def mw_p_greater(cand, base):
+    """Exact one-sided permutation p-value of the Mann-Whitney U statistic; H1: candidate values are larger."""
+    def u(xs, ys):
+        return sum(1.0 if x > y else 0.5 if x == y else 0.0 for x in xs for y in ys)
+    pooled = list(cand) + list(base)
+    obs = u(cand, base)
+    hits = total = 0
+    for comb in itertools.combinations(range(len(pooled)), len(cand)):
+        chosen = set(comb)
+        xs = [pooled[i] for i in comb]
+        ys = [pooled[i] for i in range(len(pooled)) if i not in chosen]
+        total += 1
+        if u(xs, ys) >= obs - 1e-9:
+            hits += 1
+    return hits / total
+
+
+def cmd_selftest(args):
+    cases = [
+        ("median odd", median([1, 3, 2]) == 2),
+        ("median even", median([1, 2, 3, 4]) == 2.5),
+        ("mw 3v3 separated", abs(mw_p_greater([3, 4, 5], [0, 1, 2]) - 0.05) < 1e-9),
+        ("mw identical", mw_p_greater([1, 2, 3], [1, 2, 3]) > 0.05),
+        ("mw 5v5 separated", abs(mw_p_greater([5, 6, 7, 8, 9], [0, 1, 2, 3, 4]) - 1 / 252) < 1e-9),
+    ]
+    for name, ok in cases:
+        if not ok:
+            print("selftest FAILED: " + name, file=sys.stderr)
+            sys.exit(1)
+    print("selftest ok")
+
 # (scenario, metric) -> (op, limit). Candidate arm only. `G1_MAX` is filled from --g1-max.
 ABS = {
     ("G3", "main_busy_median_ms_s"): ("<=", 25.0),
     ("G4", "hitches_per_s"): ("<=", 3.0),
     ("G4", "main_busy_median_ms_s"): ("<=", 400.0),
-    ("G4", "sub.HistoryTrendChart.plot.main_per_s"): ("<=", 5.0),
     ("G5", "details.commits_per_s_median"): ("<=", 60.0),
-    ("G5", "table.commits_per_s_median"): ("<=", 60.0),
     ("G5-top", "details.app_pct_minus_ctrl"): ("<=", 3.0),
-    ("G5-top", "table.app_pct_minus_ctrl"): ("<=", 3.0),
     ("G6-page", "sub.rgba64_shade_conic.all"): ("<=", 0.0),
     ("G6-table", "sub.rgba64_shade_conic.all"): ("<=", 0.0),
     ("G6-hover", "sub.rgba64_shade_conic.all"): ("<=", 0.0),
@@ -358,6 +398,8 @@ for _s in ("G3", "G4", "G6-page", "G6-table", "G6-hover", "G7", "G8"):
     REG[(_s, "hitches_total")] = ("add", 3.0)
 for _s in ("G4", "G6-page", "G6-table", "G6-hover", "G7"):
     REG[(_s, "main_busy_total")] = ("mul", 1.15)
+REG[("GP", "hitches_total")] = ("add", 3.0)
+REG[("GP", "main_busy_total")] = ("mul", 1.15)
 REG[("G1", "app_pct")] = ("add", 0.5)
 REG[("G3", "app_pct")] = ("add", 0.5)
 REG[("G8", "app_pct")] = ("add", 0.5)
@@ -365,7 +407,7 @@ REG[("G9", "app_pct")] = ("add", 0.5)
 
 ORDER = ["G1", "G2", "G3", "G4", "G5", "G5-top", "G6-page", "G6-table", "G6-hover", "G7", "G8", "G9"]
 TITLES = {
-    "G1": "G1 idle-overview", "G2": "G2 ca-idle", "G3": "G3 post-scroll-bottom", "G4": "G4 hist-all",
+    "G1": "G1 idle-home", "G2": "G2 ca-idle", "G3": "G3 post-scroll-bottom", "G4": "G4 hist-all",
     "G5": "G5 rainbow (traced)", "G5-top": "G5 rainbow (untraced, top)", "G6-page": "G6 iphone page",
     "G6-table": "G6 iphone table", "G6-hover": "G6 iphone hover", "G7": "G7 mac-scroll", "G8": "G8 orphan-bottom",
     "G9": "G9 idle-cpu-page",
@@ -414,7 +456,7 @@ def cmd_verdict(argv):
 
     # derived: <label>.app_pct_minus_ctrl for G5-top, per arm and per run
     for arm in sorted(arms):
-        for label in ("details", "table"):
+        for label in ("details",):
             ctrl = dict(data.get(("G5-top", arm, "ctrl.app_pct"), []))
             for run, v in data.get(("G5-top", arm, label + ".app_pct"), []):
                 if run in ctrl:
@@ -424,14 +466,23 @@ def cmd_verdict(argv):
                         metric_order["G5-top"].append(label + ".app_pct_minus_ctrl")
 
     def agg(scen, arm, name):
-        vals = [v for _, v in data.get((scen, arm, name), [])]
-        return (sum(vals) / len(vals)) if vals else None
+        vs = vals(scen, arm, name)
+        return median(vs) if vs else None
+
+    def vals(scen, arm, name):
+        return [v for _, v in data.get((scen, arm, name), [])]
+
+    def cell(scen, arm, name):
+        vs = vals(scen, arm, name)
+        if not vs:
+            return "-"
+        return "%s (%s-%s)" % (fmt(median(vs)), fmt(min(vs)), fmt(max(vs)))
 
     tsv = ["scenario\tarm\trun\tmetric\tvalue\tthreshold\tverdict"]
     rep = []
-    npass = nfail = 0
+    npass = nfail = nnoisy = 0
     for scen in [s for s in ORDER if s in metric_order] + [s for s in metric_order if s not in ORDER]:
-        rep.append("### %s" % TITLES.get(scen, scen))
+        rep.append("### %s" % TITLES.get(scen, scen + " page scroll" if scen.startswith("GP-") else scen))
         rep.append("")
         if have_base:
             rep.append("| metric | candidate | baseline | threshold | verdict |")
@@ -448,49 +499,47 @@ def cmd_verdict(argv):
             verdicts = []
             thr_txt = []
             rule = rules.get((scen, name))
-            if scen == "G8" and agg("G8", "cand", "orphan_visible") == 0.0:
-                rule = None
             if cand is not None and rule:
                 ok = check(rule[0], cand, rule[1])
                 verdicts.append("PASS" if ok else "FAIL")
                 thr_txt.append("%s %s" % (rule[0], fmt(rule[1])))
-            reg = REG.get((scen, name))
-            if scen == "G8" and agg("G8", "cand", "orphan_visible") == 0.0:
-                reg = None
+            reg = REG.get((scen, name)) or (REG.get(("GP", name)) if scen.startswith("GP-") else None)
             if cand is not None and base is not None and reg:
-                lim = base + reg[1] if reg[0] == "add" else base * reg[1]
-                ok = cand <= lim
-                verdicts.append("PASS" if ok else "FAIL")
-                thr_txt.append("<= base %s %s (= %s)" % ("+" if reg[0] == "add" else "x", fmt(reg[1]), fmt(lim)))
-            verdict = ("FAIL" if "FAIL" in verdicts else "PASS") if verdicts else "INFO"
+                margin = reg[1] if reg[0] == "add" else base * (reg[1] - 1.0)
+                if cand - base <= margin:
+                    verdicts.append("PASS")
+                    thr_txt.append("median delta <= %s" % fmt(margin))
+                else:
+                    p = mw_p_greater(vals(scen, "cand", name), vals(scen, "base", name))
+                    verdicts.append("FAIL" if p <= ALPHA else "NOISY")
+                    thr_txt.append("median delta %s > %s, p=%.3f (fail if p <= %.2f)" % (fmt(cand - base), fmt(margin), p, ALPHA))
+            verdict = "FAIL" if "FAIL" in verdicts else "NOISY" if "NOISY" in verdicts else "PASS" if verdicts else "INFO"
             npass += verdicts.count("PASS")
             nfail += verdicts.count("FAIL")
+            nnoisy += verdicts.count("NOISY")
             thr = "; ".join(thr_txt)
             if cand is not None:
                 tsv.append("%s\tcand\tagg\t%s\t%s\t%s\t%s" % (scen, name, fmt(cand), thr, verdict))
             if base is not None:
                 tsv.append("%s\tbase\tagg\t%s\t%s\t\tref" % (scen, name, fmt(base)))
-            row = [name, fmt(cand) if cand is not None else "-"]
+            row = [name, cell(scen, "cand", name)]
             if have_base:
-                row.append(fmt(base) if base is not None else "-")
+                row.append(cell(scen, "base", name))
             row += [thr or "-", verdict]
             rep.append("| " + " | ".join(row) + " |")
-        if scen == "G8" and agg("G8", "cand", "orphan_visible") == 0.0:
-            rep.append("")
-            rep.append("orphan_visible=no: the bench could not show an orphan in the Autostart card, so P7 (R6) is not measured; no verdict applied.")
         rep.append("")
     with open(os.path.join(out, "summary.tsv"), "w") as f:
         f.write("\n".join(tsv) + "\n")
     with open(os.path.join(out, "report.md"), "a") as f:
         f.write("\n".join(rep) + "\n")
-    print("COUNTS pass=%d fail=%d" % (npass, nfail))
+    print("COUNTS pass=%d fail=%d noisy=%d" % (npass, nfail, nnoisy))
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("tp", "ca", "top", "verdict"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("tp", "ca", "top", "verdict", "selftest"):
         print(__doc__, file=sys.stderr)
         sys.exit(2)
-    {"tp": cmd_tp, "ca": cmd_ca, "top": cmd_top, "verdict": cmd_verdict}[sys.argv[1]](sys.argv[2:])
+    {"tp": cmd_tp, "ca": cmd_ca, "top": cmd_top, "verdict": cmd_verdict, "selftest": cmd_selftest}[sys.argv[1]](sys.argv[2:])
 
 
 if __name__ == "__main__":

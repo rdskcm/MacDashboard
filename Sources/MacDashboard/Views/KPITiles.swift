@@ -148,6 +148,7 @@ struct BatteryTile: View {
                 // Overview recipe), not floated over the tile as a v1 overlay.
                 RainbowCapsuleButton(title: L.kpiBatteryDetailsButton, size: .compact) { showDetails.toggle() }
                     .accessibilityLabel(L.kpiBatteryDetailsButton)
+                    .accessibilityIdentifier("battery-details")
                     .popover(isPresented: $showDetails, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
                         BatteryDetailView(condition: model.report.battery?.condition ?? model.battery?.condition)
                     }
