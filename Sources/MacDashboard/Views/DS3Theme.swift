@@ -23,7 +23,18 @@ enum DS3 {
     static let chip = Color(light: Color.white.opacity(0.55), dark: Color.white.opacity(0.07))
     static let lens = Color(light: Color.white.opacity(0.42), dark: Color.white.opacity(0.12))
     static let bar = Color(light: Color.white.opacity(0.42), dark: ds3RGB(30, 30, 34, 0.42))
-    static let glassStrong = Color(light: Color.white.opacity(0.66), dark: ds3RGB(26, 26, 30, 0.70))
+    static let glassStrong = Color(light: Color.white.opacity(GlassTint.light.mockup), dark: ds3RGB(26, 26, 30, GlassTint.dark.mockup))
+    /// CARD-GLASS-BACKDROP: the glass tint at the opacities `GlassSettings` resolved (D8). The default fill returns
+    /// `glassStrong` itself; any other fill is memoised on the last one, so a card body that re-runs for another
+    /// reason gets the identical Color (a fresh dynamic NSColor compares unequal and would redraw the fill).
+    @MainActor static func glassTint(_ f: GlassTint.Fill) -> Color {
+        if f == .standard { return glassStrong }
+        if let last = lastGlassTint, last.fill == f { return last.color }
+        let c = Color(light: Color.white.opacity(f.lightAlpha), dark: ds3RGB(26, 26, 30, f.darkAlpha))
+        lastGlassTint = (f, c)
+        return c
+    }
+    @MainActor private static var lastGlassTint: (fill: GlassTint.Fill, color: Color)?
     static let overlay = Color(light: ds3RGB(250, 248, 244, 0.96), dark: ds3RGB(30, 29, 27, 0.97))
 
     static let accent = Color(light: Color(hex: 0x2F7FE0), dark: Color(hex: 0x6AA6F2))

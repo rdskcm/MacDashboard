@@ -34,7 +34,7 @@ usage_error() { echo "usage error: $1" >&2; echo "$HELP" >&2; exit 64; }
 precondition_refused() { echo "REFUSED: $1" >&2; exit 65; }
 runtime_error() { echo "RUNTIME ERROR: $1" >&2; exit 70; }
 
-STATE_ORDER="main-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark settings-backup-dark main-report-dark main-page-system-dark main-page-cpu-dark main-light settings-general-light settings-monitoring-light settings-titlebar-hover-light settings-backup-light main-report-light main-page-system-light main-page-cpu-light content-processes-cpu-dark content-processes-mem-dark content-cpu-live-dark content-cpu-high-dark content-cpu-failed-dark content-cpu-loading-dark content-cpu-bars-dark content-processes-cpu-open-dark content-processes-cpu-confirm-dark content-processes-cpu-quitting-dark content-folders-home-dark content-folders-service-dark content-claude-backup-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-history-fresh-dark content-home-attention-dark content-home-sections-dark content-home-now-dark content-processes-cpu-light content-processes-mem-light content-cpu-live-light content-cpu-high-light content-cpu-failed-light content-cpu-loading-light content-cpu-bars-light content-processes-cpu-open-light content-processes-cpu-confirm-light content-processes-cpu-quitting-light content-folders-home-light content-folders-service-light content-claude-backup-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light content-history-fresh-light content-home-attention-light content-home-sections-light content-home-now-light"
+STATE_ORDER="main-dark main-glass-clear-dark main-glass-tinted-dark main-glass-rt-dark settings-general-dark settings-monitoring-dark settings-titlebar-hover-dark settings-backup-dark main-report-dark main-page-system-dark main-page-cpu-dark main-light main-glass-clear-light main-glass-tinted-light main-glass-rt-light settings-general-light settings-monitoring-light settings-titlebar-hover-light settings-backup-light main-report-light main-page-system-light main-page-cpu-light content-processes-cpu-dark content-processes-mem-dark content-cpu-live-dark content-cpu-high-dark content-cpu-failed-dark content-cpu-loading-dark content-cpu-bars-dark content-processes-cpu-open-dark content-processes-cpu-confirm-dark content-processes-cpu-quitting-dark content-folders-home-dark content-folders-service-dark content-claude-backup-dark content-history-disk-dark content-history-battery-dark content-history-cycles-dark content-history-swap-dark content-history-disk-quarter-dark content-history-disk-year-dark content-history-disk-all-dark content-history-fresh-dark content-home-attention-dark content-home-sections-dark content-home-now-dark content-processes-cpu-light content-processes-mem-light content-cpu-live-light content-cpu-high-light content-cpu-failed-light content-cpu-loading-light content-cpu-bars-light content-processes-cpu-open-light content-processes-cpu-confirm-light content-processes-cpu-quitting-light content-folders-home-light content-folders-service-light content-claude-backup-light content-history-disk-light content-history-battery-light content-history-cycles-light content-history-swap-light content-history-disk-quarter-light content-history-disk-year-light content-history-disk-all-light content-history-fresh-light content-home-attention-light content-home-sections-light content-home-now-light"
 
 # edge_inset_px is 0 by default (see README §5); only changed with measured
 # evidence, in a separate documented commit.
@@ -873,6 +873,23 @@ for mode in dark light; do
   park_cursor
   sleep 1.5
   capture_state "main-$mode" "$MAIN_ID"
+
+  # CARD-GLASS-BACKDROP: glass cards at the Liquid Glass slider's two ends and under Reduce Transparency, set through
+  # the app's fixture-only keys (GlassTint.fixture*Key); the app picks them up live via KVO, no relaunch.
+  for gs in clear tinted rt; do
+    case "$gs" in
+      clear)  defaults write "$BUNDLE_ID" visualGlassTintAmount -float 0 ;;
+      tinted) defaults write "$BUNDLE_ID" visualGlassTintAmount -float 1 ;;
+      rt)     defaults delete "$BUNDLE_ID" visualGlassTintAmount >/dev/null 2>&1 || true
+              defaults write "$BUNDLE_ID" visualReduceTransparency -bool true ;;
+    esac
+    sleep 1.5
+    assert_key "$MAIN_ID" "main-glass-$gs-$mode"
+    capture_state "main-glass-$gs-$mode" "$MAIN_ID"
+  done
+  defaults delete "$BUNDLE_ID" visualGlassTintAmount >/dev/null 2>&1 || true
+  defaults delete "$BUNDLE_ID" visualReduceTransparency >/dev/null 2>&1 || true
+  sleep 1.5
 
   # REDESIGN-HOME: a section page (the interim System page) opened from its Home tile, then Back.
   assert_key "$MAIN_ID" "main-page-system-$mode"

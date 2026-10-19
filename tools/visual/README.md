@@ -48,14 +48,14 @@ frontmost/AXMain/bounds failed. The screen must be unlocked: a locked session sh
 
 ## 4. States captured
 
-**Real window (18 states, `screencapture -x -o -l <windowid>`):** `main`,
+**Real window (24 states, `screencapture -x -o -l <windowid>`):** `main`,
 `main-report` (Report tab, via an AX press on the tab button — see §8),
 `settings-general`, `settings-monitoring`, `settings-titlebar-hover`,
 `settings-backup` (Backups section, third sidebar row), `main-iphone` (iPhone mode device list, fixture data),
 `main-iphone-device` (the first tile opened via its AX identifier `iphone-tile-0`; the Back button is `iphone-back`),
 `main-page-system` (Home's System tile opened via `home-tile-system`; the page's Back chip is `page-back`), each
 `dark`/`light`. Window id via `vbtool windows --pid P`; the Settings window
-must be 680±2 pt wide or the run aborts.
+must be 680±2 pt wide or the run aborts. `main-glass-clear`, `main-glass-tinted`, `main-glass-rt` (Home with the glass-card fixture keys `visualGlassTintAmount` = 0 / 1 and `visualReduceTransparency` = true written into the app domain between captures; CARD-GLASS-BACKDROP), each `dark`/`light`.
 
 **Offscreen content (46 states, `tools/visual/content_states.swift` via
 `tools/harness/render.sh`; `run.sh` aborts below 46):** `content-processes-{cpu,mem}`,
