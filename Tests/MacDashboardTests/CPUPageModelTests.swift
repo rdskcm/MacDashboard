@@ -119,10 +119,14 @@ extension SerialTests {
 
         @Test func socTile() {
             withLanguage(.en) {
-                var soc = CPUPageModel.make(cpuInput(soc: 93)).tiles[2]
-                #expect(soc.value == "93 °C" && soc.dot == .hot && soc.hot && soc.note == "hot · may throttle" && !soc.dimmed)
-                soc = CPUPageModel.make(cpuInput(soc: 90)).tiles[2]
-                #expect(soc.dot == .hot, "exactly 90 is hot")
+                var soc = CPUPageModel.make(cpuInput(soc: 95)).tiles[2]
+                #expect(soc.value == "95 °C" && soc.dot == .hot && soc.hot && soc.note == "hot · may throttle" && !soc.dimmed, "exactly 95 is hot")
+                soc = CPUPageModel.make(cpuInput(soc: 94)).tiles[2]
+                #expect(soc.value == "94 °C" && soc.dot == .amber && !soc.hot && soc.note == "warm" && !soc.dimmed, "94 is warm")
+                soc = CPUPageModel.make(cpuInput(soc: 85)).tiles[2]
+                #expect(soc.dot == .amber && !soc.hot && soc.note == "warm", "exactly 85 is warm")
+                soc = CPUPageModel.make(cpuInput(soc: 84)).tiles[2]
+                #expect(soc.dot == .green && !soc.hot && soc.note == "normal", "84 is normal")
                 soc = CPUPageModel.make(cpuInput(soc: 48)).tiles[2]
                 #expect(soc.value == "48 °C" && soc.dot == .green && !soc.hot && soc.note == "normal")
                 soc = CPUPageModel.make(cpuInput(soc: nil)).tiles[2]
@@ -130,8 +134,14 @@ extension SerialTests {
             }
             withLanguage(.ru) {
                 #expect(CPUPageModel.make(cpuInput(soc: 48)).tiles[2].note == "норма")
+                #expect(CPUPageModel.make(cpuInput(soc: 90)).tiles[2].note == "тепло")
                 #expect(CPUPageModel.make(cpuInput(soc: 95)).tiles[2].note == "горячо · возможен троттлинг")
             }
+        }
+
+        @Test func socLevelBoundaries() {
+            #expect(CPULoad.socLevel(84) == .normal && CPULoad.socLevel(85) == .warm)
+            #expect(CPULoad.socLevel(94) == .warm && CPULoad.socLevel(95) == .hot)
         }
 
         @Test func failedWithLastGood() {

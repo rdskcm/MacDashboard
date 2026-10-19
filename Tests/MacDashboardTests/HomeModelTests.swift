@@ -316,6 +316,26 @@ extension SerialTests {
                     BatteryInfo(source: "ac", charge: 50, state: "charging", cycles: 300, condition: "Normal", maxCapacity: 86))
         }
 
+        @Test func wornTaskUsesMergedCapacity() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            // Report battery without max capacity, live sample with it: both Assessment and the task fall back to live.
+            var report = FullReport()
+            report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: 100, condition: "Normal", maxCapacity: nil)
+            var live = LiveSnapshot()
+            live.battery = BatteryInfo(source: nil, charge: 50, state: nil, cycles: nil, condition: nil, maxCapacity: 65)
+            var a = Assess.assess(report: report, live: live, memPressure: nil)
+            #expect(a.items.contains { $0.kind == .batteryCapacity && $0.sev == .serious }, "live capacity raises the item")
+            var t = HomeModel.tasks(a, report: report, disk: nil, battery: live.battery).first { $0.kind == .batteryCapacity }
+            #expect(t?.state == "35% worn", "fallback state \(String(describing: t?.state))")
+            // Both carry it: the report value wins.
+            report.battery?.maxCapacity = 60
+            a = Assess.assess(report: report, live: live, memPressure: nil)
+            t = HomeModel.tasks(a, report: report, disk: nil, battery: live.battery).first { $0.kind == .batteryCapacity }
+            #expect(t?.state == "40% worn", "report state \(String(describing: t?.state))")
+        }
+
         @Test func nowCellsTones() {
             let saved = L10nStore.shared.language
             defer { L10nStore.shared.language = saved }
@@ -345,6 +365,24 @@ extension SerialTests {
             #expect(cells[0].loading && cells[0].big == "—" && cells[0].foot == "Collecting data…" && cells[0].chipText == nil)
             #expect(cells[0].segments == [HomeNowSegment(series: .track, value: 1)] && cells[0].legend.isEmpty)
             #expect(cells[1].chipText == nil, "no pressure level, no chip")
+        }
+
+        @Test func socChipSharesCPUPageLevels() {
+            let (report, live) = nowFixture()
+            func chip(_ t: Int) -> HomeTone? {
+                HomeModel.nowCells(homeInput(report, live), tasks: [], memPressure: nil, socTempC: t,
+                                   cpu: CPUUsage(user: 1, sys: 1, idle: 98), short: false, narrow: false)[0].chipTone
+            }
+            #expect(chip(84) == .green && chip(85) == .amber && chip(94) == .amber && chip(95) == .hot, "Home chip 84/85/94/95")
+            for t in [48, 84, 85, 94, 95, 100] {
+                let expected: HomeTone
+                switch CPULoad.socLevel(t) {
+                case .normal: expected = .green
+                case .warm: expected = .amber
+                case .hot: expected = .hot
+                }
+                #expect(chip(t) == expected, "Home chip follows CPULoad.socLevel at \(t) °C")
+            }
         }
 
         @Test func nowRuAndSparkline() {

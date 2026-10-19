@@ -9,10 +9,20 @@ import CoreGraphics
 /// (Views/DesignSystem.swift) can track the current selection. Moved from Views/ProcessCards.swift.
 enum Metric: Hashable, Sendable { case cpu, mem }
 
+/// Mac SoC temperature level (HOME-LEFTOVERS): the one classification every SoC temperature display uses.
+enum SocTempLevel: Equatable, Sendable { case normal, warm, hot }
+
 /// REDESIGN-CPU thresholds (03-cpu:20) and the high-load run tracker.
 enum CPULoad {
     static let highUsagePct: Double = 85
-    static let socHotC = 90
+    /// SoC temperature thresholds, user decision 2026-10-19 (HOME-LEFTOVERS, option B): Apple publishes no limit and
+    /// M-series chips sit at 90-100 °C under normal heavy load, so warm from 85 °C and hot from 95 °C. The ONLY SoC
+    /// temperature rule in the app — the CPU page tile and the Home CPU chip both call `socLevel`.
+    static let socWarmC = 85
+    static let socHotC = 95
+    static func socLevel(_ celsius: Int) -> SocTempLevel {
+        celsius >= socHotC ? .hot : (celsius >= socWarmC ? .warm : .normal)
+    }
     /// A gap between two successful CPU samples longer than this restarts a high-load run (pause, sleep).
     static let maxSampleGap: TimeInterval = 30
 
@@ -39,7 +49,7 @@ enum CPULoad {
 
 enum CPUPagePhase: Equatable { case loading, live, high, failed(BlockFailure, lastGoodAt: Date?) }
 enum CPUTagKind: Equatable { case ok, high, loading, failed }
-enum CPUDot: Equatable { case green, hot }
+enum CPUDot: Equatable { case green, amber, hot }
 
 struct CPUHeroModel: Equatable { var value: String; var fraction: Double; var note: String; var high: Bool; var dimmed: Bool }
 struct CPUTileModel: Equatable { var label: String; var value: String; var note: String?; var dot: CPUDot?; var hot: Bool; var dimmed: Bool }
@@ -124,9 +134,12 @@ struct CPUPageModel: Equatable {
                                 note: note, high: high, dimmed: false)
             let soc: CPUTileModel
             if let t = i.socTempC {
-                if t >= CPULoad.socHotC {
+                switch CPULoad.socLevel(t) {
+                case .hot:
                     soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.cpuSocHot, dot: .hot, hot: true, dimmed: false)
-                } else {
+                case .warm:
+                    soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.cpuSocWarm, dot: .amber, hot: false, dimmed: false)
+                case .normal:
                     soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.commonNormal, dot: .green, hot: false, dimmed: false)
                 }
             } else {

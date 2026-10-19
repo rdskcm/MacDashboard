@@ -125,11 +125,13 @@ struct CPUUsageCard: View {
         }
     }
 
+    /// State colour from the dot (CPULoad.socLevel via CPUPageModel): hot → hot, warm → amber, else green note / plain value.
     private func tile(_ t: CPUTileModel) -> some View {
-        SectionTile(label: t.label, value: t.value, note: t.note,
-                    noteInk: t.hot ? DS3.hotInk : DS3.greenInk,
-                    dot: t.dot.map { $0 == .hot ? DS3.hot : DS3.green },
-                    valueInk: t.dimmed ? DS3.muted : (t.hot ? DS3.hotInk : DS3.ink))
+        let ink: Color = t.dot == .hot ? DS3.hotInk : (t.dot == .amber ? DS3.amberInk : DS3.greenInk)
+        return SectionTile(label: t.label, value: t.value, note: t.note,
+                           noteInk: ink,
+                           dot: t.dot.map { $0 == .hot ? DS3.hot : ($0 == .amber ? DS3.amber : DS3.green) },
+                           valueInk: t.dimmed ? DS3.muted : ((t.dot == .hot || t.dot == .amber) ? ink : DS3.ink))
     }
 }
 

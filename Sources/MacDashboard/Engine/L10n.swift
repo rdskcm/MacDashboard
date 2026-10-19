@@ -184,6 +184,7 @@ protocol AppStrings {
     var cpuSystem: String { get }
     var cpuSocTemperature: String { get }
     var cpuSocHot: String { get }
+    var cpuSocWarm: String { get }
     var cpuNoReading: String { get }
     func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String
     func cpuHighLoadFor(_ min: Int) -> String

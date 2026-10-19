@@ -95,8 +95,8 @@ enum Assess {
                                         fullText: text, verb: verb(action), action: action)))
         }
 
-        // --- battery (report merge wins; falls back to live) ---
-        let batt = report.battery ?? live.battery
+        // --- battery: static fields from the report, falling back field by field to the live sample (BatteryInfo.merged) ---
+        let batt = BatteryInfo.merged(live: live.battery, report: report.battery)
         if let cap = batt?.maxCapacity {
             if cap < 70 {
                 a.battSev = .serious
