@@ -6,9 +6,11 @@ import SwiftUI
 @main
 struct MacDashboardApp: App {
     @State private var model: DashboardModel
+    @State private var glass: GlassSettings
 
     init() {
         _model = State(wrappedValue: DashboardModel())
+        _glass = State(wrappedValue: GlassSettings())
         // Forces the launch-language capture now, before any UI can switch it.
         _ = L10nStore.launchLanguage
         syncAppleLanguages()
@@ -17,6 +19,7 @@ struct MacDashboardApp: App {
     var body: some Scene {
         WindowGroup(AppInfo.name) {
             MainDashboardView(model: model)
+                .environment(glass)
                 .frame(minWidth: 900, minHeight: 620)
                 .onAppear {
                     if VisualFixture.isRequested {

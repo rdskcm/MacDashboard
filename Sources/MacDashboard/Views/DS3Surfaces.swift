@@ -151,15 +151,9 @@ extension View {
 
     /// Glass card: material + `glassStrong` tint, pointer rim, card shadow (D4). No `.clipped()` on ancestors:
     /// the shadow bleeds 36 pt below and about 18 pt sideways.
+    /// The fill follows the system Liquid Glass slider and Reduce Transparency through GlassSettings (CARD-GLASS-BACKDROP).
     func ds3GlassCard(cornerRadius r: CGFloat) -> some View {
-        background {
-            ZStack {
-                RoundedRectangle(cornerRadius: r, style: .continuous).fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: r, style: .continuous).fill(DS3.glassStrong)
-            }
-        }
-        .overlay(DS3Rim(cornerRadius: r))
-        .ds3Elevation(.card, in: RoundedRectangle(cornerRadius: r, style: .continuous))
+        modifier(DS3GlassCard(cornerRadius: r))
     }
 
     /// One `.onContinuousHover` on the window root feeds the tracker; rims reach it through the environment.
@@ -208,6 +202,28 @@ private struct DS3Appear: ViewModifier {
                     withAnimation(animation.delay(delay)) { shown = true }
                 }
             }
+    }
+}
+
+/// CARD-GLASS-BACKDROP: `ds3GlassCard`'s surface. Reads the one injected `GlassSettings` (nil in offscreen harness
+/// renders → the default look). Under Reduce Transparency there is no material and the tint is opaque. Shadow and rim
+/// are unchanged; no `.drawingGroup()` here (it would flatten the material's backdrop sample, findings R2-C4).
+private struct DS3GlassCard: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(GlassSettings.self) private var glass: GlassSettings?
+
+    func body(content: Content) -> some View {
+        let fill = glass?.fill ?? .standard
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return content
+            .background {
+                ZStack {
+                    if fill.usesMaterial { shape.fill(.regularMaterial) }
+                    shape.fill(DS3.glassTint(fill))
+                }
+            }
+            .overlay(DS3Rim(cornerRadius: cornerRadius))
+            .ds3Elevation(.card, in: shape)
     }
 }
 
