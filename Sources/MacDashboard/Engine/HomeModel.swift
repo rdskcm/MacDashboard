@@ -552,13 +552,21 @@ extension HomeModel {
         let memDest = Destination(.memory, focus: .usage)
         if let mem = input.mem, mem.total > 0 {
             var chipTone: HomeTone? = nil, chipText: String? = nil
-            switch memPressure {
-            case .normal?: (chipTone, chipText) = (.green, L.homePressureLow)
-            case .warn?: (chipTone, chipText) = (.amber, L.homePressureMedium)
-            case .critical?: (chipTone, chipText) = (.hot, L.homePressureHigh)
+            switch MemoryLoad.pressureTone(memPressure) {
+            case .low?: (chipTone, chipText) = (.green, L.homePressureLow)
+            case .medium?: (chipTone, chipText) = (.amber, L.homePressureMedium)
+            case .high?: (chipTone, chipText) = (.hot, L.homePressureHigh)
             case nil: break
             }
             let rest = max(0, mem.total - mem.active - mem.wired - mem.compressor - mem.inactive)
+            // The compressed item only where the cell is wide: 2x2 (narrow) and the 3-column no-battery layout;
+            // the 4-in-a-row layouts keep three items (a fourth truncates the labels there).
+            var memLegend = [HomeLegendItem(series: .s1, text: L.homeLegendActive(g(mem.active), short: short), isRule: false),
+                             HomeLegendItem(series: .s2, text: L.homeLegendWired(g(mem.wired)), isRule: false),
+                             HomeLegendItem(series: .s4, text: L.homeLegendInactive(g(mem.inactive), short: short), isRule: false)]
+            if narrow || !input.hasBattery {
+                memLegend.insert(HomeLegendItem(series: .s3, text: L.homeLegendCompressed(g(mem.compressor), short: short), isRule: false), at: 2)
+            }
             let foot: String
             if let s = input.swap, s.total > 0 { foot = L.homeMemFoot(fmtBytes(s.used), fmtBytes(s.total), fmtBytes(mem.compressor)) }
             else { foot = L.homeMemFootNoSwap(fmtBytes(mem.compressor)) }
@@ -572,9 +580,7 @@ extension HomeModel {
                            HomeNowSegment(series: .s4, value: Double(mem.inactive)),
                            HomeNowSegment(series: .track, value: Double(rest))],
                 mark: nil,
-                legend: [HomeLegendItem(series: .s1, text: L.homeLegendActive(g(mem.active), short: short), isRule: false),
-                         HomeLegendItem(series: .s2, text: L.homeLegendWired(g(mem.wired)), isRule: false),
-                         HomeLegendItem(series: .s4, text: L.homeLegendInactive(g(mem.inactive), short: short), isRule: false)],
+                legend: memLegend,
                 foot: foot, destination: memDest))
         } else {
             cells.append(loadingCell(.memory, L.commonMemory, memDest))

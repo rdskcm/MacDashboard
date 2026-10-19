@@ -73,6 +73,9 @@ final class DashboardModel {
     /// True while refreshCPUNow() runs (CPU page Refresh / Try again).
     private(set) var cpuRefreshing = false
 
+    /// REDESIGN-MEMORY: Memory page Refresh / Try again in flight.
+    private(set) var memoryRefreshing = false
+
     /// Re-entrancy guard for `upgradeBrewNow()`, true while an in-app `brew upgrade`
     /// is in flight — mirrors `smartRefreshing`.
     var brewUpgrading = false
@@ -396,6 +399,9 @@ final class DashboardModel {
 
     /// Visual fixture only: sets the memory-pressure level the Now card's Memory chip reads.
     func applyFixturePressure(_ p: MemoryPressureLevel?) { memPressure = p }
+
+    /// Visual fixture only: sets the memory block.
+    func applyFixtureMemory(_ state: BlockState) { memoryBlock = state }
 
     /// Starts an attempt and arms its watchdog: still in flight after `id.timeout` → `.failed(.timedOut)`.
     private func beginBlock(_ id: BlockID, showsLoading: Bool = false) {
@@ -938,8 +944,32 @@ final class DashboardModel {
         }
     }
 
+    /// REDESIGN-MEMORY: Memory page Refresh / Try again. One native memory + swap + pressure read off the
+    /// main actor plus a process re-sample. `showsLoading: false` (D4): the read takes milliseconds, so a
+    /// loading phase would only flash; the button's «Refreshing…» is the feedback.
+    func refreshMemoryNow() {
+        guard !memoryRefreshing else { return }
+        memoryRefreshing = true
+        beginBlock(.memory)
+        refreshProcessesNow()
+        Task { [weak self] in
+            let (snap, pressure): (LiveSnapshot, MemoryPressureLevel?) = await withCheckedContinuation { c in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    c.resume(returning: (LiveCollector().collectFast(), LiveCollector.readMemoryPressure()))
+                }
+            }
+            guard let self else { return }
+            defer { self.memoryRefreshing = false }
+            guard let mem = snap.mem else { self.failBlock(.memory, .noReading); return }
+            if self.mem != mem { self.mem = mem }
+            if self.swap != snap.swap { self.swap = snap.swap }
+            if self.memPressure != pressure { self.memPressure = pressure }
+            self.succeedBlock(.memory)
+        }
+    }
+
     /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up).
-    /// Its callers are `refreshCPUNow()` and the Processes card's Quit flow (REDESIGN-CPU);
+    /// Its callers are `refreshCPUNow()`, `refreshMemoryNow()` and the Processes card's Quit flow (REDESIGN-CPU);
     /// the «Применить» button of the retired process-limit setting was removed in
     /// REDESIGN-FOUNDATION. One-shot, independent of the periodic slowTask sampler — a fresh
     /// LiveCollector instance is created per call, never shared with a concurrent

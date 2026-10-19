@@ -532,7 +532,7 @@ private struct HistoryTrendChart: View {
         /// tooltip renders a literal space as a full glyph advance, so disk/swap
         /// split value and unit into two `Text` views with a tight
         /// `.padding(.leading, 1.5)` gap, matching TMRow.valueParts and
-        /// LegendItem elsewhere in this block. Battery/cycles don't have the
+        /// the Memory page legend elsewhere in this block. Battery/cycles don't have the
         /// gap defect (`%` touches the number directly; cycles is a count + word
         /// label, not a byte/capacity unit) so they stay single strings.
         private func valueParts(for point: HistoryChartPoint) -> (value: String, unit: String?) {

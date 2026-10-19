@@ -46,9 +46,6 @@ struct StringsEN: AppStrings {
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { "CPU" }
-    var kpiMemLabel: String { "Memory" }
-    func kpiMemUnit(_ total: String) -> String { "of \(total)" }
-    func kpiMemSub(_ compressor: String, _ purgeable: String) -> String { "compressed \(compressor) · purgeable \(purgeable)" }
     var kpiSwapLabel: String { "Swap" }
     func kpiSwapUnit(_ total: String) -> String { "of \(total)" }
     func kpiSwapSub(_ free: String) -> String { "free \(free)" }
@@ -154,6 +151,31 @@ struct StringsEN: AppStrings {
     var processForceQuitConfirm: String { "Force quit" }
     func processTerminateA11y(_ name: String) -> String { "Quit process “\(name)”" }
     func processKillA11y(_ name: String) -> String { "Force quit process “\(name)”" }
+    // REDESIGN-MEMORY
+    var memUsageTitle: String { "Usage" }
+    func memUsageCaption(_ total: String) -> String { "\(total) total · live snapshot" }
+    var memCompTitle: String { "Memory composition" }
+    func memCompCaption(_ total: String) -> String { "\(total) · by page type" }
+    var memProcsTitle: String { "Processes by memory" }
+    func memProcsTop(_ n: Int) -> String { "top \(n)" }
+    func memProcCPU(_ pct: String) -> String { "\(pct) CPU" }
+    var memUsed: String { "Used" }
+    func memHeroNote(_ total: String, _ pct: String) -> String { "of \(total) · \(pct)" }
+    var memPurgeable: String { "Purgeable" }
+    var memSwap: String { "Swap" }
+    func memSwapOf(_ pct: String, _ total: String) -> String { "\(pct) of \(total)" }
+    var memFileCache: String { "File cache" }
+    var memOtherShort: String { "Other" }
+    var memTagLow: String { "Pressure: low" }
+    var memTagMedium: String { "Pressure: medium" }
+    var memTagHigh: String { "Pressure: high" }
+    var memTagUnknown: String { "Pressure: unknown" }
+    var memTagReadFailed: String { "Read failed" }
+    func memUpdatesEvery(_ seconds: Int) -> String { "updates every \(seconds) s" }
+    var memFailTimedOut: String { "Couldn’t read memory statistics: no response within 5 s." }
+    var memFailNoReading: String { "Couldn’t read memory statistics: the system returned no data." }
+    var memTryAgainA11y: String { "Read the memory statistics again" }
+    var memCompViewA11y: String { "Composition view" }
     // REDESIGN-CPU
     var cpuLiveSnapshot: String { "live snapshot" }
     var cpuUsage: String { "Usage" }
@@ -278,23 +300,12 @@ struct StringsEN: AppStrings {
     var memoryLegendInactive: String { "Inactive" }
     var memoryLegendSpeculative: String { "Speculative" }
     var memoryLegendFree: String { "Free" }
-    var memoryLegendPurgeable: String { "Purgeable (informational)" }
-    var memoryLegendFileCache: String { "File cache (informational)" }
     var memoryNoteActive: String { "Memory that apps are using right now or have accessed recently." }
     var memoryNoteWired: String { "Held by the macOS kernel and drivers; can't be swapped out or freed." }
     var memoryNoteOther: String { "Mostly compressed memory: macOS compresses rarely used pages instead of writing them to swap." }
     var memoryNoteInactive: String { "Hasn't been used in a while and will be reclaimed when needed; often data from recently closed apps." }
     var memoryNoteSpeculative: String { "Read from disk ahead of time, “just in case”; the first to be freed." }
     var memoryNoteFree: String { "Completely unused memory. A small value here is normal." }
-    var memoryNotePurgeable: String { "Memory the system can free without loss when needed (caches, temporary data)." }
-    var memoryNoteFileCache: String { "File contents kept in memory to speed up repeat access; freed when needed." }
-    func memoryTitle(_ total: String) -> String { "Memory · total \(total)" }
-    var memoryCaption: String { "Live snapshot, updates continuously" }
-    var memoryInfoHelp: String { "Hover over a memory type to see what it means" }
-    func memorySwapNote(_ used: String, _ total: String) -> String { "swap: \(used) of \(total)" }
-    var memoryOtherNote: String { "“other” — compressed memory and anything not captured above" }
-    var memoryColCategory: String { "Category" }
-    var memoryColVolume: String { "Amount" }
 
     // MARK: History card
     var historyTitle: String { "History" }
@@ -1083,6 +1094,7 @@ struct StringsEN: AppStrings {
     func homeLegendActive(_ v: String, short: Bool) -> String { short ? "act. \(v)" : "active \(v)" }
     func homeLegendWired(_ v: String) -> String { "wired \(v)" }
     func homeLegendInactive(_ v: String, short: Bool) -> String { short ? "inact. \(v)" : "inactive \(v)" }
+    func homeLegendCompressed(_ v: String, short: Bool) -> String { short ? "compr. \(v)" : "compressed \(v)" }
     func homeMemFoot(_ used: String, _ total: String, _ compressed: String) -> String { "swap \(used) of \(total) · compressed \(compressed)" }
     func homeMemFootNoSwap(_ compressed: String) -> String { "compressed \(compressed)" }
     var homeFreeWord: String { "free" }

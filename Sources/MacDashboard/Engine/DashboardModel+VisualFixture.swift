@@ -47,5 +47,12 @@ extension DashboardModel {
             s.succeed(at: ref)
             return s
         }(), highSince: nil)
+        // REDESIGN-MEMORY: an ok memory block, so the Memory page renders live values in the fixture.
+        applyFixtureMemory({
+            var s = BlockState(.memory, createdAt: ref.addingTimeInterval(-4))
+            s.begin(at: ref.addingTimeInterval(-2), showsLoading: false)
+            s.succeed(at: ref)
+            return s
+        }())
     }
 }

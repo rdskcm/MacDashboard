@@ -57,7 +57,7 @@ enum BarFillLayout: Equatable {
 }
 
 /// Rects, in points, for `spans` inside a bar `width` pt wide. Single source of
-/// truth for bar geometry: `BarFillLayerView` draws these, and `MemoryCard` builds
+/// truth for bar geometry: `BarFillLayerView` draws these, and `MemoryPage` builds
 /// its per-segment hover hit regions from the same call, so drawn and hit-tested
 /// rects cannot drift apart AT REST. During a transition they can — the CALayers
 /// interpolate towards these rects over `barDuration` (0.45 s) while the hit regions

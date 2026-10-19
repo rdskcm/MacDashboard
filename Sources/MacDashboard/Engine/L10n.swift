@@ -63,9 +63,6 @@ protocol AppStrings {
     var kpiCpuLabel: String { get }
     /// V2-TILES footer: all three load averages, e.g. "нагрузка 1,73 · 2,05 · 2,20".
     /// The core count is NOT repeated here — it already lives in the header's load chip.
-    var kpiMemLabel: String { get }
-    func kpiMemUnit(_ total: String) -> String
-    func kpiMemSub(_ compressor: String, _ purgeable: String) -> String
     var kpiSwapLabel: String { get }
     func kpiSwapUnit(_ total: String) -> String
     func kpiSwapSub(_ free: String) -> String
@@ -176,6 +173,32 @@ protocol AppStrings {
     var processForceQuitConfirm: String { get }
     func processTerminateA11y(_ name: String) -> String
     func processKillA11y(_ name: String) -> String
+
+    // MARK: Memory page (REDESIGN-MEMORY)
+    var memUsageTitle: String { get }
+    func memUsageCaption(_ total: String) -> String
+    var memCompTitle: String { get }
+    func memCompCaption(_ total: String) -> String
+    var memProcsTitle: String { get }
+    func memProcsTop(_ n: Int) -> String
+    func memProcCPU(_ pct: String) -> String
+    var memUsed: String { get }
+    func memHeroNote(_ total: String, _ pct: String) -> String
+    var memPurgeable: String { get }
+    var memSwap: String { get }
+    func memSwapOf(_ pct: String, _ total: String) -> String
+    var memFileCache: String { get }
+    var memOtherShort: String { get }
+    var memTagLow: String { get }
+    var memTagMedium: String { get }
+    var memTagHigh: String { get }
+    var memTagUnknown: String { get }
+    var memTagReadFailed: String { get }
+    func memUpdatesEvery(_ seconds: Int) -> String
+    var memFailTimedOut: String { get }
+    var memFailNoReading: String { get }
+    var memTryAgainA11y: String { get }
+    var memCompViewA11y: String { get }
 
     // MARK: CPU page + restyled Processes card (REDESIGN-CPU)
     var cpuLiveSnapshot: String { get }
@@ -303,23 +326,12 @@ protocol AppStrings {
     var memoryLegendInactive: String { get }
     var memoryLegendSpeculative: String { get }
     var memoryLegendFree: String { get }
-    var memoryLegendPurgeable: String { get }
-    var memoryLegendFileCache: String { get }
     var memoryNoteActive: String { get }
     var memoryNoteWired: String { get }
     var memoryNoteOther: String { get }
     var memoryNoteInactive: String { get }
     var memoryNoteSpeculative: String { get }
     var memoryNoteFree: String { get }
-    var memoryNotePurgeable: String { get }
-    var memoryNoteFileCache: String { get }
-    func memoryTitle(_ total: String) -> String
-    var memoryCaption: String { get }
-    var memoryInfoHelp: String { get }
-    func memorySwapNote(_ used: String, _ total: String) -> String
-    var memoryOtherNote: String { get }
-    var memoryColCategory: String { get }
-    var memoryColVolume: String { get }
 
     // MARK: History card
     var historyTitle: String { get }
@@ -1004,6 +1016,7 @@ protocol AppStrings {
     func homeLegendActive(_ v: String, short: Bool) -> String
     func homeLegendWired(_ v: String) -> String
     func homeLegendInactive(_ v: String, short: Bool) -> String
+    func homeLegendCompressed(_ v: String, short: Bool) -> String
     func homeMemFoot(_ used: String, _ total: String, _ compressed: String) -> String
     func homeMemFootNoSwap(_ compressed: String) -> String
     var homeFreeWord: String { get }

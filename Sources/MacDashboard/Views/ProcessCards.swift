@@ -36,19 +36,23 @@ struct ProcessListCard: View {
     let model: DashboardModel
 
     @State private var procMetric: Metric
+    private let memoryPage: Bool
     private let rowFixture: ProcessRowFixture?
     private let onConfirmShown: (Bool) -> Void
 
     /// `initialMetric` is default-valued only for the visual baseline's offscreen
     /// content render (VISUAL-COVERAGE) and the Memory page: the CPU page and every other
     /// call site use the implicit `.cpu` default. `rowFixture` is the visual fixture's seeded open row.
+    /// `memoryPage`: the Memory page's fixed «Processes by memory» list (REDESIGN-MEMORY) — memory ranking only,
+    /// no metric control, rows do not open, no foot line.
     /// `onConfirmShown` reports the inline force-quit confirm to the page (it owns Esc while open).
-    init(model: DashboardModel, initialMetric: Metric = .cpu, rowFixture: ProcessRowFixture? = nil,
+    init(model: DashboardModel, initialMetric: Metric = .cpu, memoryPage: Bool = false, rowFixture: ProcessRowFixture? = nil,
          onConfirmShown: @escaping (Bool) -> Void = { _ in }) {
         self.model = model
+        self.memoryPage = memoryPage
         self.rowFixture = rowFixture
         self.onConfirmShown = onConfirmShown
-        _procMetric = State(initialValue: initialMetric)
+        _procMetric = State(initialValue: memoryPage ? .mem : initialMetric)
         _expandedPID = State(initialValue: rowFixture?.pid)
     }
 
@@ -123,13 +127,14 @@ struct ProcessListCard: View {
     // just mounted pre-selected. Only the row content varies.
     var body: some View {
         DS3Card(
-            title: L.processesTitle,
-            caption: CPUPageModel.procsCaption(metric: procMetric, processCount: model.processCount),
-            trailing: { metricControl }
+            title: memoryPage ? L.memProcsTitle : L.processesTitle,
+            caption: memoryPage ? MemoryPageModel.procsCaption(processCount: model.processCount)
+                                : CPUPageModel.procsCaption(metric: procMetric, processCount: model.processCount),
+            trailing: { if !memoryPage { metricControl } }
         ) {
             VStack(alignment: .leading, spacing: 8) {
                 content
-                if !rows.isEmpty {
+                if !rows.isEmpty && !memoryPage {
                     Text(L.procsFoot)
                         .font(.system(size: 12.5))
                         .foregroundStyle(DS3.muted)
@@ -162,11 +167,11 @@ struct ProcessListCard: View {
         } else {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(rows) { row in
-                    let isOpen = row.pid != nil && expandedPID == row.pid
+                    let isOpen = !memoryPage && row.pid != nil && expandedPID == row.pid
                     VStack(alignment: .leading, spacing: 0) {
                         ProcessRowView(
                             row: row, primary: procMetric, maxValue: maxValue,
-                            expanded: isOpen,
+                            expanded: isOpen, interactive: !memoryPage,
                             onTap: {
                                 guard let pid = row.pid else { return }
                                 if expandedPID == pid {
@@ -188,35 +193,37 @@ struct ProcessListCard: View {
                         // `.transition` + this container's `.animation(value:
                         // expandedPID)`, matching `QuietStripRow`/
                         // `AutoSectionRow`/`OrphanRow`.
-                        ProcessDetailView(
-                            row: row, isOpen: isOpen,
-                            fixture: rowFixture?.pid == row.pid ? rowFixture : nil,
-                            onConfirmShown: onConfirmShown,
-                            onSignalSent: { model.refreshProcessesNow() }
-                        )
-                            // V2-FIX-PROCESS-ROWS wave 2 (`rowOrder` doc comment
-                            // above has the full writeup, INCLUDING the NEEDS-HUMAN
-                            // note — this does not fully resolve the defect either):
-                            // even keyed on row IDENTITY, `rowOrder`'s ambient
-                            // reorder transaction still reaches every row's
-                            // permanently-mounted panel, including the 9 COLLAPSED,
-                            // fully invisible (`opacity(0)`, height 0) ones. A
-                            // collapsed panel has nothing worth animating, so it has
-                            // no business sharing a CATransaction with 9 siblings'
-                            // worth of `.onGeometryChange` writes during a reorder —
-                            // only the row actually mid-disclosure (which drives
-                            // itself off its own explicit
-                            // `withAnimation(disclosureCurve)` regardless of ambient
-                            // context) needs to. Stripping the ambient animation
-                            // here for every OTHER row is a no-op for anything
-                            // visible and removes 9/10 panels from the shared
-                            // transaction — a defensible improvement kept for that
-                            // reason, but live re-repro after this change still
-                            // caught the same class of glitch, so it is NOT the
-                            // fix; see `rowOrder`'s NEEDS-HUMAN note.
-                            .transaction { t in
-                                if !isOpen { t.animation = nil }
-                            }
+                        if !memoryPage {
+                            ProcessDetailView(
+                                row: row, isOpen: isOpen,
+                                fixture: rowFixture?.pid == row.pid ? rowFixture : nil,
+                                onConfirmShown: onConfirmShown,
+                                onSignalSent: { model.refreshProcessesNow() }
+                            )
+                                // V2-FIX-PROCESS-ROWS wave 2 (`rowOrder` doc comment
+                                // above has the full writeup, INCLUDING the NEEDS-HUMAN
+                                // note — this does not fully resolve the defect either):
+                                // even keyed on row IDENTITY, `rowOrder`'s ambient
+                                // reorder transaction still reaches every row's
+                                // permanently-mounted panel, including the 9 COLLAPSED,
+                                // fully invisible (`opacity(0)`, height 0) ones. A
+                                // collapsed panel has nothing worth animating, so it has
+                                // no business sharing a CATransaction with 9 siblings'
+                                // worth of `.onGeometryChange` writes during a reorder —
+                                // only the row actually mid-disclosure (which drives
+                                // itself off its own explicit
+                                // `withAnimation(disclosureCurve)` regardless of ambient
+                                // context) needs to. Stripping the ambient animation
+                                // here for every OTHER row is a no-op for anything
+                                // visible and removes 9/10 panels from the shared
+                                // transaction — a defensible improvement kept for that
+                                // reason, but live re-repro after this change still
+                                // caught the same class of glitch, so it is NOT the
+                                // fix; see `rowOrder`'s NEEDS-HUMAN note.
+                                .transaction { t in
+                                    if !isOpen { t.animation = nil }
+                                }
+                        }
                     }
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -272,6 +279,8 @@ private struct ProcessRowView: View {
     let primary: Metric
     let maxValue: Double
     let expanded: Bool
+    /// false on the Memory page: not a button, no chevron, secondary text is the CPU share.
+    let interactive: Bool
     let onTap: () -> Void
 
     @State private var hovering = false
@@ -307,57 +316,69 @@ private struct ProcessRowView: View {
         case .series: return DS3.s1
         }
     }
-    private var isExpandable: Bool { row.pid != nil }
+    private var isExpandable: Bool { interactive && row.pid != nil }
 
+    private var texts: (value: String, secondary: String) { CPUPageModel.procTexts(row, metric: primary) }
+    private var secondary: String { interactive ? texts.secondary : MemoryPageModel.procSecondary(row) }
+
+    @ViewBuilder
     var body: some View {
-        let texts = CPUPageModel.procTexts(row, metric: primary)
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                chevron
-                Text(row.name)
-                    .font(.system(size: 14))
-                    .foregroundStyle(DS3.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 8)
-                Text(texts.secondary)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(DS3.muted)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                Text(texts.value)
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(DS3.ink)
-                    .lineLimit(1)
-                    .frame(minWidth: 64, alignment: .trailing)
-                    .layoutPriority(1)
-            }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
-            .background(alignment: .leading) {
-                ZStack(alignment: .leading) {
-                    // Flat text row hover class (`hover-surface-classes`): the container carries `row`, so hover is `row`.
-                    RoundedRectangle(cornerRadius: 16).fill(isExpandable && hovering ? DS3.row : Color.clear)
-                    if maxValue > 0 {
-                        BarFillLayer(spans: [BarSpan(key: "gauge",
-                                                     fraction: CGFloat(min(primaryValue / maxValue, 1)),
-                                                     alpha: CPUPageModel.procBarOpacity(primary),
-                                                     color: gaugeColor)],
-                                     layout: .single(minWidth: 0, cornerRadius: 16),
-                                     animated: !reduceMotion)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
+        if interactive {
+            Button(action: onTap) { rowContent }
+                .buttonStyle(.plain)
+                .animation(.easeOut(duration: 0.12), value: hovering)
+                .pointingHandOnHover(isEnabled: isExpandable, hovering: $hovering)
+                .accessibilityLabel("\(row.name), \(texts.value)")
+                .accessibilityAddTraits(isExpandable ? [] : .isStaticText)
+        } else {
+            rowContent
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(row.name), \(texts.value)")
+                .accessibilityAddTraits(.isStaticText)
+        }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 10) {
+            if interactive { chevron }
+            Text(row.name)
+                .font(.system(size: 14))
+                .foregroundStyle(DS3.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 8)
+            Text(secondary)
+                .font(.system(size: 12.5))
+                .foregroundStyle(DS3.muted)
+                .lineLimit(1)
+                .layoutPriority(1)
+            Text(texts.value)
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(DS3.ink)
+                .lineLimit(1)
+                .frame(minWidth: 64, alignment: .trailing)
+                .layoutPriority(1)
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                // Flat text row hover class (`hover-surface-classes`): the container carries `row`, so hover is `row`.
+                RoundedRectangle(cornerRadius: 16).fill(isExpandable && hovering ? DS3.row : Color.clear)
+                if maxValue > 0 {
+                    BarFillLayer(spans: [BarSpan(key: "gauge",
+                                                 fraction: CGFloat(min(primaryValue / maxValue, 1)),
+                                                 alpha: CPUPageModel.procBarOpacity(primary),
+                                                 color: gaugeColor)],
+                                 layout: .single(minWidth: 0, cornerRadius: 16),
+                                 animated: !reduceMotion)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .pointingHandOnHover(isEnabled: isExpandable, hovering: $hovering)
-        .accessibilityLabel("\(row.name), \(texts.value)")
-        .accessibilityAddTraits(isExpandable ? [] : .isStaticText)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(Rectangle())
     }
 
     /// Always laid out (space kept for rows without a PID), only drawn when the row can open.
