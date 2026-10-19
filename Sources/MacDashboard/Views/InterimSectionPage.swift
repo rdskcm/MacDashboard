@@ -11,6 +11,7 @@ struct InterimSectionPage: View {
     let model: DashboardModel
     let page: Page
     let windowWidth: CGFloat
+    let onConfirmShown: (Bool) -> Void
     let onBack: () -> Void
 
     var body: some View {
@@ -23,6 +24,7 @@ struct InterimSectionPage: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) { InterimPageBar(model: model, page: page, onBack: onBack) }
         .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
+        .onDisappear { onConfirmShown(false) }
     }
 
     /// KPI tiles keep `.frame(maxWidth: .infinity)` in an `HStack`, never a lazy container (`live-list-identity`).
@@ -31,12 +33,12 @@ struct InterimSectionPage: View {
         case .home:
             EmptyView()
         case .cpu:
-            HStack(alignment: .top, spacing: 12) { CPUTile(model: model).frame(maxWidth: .infinity) }
-            ProcessListCard(model: model, initialMetric: .cpu)
+            // .cpu renders CPUPage (MainDashboardView), never this page.
+            EmptyView()
         case .memory:
             InterimMemoryTiles(model: model)
             MemoryCard(model: model)
-            ProcessListCard(model: model, initialMetric: .mem)
+            ProcessListCard(model: model, initialMetric: .mem, onConfirmShown: onConfirmShown)
         case .storage:
             HStack(alignment: .top, spacing: 12) { DiskTile(model: model).frame(maxWidth: .infinity) }
             LegacySpaceTips(model: model)
@@ -106,7 +108,7 @@ private struct InterimSecurityCards: View {
 
 // MARK: - Page bar
 
-/// Pinned frosted bar (00 §4.2 / §8), the shape of `IPhoneDeviceView.header`.
+/// The interim page's bar: `SectionPageBar` fed from the Home tile of the page (sub line and tag).
 @MainActor
 private struct InterimPageBar: View {
     let model: DashboardModel
@@ -115,22 +117,8 @@ private struct InterimPageBar: View {
 
     var body: some View {
         let tile = HomeInput.tiles(model).first { $0.page == page }
-        HStack(spacing: 14) {
-            back
-            HomeIconTile(symbol: page.symbol)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(page.title)
-                    .font(.system(size: 22, weight: .heavy))
-                    .tracking(-0.4)
-                    .lineLimit(1)
-                if let tile {
-                    Text(tile.sub)
-                        .font(.system(size: 13))
-                        .foregroundStyle(tile.subIsFailure ? DS3.hotInk : DS3.muted)
-                        .lineLimit(1)
-                        .help(tile.sub)
-                }
-            }
+        SectionPageBar(symbol: page.symbol, title: page.title, sub: tile?.sub,
+                       subIsFailure: tile?.subIsFailure ?? false, onBack: onBack) {
             if let tile {
                 Group {
                     if tile.skeleton {
@@ -139,33 +127,10 @@ private struct InterimPageBar: View {
                         DS3Tag(tone: tile.tagTone.ds3Tag, text: tile.tagText).help(tile.tagText)
                     }
                 }
-                .layoutPriority(1)
             }
-            Spacer(minLength: 0)
+        } trailing: {
+            EmptyView()
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 14)
-        .background {
-            ZStack {
-                Rectangle().fill(.regularMaterial)
-                Rectangle().fill(DS3.bar)
-            }
-        }
-        .overlay(alignment: .bottom) { Rectangle().fill(DS3.line).frame(height: 1) }
-    }
-
-    private var back: some View {
-        Button(action: onBack) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold))
-                Text(L.commonThisMac)
-            }
-            .padding(.leading, -4)
-        }
-        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 13, topRim: 1))
-        .accessibilityLabel(L.homeBackA11y)
-        .accessibilityIdentifier("page-back")
-        .layoutPriority(1)
     }
 }
 

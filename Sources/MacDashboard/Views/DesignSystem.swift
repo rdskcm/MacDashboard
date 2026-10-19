@@ -320,6 +320,8 @@ enum DSSegmentedSize {
     /// Settings ▸ Monitoring interval switch (spec §2.3/§7.3, SW:92): monospaced
     /// tabular digits, since the segments are all-numeric.
     case settingsInterval
+    /// Section page card trailing control (REDESIGN-CPU, 00-shared §8): 12.5 / 600, segment padding 6 × 12.
+    case section
 
     var font: Font {
         switch self {
@@ -327,6 +329,7 @@ enum DSSegmentedSize {
         case .header: return .system(size: 13, weight: .semibold)
         case .card: return .system(size: 11, weight: .semibold)
         case .settingsInterval: return .system(size: 12, weight: .semibold, design: .monospaced)
+        case .section: return .system(size: 12.5, weight: .semibold)
         }
     }
     var hPad: CGFloat {
@@ -335,6 +338,7 @@ enum DSSegmentedSize {
         case .header: return 16
         case .card: return 11
         case .settingsInterval: return 11
+        case .section: return 12
         }
     }
     var vPad: CGFloat {
@@ -343,6 +347,7 @@ enum DSSegmentedSize {
         case .header: return 8
         case .card: return 5
         case .settingsInterval: return 6
+        case .section: return 6
         }
     }
     /// Gap between segments, matching the prototype track's `gap` (2px for
@@ -353,6 +358,7 @@ enum DSSegmentedSize {
         case .header: return 2
         case .card: return 2
         case .settingsInterval: return 3
+        case .section: return 2
         }
     }
 }

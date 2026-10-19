@@ -25,13 +25,16 @@ final class DashboardModel {
     var battery: BatteryInfo? = nil   // read by BatteryTile (falls back to report.battery)
     /// Block N7: rounded SOC die temperature (°C), max over valid PMU tdie sensors,
     /// sampled by the fast task via ThermalHIDReader (app-only private API). nil =
-    /// unavailable (Intel / API failure) — CPUTile hides the segment (honest-empty).
+    /// unavailable (Intel / API failure) — the CPU page shows «—» (honest-empty).
     /// Stored pre-rounded to Int so the equality guard suppresses sub-degree jitter.
     var socTempC: Int? = nil
     var topCPU: [ProcEntry] = []
     var topMem: [ProcEntry] = []
     /// REDESIGN-HOME: rows of the last full ps snapshot (Home CPU tile «Processes»); nil before the first slow sample.
     var processCount: Int? = nil
+    /// REDESIGN-CPU: start of the current run of CPU samples >= CPULoad.highUsagePct; nil when the latest sample is below it.
+    private(set) var cpuHighSince: Date? = nil
+    @ObservationIgnored private var lastCPUSampleAt: Date? = nil
     var lastSampleAt: Date = .init()
     /// REDESIGN-FOUNDATION: per-block loading / ok / failed state (Engine/BlockState.swift), read
     /// through `blockState(_:)`. One property per block so a view observing one is not
@@ -66,6 +69,9 @@ final class DashboardModel {
     /// Re-entrancy guard for `refreshProcessesNow()`, true while a manual process-list
     /// refresh is in flight — mirrors `smartRefreshing`.
     var processesRefreshing = false
+
+    /// True while refreshCPUNow() runs (CPU page Refresh / Try again).
+    private(set) var cpuRefreshing = false
 
     /// Re-entrancy guard for `upgradeBrewNow()`, true while an in-app `brew upgrade`
     /// is in flight — mirrors `smartRefreshing`.
@@ -385,6 +391,9 @@ final class DashboardModel {
     /// Visual fixture only (DashboardModel+VisualFixture, tools/visual/content_states.swift): sets the scan block directly; live code never calls this.
     func applyFixtureScan(_ state: BlockState) { scanBlock = state }
 
+    /// Visual fixture only: sets the CPU block and the high-load start.
+    func applyFixtureCPU(_ state: BlockState, highSince: Date?) { cpuBlock = state; cpuHighSince = highSince }
+
     /// Visual fixture only: sets the memory-pressure level the Now card's Memory chip reads.
     func applyFixturePressure(_ p: MemoryPressureLevel?) { memPressure = p }
 
@@ -418,6 +427,14 @@ final class DashboardModel {
     private func disarmBlockWatchdog(_ id: BlockID) {
         blockWatchdogs[id]?.cancel()
         blockWatchdogs[id] = nil
+    }
+
+    /// REDESIGN-CPU: advances the high-load run (CPULoad.nextHighSince) with one successful CPU sample.
+    private func recordCPUSample(_ cpu: CPUUsage, at t: Date) {
+        let next = CPULoad.nextHighSince(previous: cpuHighSince, previousSampleAt: lastCPUSampleAt,
+                                         usage: CPULoad.usage(cpu), at: t)
+        if next != cpuHighSince { cpuHighSince = next }
+        lastCPUSampleAt = t
     }
 
     // MARK: - Lifecycle (SPEC §4 contract)
@@ -484,6 +501,7 @@ final class DashboardModel {
                 if self.memPressure != pressure { self.memPressure = pressure }
                 self.lastSampleAt = snap.t
                 if let cpu = snap.cpu {
+                    self.recordCPUSample(cpu, at: snap.t)
                     self.cpuHistory.append((snap.t, cpu.user + cpu.sys))
                     if self.cpuHistory.count > 60 {
                         self.cpuHistory.removeFirst(self.cpuHistory.count - 60)
@@ -891,10 +909,39 @@ final class DashboardModel {
         }
     }
 
+    /// REDESIGN-CPU: CPU page Refresh / Try again. One user-initiated sample on a fresh LiveCollector
+    /// (its own 0.5 s delta window, independent of the fast loop's baseline) plus a process re-sample.
+    func refreshCPUNow() {
+        guard !cpuRefreshing else { return }
+        cpuRefreshing = true
+        beginBlock(.cpu, showsLoading: true)
+        refreshProcessesNow()
+        Task { [weak self] in
+            let (snap, soc): (LiveSnapshot, Int?) = await withCheckedContinuation { c in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let collector = LiveCollector()
+                    _ = collector.collectFast()
+                    Thread.sleep(forTimeInterval: 0.5)
+                    let s = collector.collectFast()
+                    let t = ThermalSensors.socTemperature(from: ThermalHIDReader.readTemperatureSensors())
+                    c.resume(returning: (s, t.map { Int($0.rounded()) }))
+                }
+            }
+            guard let self else { return }
+            defer { self.cpuRefreshing = false }
+            guard let cpu = snap.cpu else { self.failBlock(.cpu, .noReading); return }
+            if self.cpu != cpu { self.cpu = cpu }
+            if self.load != snap.load { self.load = snap.load }
+            if self.socTempC != soc { self.socTempC = soc }
+            self.recordCPUSample(cpu, at: snap.t)
+            self.succeedBlock(.cpu)
+        }
+    }
+
     /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up).
-    /// Its caller, the «Применить» button of the retired process-limit setting, was
-    /// removed in REDESIGN-FOUNDATION; the CPU page's Refresh (REDESIGN-CPU, 03-cpu) is
-    /// its intended caller. One-shot, independent of the periodic slowTask sampler — a fresh
+    /// Its callers are `refreshCPUNow()` and the Processes card's Quit flow (REDESIGN-CPU);
+    /// the «Применить» button of the retired process-limit setting was removed in
+    /// REDESIGN-FOUNDATION. One-shot, independent of the periodic slowTask sampler — a fresh
     /// LiveCollector instance is created per call, never shared with a concurrent
     /// sampler pass (see the fastBox/procBox/smartBox comment in start()). Because
     /// this path builds a fresh LiveCollector (and therefore a fresh ProcessSampler)

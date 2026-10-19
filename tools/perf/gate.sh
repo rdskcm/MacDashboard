@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/perf/gate.sh — the perf gate (GPU-RENDER-AUDIT): scenarios G1-G8 against an app bundle,
+# tools/perf/gate.sh — the perf gate (GPU-RENDER-AUDIT): scenarios G1-G9 against an app bundle,
 # optionally against a baseline bundle too. Moves the real pointer and sends AX actions: do not use
 # the Mac while it runs. See tools/perf/README.md.
 #
@@ -8,7 +8,7 @@
 #   --app        bundle under test (default dist.noindex/MacDashboard.app)
 #   --baseline   pre-block bundle; candidate and baseline runs alternate A,B,A,B,...
 #   --scenarios  default: all except G8. G8 needs --orphan.
-#   --runs       runs per scenario and arm (default 3 for G1, 1 for the others)
+#   --runs       runs per scenario and arm (default 3 for G1 and G9, 1 for the others)
 #   --out        run directory, must be inside tools/perf/out/ (default tools/perf/out/<stamp>)
 #   --orphan     G8 builds its bench home with an orphan launchd plist
 #   --keep-traces  keep .trace bundles and exported XML (10-60 MB each)
@@ -115,15 +115,15 @@ case "$RUNS" in ""|[1-9]|[1-9][0-9]) ;; *) fatal 64 "--runs must be a positive i
 case "$G1_MAX" in *[!0-9.]*|"") fatal 64 "--g1-max must be a number" ;; esac
 
 # scenario list -> work items
-[ -n "$SCENARIOS" ] || SCENARIOS="G1,G2,G3,G4,G5,G6,G7"
+[ -n "$SCENARIOS" ] || SCENARIOS="G1,G2,G3,G4,G5,G6,G7,G9"
 ITEMS=""
 for s in $(echo "$SCENARIOS" | tr 'a-z,' 'A-Z '); do
   case "$s" in
-    G1|G2|G3|G4|G7) ITEMS="$ITEMS $s" ;;
+    G1|G2|G3|G4|G7|G9) ITEMS="$ITEMS $s" ;;
     G5) ITEMS="$ITEMS G5 G5-top" ;;
     G6) ITEMS="$ITEMS G6-page G6-table G6-hover" ;;
     G8) [ "$ORPHAN" = 1 ] || fatal 64 "G8 needs --orphan"; ITEMS="$ITEMS G8" ;;
-    *) fatal 64 "unknown scenario: $s (G1..G8)" ;;
+    *) fatal 64 "unknown scenario: $s (G1..G9)" ;;
   esac
 done
 
@@ -265,6 +265,9 @@ topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" f
 }
 
 # ---------------------------------------------------------------- per-item definitions
+# CPU page (REDESIGN-CPU): Home -> CPU tile. Baseline build: the same tile opens the interim page with the v2 CPU tile + process list.
+route_cpu() { route_mac; ax_press id home-tile-cpu; sleep 2; }
+
 # Sets S_ROUTE S_PRE (extra wait after the route, s) S_SECS (record length) S_SCEN S_ARGS S_TABLES S_INSTR.
 TP_INSTR=(--instrument 'Time Profiler' --instrument Hitches)
 CA_INSTR=(--instrument 'Core Animation Commits' --instrument 'Core Animation Server' --instrument 'Time Profiler')
@@ -272,6 +275,7 @@ define_item() {
   S_ROUTE=mac; S_PRE=3; S_ARGS=""; S_TABLES="time-profile hitches"; S_INSTR=("${TP_INSTR[@]}"); S_ORPHAN=0
   case "$1" in
     G1) S_PRE=22 ;;
+    G9) S_ROUTE=cpu; S_PRE=22 ;;
     G5-top) S_PRE=22 ;;
     G2) S_PRE=30; S_SECS=20; S_SCEN=scen-idle.sh; S_ARGS=15
         S_TABLES="coreanimation-commit-interval coreanimation-server-interval"; S_INSTR=("${CA_INSTR[@]}") ;;
@@ -290,7 +294,7 @@ define_item() {
 
 do_route() {
   case "$S_ROUTE" in
-    mac) route_mac ;; hist) route_hist ;; iphone) route_iphone ;; table) route_table ;;
+    mac) route_mac ;; hist) route_hist ;; iphone) route_iphone ;; table) route_table ;; cpu) route_cpu ;;
   esac
 }
 
@@ -321,7 +325,7 @@ attempt() {
   sleep "$S_PRE"
 
   local pend
-  if [ "$item" = "G1" ]; then
+  if [ "$item" = "G1" ] || [ "$item" = "G9" ]; then
     mark_now t0 "$prefix-drv.txt"
     topsamp 41 "$PID" > "$prefix-top.txt" & local tp=$!; track "$tp"
     wait "$tp"; untrack "$tp"
@@ -392,7 +396,7 @@ analyze_item() {
   local item=$1 prefix=$2 buf=$3 an="$prefix-analysis.txt"
   local t0 t1
   case "$item" in
-    G1) az "$buf" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" ;;
+    G1|G9) az "$buf" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" ;;
     G5-top)
       local label l0 l1
       while read -r label l0; do
@@ -436,7 +440,7 @@ G3_WIN_LO=0; G3_WIN_HI=7
 PID_LAST=""
 
 # ---------------------------------------------------------------- run loop
-default_runs() { if [ -n "$RUNS" ]; then echo "$RUNS"; elif [ "$1" = "G1" ]; then echo 3; else echo 1; fi; }
+default_runs() { if [ -n "$RUNS" ]; then echo "$RUNS"; elif [ "$1" = "G1" ] || [ "$1" = "G9" ]; then echo 3; else echo 1; fi; }
 
 {
   echo "# Perf gate report"

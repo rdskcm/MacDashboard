@@ -3,7 +3,7 @@
 ## 1. Purpose
 
 `tools/perf/gate.sh` measures the main-thread, Core Animation and WindowServer cost of the real app
-(scenarios G1-G8) and compares it with absolute limits and, optionally, with a pre-block build. It
+(scenarios G1-G9) and compares it with absolute limits and, optionally, with a pre-block build. It
 exists because per-frame animation work cannot be seen by the offscreen harness or the visual baseline
 (rule `gpu-per-frame`). It runs on every GUI-affecting block, next to `tools/visual/run.sh`.
 
@@ -23,7 +23,7 @@ cd MacDashboard && ./build_app.sh && tools/perf/gate.sh --baseline tools/perf/ou
 ```
 
 - `--app` default `dist.noindex/MacDashboard.app`. `--baseline`: candidate and baseline runs alternate A,B,A,B so drift hits both.
-- `--scenarios` default all except G8 (G8 needs `--orphan`). `--runs` default 3 for G1, 1 for the others.
+- `--scenarios` default all except G8 (G8 needs `--orphan`). `--runs` default 3 for G1 and G9, 1 for the others.
 - `--out` must be inside `tools/perf/out/` (gitignored); default `tools/perf/out/<stamp>`. A reused `--out` keeps the previous `summary`/`report`/`runs` files under a time-stamped name.
 - `--keep-traces` keeps the `.trace` bundles and exported XML (10-60 MB each). `*-analysis.txt` is always kept.
 - `--g1-max` is the absolute G1 app CPU limit: 5.6 (the level before C7), 2.5 after the process-list fix.
@@ -57,11 +57,12 @@ All run on the synthetic bench home with the window pinned to 1000x733 pt at (0,
 | G6 | iPhone page, Table and hover scenarios (3 runs) | Time Profiler, Hitches | hitches, ms, main busy total, `rgba64_shade_conic` samples |
 | G7 | This Mac scroll | Time Profiler, Hitches | hitches, ms, main busy total |
 | G8 | G3 with an orphan launchd plist in the bench home | as G3 | as G3 plus `orphan_visible` |
+| G9 | CPU page idle (Home → CPU tile), 22 s, then `top -l 41` | none | app %, WindowServer % |
 
-Limits (this block, GPU-RENDER-AUDIT): G1 app % ≤ `--g1-max`; G3 median ≤ 25 ms/s; G4 hitches/s ≤ 3, median ≤ 400 ms/s,
+Limits (this block, GPU-RENDER-AUDIT): G1 and G9 app % ≤ `--g1-max`; G3 median ≤ 25 ms/s; G4 hitches/s ≤ 3, median ≤ 400 ms/s,
 plot samples/s ≤ 5; G5 ring commits/s median ≤ 60 and ring app % ≤ control + 3; G6 `shade_conic` = 0. Regression rule
 against `--baseline`: hitches ≤ base + 3 (G3 G4 G6 G7 G8), main busy total ≤ base × 1.15 (G4 G6 G7), app % ≤ base + 0.5
-(G1 G3 G8). WindowServer numbers are reported, never gated (±2 pt noise). G8 with `orphan_visible=no` gets no verdict.
+(G1 G3 G8 G9). WindowServer numbers are reported, never gated (±2 pt noise). G8 with `orphan_visible=no` gets no verdict.
 
 ## 5. Permissions (as `tools/visual/README.md` §3)
 

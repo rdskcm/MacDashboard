@@ -61,10 +61,8 @@ protocol AppStrings {
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { get }
-    var kpiLoadUnavailable: String { get }
     /// V2-TILES footer: all three load averages, e.g. "нагрузка 1,73 · 2,05 · 2,20".
     /// The core count is NOT repeated here — it already lives in the header's load chip.
-    func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String
     var kpiMemLabel: String { get }
     func kpiMemUnit(_ total: String) -> String
     func kpiMemSub(_ compressor: String, _ purgeable: String) -> String
@@ -171,19 +169,40 @@ protocol AppStrings {
     var processSegCPU: String { get }
     var processSegMem: String { get }
     var processesMetricA11y: String { get }
-    var processListCaption: String { get }
     var processLoadingDetails: String { get }
-    var processDetailThreads: String { get }
-    var processDetailMemory: String { get }
     var processDetailPath: String { get }
     var processQuit: String { get }
-    var processSignalError: String { get }
     var processForceQuit: String { get }
     var processForceQuitConfirm: String { get }
-    var processForceQuitInlineQuestion: String { get }
-    func processRevealA11y(_ name: String) -> String
     func processTerminateA11y(_ name: String) -> String
     func processKillA11y(_ name: String) -> String
+
+    // MARK: CPU page + restyled Processes card (REDESIGN-CPU)
+    var cpuLiveSnapshot: String { get }
+    var cpuUsage: String { get }
+    var cpuUser: String { get }
+    var cpuSystem: String { get }
+    var cpuSocTemperature: String { get }
+    var cpuSocHot: String { get }
+    var cpuNoReading: String { get }
+    func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String
+    func cpuHighLoadFor(_ min: Int) -> String
+    var cpuTagHigh: String { get }
+    var cpuTagReadError: String { get }
+    func cpuSubLive(_ cores: Int, _ seconds: Int) -> String
+    var cpuSubCollecting: String { get }
+    var cpuFailTimedOut: String { get }
+    var cpuFailNoReading: String { get }
+    var cpuRefreshA11y: String { get }
+    var cpuTryAgainA11y: String { get }
+    var procsTopByCPU: String { get }
+    var procsTopByMemory: String { get }
+    func procsCount(_ n: Int) -> String
+    var procsFoot: String { get }
+    var processOwner: String { get }
+    var processQuitting: String { get }
+    func processForceQuitQuestion(_ name: String) -> String
+    func processSignalFailed(_ name: String) -> String
 
     // MARK: Maintenance card
     var maintenanceTitle: String { get }

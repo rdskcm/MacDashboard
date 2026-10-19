@@ -39,5 +39,13 @@ extension DashboardModel {
             s.succeed(at: VisualFixture.referenceDate)
             return s
         }())
+        // REDESIGN-CPU: an ok CPU block, so the CPU page renders live values in the fixture.
+        let ref = VisualFixture.referenceDate
+        applyFixtureCPU({
+            var s = BlockState(.cpu, createdAt: ref.addingTimeInterval(-4))
+            s.begin(at: ref.addingTimeInterval(-2), showsLoading: false)
+            s.succeed(at: ref)
+            return s
+        }(), highSince: nil)
     }
 }

@@ -46,8 +46,6 @@ struct StringsEN: AppStrings {
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { "CPU" }
-    var kpiLoadUnavailable: String { "load —" }
-    func kpiCpuLoadFooter(_ l1: String, _ l2: String, _ l3: String) -> String { "load \(l1) · \(l2) · \(l3)" }
     var kpiMemLabel: String { "Memory" }
     func kpiMemUnit(_ total: String) -> String { "of \(total)" }
     func kpiMemSub(_ compressor: String, _ purgeable: String) -> String { "compressed \(compressor) · purgeable \(purgeable)" }
@@ -149,19 +147,39 @@ struct StringsEN: AppStrings {
     var processSegCPU: String { "CPU" }
     var processSegMem: String { "Memory" }
     var processesMetricA11y: String { "Process metric" }
-    var processListCaption: String { "live snapshot" }
     var processLoadingDetails: String { "Loading details…" }
-    var processDetailThreads: String { "Threads" }
-    var processDetailMemory: String { "Memory" }
     var processDetailPath: String { "Path" }
     var processQuit: String { "Quit" }
-    var processSignalError: String { "Couldn't send signal (no permission)" }
-    var processForceQuit: String { "Force quit" }
+    var processForceQuit: String { "Force quit…" }
     var processForceQuitConfirm: String { "Force quit" }
-    var processForceQuitInlineQuestion: String { "Force quit?" }
-    func processRevealA11y(_ name: String) -> String { "Show “\(name)” in Finder" }
     func processTerminateA11y(_ name: String) -> String { "Quit process “\(name)”" }
     func processKillA11y(_ name: String) -> String { "Force quit process “\(name)”" }
+    // REDESIGN-CPU
+    var cpuLiveSnapshot: String { "live snapshot" }
+    var cpuUsage: String { "Usage" }
+    var cpuUser: String { "User" }
+    var cpuSystem: String { "System" }
+    var cpuSocTemperature: String { "SoC temperature" }
+    var cpuSocHot: String { "hot · may throttle" }
+    var cpuNoReading: String { "No current reading" }
+    func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String { "load \(a) · \(b) · \(c) · \(cores) cores" }
+    func cpuHighLoadFor(_ min: Int) -> String { "High load for \(min) min" }
+    var cpuTagHigh: String { "High load" }
+    var cpuTagReadError: String { "Read error" }
+    func cpuSubLive(_ cores: Int, _ seconds: Int) -> String { "\(cores) cores · updates every \(seconds) s" }
+    var cpuSubCollecting: String { "collecting data…" }
+    var cpuFailTimedOut: String { "Couldn’t read CPU counters: no response within 5 s." }
+    var cpuFailNoReading: String { "Couldn’t read CPU counters: the system returned no data." }
+    var cpuRefreshA11y: String { "Refresh CPU data" }
+    var cpuTryAgainA11y: String { "Read the CPU counters again" }
+    var procsTopByCPU: String { "top by CPU" }
+    var procsTopByMemory: String { "top by memory" }
+    func procsCount(_ n: Int) -> String { n == 1 ? "1 process" : "\(n) processes" }
+    var procsFoot: String { "click a process to see its PID, path and the Quit / Force quit buttons" }
+    var processOwner: String { "Owner" }
+    var processQuitting: String { "Quitting…" }
+    func processForceQuitQuestion(_ name: String) -> String { "Force quit “\(name)”? Unsaved changes will be lost." }
+    func processSignalFailed(_ name: String) -> String { "Couldn’t quit “\(name)”." }
 
     // MARK: Maintenance card
     var maintenanceTitle: String { "System maintenance" }
