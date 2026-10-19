@@ -25,6 +25,7 @@ struct MacDashboardApp: App {
                     if VisualFixture.isRequested {
                         model.applyVisualFixture()
                         IPhoneModel.shared.applyVisualFixture()
+                        _ = FixtureAppearance.shared
                     } else {
                         model.start()
                         IPhoneModel.shared.start()

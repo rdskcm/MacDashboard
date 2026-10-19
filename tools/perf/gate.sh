@@ -7,22 +7,27 @@
 #                [--orphan] [--keep-traces] [--g1-max PCT]
 #   --app        bundle under test (default dist.noindex/MacDashboard.app)
 #   --baseline   pre-block bundle; candidate and baseline runs alternate A,B,A,B,...
-#   --scenarios  default: all except G8. G8 needs --orphan.
-#   --runs       runs per scenario and arm (default 3 for G1 and G9, 1 for the others)
+#   --scenarios  G1..G9, GP:<page> (pages: cpu memory storage battery security backups system history), or
+#                all (= every G item incl. G8, plus GP for all pages; implies --orphan);
+#                default G1,G2,G3,G4,G5,G6,G7,G9. G8 needs --orphan.
+#   --runs       runs per scenario and arm, 1-7 (default 3)
 #   --out        run directory, must be inside tools/perf/out/ (default tools/perf/out/<stamp>)
 #   --orphan     G8 builds its bench home with an orphan launchd plist
 #   --keep-traces  keep .trace bundles and exported XML (10-60 MB each)
 #   --g1-max     absolute G1 app CPU limit in % (default 5.6, the level before C7; 2.5 after Step 7)
 #   -h, --help   this text
-# Exit: 0 pass | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed during the run
-#       64 usage | 65 precondition refused | 70 runtime error. Last line: GATE: exit=<n> pass=<k> fail=<m> invalid=<0|1>
-# Data safety: synthetic fixtures only; never touches ~/Library/Application Support/MacDashboard;
+# Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed
+#       during the run | 64 usage | 65 precondition refused | 70 runtime error.
+#       Last line: GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1>
+# Data safety: runs bench copies (bundle id com.rdskcm.mac-dashboard.bench); synthetic fixtures only; never touches ~/Library/Application Support/MacDashboard;
 # kills only the PIDs it started (never by name); never writes or restores the defaults domain.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PERF="$ROOT/tools/perf"
 BUNDLE_ID="com.rdskcm.mac-dashboard"
+BENCH_ID="com.rdskcm.mac-dashboard.bench"
+GP_PAGES="cpu memory storage battery security backups system history"
 
 APP="$ROOT/dist.noindex/MacDashboard.app"
 BASELINE=""
@@ -33,8 +38,8 @@ ORPHAN=0
 KEEP=0
 G1_MAX="5.6"
 
-NPASS=0; NFAIL=0; INVALID=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0
-PIDS=""; HOMEDIR=""; BIN=""; PID=""
+NPASS=0; NFAIL=0; NNOISY=0; INVALID=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0
+PIDS=""; HOMEDIR=""; BIN=""; PID=""; CAND_APP=""; BASE_APP=""
 
 usage() { sed -n '2,/^[^#]/{/^#/p;}' "$0" | sed 's/^# \{0,1\}//'; }
 log() { echo "[$(date +%T)] $*" | tee -a "${OUT:-/dev/null}/gate.log" 2>/dev/null; }
@@ -69,13 +74,14 @@ on_exit() {
   trap - EXIT INT TERM
   [ "$QUIET_EXIT" = 1 ] && exit "$rc"
   kill_tracked
+  [ -n "${OUT:-}" ] && rm -rf "$OUT/apps"
   if [ "$LS_DIRTY" = 1 ]; then
-    # The run opened bundles by path; drop their LaunchServices registrations like tools/visual/run.sh does.
+    # The run opened bundles by path; drop their LaunchServices registrations (tools/ls-prune.sh).
     local ls_out
     ls_out="$("$ROOT/tools/ls-prune.sh" 2>/dev/null)" || echo "gate: warning: ls-prune.sh exited non-zero" >&2
     if grep -q '^RUNNING' <<< "$ls_out"; then echo "gate: warning: a copy is still running (ls-prune RUNNING)" >&2; fi
   fi
-  local line="GATE: exit=$rc pass=$NPASS fail=$NFAIL invalid=$INVALID"
+  local line="GATE: exit=$rc pass=$NPASS fail=$NFAIL noisy=$NNOISY invalid=$INVALID"
   [ "$STARTED" = 1 ] && [ -d "$OUT" ] && echo "$line" >> "$OUT/report.md"
   echo "$line"
   exit "$rc"
@@ -111,19 +117,33 @@ if [ -n "$BASELINE" ]; then
   BASELINE="$(abspath "$BASELINE")"
   [ -x "$BASELINE/Contents/MacOS/MacDashboard" ] || fatal 64 "--baseline binary is not executable: $BASELINE/Contents/MacOS/MacDashboard"
 fi
-case "$RUNS" in ""|[1-9]|[1-9][0-9]) ;; *) fatal 64 "--runs must be a positive integer" ;; esac
+case "$RUNS" in ""|[1-7]) ;; *) fatal 64 "--runs must be 1-7" ;; esac
 case "$G1_MAX" in *[!0-9.]*|"") fatal 64 "--g1-max must be a number" ;; esac
 
 # scenario list -> work items
 [ -n "$SCENARIOS" ] || SCENARIOS="G1,G2,G3,G4,G5,G6,G7,G9"
 ITEMS=""
-for s in $(echo "$SCENARIOS" | tr 'a-z,' 'A-Z '); do
-  case "$s" in
-    G1|G2|G3|G4|G7|G9) ITEMS="$ITEMS $s" ;;
-    G5) ITEMS="$ITEMS G5 G5-top" ;;
-    G6) ITEMS="$ITEMS G6-page G6-table G6-hover" ;;
-    G8) [ "$ORPHAN" = 1 ] || fatal 64 "G8 needs --orphan"; ITEMS="$ITEMS G8" ;;
-    *) fatal 64 "unknown scenario: $s (G1..G9)" ;;
+add_item() { case " $ITEMS " in *" $1 "*) ;; *) ITEMS="$ITEMS $1" ;; esac; }
+for t in $(echo "$SCENARIOS" | tr ',' ' '); do   # "all" implies --orphan, whatever its position in the list
+  case "$t" in all|ALL) ORPHAN=1 ;; esac
+done
+for t in $(echo "$SCENARIOS" | tr ',' ' '); do
+  case "$t" in
+    all|ALL)
+      for s in G1 G2 G3 G4 G5 G5-top G6-page G6-table G6-hover G7 G8 G9; do add_item "$s"; done
+      for p in $GP_PAGES; do add_item "GP-$p"; done ;;
+    [Gg][Pp]:*)
+      p="$(echo "${t#*:}" | tr 'A-Z' 'a-z')"
+      case " $GP_PAGES " in *" $p "*) add_item "GP-$p" ;; *) fatal 64 "unknown page in $t" ;; esac ;;
+    *)
+      s="$(echo "$t" | tr 'a-z' 'A-Z')"
+      case "$s" in
+        G1|G2|G3|G4|G7|G9) add_item "$s" ;;
+        G5) add_item G5; add_item G5-top ;;
+        G6) add_item G6-page; add_item G6-table; add_item G6-hover ;;
+        G8) [ "$ORPHAN" = 1 ] || fatal 64 "G8 needs --orphan"; add_item G8 ;;
+        *) fatal 64 "unknown scenario: $t (G1..G9, GP:<page>, all)" ;;
+      esac ;;
   esac
 done
 
@@ -163,6 +183,17 @@ done
 
 mkdir -p "$OUT" || fatal 70 "cannot create $OUT"
 STARTED=1
+G5_NOTE=""
+case " $ITEMS " in *" G5 "*|*" G5-top "*)
+  if ! pmset -g batt 2>/dev/null | grep -q InternalBattery; then
+    ITEMS="$(for i in $ITEMS; do case "$i" in G5|G5-top) ;; *) echo -n " $i" ;; esac; done)"
+    G5_NOTE="G5 skipped: this Mac has no battery"
+    log "$G5_NOTE"
+  fi ;;
+esac
+# Bench copies: own bundle id, so the gate never touches the real defaults domain (R11); removed on exit.
+CAND_APP="$("$ROOT/tools/bench-app.sh" "$APP" "$OUT/apps/cand")" || fatal 70 "bench copy of --app failed"
+[ -n "$BASELINE" ] && { BASE_APP="$("$ROOT/tools/bench-app.sh" "$BASELINE" "$OUT/apps/base")" || fatal 70 "bench copy of --baseline failed"; }
 PIDS="$OUT/pids"; : > "$PIDS"
 HOMEDIR="$OUT/home"
 REAL_HOME="$(abspath "$HOMEDIR")"
@@ -213,10 +244,18 @@ for m in re.finditer(r"Height = ([0-9.]+);\s*Width = ([0-9.]+);\s*X = (-?[0-9.]+
 print(" ".join(t.split())); sys.exit(1)')" || fatal 70 "window frame is not 1000x733 at (0,29): $frame"
 }
 
+ax_frame() {   # AXIdentifier -> "x y w h" (global points, top-left origin); a miss is exit 70
+  local out; out="$(ax frame "$1")"
+  [[ "$out" =~ ^-?[0-9]+\ -?[0-9]+\ [0-9]+\ [0-9]+$ ]] || fatal 70 "AX frame failed for '$1' (got: $out)"
+  echo "$out"
+}
+
 park_pointer() { "$BIN/hold" 1100 500 0.4 >/dev/null 2>&1; }   # drv move with 0 s is a no-op
 
 launch_app() {   # app tag -> PID
-  CFFIXED_USER_HOME="$HOMEDIR" "$1/Contents/MacOS/MacDashboard" >"$OUT/$2-app.log" 2>&1 &
+  defaults delete "$BENCH_ID" >/dev/null 2>&1 || true
+  rm -rf "$HOME/Library/Saved Application State/$BENCH_ID.savedState"
+  CFFIXED_USER_HOME="$HOMEDIR" "$1/Contents/MacOS/MacDashboard" -appLanguage en -AppleLanguages "(en)" -ApplePersistenceIgnoreState YES >"$OUT/$2-app.log" 2>&1 &
   PID=$!
   track "$PID"; LS_DIRTY=1
   sleep 7
@@ -239,16 +278,26 @@ stop_app() {
 route_mac()    { ax_press id main-mode-mac; sleep 2; }
 route_iphone() { ax_press id main-mode-iphone; sleep 2; ax_press id iphone-tile-0; sleep 3; }
 route_table()  { route_iphone; ax_press title 'Таблица|Table'; sleep 2; }
-# History page: candidate = Home -> History tile (short page, chart plot at y ~310-415); baseline = Overview scrolled
-# to the bottom (chart plot at y ~595-700). HIST_SWEEP_Y puts the G4 pointer sweep (scen-hist-all.sh) on the plot.
-# Not 'home-tile-history|main-tab-overview' in one press: ui.applescript presses the first match in AX order and
-# the header tab comes before the tile, so that pressed the tab (a no-op on Home) and the History page never opened.
+# History page (Home -> History tile), range All; the G4 sweep is centred on the chart's AX frame (D16).
 route_hist() {
-  route_mac
-  if [ "$(ax id home-tile-history)" = pressed ]; then HIST_SWEEP_Y=360; else HIST_SWEEP_Y=650; fi
-  export HIST_SWEEP_Y
-  sleep 2; "$BIN/drv" scroll 500 450 3 -15 >/dev/null 2>&1; sleep 1; ax_press id history-range-all; sleep 3
+  route_mac; ax_press id home-tile-history; sleep 2
+  "$BIN/drv" scroll 500 450 3 -15 >/dev/null 2>&1; sleep 1; ax_press id history-range-all; sleep 3
+  local fr fx fy fw fh; fr="$(ax_frame history-chart)" || exit 70; read -r fx fy fw fh <<< "$fr"
+  HIST_SWEEP_X=$((fx + fw / 2)); HIST_SWEEP_Y=$((fy + fh / 2))
+  { [ "$HIST_SWEEP_X" -ge 150 ] && [ "$HIST_SWEEP_X" -le 850 ] && [ "$HIST_SWEEP_Y" -ge 29 ] && [ "$HIST_SWEEP_Y" -le 762 ]; } \
+    || fatal 70 "G4: history chart centre ($HIST_SWEEP_X,$HIST_SWEEP_Y) is outside the pinned window"
+  export HIST_SWEEP_X HIST_SWEEP_Y
 }
+# Battery page; G5 holds on the rainbow "Details" capsule and on the same tile 300 pt to its left (D17).
+route_battery() {
+  route_mac; ax_press id home-tile-battery; sleep 2
+  local fr fx fy fw fh; fr="$(ax_frame battery-details)" || exit 70; read -r fx fy fw fh <<< "$fr"
+  local dx=$((fx + fw / 2)) dy=$((fy + fh / 2)) cx=$((fx - 300))
+  [ "$cx" -ge 40 ] || fatal 70 "G5: control spot x=$cx is outside the window"
+  G5_SPOTS="ctrl:$cx:$dy details:$dx:$dy"; export G5_SPOTS
+}
+route_system() { route_mac; ax_press id home-tile-system; sleep 2; }
+route_page()   { route_mac; ax_press id "home-tile-$1"; sleep 2; }
 
 topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" for the app and WindowServer
   # exec: always called as a background job, so the tracked PID is perl itself (it forwards TERM to top)
@@ -265,7 +314,7 @@ topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" f
 }
 
 # ---------------------------------------------------------------- per-item definitions
-# CPU page (REDESIGN-CPU): Home -> CPU tile. Baseline build: the same tile opens the interim page with the v2 CPU tile + process list.
+# CPU page (REDESIGN-CPU): Home -> CPU tile.
 route_cpu() { route_mac; ax_press id home-tile-cpu; sleep 2; }
 
 # Sets S_ROUTE S_PRE (extra wait after the route, s) S_SECS (record length) S_SCEN S_ARGS S_TABLES S_INSTR.
@@ -276,25 +325,27 @@ define_item() {
   case "$1" in
     G1) S_PRE=22 ;;
     G9) S_ROUTE=cpu; S_PRE=22 ;;
-    G5-top) S_PRE=22 ;;
+    G5-top) S_ROUTE=battery; S_PRE=22 ;;
     G2) S_PRE=30; S_SECS=20; S_SCEN=scen-idle.sh; S_ARGS=15
         S_TABLES="coreanimation-commit-interval coreanimation-server-interval"; S_INSTR=("${CA_INSTR[@]}") ;;
     G3) S_PRE=5; S_SECS=22; S_SCEN=scen-idle-bottom.sh ;;
-    G8) S_PRE=5; S_SECS=22; S_SCEN=scen-idle-bottom.sh; S_ORPHAN=1 ;;
+    G8) S_ROUTE=system; S_PRE=5; S_SECS=22; S_SCEN=scen-idle-bottom.sh; S_ORPHAN=1 ;;
     G4) S_ROUTE=hist; S_PRE=0; S_SECS=22; S_SCEN=scen-hist-all.sh ;;
-    G5) S_PRE=22; S_SECS=22; S_SCEN=scen-rainbow.sh
+    G5) S_ROUTE=battery; S_PRE=22; S_SECS=22; S_SCEN=scen-rainbow.sh
         S_TABLES="coreanimation-commit-interval coreanimation-server-interval"
         S_INSTR=(--instrument 'Time Profiler' --instrument Hitches --instrument 'Core Animation Commits' --instrument 'Core Animation Server') ;;
     G6-page)  S_ROUTE=iphone; S_PRE=2; S_SECS=17; S_SCEN=scen-page.sh ;;
     G6-table) S_ROUTE=table;  S_PRE=2; S_SECS=24; S_SCEN=scen-table.sh ;;
     G6-hover) S_ROUTE=iphone; S_PRE=2; S_SECS=20; S_SCEN=scen-hover.sh ;;
     G7) S_SECS=21; S_SCEN=scen-mac-scroll.sh ;;
+    GP-*) S_ROUTE="page:${1#GP-}"; S_SECS=21; S_SCEN=scen-mac-scroll.sh ;;
   esac
 }
 
 do_route() {
   case "$S_ROUTE" in
     mac) route_mac ;; hist) route_hist ;; iphone) route_iphone ;; table) route_table ;; cpu) route_cpu ;;
+    battery) route_battery ;; system) route_system ;; page:*) route_page "${S_ROUTE#page:}" ;;
   esac
 }
 
@@ -317,9 +368,14 @@ attempt() {
   define_item "$item"
   launch_app "$app" "$tag"
   do_route
-  if [ "$S_ORPHAN" = 1 ]; then
-    local pr; pr="$(ax probe 'Outdated:|Устаревших:')"
-    case "$pr" in found) echo "orphan_visible 1" >> "$buf" ;; absent) echo "orphan_visible 0" >> "$buf" ;; *) fatal 70 "orphan probe failed: $pr" ;; esac
+  if [ "$S_ORPHAN" = 1 ]; then   # D18: the Autostart card exists only after the report pass
+    local waited=0
+    until [ "$(ax exists autostart-outdated)" = present ]; do
+      waited=$((waited + 2))
+      [ "$waited" -ge 60 ] && fatal 70 "G8: autostart-outdated did not appear on the System page within 60 s (bench orphan not shown)"
+      sleep 2
+    done
+    echo "orphan_visible 1" >> "$buf"
   fi
   park_pointer
   sleep "$S_PRE"
@@ -420,14 +476,14 @@ analyze_item() {
       grep -E '^(app_pct|ws_pct) ' "$buf.top" >> "$buf"; rm -f "$buf.top" ;;
     G4)
       export_tables "$prefix"
-      az "$buf" "" "$an" -- tp "$prefix" HistoryTrendChart.plot
+      az "$buf" "" "$an" -- tp "$prefix"
       t0="$(mark_val t0 "$prefix-drv.txt")"; t1="$(mark_val t1 "$prefix-drv.txt")"
       az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$t0" "$t1"
       grep -E '^(app_pct|ws_pct) ' "$buf.top" >> "$buf"; rm -f "$buf.top" ;;
     G6-*)
       export_tables "$prefix"
       az "$buf" "" "$an" -- tp "$prefix" rgba64_shade_conic ;;
-    G7)
+    G7|GP-*)
       export_tables "$prefix"
       az "$buf" "" "$an" -- tp "$prefix" ;;
   esac
@@ -440,7 +496,7 @@ G3_WIN_LO=0; G3_WIN_HI=7
 PID_LAST=""
 
 # ---------------------------------------------------------------- run loop
-default_runs() { if [ -n "$RUNS" ]; then echo "$RUNS"; elif [ "$1" = "G1" ] || [ "$1" = "G9" ]; then echo 3; else echo 1; fi; }
+default_runs() { echo "${RUNS:-3}"; }
 
 {
   echo "# Perf gate report"
@@ -460,7 +516,7 @@ for item in $ITEMS; do
   while [ "$r" -le "$n" ] && [ "$INVALID" = 0 ]; do
     arms="cand"; [ -n "$BASELINE" ] && arms="cand base"
     for arm in $arms; do
-      app="$APP"; [ "$arm" = "base" ] && app="$BASELINE"
+      app="$CAND_APP"; [ "$arm" = "base" ] && app="$BASE_APP"
       if ! attempt "$item" "$arm" "$r" "$app"; then
         log "$item-$arm$r: re-recording once"
         sleep 5
@@ -488,6 +544,7 @@ if [ -s "$OUT/runs.tsv" ]; then
   COUNTS="$(python3 -I "$PERF/analyze.py" verdict "$OUT" --g1-max "$G1_MAX" | sed -n 's/^COUNTS //p')" || fatal 70 "analyze.py verdict failed"
   NPASS="$(sed -n 's/.*pass=\([0-9]*\).*/\1/p' <<< "$COUNTS")"
   NFAIL="$(sed -n 's/.*fail=\([0-9]*\).*/\1/p' <<< "$COUNTS")"
+  NNOISY="$(sed -n 's/.*noisy=\([0-9]*\).*/\1/p' <<< "$COUNTS")"
 fi
 {
   echo "## Power"
@@ -502,6 +559,7 @@ fi
     sed 's/^/- /' "$OUT/invalid.log"
     echo
   fi
+  if [ -n "$G5_NOTE" ]; then echo "$G5_NOTE"; echo; fi
   echo "## Defaults domain \`$BUNDLE_ID\`"
   echo
   if [ "$DEFAULTS_CHANGED" = 1 ]; then

@@ -108,7 +108,7 @@ final class GlassSettings {
 }
 
 /// KVO on `UserDefaults.standard` for a fixed key list; removed on deinit.
-private final class DefaultsKeyObserver: NSObject {
+final class DefaultsKeyObserver: NSObject {
     private let keys: [String]
     private let onChange: () -> Void
 

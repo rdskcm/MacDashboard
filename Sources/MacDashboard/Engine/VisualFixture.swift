@@ -9,9 +9,13 @@
 import Foundation
 
 enum VisualFixture {
-    /// `-visualFixture` on the command line requests fixture mode.
+    /// HARNESS-REDESIGN-RETARGET: test hook. The offscreen snapshot suite cannot add a launch argument to its
+    /// own process, so it sets this for the duration of its render (and restores it). Never set by the app.
+    static var forced = false
+
+    /// `-visualFixture` on the command line (or `forced` in the snapshot tests) requests fixture mode.
     static var isRequested: Bool {
-        ProcessInfo.processInfo.arguments.contains("-visualFixture")
+        forced || ProcessInfo.processInfo.arguments.contains("-visualFixture")
     }
 
     /// Always in the past, so `reportUpdatedTimeString` takes its stable

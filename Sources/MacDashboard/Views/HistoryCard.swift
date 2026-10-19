@@ -148,6 +148,8 @@ struct HistoryCard: View {
                     .frame(height: 120)
             } else {
                 HistoryTrendChart(points: points, metric: metric, yLabel: metricYLabel)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("history-chart")
             }
         }
     }

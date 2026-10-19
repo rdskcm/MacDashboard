@@ -78,5 +78,5 @@ same command checks a different theme on a different day. Pin it:
   material/translucency blending, between-frame artefacts) never appears here,
   so a clean PNG is no evidence against it (the row-escape defect was in this
   class). Same root cause as the blank sidebar above. Verify that class in the
-  real app: `tools/visual/run.sh` or a live screencapture.
-- Window chrome (titlebar, translucency, traffic lights, alpha holes) is invisible here — use `tools/visual/run.sh` (real windows, reference diff).
+  real app: `tools/visual/smoke.sh` or a live screencapture.
+- Window chrome (titlebar, translucency, traffic lights, alpha holes) is invisible here — use `tools/visual/smoke.sh` (real windows on a bench copy, reference diff); per-view pictures are checked by `tools/visual/snapshots.sh`.

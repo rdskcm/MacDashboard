@@ -6,6 +6,7 @@
 # pixel_tolerance: per-channel (R/G/B/A) byte tolerance used by `vbtool diff`.
 # default: max allowed diff_pct for any state with no more specific line below.
 # <state> <max_pct>: per-state override.
+# consumer: tools/visual/smoke.sh (run.sh removed, HARNESS-REDESIGN-RETARGET)
 
 pixel_tolerance 24
 default 0.5

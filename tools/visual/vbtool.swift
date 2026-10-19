@@ -764,6 +764,69 @@ func cmdSelftest() {
     exit(passed == total ? 0 : 1)
 }
 
+// MARK: - Snapshot compare (HARNESS-REDESIGN-RETARGET)
+
+/// D5 rule of tools/visual/snapshots.sh: a pixel is changed when any channel differs by more than 24; none allowed.
+let snapChannelTolerance = 24
+let snapMaxChangedPixels = 0
+
+/// `snap-compare --out RUN --ref REFDIR`: reads RUN/rendered.tsv (written by the snapshot test), compares RUN/current/<state>.png
+/// with REFDIR/<state>.png, writes RUN/diff/<state>.png masks (CHANGED only) and RUN/results.tsv (9 columns, as `sheet` reads).
+func cmdSnapCompare(_ args: [String]) {
+    let (_, opts) = parseOptions(args)
+    guard let outPath = opts["out"]?.first, let refPath = opts["ref"]?.first else {
+        fail("snap-compare: usage --out RUN --ref REFDIR", code: 3)
+    }
+    let out = URL(fileURLWithPath: outPath), refDir = URL(fileURLWithPath: refPath)
+    let fm = FileManager.default
+    guard let list = try? String(contentsOf: out.appendingPathComponent("rendered.tsv"), encoding: .utf8),
+          list.split(separator: "\n").contains(where: { $0.hasPrefix("# complete ") }) else {
+        fail("snap-compare: rendered.tsv missing or incomplete", code: 3)
+    }
+    try? fm.createDirectory(at: out.appendingPathComponent("diff"), withIntermediateDirectories: true)
+    var rows: [String] = []
+    var produced = Set<String>()
+    func add(_ state: String, _ pct: String, _ verdict: String) {
+        rows.append("\(state)\tn/a\t0\t-\t-\t\(pct)\t0 px\t\(verdict)\t-")
+    }
+    for line in list.split(separator: "\n") where !line.hasPrefix("#") {
+        let f = line.split(separator: "\t").map(String.init)
+        guard f.count == 2 else { continue }
+        let state = f[0]
+        produced.insert(state)
+        if f[1] != "ok" { add(state, "-", "RENDER-FAILED"); continue }
+        let curURL = out.appendingPathComponent("current/\(state).png")
+        let refURL = refDir.appendingPathComponent("\(state).png")
+        guard fm.fileExists(atPath: refURL.path) else { add(state, "-", "NO-REF"); continue }
+        guard let r = try? loadPixelsAny(refURL), let c = try? loadPixelsAny(curURL) else {
+            add(state, "-", "RENDER-FAILED"); continue
+        }
+        if r.width != c.width || r.height != c.height { add(state, "100.0000", "SIZE-CHANGED"); continue }
+        let (_, _, mask) = computeDiff(ref: r, cur: c, tol: snapChannelTolerance)
+        var changed = 0
+        for i in stride(from: 0, to: mask.count, by: 4) where mask[i + 1] == 0 && mask[i] == 255 && mask[i + 2] == 255 { changed += 1 }
+        let pct = String(format: "%.4f", Double(changed) / Double(c.width * c.height) * 100)
+        if changed > snapMaxChangedPixels {
+            if let img = try? makeCGImage(from: PixelImage(width: c.width, height: c.height, pixels: mask)) {
+                try? writePNG(img, to: out.appendingPathComponent("diff/\(state).png"))
+            }
+            add(state, pct, "CHANGED")
+        } else {
+            add(state, pct, "same")
+        }
+    }
+    let files = (try? fm.contentsOfDirectory(atPath: refDir.path)) ?? []
+    for f in files.sorted() where f.hasSuffix(".png") {
+        let state = String(f.dropLast(4))
+        if !produced.contains(state) { add(state, "-", "ORPHAN-REF") }
+    }
+    let header = "state\talpha\thole_px\tbbox_pt\tregions\tdiff_pct\tthreshold\tverdict\ttext"
+    let body = ([header] + rows + ["# complete \(produced.count) states"]).joined(separator: "\n") + "\n"
+    do { try body.write(to: out.appendingPathComponent("results.tsv"), atomically: true, encoding: .utf8) }
+    catch { fail("snap-compare: cannot write results.tsv: \(error)", code: 3) }
+    exit(0)
+}
+
 // MARK: - Main
 
 let cliArgs = CommandLine.arguments
@@ -782,6 +845,7 @@ case "downscale": cmdDownscale(rest)
 case "diff": cmdDiff(rest)
 case "text-diff": cmdTextDiff(rest)
 case "sheet": cmdSheet(rest)
+case "snap-compare": cmdSnapCompare(rest)
 case "selftest": cmdSelftest()
 default: fail("unknown subcommand: \(cmd)", code: 3)
 }
