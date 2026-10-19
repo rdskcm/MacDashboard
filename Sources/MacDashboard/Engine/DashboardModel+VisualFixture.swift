@@ -47,6 +47,14 @@ extension DashboardModel {
             s.succeed(at: ref)
             return s
         }(), highSince: nil)
+        // REDESIGN-STORAGE: smartmontools present (the SMART card shows its tiles) and an ok folder-count block.
+        applyFixtureSmartTools(.installed, installing: false, failure: nil)
+        applyFixtureFolders(VisualFixture.folderSizes(), block: {
+            var s = BlockState(.folders, createdAt: ref.addingTimeInterval(-14))
+            s.begin(at: ref.addingTimeInterval(-12), showsLoading: false)
+            s.succeed(at: ref)
+            return s
+        }())
         // REDESIGN-MEMORY: an ok memory block, so the Memory page renders live values in the fixture.
         applyFixtureMemory({
             var s = BlockState(.memory, createdAt: ref.addingTimeInterval(-4))

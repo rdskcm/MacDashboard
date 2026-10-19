@@ -24,11 +24,11 @@ extension SerialTests {
             #expect(d1.history.mac_history == d2.history.mac_history, "VisualFixture: two make() calls -> equal history.mac_history")
             #expect(VisualFixture.referenceDate < Date(), "VisualFixture: referenceDate is in the past")
 
-            // --- R2: attention items / tips ---
+            // --- R2: attention items / tips (REDESIGN-STORAGE: the fixture disk is 256 GB, 30 % free = ok, so no diskFullSoon) ---
             let kinds = Set(d1.assessment.items.map(\.kind))
-            #expect(kinds == [.firewallOff, .diskFullSoon, .timeMachine, .wakeHolders, .batteryCapacity, .brewOutdated],
-                  "VisualFixture: attention item kinds == {firewallOff, diskFullSoon, timeMachine, wakeHolders, batteryCapacity, brewOutdated} (got \(kinds))")
-            #expect(d1.assessment.items.count == 6, "VisualFixture: 6 attention items (got \(d1.assessment.items.count))")
+            #expect(kinds == [.firewallOff, .timeMachine, .wakeHolders, .batteryCapacity, .brewOutdated],
+                  "VisualFixture: attention item kinds == {firewallOff, timeMachine, wakeHolders, batteryCapacity, brewOutdated} (got \(kinds))")
+            #expect(d1.assessment.items.count == 5, "VisualFixture: 5 attention items (got \(d1.assessment.items.count))")
             #expect(d1.assessment.capsules.count == 4, "VisualFixture: 4 tip capsules (got \(d1.assessment.capsules.count))")
 
             // --- VISUAL-HARNESS-STALE: fixed, fresh Claude backup ---

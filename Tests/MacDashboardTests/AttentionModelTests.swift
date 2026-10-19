@@ -33,7 +33,7 @@ private func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
 // parity and regression checks below (these don't need all 17 AttentionKinds, just
 // a healthy mix of items+capsules with both nil and non-nil actions).
 private func attnMegaBadFixture() -> (FullReport, LiveSnapshot) {
-    var (report, live) = attnFullBadFixture(diskPct: 0.90)
+    var (report, live) = attnFullBadFixture(diskPct: 0.94)
     report.brewOutdated = ["pkg1", "pkg2", "pkg3"]
     report.smart?.append(SmartDisk(device: "/dev/disk5", title: "External HDD", status: "SMART недоступен",
                                     attrs: [], severity: .warn))
@@ -41,9 +41,7 @@ private func attnMegaBadFixture() -> (FullReport, LiveSnapshot) {
         DirSize(path: "/Users/x/Downloads", bytes: 11 * GIB),
         DirSize(path: "/Users/x/.Trash", bytes: 2 * GIB),
     ]
-    report.serviceDirs = [
-        DirSize(path: FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Caches", bytes: 4 * GIB),
-    ]
+    report.homeCaches = DirSize(path: FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Caches", bytes: 4 * GIB)
     return (report, live)
 }
 
@@ -141,7 +139,7 @@ extension SerialTests {
                 for lang in AppLanguage.allCases {
                     L10nStore.shared.language = lang
                     let (reportFull, liveFull) = attnFullBadFixture(diskPct: 0.94)   // -> diskFull
-                    let (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.80)   // -> diskFullSoon
+                    let (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.85)   // -> diskFullSoon
                     let itemsFull = Assess.assess(report: reportFull, live: liveFull, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
                     let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
                     let allItems = itemsFull + itemsSoon

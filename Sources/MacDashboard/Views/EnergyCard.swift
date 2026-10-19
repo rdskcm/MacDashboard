@@ -1,7 +1,7 @@
 // Views/EnergyCard.swift
 // Настройки энергии (pmset) card — v2 restyle, Block V2-CARD-SYS (Spec §5.7).
 // Collapsed by default, header disclosure via `DSDisclosureBars` (same 13×13
-// indicator as FoldersCard/HistoryCard-style disclosure users elsewhere).
+// indicator as HistoryCard-style disclosure users elsewhere).
 //
 // SPEC Block K: editable toggles/sleep timers with a pending-changes model, applied
 // in one batched `pmset` call via PrivilegedRunner (Touch ID / admin password), plus

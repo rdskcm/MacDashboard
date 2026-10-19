@@ -29,6 +29,52 @@ enum VisualFixture {
     static let procDetailXcode = ProcDetail(path: "/Applications/Xcode.app/Contents/MacOS/Xcode", owner: "ivan")
 
     private static let GiB: Int64 = 1 << 30
+    /// REDESIGN-STORAGE: decimal gigabytes (what `fmtCapacity` shows).
+    private static func GB(_ v: Double) -> Int64 { Int64(v * 1e9) }
+
+    /// REDESIGN-STORAGE: the internal drive's health record (model values, not the design mock-up's).
+    static let internalHealth = SmartHealth(
+        temperatureC: 41, percentageUsed: 3, availableSpare: 100, spareThreshold: 99, powerOnHours: 1204,
+        powerCycles: 812, unsafeShutdowns: 14, dataUnitsRead: 74_609_375, dataUnitsWritten: 57_812_500,
+        mediaErrors: 0, errorLogEntries: 0, criticalWarning: 0)
+
+    /// REDESIGN-STORAGE: a failing external drive (the `storage-smart-failing` state).
+    static let externalFailingDisk = SmartDisk(
+        device: "/dev/disk4", title: "External SSD", status: "FAILING",
+        attrs: [("Critical Warning", "0x01"), ("Media and Data Integrity Errors", "27"), ("Percentage Used", "104%")],
+        severity: .crit,
+        health: SmartHealth(
+            temperatureC: 72, percentageUsed: 104, availableSpare: 4, spareThreshold: 10, powerOnHours: 9812,
+            powerCycles: 1406, unsafeShutdowns: 31, dataUnitsRead: 80_664_062, dataUnitsWritten: 231_640_625,
+            mediaErrors: 27, errorLogEntries: 112, criticalWarning: 1))
+
+    /// REDESIGN-STORAGE: the folder-count result the Storage page shows (home walk + the six System paths).
+    /// `unreadable` = home folders the count could not read.
+    static func folderSizes(unreadable: [String]? = nil) -> FolderSizes {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return FolderSizes(
+            homeDirs: [
+                DirSize(path: home + "/Library", bytes: GB(48.2)),
+                DirSize(path: home + "/Documents", bytes: GB(31)),
+                DirSize(path: home + "/Downloads", bytes: GB(14)),
+                DirSize(path: home + "/Movies", bytes: GB(9.8)),
+                DirSize(path: home + "/Pictures", bytes: GB(7.4)),
+                DirSize(path: home + "/Developer", bytes: GB(6.1)),
+                DirSize(path: home + "/.Trash", bytes: GB(1.5)),
+            ],
+            homeDirsUnreadable: unreadable ?? [home + "/Library/Mail"],
+            serviceDirs: [
+                DirSize(path: "/Applications", bytes: GB(24.6)),
+                DirSize(path: "/Library", bytes: GB(9.3)),
+                DirSize(path: "/private/var", bytes: GB(6.8)),
+                DirSize(path: "/usr/local", bytes: GB(2.1)),
+                DirSize(path: "/opt/homebrew", bytes: GB(8.2)),
+                DirSize(path: "/Users/Shared", bytes: GB(0.4)),
+            ],
+            serviceDirsUnreadable: [],
+            countedAt: referenceDate, durationSeconds: 12,
+            homeCaches: DirSize(path: home + "/Library/Caches", bytes: GB(4.2)))
+    }
 
     /// One fixed, pure snapshot of everything a `DashboardModel` normally
     /// collects live.
@@ -70,7 +116,8 @@ enum VisualFixture {
         let swapUsed: Int64 = 512 * (1 << 20)
         let swap = SwapInfo(total: swapTotal, used: swapUsed, free: swapTotal - swapUsed)
 
-        let disk = DiskInfo(size: 460 * GiB, avail: 60 * GiB, dataUsed: nil, sysUsed: nil)
+        // REDESIGN-STORAGE: 256 GB volume, 30 % free (ok); Storage states tweak it for low / critical.
+        let disk = DiskInfo(size: GB(256), avail: GB(76.8), dataUsed: GB(160), sysUsed: GB(18), purgeable: GB(3.1))
 
         let battery = BatteryInfo(
             source: "AC Power", charge: 82, state: "charging",
@@ -105,22 +152,10 @@ enum VisualFixture {
             cores: "8 (4 performance and 4 efficiency)", memBytes: 16 * GiB,
             uptime: "3 days 4 hours", hostName: "fixture-mac"
         )
-        report.homeDirs = [
-            DirSize(path: home + "/Downloads", bytes: 14 * GiB),
-            DirSize(path: home + "/Library", bytes: 22 * GiB),
-            DirSize(path: home + "/Documents", bytes: 9 * GiB),
-            DirSize(path: home + "/Pictures", bytes: 6 * GiB),
-            DirSize(path: home + "/Movies", bytes: 4 * GiB),
-            DirSize(path: home + "/.Trash", bytes: Int64(1.5 * Double(GiB))),
-            DirSize(path: home + "/Desktop", bytes: Int64(0.8 * Double(GiB))),
-            DirSize(path: home + "/Music", bytes: Int64(0.5 * Double(GiB))),
-        ]
-        report.serviceDirs = [
-            DirSize(path: home + "/Library/Caches", bytes: Int64(4.2 * Double(GiB))),
-            DirSize(path: home + "/Library/Application Support", bytes: Int64(7.5 * Double(GiB))),
-            DirSize(path: home + "/Library/Containers", bytes: Int64(5.1 * Double(GiB))),
-            DirSize(path: "/Library/Caches", bytes: Int64(1.1 * Double(GiB))),
-        ]
+        let counted = folderSizes()
+        report.homeDirs = counted.homeDirs
+        report.homeCaches = counted.homeCaches
+        report.serviceDirs = counted.serviceDirs
         report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
         report.tmDest = .some(nil)
         report.updates = []
@@ -134,7 +169,7 @@ enum VisualFixture {
                             "com.apple.TimeMachine.2026-01-15-080000.local",
                             "com.apple.TimeMachine.2026-01-15-070000.local"]
         report.homeDirsUnreadable = [home + "/Library/Mail"]
-        report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED")]
+        report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED", health: internalHealth)]
         report.progress = ["homeDirs": true, "serviceDirs": true]
         report.battery = battery
 

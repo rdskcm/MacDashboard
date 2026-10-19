@@ -47,7 +47,7 @@ final class AdviceActionDispatch {
     var trashError: String? = nil
     /// Settings pane the `trashError` above can be acted on in, when there is one
     /// (today: Automation, after a declined grant). Same shape as
-    /// `FoldersNoFDANotice`'s FDA capsule — an error the user can fix must carry the
+    /// the Full Disk Access note's button — an error the user can fix must carry the
     /// route to fix it, not just the sentence.
     var trashErrorPane: String? = nil
     /// True while `AdviceActionRunner.emptyTrash` is in flight — i.e. for the whole
@@ -55,6 +55,10 @@ final class AdviceActionDispatch {
     /// the first-run automation prompt. Read through `busy(for:)`, which is what
     /// swaps the plate/capsule verb for a spinner (`dsSwapInPlace`).
     private(set) var trashEmptying = false
+    /// REDESIGN-STORAGE D10: true while Finder is asked how many items the Trash holds (before the inline
+    /// confirm opens); `trashItemCount` is that answer, nil when Finder did not give one.
+    private(set) var trashCounting = false
+    private(set) var trashItemCount: Int?
 
     /// `TipCapsule.id` embeds the formatted value (`"Корзина|1,4 ГБ"`), which changes when a
     /// report refresh lands while Finder is still working — the captured id would then match
@@ -85,6 +89,33 @@ final class AdviceActionDispatch {
         }
     }
 
+    /// REDESIGN-STORAGE D11: «Empty Trash…» on the Storage page. Asks Finder for the item count first, then
+    /// opens the confirm. 0 items: nothing opens (the Trash is already empty; the next count removes the row).
+    /// No answer (Automation declined): the confirm opens with the count-free sentence.
+    func requestEmptyTrash(id: String) {
+        trashError = nil
+        trashErrorPane = nil
+        guard !trashCounting, !trashEmptying else { return }
+        trashCounting = true
+        AdviceActionRunner.countTrashItems { [weak self] n in
+            guard let self else { return }
+            self.trashCounting = false
+            if n == 0 { return }
+            self.trashItemCount = n
+            self.trashTargetID = id
+            self.showTrashConfirm = true
+        }
+    }
+
+    /// Visual fixture only (REDESIGN-STORAGE): opens the inline confirm with a given Finder item count.
+    func applyFixtureConfirm(count: Int?) {
+        trashItemCount = count
+        showTrashConfirm = true
+    }
+
+    /// Visual fixture only: the state while Finder is counting the Trash items.
+    func applyFixtureCounting() { trashCounting = true }
+
     func confirmEmptyTrash() {
         guard !trashEmptying else { return }
         let id = trashTargetID
@@ -101,6 +132,7 @@ final class AdviceActionDispatch {
                 if let id { self.completedAdviceIDs.insert(Self.adviceKey(id)) }
                 self.trashError = nil
                 self.trashErrorPane = nil
+                self.model.trashWasEmptied()
             case .cancelled:
                 // Backing out is not a failure: leave the plate on its verb, say nothing.
                 self.trashError = nil
@@ -122,6 +154,7 @@ final class AdviceActionDispatch {
     /// because an empty-trash already in flight owns `trashTargetID` — clearing it
     /// from a later dialog's Cancel would cost that operation its done state.
     func cancelEmptyTrash() {
+        showTrashConfirm = false
         guard !trashEmptying else { return }
         trashTargetID = nil
     }
@@ -130,7 +163,7 @@ final class AdviceActionDispatch {
         switch action {
         case .brewUpgrade: return model.brewUpgrading
         case .enableFirewall: return model.firewallApplying
-        case .emptyTrash: return trashEmptying
+        case .emptyTrash: return trashEmptying || trashCounting
         default: return false
         }
     }

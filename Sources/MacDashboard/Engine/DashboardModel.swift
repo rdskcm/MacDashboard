@@ -109,8 +109,8 @@ final class DashboardModel {
     var smartInstalling = false
 
     /// Set when the last `installSmartmontoolsNow()` run failed; cleared at the
-    /// start of the next run. Shown as an inline error under the install button.
-    var smartInstallError: String? = nil
+    /// start of the next run. Typed so the page words it (exit code, language) at render time.
+    private(set) var smartInstallFailure: SmartInstallFailure? = nil
 
     /// Re-entrancy guard for `enableFirewallNow()`, true while an in-app firewall
     /// enable (via `PrivilegedRunner`) is in flight — mirrors `smartRefreshing`.
@@ -255,7 +255,14 @@ final class DashboardModel {
     private let folderSizesURL: URL
     private var sizeCountTask: Task<Void, Never>?
     private var sizeScheduleTask: Task<Void, Never>?
-    private var isCountingSizes = false
+    private(set) var isCountingSizes = false
+    /// REDESIGN-STORAGE: set by `trashWasEmptied()`, cleared by the next successful count. The page caption reads them.
+    private(set) var trashFreedBytes: Int64?
+    private(set) var trashEmptiedAt: Date?
+    /// REDESIGN-STORAGE D13: protected locations the last probe found refused (no Full Disk Access).
+    private(set) var fdaDenied: [ProtectedLocation] = []
+    /// REDESIGN-STORAGE D14: «Open Privacy settings…» was pressed and the user has not come back yet.
+    private(set) var fdaAwaitingReturn = false
     private var sizeCountGeneration = 0
     /// Wall time the last folder-size count finished without a result (SIZES-FAIL-BACKOFF).
     /// Automatic triggers wait the 1 h window after it; the button does not. In-memory only:
@@ -402,6 +409,22 @@ final class DashboardModel {
 
     /// Visual fixture only: sets the memory block.
     func applyFixtureMemory(_ state: BlockState) { memoryBlock = state }
+
+    /// Visual fixture only (REDESIGN-STORAGE): smartmontools state, install-in-flight flag and typed failure.
+    func applyFixtureSmartTools(_ state: ReportCollector.SmartToolsAvailability, installing: Bool, failure: SmartInstallFailure?) {
+        smartToolsState = state; smartInstalling = installing; smartInstallFailure = failure
+    }
+
+    /// Visual fixture only (REDESIGN-STORAGE): the folder-count result and its block, re-applied to the shown report
+    /// (nil sizes = no count yet, the Folders card shows its Wait / error state).
+    func applyFixtureFolders(_ sizes: FolderSizes?, block: BlockState) {
+        folderSizes = sizes
+        foldersBlock = block
+        applyFolderSizes(to: &report)
+    }
+
+    /// Visual fixture only (REDESIGN-STORAGE): the protected locations the Full Disk Access probe found refused.
+    func applyFixtureFDA(denied: [ProtectedLocation]) { fdaDenied = denied }
 
     /// Starts an attempt and arms its watchdog: still in flight after `id.timeout` → `.failed(.timedOut)`.
     private func beginBlock(_ id: BlockID, showsLoading: Bool = false) {
@@ -599,6 +622,7 @@ final class DashboardModel {
         }
 
         loadCachedReportFromDisk()
+        reprobeProtectedLocations()
         refreshReport(trigger: .automatic)
         Task { [weak self] in await self?.refreshClaudeBackup() }
 
@@ -781,6 +805,7 @@ final class DashboardModel {
         r.homeDirs = folderSizes?.homeDirs
         r.homeDirsUnreadable = folderSizes?.homeDirsUnreadable ?? []
         r.serviceDirs = folderSizes?.serviceDirs
+        r.homeCaches = folderSizes?.homeCaches
         r.serviceDirsUnreadable = folderSizes?.serviceDirsUnreadable ?? []
         r.homeDirsNotMeasured = folderSizes?.homeDirsNotMeasured ?? []
         r.serviceDirsNotMeasured = folderSizes?.serviceDirsNotMeasured ?? []
@@ -810,12 +835,19 @@ final class DashboardModel {
         }
     }
 
-    private func startSizeCountIfNeeded(trigger: CollectTrigger) {
+    /// `armsWatchdog`: Try again on a visible error — a Wait comes back, so the 10 s watchdog is armed even
+    /// though a count exists. With no count at all the Wait is on screen and the watchdog is always armed;
+    /// otherwise the list stays visible and no watchdog runs (REDESIGN-STORAGE D5).
+    private func startSizeCountIfNeeded(trigger: CollectTrigger, armsWatchdog: Bool = false) {
         guard ReportCollector.shouldStartSizeCount(trigger: trigger, countedAt: folderSizes?.countedAt,
                                                    failedAt: sizeCountFailedAt,
                                                    inFlight: isCountingSizes, now: Date()) else { return }
         isCountingSizes = true
-        beginBlock(.folders, showsLoading: trigger == .button)
+        if folderSizes == nil || armsWatchdog {
+            beginBlock(.folders, showsLoading: true)                       // a Wait is on screen: arm the 10 s watchdog (D5)
+        } else {
+            updateBlock(.folders) { $0.begin(at: Date(), showsLoading: false) }   // list stays visible; no watchdog
+        }
         sizeCountGeneration += 1
         let gen = sizeCountGeneration
         applyFolderSizes(to: &report)                   // display only: spinner if no cache yet
@@ -828,12 +860,14 @@ final class DashboardModel {
                 self.succeedBlock(.folders)
                 self.folderSizes = result
                 self.sizeCountFailedAt = nil
+                self.trashFreedBytes = nil; self.trashEmptiedAt = nil            // the new count includes the real Trash state
                 try? FolderSizesCacheStore.save(result, to: self.folderSizesURL)   // a failed write costs one recount next launch
             } else {
                 self.failBlock(.folders, .noReading)
                 self.sizeCountFailedAt = Date()          // automatic triggers back off 1 h; the button still forces
             }
             self.mergeBackgroundIntoCommitted()         // also on failure: spinner -> "unavailable" when no cache
+            self.reprobeProtectedLocations()
         }
     }
 
@@ -942,6 +976,51 @@ final class DashboardModel {
             self.recordCPUSample(cpu, at: snap.t)
             self.succeedBlock(.cpu)
         }
+    }
+
+    /// REDESIGN-STORAGE D22: Storage page Refresh = a folder recount with the `.button` trigger. Live disk figures
+    /// already tick every interval; SMART has its own button.
+    func refreshStorageNow() { startSizeCountIfNeeded(trigger: .button) }
+
+    /// REDESIGN-STORAGE: Try again on the folder-count error. A count still in flight is not restarted: the Wait
+    /// and a fresh 10 s watchdog come back and the running count's result still lands.
+    func retryFolderCount() {
+        if isCountingSizes {
+            beginBlock(.folders, showsLoading: true)
+        } else {
+            startSizeCountIfNeeded(trigger: .button, armsWatchdog: true)
+        }
+    }
+
+    /// REDESIGN-STORAGE D12: the Trash was emptied through Finder. Drops the `.Trash` entry from the in-memory
+    /// count, records what it held, saves the cache (same write a count does) and re-assesses so Home's chip and
+    /// the Disk note lose the Trash too.
+    func trashWasEmptied() {
+        let trash = FileManager.default.homeDirectoryForCurrentUser.path + "/.Trash"
+        if var sizes = folderSizes {
+            if let entry = sizes.homeDirs.first(where: { $0.path == trash }) {
+                trashFreedBytes = entry.bytes
+                sizes.homeDirs.removeAll { $0.path == trash }
+                folderSizes = sizes
+                try? FolderSizesCacheStore.save(sizes, to: folderSizesURL)
+            }
+        }
+        trashEmptiedAt = Date()
+        mergeBackgroundIntoCommitted()
+    }
+
+    /// REDESIGN-STORAGE D13/D14: re-reads which protected locations are refused. If fewer are refused than
+    /// before (access was just granted), a `.button` recount starts so the sizes include the newly readable folders.
+    func reprobeProtectedLocations() {
+        let next = ProtectedLocations.denied(home: NSHomeDirectory(), probe: DirectoryAccess.probe)
+        if next.count < fdaDenied.count && !fdaDenied.isEmpty { startSizeCountIfNeeded(trigger: .button) }
+        if next != fdaDenied { fdaDenied = next }
+    }
+
+    /// REDESIGN-STORAGE D14: opens the Full Disk Access pane; busy until the app is re-activated.
+    func openFullDiskAccessSettings() {
+        fdaAwaitingReturn = true
+        AdviceActionRunner.openPane(AdvicePanes.fullDiskAccess)
     }
 
     /// REDESIGN-MEMORY: Memory page Refresh / Try again. One native memory + swap + pressure read off the
@@ -1076,23 +1155,22 @@ final class DashboardModel {
     /// `brew install smartmontools` off-main (unprivileged — brew runs as the user,
     /// never via PrivilegedRunner), then re-probes `findSmartctl()`: on success,
     /// flips `smartToolsState` to `.installed` and re-collects external SMART via
-    /// `refreshSmartNow()`; on failure, reports the last non-empty output line.
+    /// `refreshSmartNow()`; on failure, records a typed `SmartInstallFailure` (exit code, 300 s timeout, no brew).
     /// Mirrors `upgradeBrewNow()`.
     func installSmartmontoolsNow() {
         guard !smartInstalling else { return }
         smartInstalling = true
-        smartInstallError = nil
+        smartInstallFailure = nil
 
         Task { [weak self] in
             guard let self else { return }
             defer { self.smartInstalling = false }
 
             guard let brew = ReportCollector.findBrew() else {
-                self.smartInstallError = L.storageSmartInstallFailed(L.maintenanceBrewUpgradeFailed)
+                self.smartInstallFailure = .noBrew
                 return
             }
 
-            let lastLineBox = LastLineBox()
             // brew is a Homebrew-prefix script that shells out to its own helper
             // binaries (ruby, git, curl, …) inside that prefix — same reason
             // BrewUpgrader.upgradeAll and collectBrewInfo() build this env
@@ -1102,19 +1180,20 @@ final class DashboardModel {
                 prependingPATH: [(brew as NSString).deletingLastPathComponent])
             // Formerly `/usr/bin/env HOMEBREW_NO_AUTO_UPDATE=1 brew …`; same variable, set directly (R0(c)).
             installEnv["HOMEBREW_NO_AUTO_UPDATE"] = "1"
-            _ = await CommandRunner.run(brew, ["install", "smartmontools"], timeout: 600,
-                                        environment: installEnv, onLine: { line, _ in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if !trimmed.isEmpty { lastLineBox.value = trimmed }
-            })
+            let outcome = await CommandRunner.run(brew, ["install", "smartmontools"], timeout: 300,
+                                                  environment: installEnv)
             guard !Task.isCancelled else { return }
 
             if ReportCollector.findSmartctl() != nil {
                 self.smartToolsState = .installed
-                self.smartInstallError = nil
+                self.smartInstallFailure = nil
                 self.refreshSmartNow()
             } else {
-                self.smartInstallError = L.storageSmartInstallFailed(lastLineBox.value)
+                switch outcome.termination {
+                case .timedOut: self.smartInstallFailure = .timedOut
+                case .exited(let code): self.smartInstallFailure = .exitCode(code)
+                case .signaled, .launchFailed, .cancelled: self.smartInstallFailure = .exitCode(-1)
+                }
             }
         }
     }
@@ -1401,7 +1480,11 @@ final class DashboardModel {
         let become = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.recomputeIsPaused() }
+            Task { @MainActor [weak self] in
+                self?.recomputeIsPaused()
+                self?.fdaAwaitingReturn = false
+                self?.reprobeProtectedLocations()
+            }
         }
         let willClose = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
@@ -1441,15 +1524,6 @@ final class DashboardModel {
         init(_ value: T) { self.value = value }
     }
 
-    /// Mutable counterpart to `UncheckedSendableBox`, used by
-    /// `installSmartmontoolsNow()` to capture the last non-empty `onLine` output.
-    /// `onLine` runs on the runner's private serial queue, and every call completes
-    /// before `CommandRunner.run` returns, so the read after the `await` is ordered
-    /// after the last write.
-    private final class LastLineBox: @unchecked Sendable {
-        var value: String = ""
-    }
-
     /// Suppresses redundant @Observable notifications when the new assessment
     /// is value-equal to the current one (e.g. repeated live ticks with no
     /// change in severity/tips/problems).
@@ -1462,6 +1536,7 @@ final class DashboardModel {
         Assess.assess(report: r, live: live, memPressure: memPressure, topApps: topApps,
                       wakeHolders: wakeHolders, ignoredWakeHolders: AppSettings.shared.ignoredWakeHolders,
                       claudeBackup: claudeBackup, backupStaleHours: AppSettings.shared.backupStaleHours,
+                      lowSpacePercent: AppSettings.shared.lowSpacePercent,
                       now: fixtureNow ?? Date())
     }
 

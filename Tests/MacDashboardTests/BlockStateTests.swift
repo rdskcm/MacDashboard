@@ -12,7 +12,7 @@ struct BlockStateTests {
         #expect(BlockID.cpu.timeout == 5, "BlockID.cpu.timeout == 5")
         #expect(BlockID.memory.timeout == 5, "BlockID.memory.timeout == 5")
         #expect(BlockID.scan.timeout == 30, "BlockID.scan.timeout == 30")
-        #expect(BlockID.folders.timeout == ReportCollector.folderSizesDeadline + 5, "folders timeout = deadline + 5")
+        #expect(BlockID.folders.timeout == 10, "folders timeout = 10 (the visible Counting wait; du keeps its 90 s deadline)")
         #expect(ReportCollector.folderSizesDeadline == 90, "folderSizesDeadline == 90 (tripwire: Storage copy must follow)")
     }
 

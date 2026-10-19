@@ -31,14 +31,10 @@ extension SerialTests {
                   "splitHomeWalk: depth1 == home + its direct children (got \(split1.depth1.map(\.path)))")
 
             let serviceByPath = Dictionary(uniqueKeysWithValues: split1.service.map { ($0.path, $0.bytes) })
+            #expect(servicePaths == ["/Users/u/Library/Caches"], "homeServicePaths: only ~/Library/Caches (REDESIGN-STORAGE D9)")
             #expect(serviceByPath["/Users/u/Library/Caches"] == 10_000, "splitHomeWalk: service Caches bytes match")
-            #expect(serviceByPath["/Users/u/Library/Containers"] == 20_000, "splitHomeWalk: service Containers bytes match")
-            #expect(serviceByPath["/Users/u/.Trash"] == 5_000, "splitHomeWalk: service .Trash bytes match")
-            #expect(split1.service.count == 3, "splitHomeWalk: exactly the three present service entries (got \(split1.service.count))")
-
-            let expectedMissing = ["/Users/u/Library/Application Support", "/Users/u/Library/Group Containers",
-                                    "/Users/u/Library/Developer"]
-            #expect(split1.missing == expectedMissing, "splitHomeWalk: missing == the three absent service paths in order (got \(split1.missing))")
+            #expect(split1.service.count == 1, "splitHomeWalk: exactly the one service entry (got \(split1.service.count))")
+            #expect(split1.missing.isEmpty, "splitHomeWalk: nothing missing (got \(split1.missing))")
 
             // Path-prefix trap: "CachesOld" must not match "Caches".
             let trapLines = [DirSize(path: "/Users/u/Library/CachesOld", bytes: 999)]
@@ -156,7 +152,9 @@ extension SerialTests {
                 let T = "SERVICE-DIRS-TIMEOUT: "
                 // 1. constants
                 #expect(ReportCollector.folderSizesDeadline == 90, Comment(rawValue: T + "deadline == 90"))
-                #expect(FolderSizes.currentSchema == 2, Comment(rawValue: T + "currentSchema == 2"))
+                #expect(FolderSizes.currentSchema == 3, Comment(rawValue: T + "currentSchema == 3"))
+                #expect(ReportCollector.outsideServicePaths == ["/Applications", "/Library", "/private/var", "/usr/local", "/opt/homebrew", "/Users/Shared"],
+                      Comment(rawValue: T + "outside paths == the six System paths"))
 
                 // 2. duRun
                 func outcome(_ t: CommandOutcome.Termination, _ out: String) -> CommandOutcome {
@@ -198,16 +196,32 @@ extension SerialTests {
                 #expect(cut?.homeDirsUnreadable == ["/Users/u/Private"], Comment(rawValue: T + "assemble cut: homeDirsUnreadable"))
                 #expect(cut?.homeDirsNotMeasured == ["/Users/u/Library", "/Users/u/Music"],
                       Comment(rawValue: T + "assemble cut: homeDirsNotMeasured (got \(String(describing: cut?.homeDirsNotMeasured)))"))
-                #expect(cut?.serviceDirs == [DirSize(path: "/Users/u/Library/Caches", bytes: 10_000), DirSize(path: "/o1", bytes: 5_000)],
-                      Comment(rawValue: T + "assemble cut: serviceDirs"))
-                #expect(cut?.serviceDirsUnreadable == ["/Users/u/Library/Group Containers", "/o3"],
-                      Comment(rawValue: T + "assemble cut: serviceDirsUnreadable (/o3 refused wins over cut)"))
-                #expect(cut?.serviceDirsNotMeasured == ["/Users/u/Library/Containers", "/o2"],
+                #expect(cut?.homeCaches == DirSize(path: "/Users/u/Library/Caches", bytes: 10_000),
+                      Comment(rawValue: T + "assemble cut: Caches lands in homeCaches"))
+                #expect(cut?.serviceDirs == [DirSize(path: "/o1", bytes: 5_000)],
+                      Comment(rawValue: T + "assemble cut: serviceDirs holds the outside paths only"))
+                #expect(cut?.serviceDirsUnreadable == ["/o3"],
+                      Comment(rawValue: T + "assemble cut: serviceDirsUnreadable (/o3 refused wins over cut; never in serviceDirs)"))
+                #expect(cut?.serviceDirsNotMeasured == ["/o2"],
                       Comment(rawValue: T + "assemble cut: serviceDirsNotMeasured, /o4 in no list (got \(String(describing: cut?.serviceDirsNotMeasured)))"))
                 let fin = assemble(Run(lines: walkLines, cut: false), cutRuns.map { Run(lines: $0.lines, cut: false) })
                 #expect(fin?.homeDirsNotMeasured == [] && fin?.serviceDirsNotMeasured == [], Comment(rawValue: T + "assemble finished: empty not-measured lists"))
                 #expect(fin?.homeDirsUnreadable == cut?.homeDirsUnreadable && fin?.serviceDirsUnreadable == cut?.serviceDirsUnreadable,
                       Comment(rawValue: T + "assemble finished: unreadable lists unchanged"))
+                // The caches path itself missing from the walk: refused -> homeDirsUnreadable, cut -> homeDirsNotMeasured.
+                let noCaches = [DirSize(path: "/Users/u/Documents", bytes: 30_000)]
+                let deniedCaches = ReportCollector.assembleFolderSizes(
+                    home: h, homeWalk: Run(lines: noCaches, cut: false), outside: outside, outsideRuns: cutRuns.map { Run(lines: $0.lines, cut: false) },
+                    homeChildNames: names, access: { $0 == "/Users/u/Library/Caches" ? .denied : access($0) },
+                    countedAt: Date(timeIntervalSince1970: 0), durationSeconds: 1)
+                #expect(deniedCaches?.homeCaches == nil && deniedCaches?.homeDirsUnreadable.contains("/Users/u/Library/Caches") == true,
+                      Comment(rawValue: T + "assemble: refused Caches -> homeDirsUnreadable, homeCaches nil"))
+                let cutCaches = ReportCollector.assembleFolderSizes(
+                    home: h, homeWalk: Run(lines: noCaches, cut: true), outside: outside, outsideRuns: cutRuns,
+                    homeChildNames: names, access: { $0 == "/Users/u/Library/Caches" ? .readable : access($0) },
+                    countedAt: Date(timeIntervalSince1970: 0), durationSeconds: 1)
+                #expect(cutCaches?.homeDirsNotMeasured.contains("/Users/u/Library/Caches") == true,
+                      Comment(rawValue: T + "assemble: unreached Caches -> homeDirsNotMeasured"))
                 #expect(assemble(Run(lines: [], cut: true), cutRuns) == nil, Comment(rawValue: T + "assemble: no complete home line (cut) -> nil"))
                 #expect(assemble(Run(lines: [], cut: false), cutRuns) == nil, Comment(rawValue: T + "assemble: no complete home line (finished) -> nil"))
 
@@ -216,7 +230,8 @@ extension SerialTests {
                 defer { try? FileManager.default.removeItem(at: f2) }
                 let withLists = FolderSizes(homeDirs: [], homeDirsUnreadable: [], serviceDirs: nil, serviceDirsUnreadable: [],
                                             homeDirsNotMeasured: ["/Users/u/Music"], serviceDirsNotMeasured: ["/o2"],
-                                            countedAt: countedAt, durationSeconds: 90)
+                                            countedAt: countedAt, durationSeconds: 90,
+                                            homeCaches: DirSize(path: "/Users/u/Library/Caches", bytes: 10_000))
                 do {
                     try FolderSizesCacheStore.save(withLists, to: f2)
                     #expect(FolderSizesCacheStore.load(from: f2) == withLists, Comment(rawValue: T + "cache round trip keeps the not-measured lists"))
@@ -227,6 +242,13 @@ extension SerialTests {
                     var serviceDirs: [DirSize]?; var serviceDirsUnreadable: [String] = []; var countedAt: Date; var durationSeconds: Double }
                 try? encoder.encode(Schema1(countedAt: countedAt, durationSeconds: 1)).write(to: f1)
                 #expect(FolderSizesCacheStore.load(from: f1) == nil, Comment(rawValue: T + "schema 1 -> nil"))
+                // REDESIGN-STORAGE: a schema-2 file (mixed serviceDirs) is ignored once; temp dir only.
+                let f2old = FileManager.default.temporaryDirectory.appendingPathComponent("sdt-cache2-\(UUID().uuidString).json")
+                defer { try? FileManager.default.removeItem(at: f2old) }
+                struct Schema2: Codable { var schema: Int = 2; var homeDirs: [DirSize] = []; var homeDirsUnreadable: [String] = []
+                    var serviceDirs: [DirSize]?; var serviceDirsUnreadable: [String] = []; var countedAt: Date; var durationSeconds: Double }
+                try? encoder.encode(Schema2(countedAt: countedAt, durationSeconds: 1)).write(to: f2old)
+                #expect(FolderSizesCacheStore.load(from: f2old) == nil, Comment(rawValue: T + "schema 2 -> nil"))
             }
 
             // 7. Live deadline + no orphans (temp dirs and a stub du only)
@@ -261,8 +283,9 @@ extension SerialTests {
                 let elapsed = Date().timeIntervalSince(t0)
                 #expect(elapsed < 4, Comment(rawValue: T + "returns in < 4 s (was \(elapsed))"))
                 #expect(r != nil, Comment(rawValue: T + "result is not nil"))
-                #expect(r?.serviceDirs == [DirSize(path: home + "/Library/Caches", bytes: 8192)], Comment(rawValue: T + "serviceDirs (got \(String(describing: r?.serviceDirs)))"))
-                #expect(r?.serviceDirsNotMeasured == [home + "/Library/Containers", out1],
+                #expect(r?.homeCaches == DirSize(path: home + "/Library/Caches", bytes: 8192), Comment(rawValue: T + "homeCaches (got \(String(describing: r?.homeCaches)))"))
+                #expect(r?.serviceDirs == nil, Comment(rawValue: T + "serviceDirs nil: the one outside run was killed"))
+                #expect(r?.serviceDirsNotMeasured == [out1],
                       Comment(rawValue: T + "serviceDirsNotMeasured (got \(String(describing: r?.serviceDirsNotMeasured)))"))
                 #expect(r?.serviceDirsUnreadable == [], Comment(rawValue: T + "serviceDirsUnreadable empty"))
                 #expect(r?.homeDirs == [], Comment(rawValue: T + "homeDirs empty"))

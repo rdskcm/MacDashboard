@@ -39,10 +39,8 @@ struct InterimSectionPage: View {
             // .memory renders MemoryPage (MainDashboardView), never this page.
             EmptyView()
         case .storage:
-            HStack(alignment: .top, spacing: 12) { DiskTile(model: model).frame(maxWidth: .infinity) }
-            LegacySpaceTips(model: model)
-            FoldersCard(model: model, initialTab: .home)
-            SmartDisksCard(model: model)
+            // .storage renders StoragePage (MainDashboardView), never this page.
+            EmptyView()
         case .battery:
             HStack(alignment: .top, spacing: 12) { BatteryTile(model: model).frame(maxWidth: .infinity) }
         case .security:
@@ -115,67 +113,5 @@ private struct InterimPageBar: View {
         } trailing: {
             EmptyView()
         }
-    }
-}
-
-// MARK: - Legacy space tips (decision 1 = option A)
-
-/// Today's Downloads / Trash / Caches shortcuts, shown on the interim Storage page while the Home rows
-/// no longer carry them: `Assessment.capsules` whose action is `.revealPath` or `.emptyTrash`. The Storage
-/// page stage replaces this with the redesigned cards.
-@MainActor
-struct LegacySpaceTips: View {
-    let model: DashboardModel
-
-    @State private var dispatch: AdviceActionDispatch
-
-    init(model: DashboardModel) {
-        self.model = model
-        _dispatch = State(wrappedValue: AdviceActionDispatch(model: model))
-    }
-
-    private var capsules: [TipCapsule] {
-        model.assessment.capsules.filter {
-            switch $0.action {
-            case .revealPath?, .emptyTrash?: return true
-            default: return false
-            }
-        }
-    }
-
-    var body: some View {
-        let caps = capsules
-        if !caps.isEmpty || dispatch.trashError != nil {
-            VStack(alignment: .leading, spacing: 8) {
-                FlowLayout(spacing: 8) {
-                    ForEach(caps) { c in tip(c) }
-                }
-                if let e = dispatch.trashError {
-                    Text(e).font(.system(size: 12.5)).foregroundStyle(DS3.hotInk)
-                    if let pane = dispatch.trashErrorPane {
-                        RainbowCapsuleButton(title: L.adviceTrashOpenAutomation, size: .card) {
-                            AdviceActionRunner.openPane(pane)
-                        }
-                        .accessibilityLabel(L.adviceTrashOpenAutomation)
-                    }
-                }
-            }
-            .adviceActionDialogs(dispatch)
-        }
-    }
-
-    private func tip(_ c: TipCapsule) -> some View {
-        let busy = dispatch.busy(for: c.action)
-        let done = dispatch.done(c.id)
-        return Button {
-            if let a = c.action { dispatch.handle(a, id: c.id) }
-        } label: {
-            Text("\(c.object) \(c.value)" + (done ? " \u{2713}" : ""))
-                .dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
-        }
-        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
-        .disabled(busy || done)
-        .help(c.explanation)
-        .accessibilityLabel("\(c.verb) \(c.object)")
     }
 }

@@ -187,9 +187,56 @@ final class LiveCollector {
             let avail = vals.volumeAvailableCapacityForImportantUsage ?? 0
             let purgeable = Self.purgeableBytes(importantAvailable: vals.volumeAvailableCapacityForImportantUsage,
                                                  available: vals.volumeAvailableCapacity.map(Int64.init))
-            return DiskInfo(size: Int64(total), avail: Int64(avail), dataUsed: nil, sysUsed: nil, purgeable: purgeable)
+            let (rawDataUsed, sysUsed) = Self.volumeUsage()
+            let dataUsed = Self.dataUsedExcludingPurgeable(raw: rawDataUsed, purgeable: purgeable)
+            return DiskInfo(size: Int64(total), avail: Int64(avail), dataUsed: dataUsed, sysUsed: sysUsed, purgeable: purgeable)
         }
         return nil
+    }
+
+    /// Data-volume used bytes without purgeable space. `getattrlist(ATTR_VOL_SPACEUSED)` counts purgeable as used while `avail`
+    /// (important-usage) counts it as free; Purgeable is its own tile, so it is subtracted here. nil raw -> nil.
+    static func dataUsedExcludingPurgeable(raw: Int64?, purgeable: Int64?) -> Int64? {
+        guard let raw else { return nil }
+        return max(0, raw - (purgeable ?? 0))
+    }
+
+    /// Decodes the `getattrlist` reply for `ATTR_CMN_RETURNED_ATTRS` + `ATTR_VOL_SPACEUSED`: UInt32 length at 0,
+    /// `attribute_set_t` (5 x UInt32) at 4 so the returned volattr is at 8, `off_t` used bytes at 24.
+    /// nil when the buffer is short, the SPACEUSED bit is not set in the returned attributes, or the value is negative.
+    static func decodeSpaceUsed(_ bytes: [UInt8]) -> Int64? {
+        guard bytes.count >= 32 else { return nil }
+        return bytes.withUnsafeBytes { raw -> Int64? in
+            let returnedVol = raw.loadUnaligned(fromByteOffset: 8, as: UInt32.self)
+            guard returnedVol & UInt32(ATTR_VOL_SPACEUSED) != 0 else { return nil }
+            let used = raw.loadUnaligned(fromByteOffset: 24, as: Int64.self)
+            return used >= 0 ? used : nil
+        }
+    }
+
+    /// Per-volume used bytes via `getattrlist(ATTR_VOL_SPACEUSED)` (what `df` reports). `statfs` is no use here:
+    /// on APFS it returns container counters for every volume.
+    private static func spaceUsed(_ path: String) -> Int64? {
+        var list = attrlist()
+        list.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
+        list.commonattr = attrgroup_t(ATTR_CMN_RETURNED_ATTRS)
+        list.volattr = attrgroup_t(ATTR_VOL_INFO) | attrgroup_t(ATTR_VOL_SPACEUSED)
+        var buf = [UInt8](repeating: 0, count: 32)
+        let rc = getattrlist(path, &list, &buf, buf.count, UInt32(FSOPT_PACK_INVAL_ATTRS))
+        return rc == 0 ? decodeSpaceUsed(buf) : nil
+    }
+
+    /// Data / System used bytes. `statfs` is kept only for the `f_fsid` comparison: `/` and `/System/Volumes/Data`
+    /// with the same `f_fsid` are one volume, then only `dataUsed` is set.
+    static func volumeUsage() -> (data: Int64?, sys: Int64?) {
+        func stat(_ path: String) -> statfs? {
+            var f = statfs()
+            return statfs(path, &f) == 0 ? f : nil
+        }
+        let dataUsed = spaceUsed("/System/Volumes/Data")
+        guard let data = stat("/System/Volumes/Data"), let root = stat("/") else { return (dataUsed, nil) }
+        let same = data.f_fsid.val.0 == root.f_fsid.val.0 && data.f_fsid.val.1 == root.f_fsid.val.1
+        return (dataUsed, same ? nil : spaceUsed("/"))
     }
 
     // MARK: - battery (IOKit power sources; nil on desktops)

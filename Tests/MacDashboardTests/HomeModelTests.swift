@@ -139,7 +139,7 @@ extension SerialTests {
             let home = FileManager.default.homeDirectoryForCurrentUser.path
             report.homeDirs = [DirSize(path: home + "/Downloads", bytes: 14 * GIB),
                                DirSize(path: home + "/.Trash", bytes: GIB + GIB / 2)]
-            report.serviceDirs = [DirSize(path: home + "/Library/Caches", bytes: 4 * GIB + GIB / 5)]
+            report.homeCaches = DirSize(path: home + "/Library/Caches", bytes: 4 * GIB + GIB / 5)
             report.snapshots = ["a", "b", "c"]
             report.homeDirsUnreadable = ["/x"]
             let chips = HomeModel.chips(homeInput(report, live))
@@ -149,7 +149,7 @@ extension SerialTests {
             #expect(chips[1].value == "3" && chips[2].value == L.homeBrewOutdatedShort(3) && chips[3].value == nil)
             #expect(chips[0].destination == Destination(.storage, focus: .folders, foldersSegment: .home))
             report.homeDirs = [DirSize(path: home + "/Downloads", bytes: 5 * GIB)]
-            report.serviceDirs = []
+            report.homeCaches = nil
             #expect(!HomeModel.chips(homeInput(report, live)).contains { $0.id == "freeUp" }, "5 GiB Downloads: no chip")
         }
 
@@ -270,6 +270,16 @@ extension SerialTests {
             let input = homeInput(report, live, assessment: a, hasBattery: hasBattery)
             let t = tasks ?? HomeModel.tasks(a, report: report, disk: live.disk, battery: live.battery)
             return HomeModel.nowCells(input, tasks: t, memPressure: pressure, socTempC: 48, cpu: cpu, short: short, narrow: narrow)
+        }
+
+        @Test func nowCellsDiskSegmentsOneBasis() {
+            let gb: (Double) -> Int64 = { Int64($0 * 1e9) }
+            var (report, live) = nowFixture()
+            live.disk = DiskInfo(size: gb(245.1), avail: gb(132.3), dataUsed: gb(84.4), sysUsed: gb(13.7), purgeable: gb(64.3))
+            let cell = nowCells(report, live, pressure: .normal)[2]
+            let v = cell.segments.map(\.value)
+            #expect(v.count == 4 && abs(v[2] - Double(gb(14.7))) < 0.2e9, "Other ~14.7-14.8 GB, got \(v)")
+            #expect(abs(v.reduce(0, +) - Double(gb(245.1))) < 1, "segments + free = size")
         }
 
         @Test func nowCellsValues() {

@@ -54,6 +54,18 @@ extension SerialTests {
             #expect(code == 0, "sysdiagnose probe exit code \(code) (2 = temp dir, 1 = extraction failed)")
         }
 
+        /// Opt-in: MACDASH_LIVE=1 swift test --filter liveVolumeUsage
+        @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
+        func liveVolumeUsage() async {
+            let usage = LiveCollector.volumeUsage()
+            let size = (try? URL(fileURLWithPath: "/System/Volumes/Data").resourceValues(forKeys: [.volumeTotalCapacityKey]))?.volumeTotalCapacity
+            print("liveVolumeUsage: sysUsed=\(String(describing: usage.sys)) dataUsedRaw=\(String(describing: usage.data)) size=\(String(describing: size))")
+            #expect(usage.sys != nil && usage.data != nil, "both volume used values are non-nil")
+            if let sys = usage.sys, let data = usage.data, let size {
+                #expect(sys < data && data < Int64(size), "sysUsed < dataUsedRaw < size")
+            }
+        }
+
         /// Opt-in: MACDASH_LIVE=1 swift test --filter liveCanary
         @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
         func liveCanary() async {

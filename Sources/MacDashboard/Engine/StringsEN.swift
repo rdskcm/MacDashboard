@@ -113,31 +113,14 @@ struct StringsEN: AppStrings {
     var storageTrashLabel: String { "Trash" }
     var storageAppsLabel: String { "Applications" }
 
-    // MARK: Storage — Домашняя папка
-    var storageHomeDirsTitle: String { "Home folder" }
-    var storageHomeDirsCaption: String { "top by size" }
 
-    // MARK: Storage — Служебные папки
-    var storageServiceDirsTitle: String { "Service folders" }
-    var storageServiceDirsCaption: String { "caches, containers, logs, apps" }
-    var folderTabHome: String { "Home" }
-    var folderTabSvc: String { "System" }
     func storageFoldersNoFDA(_ folders: String) -> String { "Not shown here: \(folders) — the app doesn't have Full Disk Access." }
     var storageFoldersNoFDAButton: String { "Open Settings" }
     var storageFoldersNoFDAButtonA11y: String { "Open Full Disk Access settings" }
     func storageFoldersNotMeasured(_ folders: String) -> String { "Not measured in time: \(folders)." }
 
     // MARK: Storage — Диски (SMART)
-    var storageSmartTitle: String { "Disks (SMART)" }
     func storageSmartUpdatedCaption(_ time: String) -> String { "updated \(time)" }
-    var storageSmartRefreshButton: String { "Refresh" }
-    var storageSmartColAttribute: String { "Attribute" }
-    var storageSmartColValue: String { "Value" }
-    var storageSmartInstallButton: String { "Install smartmontools" }
-    var storageSmartNeedsHomebrew: String { "External-disk SMART needs Homebrew and smartmontools" }
-    func storageSmartInstallFailed(_ msg: String) -> String { "Install failed: \(msg)" }
-    var storageSmartKindInternal: String { "INTERNAL" }
-    var storageSmartKindExternal: String { "EXTERNAL" }
 
     // MARK: Process cards
     var processesTitle: String { "Processes" }
@@ -176,6 +159,97 @@ struct StringsEN: AppStrings {
     var memFailNoReading: String { "Couldn’t read memory statistics: the system returned no data." }
     var memTryAgainA11y: String { "Read the memory statistics again" }
     var memCompViewA11y: String { "Composition view" }
+    // REDESIGN-STORAGE
+    var groupingSeparator: String { "," }
+    var storageTagDriveFailing: String { "drive failing" }
+    var storageTagAlmostFull: String { "almost out of space" }
+    var storageTagDriveWorn: String { "drive worn" }
+    var storageTagLowSpace: String { "low on space" }
+    var storageDiskTitle: String { "Disk" }
+    var storageFree: String { "Free" }
+    func storageHeroNote(_ size: String, _ pct: String) -> String { "of \(size) · \(pct) used" }
+    var storageData: String { "Data" }
+    var storageSystem: String { "System" }
+    var storagePurgeable: String { "Purgeable" }
+    var storageNVMeTemp: String { "NVMe temperature" }
+    var storageTempNormal: String { "normal" }
+    var storageTempHigh: String { "high" }
+    func storageCelsius(_ t: Int) -> String { "\(t) °C" }
+    var storageDownloads: String { "Downloads" }
+    var storageCaches: String { "Caches" }
+    func storageFreeItem(_ name: String, _ size: String) -> String { "\(name) \(size)" }
+    func storageNoteLow(_ pct: String) -> String { "Less than \(pct) free." }
+    func storageNoteLowItems(_ pct: String, _ list: String) -> String { "Less than \(pct) free. What you can free up: \(list)." }
+    func storageNoteCritical(_ pct: String) -> String { "Less than \(pct) free. macOS may stop saving files and growing swap." }
+    func storageNoteCriticalItems(_ pct: String, _ list: String) -> String { "Less than \(pct) free. macOS may stop saving files and growing swap. Free up space: \(list)." }
+    var storageSettingsButton: String { "Storage settings" }
+    var storageSettingsA11y: String { "Open Storage settings in System Settings" }
+    var storageFoldersTitle: String { "Folders" }
+    var storageSegHome: String { "Home" }
+    var storageSegSystem: String { "System" }
+    var storageSegA11y: String { "Folder list" }
+    var storageCaptionTop: String { "top by size" }
+    func storageCaptionCounted(_ age: String) -> String { "top by size · counted \(age)" }
+    func storageAgo(_ m: Int) -> String { "\(m) min ago" }
+    var storageJustNow: String { "just now" }
+    var storageCaptionCounting: String { "counting folder sizes…" }
+    var storageCaptionCountFailed: String { "counting didn’t finish" }
+    func storageCaptionTrashEmptied(_ size: String) -> String { "top by size · Trash emptied, \(size) freed" }
+    var storageCaptionSomeHidden: String { "top by size · some folders hidden" }
+    var storageCounting: String { "Counting…" }
+    var storageCountTimedOut: String { "Couldn’t count folder sizes: du didn’t respond within 10 s." }
+    var storageCountNoResult: String { "Couldn’t count folder sizes: du returned no result." }
+    var storageCountTryAgainA11y: String { "Count folder sizes again" }
+    var storageNoFolders: String { "No folder sizes yet." }
+    func storageShowA11y(_ name: String) -> String { "Show \(name) in Finder" }
+    var storageEmptyTrashButton: String { "Empty Trash…" }
+    var storageEmptyTrashA11y: String { "Empty the Trash" }
+    var storageConfirmTitle: String { "Empty Trash?" }
+    func storageConfirmText(_ n: Int, _ size: String) -> String { "\(fmtGrouped(n)) \(n == 1 ? "item" : "items") (\(size)) will be deleted permanently. You can’t undo this." }
+    func storageConfirmTextNoCount(_ size: String) -> String { "Everything in the Trash (\(size)) will be deleted permanently. You can’t undo this." }
+    var storageConfirmEmpty: String { "Empty Trash" }
+    var storageConfirmCancel: String { "Cancel" }
+    func storageFDANote(_ names: String) -> String { "Not shown here: \(names) — MacDashboard doesn’t have Full Disk Access." }
+    func storageFDANoteMore(_ names: String, _ n: Int) -> String { "Not shown here: \(names) and \(n) more — MacDashboard doesn’t have Full Disk Access." }
+    var storageFDAButtonA11y: String { "Open Full Disk Access in Privacy & Security settings" }
+    var storageSmartCardTitle: String { "Disks (SMART)" }
+    var storageSmartRefreshA11y: String { "Read SMART data again" }
+    var storageSubInternalOK: String { "INTERNAL · OK" }
+    var storageSubExternalOK: String { "EXTERNAL · OK" }
+    var storageSubInternalNoData: String { "INTERNAL · no data" }
+    var storageSubExternalNoData: String { "EXTERNAL · no data" }
+    var storageSubInternalFailing: String { "INTERNAL · failing" }
+    var storageSubExternalFailing: String { "EXTERNAL · failing" }
+    func storageSubInternalWorn(_ pct: String) -> String { "INTERNAL · worn \(pct)" }
+    func storageSubExternalWorn(_ pct: String) -> String { "EXTERNAL · worn \(pct)" }
+    var storageStatusUnavailable: String { "SMART unavailable: this drive’s USB bridge doesn’t pass the data through." }
+    var storageStatusFailing: String { "Drive is failing. Copy your data off and replace it." }
+    func storageWearNote(_ pct: String) -> String { "The drive has used \(pct) of its rated write endurance. Back up regularly and plan a replacement." }
+    var storageKVTemp: String { "Temperature" }
+    var storageKVUsed: String { "Percentage used" }
+    var storageKVSpare: String { "Available spare" }
+    var storageKVSpareThreshold: String { "Spare threshold" }
+    var storageKVHours: String { "Power-on hours" }
+    var storageKVCycles: String { "Power cycles" }
+    var storageKVUnsafe: String { "Unsafe shutdowns" }
+    var storageKVRead: String { "Data read" }
+    var storageKVWritten: String { "Data written" }
+    var storageKVMediaErrors: String { "Media errors" }
+    var storageKVErrorLog: String { "Error log entries" }
+    var storageKVCritical: String { "Critical warning" }
+    var storageYes: String { "yes" }
+    var storageNo: String { "no" }
+    var storageToolsInstallable: String { "SMART data needs smartmontools, a free command-line tool installed with Homebrew." }
+    var storageToolsNeedsBrew: String { "SMART data needs Homebrew and smartmontools." }
+    var storageToolsInstall: String { "Install smartmontools" }
+    var storageToolsInstallA11y: String { "Install smartmontools with Homebrew" }
+    var storageToolsHowToBrew: String { "How to install Homebrew" }
+    var storageToolsHowToBrewA11y: String { "Open brew.sh in your browser" }
+    func storageInstallFailedCode(_ c: Int32) -> String { "Couldn’t install smartmontools: brew exited with code \(c)." }
+    var storageInstallTimedOut: String { "Couldn’t install smartmontools: brew didn’t finish within 5 min." }
+    var storageInstallNoBrew: String { "Couldn’t install smartmontools: Homebrew wasn’t found." }
+    var storageInstallRetryA11y: String { "Try installing smartmontools again" }
+    var storageRefreshA11y: String { "Count folder sizes again" }
     // REDESIGN-CPU
     var cpuLiveSnapshot: String { "live snapshot" }
     var cpuUsage: String { "Usage" }

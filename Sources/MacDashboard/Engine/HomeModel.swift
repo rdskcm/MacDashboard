@@ -287,10 +287,7 @@ enum HomeModel {
             if name == "Downloads", d.bytes > 10 * GIB { freeable += d.bytes }
             if name == ".Trash", d.bytes > 1 * GIB { freeable += d.bytes }
         }
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        for d in report.serviceDirs ?? [] where d.path.hasSuffix("/Library/Caches") && d.path.hasPrefix(home) && d.bytes > 3 * GIB {
-            freeable += d.bytes
-        }
+        if let d = report.homeCaches, d.bytes > 3 * GIB { freeable += d.bytes }
         let foldersHome = Destination(.storage, focus: .folders, foldersSegment: .home)
         if freeable > 0 {
             out.append(HomeChip(id: "freeUp", object: L.homeFreeUpSpace, value: fmtBytes(freeable), destination: foldersHome))

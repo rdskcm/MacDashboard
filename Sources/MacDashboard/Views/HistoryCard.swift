@@ -46,8 +46,8 @@ struct HistoryCard: View {
         _range = State(initialValue: initialRange)
     }
 
-    // Table collapse — the Disk card's home-folder pattern verbatim (FoldersCard in
-    // StorageCards.swift: `homeShowAll` + `prefix(10)` + `MoreLessToggle`), same
+    // Table collapse — the old Disk card's home-folder pattern verbatim (`homeShowAll` +
+    // `prefix(10)` + `MoreLessToggle`; that card is gone since REDESIGN-STORAGE), same
     // threshold, same strings, and no animation: the row count changes the table's
     // height, so the toggle is a plain state flip.
     @State private var tableShowAll = false
@@ -87,8 +87,8 @@ struct HistoryCard: View {
     // toggle branch and the `points.count < 2` branch inside `chart` below. A
     // control bound to `$metric` that gets a fresh identity whenever the
     // surrounding view also branches on data loses its thumb-slide animation
-    // (fresh instance mounts pre-selected instead of sliding; see FoldersCard's
-    // segmentedControl note in StorageCards.swift for the reference precedent).
+    // (fresh instance mounts pre-selected instead of sliding; see `ProcessListCard`
+    // for the reference precedent).
     private var metricControl: some View {
         DSSlidingSegmented(options: HistoryMetric.allCases, selection: $metric,
                            groupLabel: L.historyMetricA11y) { m in
@@ -234,7 +234,7 @@ struct HistoryCard: View {
 /// Shown under the История kicker after HistoryStore renamed an unreadable history file
 /// aside, until the user hides it; the name lives in the history file, so it survives a
 /// relaunch (HISTORY-UNREADABLE-NOTICE). Calm on purpose — no dot, no severity colour: the
-/// machine is fine, only the app's own record restarted (same stance as FoldersNoFDANotice).
+/// machine is fine, only the app's own record restarted (same stance as the Storage page's Full Disk Access note).
 /// A sibling of HistoryCard, not inside it: below 2 days HistoryCard shows only its
 /// "not enough days" placeholder, which is exactly the state right after a restart, and this
 /// notice sits above that placeholder (NEWMAC-HISTORY-EMPTY).

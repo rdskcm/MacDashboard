@@ -65,16 +65,17 @@ enum UpdatesCacheStore {
 /// Persisted result of the last background folder-size count (SIZES-BACKGROUND),
 /// ~/Library/Application Support/MacDashboard/folder_sizes_cache.json.
 struct FolderSizes: Codable, Equatable {
-    static let currentSchema = 2
+    static let currentSchema = 3     // 3: serviceDirs = the System segment only; ~/Library/Caches moved to homeCaches (REDESIGN-STORAGE D9)
     var schema: Int = FolderSizes.currentSchema
     var homeDirs: [DirSize]              // top-20 children of $HOME, largest first
     var homeDirsUnreadable: [String]
-    var serviceDirs: [DirSize]?          // nil = no service path produced a size
+    var serviceDirs: [DirSize]?          // the System segment (StoragePageModel.systemPaths); nil = none produced a size
     var serviceDirsUnreadable: [String]
     var homeDirsNotMeasured: [String] = []      // readable, but the count's deadline came first (SERVICE-DIRS-TIMEOUT)
     var serviceDirsNotMeasured: [String] = []
     var countedAt: Date
     var durationSeconds: Double
+    var homeCaches: DirSize? = nil       // ~/Library/Caches, from the home walk (depth 2); nil = not measured
 }
 enum FolderSizesCacheStore {
     /// Missing, undecodable or other-schema file => nil ("never counted").
@@ -131,13 +132,12 @@ final class ReportCollector {
                       || (!isFolderSizesCacheFresh(countedAt: countedAt, now: now)
                           && !isBrewCacheFresh(collectedAt: failedAt, now: now, window: folderSizesCacheWindow)))
     }
-    /// The six service paths that live under $HOME, in display/unreadable order.
+    /// The one service path under $HOME that the home walk reads at depth 2: ~/Library/Caches.
     static func homeServicePaths(home: String) -> [String] {
-        ["\(home)/Library/Caches", "\(home)/Library/Application Support",
-         "\(home)/Library/Containers", "\(home)/Library/Group Containers",
-         "\(home)/Library/Developer", "\(home)/.Trash"]
+        ["\(home)/Library/Caches"]
     }
-    static let outsideServicePaths = ["/Library/Caches", "/private/var/log", "/Applications"]
+    /// The System segment of the Storage page (REDESIGN-STORAGE D8).
+    static let outsideServicePaths = StoragePageModel.systemPaths
     /// Duration -> seconds.
     static func seconds(_ d: Duration) -> TimeInterval {
         Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
@@ -725,6 +725,7 @@ final class ReportCollector {
                         if let f = ParseFailure(.smartctl, device: "disk0", executable: sc, stdout: raw) { failures.append(f) }
                     } else {
                         disk.attrs = attrs
+                        disk.health = Parsers.smartctlHealth(json: Data(raw.utf8))
                         // Real SMART data can only worsen the diskutil-derived
                         // verdict, never mask it: same wording map as makeExternalDisk.
                         switch smartSeverity(attrs: attrs) {
@@ -757,6 +758,7 @@ final class ReportCollector {
                     if let media, !media.isEmpty { title = media }
                 }
                 var attrs: [(String, String)] = []
+                var health: SmartHealth?
                 if let sc = smartctl {
                     // sudo -n first (NOPASSWD rule) and only for a smartctl binary a
                     // non-root actor cannot swap (isSafeToRunViaSudo), then plain — both
@@ -769,10 +771,13 @@ final class ReportCollector {
                         raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc] + ParsedCommand.smartctl.arguments(device: dev), timeout: ParsedCommand.smartctl.timeout).nonEmptyText
                     }
                     if raw == nil { raw = await ParsedCommand.smartctl.run(device: dev, executable: sc).nonEmptyText }
-                    if let raw { attrs = Parsers.smartctlAttrs(json: Data(raw.utf8)) }
+                    if let raw {
+                        attrs = Parsers.smartctlAttrs(json: Data(raw.utf8))
+                        health = Parsers.smartctlHealth(json: Data(raw.utf8))
+                    }
                 }
                 disks.append(makeExternalDisk(device: dev, title: title, duStatus: duStatus,
-                                              attrs: attrs, smartctlPresent: smartctl != nil))
+                                              attrs: attrs, health: health, smartctlPresent: smartctl != nil))
             }
         }
         return (disks, failures)
@@ -792,7 +797,8 @@ final class ReportCollector {
     }
 
     private func makeExternalDisk(device: String, title: String, duStatus: String?,
-                                  attrs: [(String, String)], smartctlPresent: Bool) -> SmartDisk {
+                                  attrs: [(String, String)], health: SmartHealth? = nil,
+                                  smartctlPresent: Bool) -> SmartDisk {
         if !attrs.isEmpty {
             let sev = smartSeverity(attrs: attrs)
             let word: String
@@ -801,7 +807,9 @@ final class ReportCollector {
             case .warn: word = L.reportCollectorSmartWearHigh
             default: word = "SMART: OK"
             }
-            return SmartDisk(device: device, title: title, status: word, attrs: attrs, severity: sev)
+            var disk = SmartDisk(device: device, title: title, status: word, attrs: attrs, severity: sev)
+            disk.health = health
+            return disk
         }
         let s = (duStatus ?? "").lowercased()
         if s.contains("verified") {
@@ -1098,12 +1106,12 @@ final class ReportCollector {
         let homeTop = Array(split.depth1.filter { $0.path != home }.sorted { $0.bytes > $1.bytes }.prefix(20))
         let missingChildren = DirectoryAccess.missingHomeChildren(
             home: home, duPaths: Set(split.depth1.map(\.path)), childNames: homeChildNames)
+        // The caches path, when du did not print it, is a home folder for the unreadable/not-measured lists.
         let homeUnreadable = missingChildren.filter { access($0) == .denied }
-        let homeNotMeasured = homeWalk.cut ? missingChildren.filter { access($0) == .readable } : []
-        // split.missing is already in homeServicePaths order.
-        let homeServiceUnreadable = split.missing.filter { access($0) == .denied }
-        let homeServiceNotMeasured = homeWalk.cut ? split.missing.filter { access($0) == .readable } : []
-        var dirs = split.service
+            + split.missing.filter { access($0) == .denied }
+        let homeNotMeasured = (homeWalk.cut ? missingChildren.filter { access($0) == .readable } : [])
+            + (homeWalk.cut ? split.missing.filter { access($0) == .readable } : [])
+        var dirs: [DirSize] = []
         var outsideUnreadable: [String] = [], outsideNotMeasured: [String] = []
         for (p, run) in zip(outside, outsideRuns) {
             if !run.lines.isEmpty { dirs.append(contentsOf: run.lines); continue }
@@ -1115,10 +1123,11 @@ final class ReportCollector {
         }
         return FolderSizes(homeDirs: homeTop, homeDirsUnreadable: homeUnreadable,
                            serviceDirs: dirs.isEmpty ? nil : dirs.sorted { $0.bytes > $1.bytes },
-                           serviceDirsUnreadable: homeServiceUnreadable + outsideUnreadable,
+                           serviceDirsUnreadable: outsideUnreadable,
                            homeDirsNotMeasured: homeNotMeasured,
-                           serviceDirsNotMeasured: homeServiceNotMeasured + outsideNotMeasured,
-                           countedAt: countedAt, durationSeconds: durationSeconds)
+                           serviceDirsNotMeasured: outsideNotMeasured,
+                           countedAt: countedAt, durationSeconds: durationSeconds,
+                           homeCaches: split.service.first)
     }
 
     /// Background folder-size count under ONE aggregate deadline (SERVICE-DIRS-TIMEOUT). All `du`

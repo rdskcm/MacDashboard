@@ -56,50 +56,53 @@ extension SerialTests {
             // MARK: - Assessment (SPEC §6)
             // =====================================================================
 
-            do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.94))
-                #expect(a.diskSev == .crit, "assess disk 94%: diskSev == .crit")
-                #expect(a.problems.contains { $0.sev == .crit && $0.text.contains("срочно освободите место") },
-                      "assess disk 94%: crit problem present")
+            // REDESIGN-STORAGE: one percentage rule — critical < 10 % free, low < lowSpacePercent % free (strict).
+            // Sizes are decimal (256 GB); `freeLive` sets `avail` exactly so boundaries are exact.
+            func freeLive(freePct: Int, size: Int64 = 256_000_000_000) -> LiveSnapshot {
+                var live = LiveSnapshot()
+                live.disk = DiskInfo(size: size, avail: size / 100 * Int64(freePct), dataUsed: nil, sysUsed: nil)
+                return live
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.80))
-                #expect(a.diskSev == .warn, "assess disk 80%: diskSev == .warn")
+                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 25))
+                #expect(a.diskSev == .good, "assess disk 25% free: .good")
+                #expect(!a.problems.contains { $0.text.contains("Диск заполнен") }, "assess disk 25% free: no disk problem")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.50))
-                #expect(a.diskSev == .good, "assess disk 50%: diskSev == .good")
-                #expect(!a.problems.contains { $0.text.contains("Диск заполнен") }, "assess disk 50%: no disk problem")
+                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 19))
+                #expect(a.diskSev == .warn, "assess disk 19% free: .warn")
+                #expect(a.items.contains { $0.kind == .diskFullSoon }, "assess disk 19% free: diskFullSoon item")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.80, size: 4096 * GIB))
-                #expect(a.diskSev == .good, "assess disk 4TiB@80%: diskSev == .good (R3, large volume quiet)")
-                #expect(!a.problems.contains { $0.text.contains("Диск") } && !a.tips.contains { $0.text.contains("Диск") },
-                      "assess disk 4TiB@80%: no disk problem or tip (R3)")
+                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 20))
+                #expect(a.diskSev == .good, "assess disk exactly 20% free: .good (strict)")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.99, size: 4096 * GIB))
-                #expect(a.diskSev == .warn, "assess disk 4TiB@99% (41 GiB free): diskSev == .warn")
+                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 9))
+                #expect(a.diskSev == .crit, "assess disk 9% free: .crit")
+                #expect(a.items.contains { $0.kind == .diskFull }, "assess disk 9% free: diskFull item")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.995, size: 4096 * GIB))
-                #expect(a.diskSev == .crit, "assess disk 4TiB@99.5% (20.5 GiB free): diskSev == .crit")
+                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 10))
+                #expect(a.diskSev == .warn, "assess disk exactly 10% free: .warn (strict)")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.86, size: 128 * GIB))
-                #expect(a.diskSev == .crit, "assess disk 128GiB@86%: diskSev == .crit (R2 parity with old 0.85 constant)")
+                #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 12), lowSpacePercent: 10).diskSev == .good, "lowSpacePercent 10, 12% free: .good")
+                #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 9), lowSpacePercent: 10).diskSev == .crit, "lowSpacePercent 10, 9% free: .crit")
+                #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 10), lowSpacePercent: 10).diskSev == .good, "lowSpacePercent 10, 10% free: .good (no amber band)")
+                #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 14), lowSpacePercent: 15).diskSev == .warn, "lowSpacePercent 15, 14% free: .warn")
             }
-            do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.72, size: 128 * GIB))
-                #expect(a.diskSev == .warn, "assess disk 128GiB@72%: diskSev == .warn (R2 parity with old 0.70 constant)")
-            }
-            // MUTATION-SURVIVORS M04: free space exactly AT the critical floor is critical (<=, not <).
-            // 256 GiB volume: 15 % = 38.4 GiB, so the 24 GiB upgrade-reserve cap is the floor.
             do {
                 var live = LiveSnapshot()
-                live.disk = DiskInfo(size: 256 * GIB, avail: 24 * GIB, dataUsed: nil, sysUsed: nil)
+                live.disk = DiskInfo(size: 4096 * GIB, avail: (4096 * GIB + 4) / 5, dataUsed: nil, sysUsed: nil)
                 let a = Assess.assess(report: FullReport(), live: live)
-                #expect(a.diskSev == .crit, "assess disk 256GiB, avail == crit floor (24 GiB): diskSev == .crit (got \(a.diskSev))")
+                #expect(a.diskSev == .good, "assess disk 4TiB@80% (20% free): .good")
+                #expect(!a.problems.contains { $0.text.contains("Диск") } && !a.tips.contains { $0.text.contains("Диск") },
+                      "assess disk 4TiB@80%: no disk problem or tip")
+            }
+            do {
+                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.85, size: 4096 * GIB))
+                #expect(a.diskSev == .warn, "assess disk 4TiB@85% (15% free): .warn — the rule no longer scales with volume size")
             }
 
             do {

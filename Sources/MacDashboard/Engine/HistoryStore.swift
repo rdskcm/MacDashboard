@@ -84,12 +84,11 @@ final class HistoryStore {
             // mac_report.txt's df output shows "96Gi .. 108Gi" for /System/Volumes/Data
             // and mac_check_state.json's matching entry stores disk_used_gb: 96,
             // disk_free_gb: 108 — the legacy numbers ARE binary GiB, not 10^9 decimal GB.
-            // Prefer the more precise dataUsed (df "Used" for /System/Volumes/Data) when
-            // the collector populates it; otherwise fall back to the derived
-            // usedTotal = size - avail (LiveCollector per SPEC §5.1 only uses
-            // volumeTotalCapacity/volumeAvailableCapacityForImportantUsage, so dataUsed
-            // may legitimately stay nil — this is the best available signal either way).
-            let used = disk.dataUsed ?? disk.usedTotal
+            // Always usedTotal = size - avail, never dataUsed: used + free must add up to
+            // the volume size, and the series must stay continuous. dataUsed (filled since
+            // REDESIGN-STORAGE) is the Data volume alone, without System, other APFS volumes
+            // and purgeable, so switching to it would step the chart and break used + free = size.
+            let used = disk.usedTotal
             entry.disk_used_gb = Self.roundedGiB(used)
             entry.disk_free_gb = Self.roundedGiB(disk.avail)
         }
