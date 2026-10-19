@@ -48,9 +48,6 @@ struct StringsRU: AppStrings {
 
     // MARK: KPI tiles
     var kpiCpuLabel: String { "CPU" }
-    var kpiMemLabel: String { "Память" }
-    func kpiMemUnit(_ total: String) -> String { "из \(total)" }
-    func kpiMemSub(_ compressor: String, _ purgeable: String) -> String { "сжатая \(compressor) · выгружаемая \(purgeable)" }
     var kpiSwapLabel: String { "Подкачка (swap)" }
     func kpiSwapUnit(_ total: String) -> String { "из \(total)" }
     func kpiSwapSub(_ free: String) -> String { "свободно \(free)" }
@@ -156,6 +153,31 @@ struct StringsRU: AppStrings {
     var processForceQuitConfirm: String { "Снять принудительно" }
     func processTerminateA11y(_ name: String) -> String { "Завершить процесс „\(name)“" }
     func processKillA11y(_ name: String) -> String { "Принудительно снять процесс „\(name)“" }
+    // REDESIGN-MEMORY
+    var memUsageTitle: String { "Использование" }
+    func memUsageCaption(_ total: String) -> String { "всего \(total) · живой срез" }
+    var memCompTitle: String { "Состав памяти" }
+    func memCompCaption(_ total: String) -> String { "\(total) · по типам страниц" }
+    var memProcsTitle: String { "Процессы по памяти" }
+    func memProcsTop(_ n: Int) -> String { "топ-\(n)" }
+    func memProcCPU(_ pct: String) -> String { "\(pct) CPU" }
+    var memUsed: String { "Использовано" }
+    func memHeroNote(_ total: String, _ pct: String) -> String { "из \(total) · \(pct)" }
+    var memPurgeable: String { "Очищаемая" }
+    var memSwap: String { "Своп" }
+    func memSwapOf(_ pct: String, _ total: String) -> String { "\(pct) из \(total)" }
+    var memFileCache: String { "Файловый кэш" }
+    var memOtherShort: String { "Прочее" }
+    var memTagLow: String { "Давление: низкое" }
+    var memTagMedium: String { "Давление: среднее" }
+    var memTagHigh: String { "Давление: высокое" }
+    var memTagUnknown: String { "Давление: неизвестно" }
+    var memTagReadFailed: String { "Ошибка чтения" }
+    func memUpdatesEvery(_ seconds: Int) -> String { "обновляется каждые \(seconds) с" }
+    var memFailTimedOut: String { "Не удалось прочитать статистику памяти: нет ответа за 5 с." }
+    var memFailNoReading: String { "Не удалось прочитать статистику памяти: система не вернула данных." }
+    var memTryAgainA11y: String { "Повторить чтение статистики памяти" }
+    var memCompViewA11y: String { "Вид состава памяти" }
     // REDESIGN-CPU
     var cpuLiveSnapshot: String { "живой снимок" }
     var cpuUsage: String { "Загрузка" }
@@ -282,23 +304,12 @@ struct StringsRU: AppStrings {
     var memoryLegendInactive: String { "Неактивная" }
     var memoryLegendSpeculative: String { "Спекулятивная" }
     var memoryLegendFree: String { "Свободно" }
-    var memoryLegendPurgeable: String { "Выгружаемая (справочно)" }
-    var memoryLegendFileCache: String { "Файловый кэш (справочно)" }
     var memoryNoteActive: String { "Память, которую программы используют прямо сейчас или недавно к ней обращались." }
     var memoryNoteWired: String { "Занята ядром macOS и драйверами; не выгружается на диск и не освобождается." }
     var memoryNoteOther: String { "В основном сжатая память: macOS ужимает редко используемые страницы вместо записи в swap." }
     var memoryNoteInactive: String { "Давно не использовалась и будет отдана при нехватке; часто это данные недавно закрытых программ." }
     var memoryNoteSpeculative: String { "Прочитано с диска впрок, «на всякий случай»; освобождается в первую очередь." }
     var memoryNoteFree: String { "Совсем не занятая память. Малое значение — норма." }
-    var memoryNotePurgeable: String { "Часть памяти, которую система при нехватке может освободить без потерь (кэши, временные данные)." }
-    var memoryNoteFileCache: String { "Содержимое файлов, оставленное в памяти для ускорения повторного доступа; освобождается при необходимости." }
-    func memoryTitle(_ total: String) -> String { "Память · всего \(total)" }
-    var memoryCaption: String { "живой срез, обновляется непрерывно" }
-    var memoryInfoHelp: String { "Наведите на тип памяти, чтобы узнать, что он значит" }
-    func memorySwapNote(_ used: String, _ total: String) -> String { "swap: \(used) из \(total)" }
-    var memoryOtherNote: String { "«прочее» — сжатая память и не попавшее в срез выше" }
-    var memoryColCategory: String { "Категория" }
-    var memoryColVolume: String { "Объём" }
 
     // MARK: History card
     var historyTitle: String { "История" }
@@ -1092,6 +1103,7 @@ struct StringsRU: AppStrings {
     func homeLegendActive(_ v: String, short: Bool) -> String { short ? "акт. \(v)" : "активная \(v)" }
     func homeLegendWired(_ v: String) -> String { "ядро \(v)" }
     func homeLegendInactive(_ v: String, short: Bool) -> String { short ? "неакт. \(v)" : "неактивная \(v)" }
+    func homeLegendCompressed(_ v: String, short: Bool) -> String { short ? "сжат. \(v)" : "сжатая \(v)" }
     func homeMemFoot(_ used: String, _ total: String, _ compressed: String) -> String { "swap \(used) из \(total) · сжатая \(compressed)" }
     func homeMemFootNoSwap(_ compressed: String) -> String { "сжатая \(compressed)" }
     var homeFreeWord: String { "свободно" }

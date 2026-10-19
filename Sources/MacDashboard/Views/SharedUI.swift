@@ -859,53 +859,6 @@ struct FlowLayout: Layout {
     }
 }
 
-// MARK: - Legend item (memory stack, etc.)
-
-/// Reciprocal hover emphasis between a legend row and its matching bar
-/// segment (V2-FIX-MEM). `.neutral` is today's appearance verbatim.
-enum LegendEmphasis {
-    case neutral, active, dimmed
-}
-
-struct LegendItem: View {
-    let color: Color
-    let label: String
-    let value: String
-    /// V2-FIX-UNITS follow-up: optional pre-split unit, mirroring `KPITileView`/
-    /// `TMRow` — a literal space between `value` and `unit` in one `Text` reads
-    /// as a wider gap than intended, so splitting into two `Text`s lets a tight
-    /// `.padding(.leading, 1.5)` close the gap instead. (V2-FIX-MONO-FONT: this
-    /// row is system-face, not mono, so `.padding(.leading, 1.5)` was originally
-    /// sized for a mono glyph and is deliberately held as-is — re-tuning a gap
-    /// is a size change and out of that block's scope.)
-    var unit: String? = nil
-    /// V2-FIX-MEM: when another legend row / bar segment is hovered, the
-    /// uninvolved rows dim and keep the muted label; the involved row goes to
-    /// full opacity with `DS.ink`. Default `.neutral` = today's appearance.
-    var emphasis: LegendEmphasis = .neutral
-    var body: some View {
-        HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(emphasis == .active ? DS.ink : DS.muted)
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Text(value)
-                    .font(.system(size: 12, weight: .semibold))
-                    .monospacedDigit()
-                if let unit {
-                    Text(unit)
-                        .font(.system(size: 12, weight: .semibold))
-                        .monospacedDigit()
-                        .padding(.leading, 1.5)
-                }
-            }
-        }
-        .contentShape(Rectangle())
-        .opacity(emphasis == .dimmed ? 0.45 : 1)
-    }
-}
-
 // MARK: - Rainbow border (shimmering, "AI mode" chip style)
 
 /// Full-perimeter shimmering rainbow stroke, reusable on any capsule-shaped control.

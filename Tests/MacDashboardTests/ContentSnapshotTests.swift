@@ -112,6 +112,23 @@ extension SerialTests {
             }
             let cpuFail = fixtureHome { $0.applyFixtureCPU(cpuFailed, highSince: nil) }
             let cpuLoading = fixtureHome { $0.applyFixtureCPU(BlockState(.cpu, createdAt: homeRef), highSince: nil) }
+            // REDESIGN-MEMORY: Memory page states (fixture = low pressure, swap 25 %).
+            let memFailedBlock: BlockState = {
+                var s = BlockState(.memory, createdAt: homeRef.addingTimeInterval(-60))
+                s.begin(at: homeRef.addingTimeInterval(-40), showsLoading: false)
+                s.succeed(at: homeRef.addingTimeInterval(-38))
+                s.begin(at: homeRef.addingTimeInterval(-5), showsLoading: false)
+                s.fail(.timedOut)
+                return s
+            }()
+            let memMedium = fixtureHome {
+                $0.applyFixturePressure(.warn)
+                $0.swap = SwapInfo(total: 8 << 30, used: Int64(5.2 * Double(1 << 30)), free: (8 << 30) - Int64(5.2 * Double(1 << 30)))
+            }
+            let memHigh = fixtureHome { $0.applyFixturePressure(.critical) }
+            let memUnknown = fixtureHome { $0.applyFixturePressure(nil) }
+            let memFail = fixtureHome { $0.applyFixtureMemory(memFailedBlock) }
+            let memLoading = fixtureHome { $0.applyFixtureMemory(BlockState(.memory, createdAt: homeRef)) }
             let fixtureDays = m.history.mac_history
             let historyNoDays = fixtureHistory([])
             let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -149,6 +166,52 @@ extension SerialTests {
                         CPUPageBar(model: cpuHigh) {}
                         CPUPageBar(model: cpuFail) {}
                         CPUPageBar(model: cpuLoading) {}
+                    }
+                }
+                run.snap("content-memory-usage-live", mode, width: 1094) {
+                    MemoryUsageCard(model: m, narrow: false)
+                }
+                run.snap("content-memory-usage-medium", mode, width: 1094) {
+                    MemoryUsageCard(model: memMedium, narrow: false)
+                }
+                run.snap("content-memory-usage-high", mode, width: 1094) {
+                    MemoryUsageCard(model: memHigh, narrow: false)
+                }
+                run.snap("content-memory-usage-narrow", mode, width: 904) {
+                    MemoryUsageCard(model: m, narrow: true)
+                }
+                run.snap("content-memory-usage-failed", mode, width: 1094) {
+                    MemoryUsageCard(model: memFail, narrow: false)
+                }
+                run.snap("content-memory-usage-loading", mode, width: 1094) {
+                    MemoryUsageCard(model: memLoading, narrow: false)
+                }
+                run.snap("content-memory-comp-chart", mode, width: 1094) {
+                    MemoryCompositionCard(model: m, narrow: false)
+                }
+                run.snap("content-memory-comp-table", mode, width: 1094) {
+                    MemoryCompositionCard(model: m, narrow: false, initialView: .table)
+                }
+                run.snap("content-memory-comp-narrow", mode, width: 904) {
+                    MemoryCompositionCard(model: m, narrow: true)
+                }
+                run.snap("content-memory-comp-failed", mode, width: 1094) {
+                    VStack(spacing: 12) {
+                        MemoryCompositionCard(model: memFail, narrow: false)
+                        MemoryCompositionCard(model: memFail, narrow: false, initialView: .table)
+                    }
+                }
+                run.snap("content-memory-procs", mode, width: 1094) {
+                    ProcessListCard(model: m, memoryPage: true)
+                }
+                run.snap("content-memory-bars", mode, width: 1150) {
+                    VStack(spacing: 12) {
+                        MemoryPageBar(model: m) {}
+                        MemoryPageBar(model: memMedium) {}
+                        MemoryPageBar(model: memHigh) {}
+                        MemoryPageBar(model: memUnknown) {}
+                        MemoryPageBar(model: memFail) {}
+                        MemoryPageBar(model: memLoading) {}
                     }
                 }
                 run.snap("content-processes-cpu-open", mode, width: 589) {

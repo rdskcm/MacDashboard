@@ -36,9 +36,8 @@ struct InterimSectionPage: View {
             // .cpu renders CPUPage (MainDashboardView), never this page.
             EmptyView()
         case .memory:
-            InterimMemoryTiles(model: model)
-            MemoryCard(model: model)
-            ProcessListCard(model: model, initialMetric: .mem, onConfirmShown: onConfirmShown)
+            // .memory renders MemoryPage (MainDashboardView), never this page.
+            EmptyView()
         case .storage:
             HStack(alignment: .top, spacing: 12) { DiskTile(model: model).frame(maxWidth: .infinity) }
             LegacySpaceTips(model: model)
@@ -58,21 +57,6 @@ struct InterimSectionPage: View {
         case .history:
             HistoryRestartNotice(model: model)
             HistoryCard(model: model)
-        }
-    }
-}
-
-/// Memory and (when there is swap) Swap tiles. Own struct: `SwapTile.isVisible` reads the live `model.swap`,
-/// which must not make the whole page an observer of the 2 s tick (see `HomeNowCard`).
-@MainActor
-private struct InterimMemoryTiles: View {
-    let model: DashboardModel
-
-    var body: some View {
-        let showSwap = SwapTile.isVisible(model)
-        HStack(alignment: .top, spacing: 12) {
-            MemoryTile(model: model).frame(maxWidth: .infinity)
-            if showSwap { SwapTile(model: model).frame(maxWidth: .infinity) }
         }
     }
 }

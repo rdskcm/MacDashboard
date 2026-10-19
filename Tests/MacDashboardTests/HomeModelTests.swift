@@ -265,11 +265,11 @@ extension SerialTests {
 
         private func nowCells(_ report: FullReport, _ live: LiveSnapshot, pressure: MemoryPressureLevel?,
                               tasks: [HomeTask]? = nil, hasBattery: Bool = true, cpu: CPUUsage? = CPUUsage(user: 20.2, sys: 5.5, idle: 74.3),
-                              short: Bool = false) -> [HomeNowCell] {
+                              short: Bool = false, narrow: Bool = false) -> [HomeNowCell] {
             let a = Assess.assess(report: report, live: live, memPressure: pressure)
             let input = homeInput(report, live, assessment: a, hasBattery: hasBattery)
             let t = tasks ?? HomeModel.tasks(a, report: report, disk: live.disk, battery: live.battery)
-            return HomeModel.nowCells(input, tasks: t, memPressure: pressure, socTempC: 48, cpu: cpu, short: short, narrow: false)
+            return HomeModel.nowCells(input, tasks: t, memPressure: pressure, socTempC: 48, cpu: cpu, short: short, narrow: narrow)
         }
 
         @Test func nowCellsValues() {
@@ -292,6 +292,13 @@ extension SerialTests {
                                        short: false, narrow: false)[0].chipText == nil)
             let short = nowCells(report, live, pressure: .normal, short: true)
             #expect(short[1].legend[0].text == "act. 4")
+            // 4-in-a-row keeps three items; the compressed item appears in 2x2 and 3-column layouts only.
+            #expect(cells[1].legend.map(\.series) == [.s1, .s2, .s4] && short[1].legend.count == 3)
+            let two = nowCells(report, live, pressure: .normal, narrow: true)
+            #expect(two[1].legend.map(\.series) == [.s1, .s2, .s3, .s4])
+            #expect(two[1].legend[2].text == "compressed 1.5")
+            let three = nowCells(report, live, pressure: .normal, hasBattery: false)
+            #expect(three[1].legend.map(\.series) == [.s1, .s2, .s3, .s4])
         }
 
         @Test func nowCellsBatteryMergesReportStatics() {
