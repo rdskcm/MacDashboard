@@ -163,6 +163,7 @@ struct StringsRU: AppStrings {
     var cpuSystem: String { "Система" }
     var cpuSocTemperature: String { "Температура SoC" }
     var cpuSocHot: String { "горячо · возможен троттлинг" }
+    var cpuSocWarm: String { "тепло" }
     var cpuNoReading: String { "Нет текущих данных" }
     func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String { "нагрузка \(a) · \(b) · \(c) · \(cores) " + ruPlural(cores, "ядро", "ядра", "ядер") }
     func cpuHighLoadFor(_ min: Int) -> String { "Высокая нагрузка уже \(min) мин" }

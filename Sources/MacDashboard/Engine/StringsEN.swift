@@ -161,6 +161,7 @@ struct StringsEN: AppStrings {
     var cpuSystem: String { "System" }
     var cpuSocTemperature: String { "SoC temperature" }
     var cpuSocHot: String { "hot · may throttle" }
+    var cpuSocWarm: String { "warm" }
     var cpuNoReading: String { "No current reading" }
     func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String { "load \(a) · \(b) · \(c) · \(cores) cores" }
     func cpuHighLoadFor(_ min: Int) -> String { "High load for \(min) min" }

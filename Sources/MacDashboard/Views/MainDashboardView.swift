@@ -248,7 +248,7 @@ struct MacHeaderActions: View {
                 Image(systemName: "doc.text").font(.system(size: 13))
             }
             .buttonStyle(DS3CircleButtonStyle(diameter: 34, disabledOpacity: 0.5))
-            .reportActionTraits(busy: model.isCollectingReport)
+            .reportActionTraits(busy: model.isCollectingReport, shown: router.isReportShown)
         } else {
             Button { router.isReportShown.toggle() } label: {
                 HStack(spacing: 7) {
@@ -257,7 +257,7 @@ struct MacHeaderActions: View {
                 }
             }
             .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1, disabledOpacity: 0.5))
-            .reportActionTraits(busy: model.isCollectingReport)
+            .reportActionTraits(busy: model.isCollectingReport, shown: router.isReportShown)
         }
     }
 
@@ -307,11 +307,13 @@ private struct HeaderStatusPill: View {
 }
 
 private extension View {
-    /// What both Report button forms share: tooltip, busy-disabled, label and identifier.
-    func reportActionTraits(busy: Bool) -> some View {
+    /// What both Report button forms share: tooltip, busy-disabled, label, the shown state (selected trait while
+    /// the report is open — the button is a toggle) and identifier.
+    func reportActionTraits(busy: Bool, shown: Bool) -> some View {
         self.help(L.commonReport)
             .disabled(busy)
             .accessibilityLabel(L.commonReport)
+            .accessibilityAddTraits(shown ? .isSelected : [])
             .accessibilityIdentifier("main-report")
             .layoutPriority(1)
     }

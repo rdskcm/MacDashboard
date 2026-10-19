@@ -197,7 +197,8 @@ enum HomeModel {
             (object, state, verb, tag) = (keys.count > 1 ? "\(first) +\(keys.count - 1)" : first,
                                           L.homeStateKeepsAwake, L.commonShow, L.commonMacCantSleep)
         case .batteryCapacity:
-            let cap = (report.battery ?? battery)?.maxCapacity ?? 100
+            // Same merge rule as Assess.assess, so the task's percentage is the one that raised the item.
+            let cap = BatteryInfo.merged(live: battery, report: report.battery)?.maxCapacity ?? 100
             (section, focus) = (.battery, .bathero)
             (object, state, verb, tag) = (L.commonBattery, L.homeStateWorn(100 - cap), L.homeVerbDetails, L.homeTagWorn)
         case .brewOutdated:
@@ -531,7 +532,11 @@ extension HomeModel {
             var chipTone: HomeTone? = nil, chipText: String? = nil
             if let t = socTempC {
                 chipText = "\(t) °C"
-                chipTone = t >= 95 ? .hot : (t >= 85 ? .amber : .green)
+                switch CPULoad.socLevel(t) {   // the CPU page tile reads the same level
+                case .hot: chipTone = .hot
+                case .warm: chipTone = .amber
+                case .normal: chipTone = .green
+                }
             }
             let foot: String
             if let l = input.load, let l0 = l.first { foot = L.homeLoadCores(fmtFixed(l0, decimals: 2), input.ncpu) }

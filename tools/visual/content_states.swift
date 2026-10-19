@@ -96,6 +96,12 @@ MainActor.assumeIsolated {
         $0.socTempC = 93
         $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
     }
+    // HOME-LEFTOVERS: cpuHigh's 93 °C is now the warm SoC state (CPULoad.socLevel); cpuHot keeps the hot tile covered.
+    let cpuHot = fixtureHome {
+        $0.cpu = CPUUsage(user: 71, sys: 20, idle: 9)
+        $0.socTempC = 97
+        $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
+    }
     let cpuFail = fixtureHome { $0.applyFixtureCPU(cpuFailed, highSince: nil) }
     let cpuLoading = fixtureHome { $0.applyFixtureCPU(BlockState(.cpu, createdAt: homeRef), highSince: nil) }
     let fixtureDays = m.history.mac_history
@@ -120,6 +126,9 @@ MainActor.assumeIsolated {
         }
         harnessRender(width: 1094, to: "\(outDir)/content-cpu-high-\(mode).png") {
             CPUUsageCard(model: cpuHigh)
+        }
+        harnessRender(width: 1094, to: "\(outDir)/content-cpu-hot-\(mode).png") {
+            CPUUsageCard(model: cpuHot)
         }
         harnessRender(width: 1094, to: "\(outDir)/content-cpu-failed-\(mode).png") {
             CPUUsageCard(model: cpuFail)
