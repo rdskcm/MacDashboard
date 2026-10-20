@@ -264,12 +264,12 @@ fi
 
 # 6. baseline
 BASE=""; BASE_SHA=""
-for d in $(ls -1dt "$NIGHT"/builds/*/ 2>/dev/null); do
+while IFS= read -r d; do   # one path per line: the project path contains spaces (S6)
   d="${d%/}"
   [ "$(basename "$d")" = "$SHA" ] && continue
   [ -f "$d/build.ok" ] || continue
   BASE="$d/MacDashboard.app"; BASE_SHA="$(basename "$d")"; break
-done
+done < <(ls -1dt "$NIGHT"/builds/*/ 2>/dev/null)
 
 # 7. gate
 GOUT="$PERF/out/night-$DATE"
@@ -280,21 +280,39 @@ GRC=$?
 GLINE="$(grep '^GATE:' "$NIGHT/runs/$DATE/gate.out" | tail -1)"
 
 # 8. bookkeeping
+PRUNE_NOTE=""
+# Prune only after a successful full measured run (S6): a failed or partial run keeps every build, and a run that
+# found no baseline while another finished build exists keeps them too (that would be a selection bug, not a first night).
 if { [ "$GRC" = 0 ] || [ "$GRC" = 1 ]; } && [ "${LIST:-all}" = "all" ]; then
   echo "$SHA $(date '+%Y-%m-%d')" > "$NIGHT/state/last-measured-sha"
+  PRUNE_OK=1
+  if [ -z "$BASE_SHA" ]; then
+    for d in "$NIGHT"/builds/*/; do
+      d="${d%/}"
+      [ "$(basename "$d")" != "$SHA" ] && [ -f "$d/build.ok" ] && PRUNE_OK=0
+    done
+  fi
+  if [ "$PRUNE_OK" = 1 ]; then
+    for d in "$NIGHT"/builds/*/; do
+      d="${d%/}"; [ -d "$d" ] || continue
+      case "$(basename "$d")" in "$SHA"|"$BASE_SHA") ;; *) rm -rf "$d" ;; esac
+    done
+  else
+    PRUNE_NOTE="builds/ not pruned: no baseline was chosen although another finished build exists"
+  fi
 fi
-for d in "$NIGHT"/builds/*/; do
-  d="${d%/}"
-  case "$(basename "$d")" in "$SHA"|"$BASE_SHA") ;; *) rm -rf "$d" ;; esac
-done
 
 # 9. report
 NOISY="$(echo "$GLINE" | sed -n 's/.*noisy=\([0-9]*\).*/\1/p')"
+NFAILG="$(echo "$GLINE" | sed -n 's/.*fail=\([0-9]*\).*/\1/p')"
+NERR="$(echo "$GLINE" | sed -n 's/.*error=\([0-9]*\).*/\1/p')"
 case "$GRC" in
   0) if [ "${NOISY:-0}" -gt 0 ]; then VERDICT="PASS, $NOISY noisy"; else VERDICT="PASS"; fi ;;
   1) VERDICT="FAIL" ;;
   3) VERDICT="INVALID" ;;
   4) VERDICT="DEFAULTS-CHANGED" ;;
+  5) VERDICT="ERROR in ${NERR:-?} scenario(s)"
+     if [ "${NFAILG:-0}" -gt 0 ]; then VERDICT="$VERDICT, $NFAILG FAIL"; fi ;;
   *) VERDICT="ERROR (exit $GRC: $(tail -1 "$NIGHT/runs/$DATE/gate.out"))" ;;
 esac
 END_EPOCH="$(date +%s)"; DUR=$((END_EPOCH - START_EPOCH))
@@ -309,9 +327,13 @@ REP+=("idle at start: ${IDLE0:-?} s, threshold $THR s$([ "$NOW" = 1 ] && echo ' 
 REP+=("preconditions: AC power and Low Power Mode off, screen unlocked")
 REP+=("keep-awake: caffeinate pid $CAF, assertion seen: $CAF_SEEN")
 REP+=("$BR_LINE")
-[ -z "$BASE" ] && REP+=("no baseline yet (first night): absolute limits only")
+[ -z "$BASE" ] && REP+=("no baseline build in builds/: absolute limits only")
 [ -z "$OFFLINE" ] || REP+=("$OFFLINE")
 REP+=("${GLINE:-GATE: (no GATE line in gate.out)}")
+if [ -s "$GOUT/errors.tsv" ]; then
+  while IFS= read -r l; do REP+=("$l"); done < <(awk -F'\t' '{print "- ERROR " $1 " (" $2 "): " $3 "; diagnostics: " $4}' "$GOUT/errors.tsv" | head -10)
+fi
+[ -z "$PRUNE_NOTE" ] || REP+=("$PRUNE_NOTE")
 if [ -f "$GOUT/summary.tsv" ]; then
   while IFS= read -r l; do REP+=("$l"); done < <(awk -F'\t' '$2=="cand" && $3=="agg" && ($7=="FAIL" || $7=="NOISY") {print "- " $7 " " $1 " " $4 ": " $5 " (" $6 ")"}' "$GOUT/summary.tsv" | head -15)
 fi

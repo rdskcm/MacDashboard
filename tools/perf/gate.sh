@@ -17,8 +17,10 @@
 #   --g1-max     absolute G1 app CPU limit in % (default 5.6, the level before C7; 2.5 after Step 7)
 #   -h, --help   this text
 # Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed
-#       during the run | 64 usage | 65 precondition refused | 70 runtime error.
-#       Last line: GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1>
+#       during the run | 5 ERROR: at least one scenario not measured (an AX element was still missing after one
+#       retry; the other scenarios ran and are reported) | 64 usage | 65 precondition refused | 70 runtime error.
+#       When several apply: 3 over 4 over 5 over 1.
+#       Last line: GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1> error=<e>
 # Data safety: runs bench copies (bundle id com.rdskcm.mac-dashboard.bench); synthetic fixtures only; never touches ~/Library/Application Support/MacDashboard;
 # kills only the PIDs it started (never by name); never writes or restores the defaults domain.
 set -uo pipefail
@@ -38,8 +40,8 @@ ORPHAN=0
 KEEP=0
 G1_MAX="5.6"
 
-NPASS=0; NFAIL=0; NNOISY=0; INVALID=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0
-PIDS=""; HOMEDIR=""; BIN=""; PID=""; CAND_APP=""; BASE_APP=""
+NPASS=0; NFAIL=0; NNOISY=0; INVALID=0; NERROR=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0
+PIDS=""; HOMEDIR=""; BIN=""; PID=""; CAND_APP=""; BASE_APP=""; CUR_PREFIX=""
 
 usage() { sed -n '2,/^[^#]/{/^#/p;}' "$0" | sed 's/^# \{0,1\}//'; }
 log() { echo "[$(date +%T)] $*" | tee -a "${OUT:-/dev/null}/gate.log" 2>/dev/null; }
@@ -81,7 +83,7 @@ on_exit() {
     ls_out="$("$ROOT/tools/ls-prune.sh" 2>/dev/null)" || echo "gate: warning: ls-prune.sh exited non-zero" >&2
     if grep -q '^RUNNING' <<< "$ls_out"; then echo "gate: warning: a copy is still running (ls-prune RUNNING)" >&2; fi
   fi
-  local line="GATE: exit=$rc pass=$NPASS fail=$NFAIL noisy=$NNOISY invalid=$INVALID"
+  local line="GATE: exit=$rc pass=$NPASS fail=$NFAIL noisy=$NNOISY invalid=$INVALID error=$NERROR"
   [ "$STARTED" = 1 ] && [ -d "$OUT" ] && echo "$line" >> "$OUT/report.md"
   echo "$line"
   exit "$rc"
@@ -203,7 +205,7 @@ case "$REAL_HOME/" in "$REAL_LIB"/*) refuse "bench home $REAL_HOME is inside $RE
 for f in summary.tsv report.md runs.tsv; do   # a reused --out keeps the previous invocation's tables
   [ -f "$OUT/$f" ] && mv "$OUT/$f" "$OUT/${f%.*}-$(date +%H%M%S).${f##*.}"
 done
-: > "$OUT/runs.tsv"; : > "$OUT/invalid.log"; : > "$OUT/gate.log"
+: > "$OUT/runs.tsv"; : > "$OUT/invalid.log"; : > "$OUT/gate.log"; : > "$OUT/errors.tsv"; : > "$OUT/error-runs.tsv"
 "$PERF/power.sh" before "$OUT/power.log" "gate start" || refuse "power: need AC power and Low Power Mode off ($(tail -1 "$OUT/power.log"))"
 
 # ---------------------------------------------------------------- helpers (compiled fresh every run)
@@ -225,9 +227,49 @@ mark_now() { perl -MTime::HiRes=time -e 'printf "%s %.3f\n", $ARGV[0], time' "$1
 mark_val() { awk -v k="$1" '$1==k && NF==2 {print $2; exit}' "$2"; }   # first unlabelled mark of kind k
 
 ax() { osascript "$PERF/ui.applescript" "$PID" "$@" 2>&1; }
-ax_press() {   # kind value — a miss is exit 70 with the label, never a coordinate fallback
+# AX misses (S6). The one retry after re-activating the app is ROBUSTNESS, not a cause fix: on the first night
+# (2026-10-20) this app's AX tree listed 6 of 8 Home tiles while all 8 are drawn (cause open). A second miss writes
+# diagnostics (ax_miss) and returns 1; attempt() then marks the scenario ERROR and the gate goes on.
+# Never a coordinate fallback. The helpers log to stderr: ax_frame runs inside $(...), whose stdout is the result.
+ax_reactivate() {   # kind value: frontmost again; a Home tile also gets a fresh Home press
+  osascript -e 'tell application "System Events" to set frontmost of (first process whose unix id is '"$PID"') to true' >/dev/null 2>&1 || true
+  sleep 1
+  if [ "$1" = id ] && [[ "$2" == home-tile-* ]]; then
+    log "re-pressing main-mode-mac before the retry of '$2'" >&2
+    ax id main-mode-mac >/dev/null; sleep 2
+  fi
+  return 0
+}
+ax_miss() {   # label -> $CUR_PREFIX-axdiag/ {miss.txt ax-dump.txt winfo.txt screen.png display.txt}; never exits
+  local d="${CUR_PREFIX:-$OUT/unknown}-axdiag" b="$PERF/out/night.noindex/.bin/brightness"
+  rm -rf "$d"; mkdir -p "$d"
+  echo "$1" > "$d/miss.txt"
+  ax dump > "$d/ax-dump.txt"
+  "$BIN/drv" winfo "$PID" > "$d/winfo.txt" 2>&1
+  screencapture -x "$d/screen.png" > "$d/screencapture.err" 2>&1
+  {
+    echo "time: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "app pid $PID alive: $(kill -0 "$PID" 2>/dev/null && echo yes || echo no)"
+    echo "frontmost pid: $(osascript -e 'tell application "System Events" to get unix id of first process whose frontmost is true' 2>&1)"
+    if [ -x "$b" ]; then echo "brightness: $("$b" get 2>&1)"; else echo "brightness: n/a (no helper at $b)"; fi
+    echo "session locked: $(ioreg -n Root -d1 | grep -q '"IOConsoleLocked" *= *Yes' && echo yes || echo no)"
+    echo "HID idle s: $(ioreg -c IOHIDSystem -d 4 | awk '/"HIDIdleTime"/ {print int($NF/1000000000); exit}')"
+    echo "display power (pmset -g powerstate IODisplayWrangler):"; pmset -g powerstate IODisplayWrangler 2>&1
+    echo "display power (ioreg IODisplayWrangler):"
+    ioreg -r -d 1 -n IODisplayWrangler 2>&1 | grep -E '"(CurrentPowerState|DevicePowerState)"' || echo "  not found"
+    echo "display assertions:"; pmset -g assertions 2>&1 | grep -i 'display' || echo "  none"
+  } > "$d/display.txt" 2>&1
+  log "AX miss: $1 (diagnostics: $d)" >&2
+}
+ax_press() {   # kind value -> 0 pressed | 1 missed twice (diagnostics written)
   local out; out="$(ax "$1" "$2")"
-  [ "$out" = "pressed" ] || fatal 70 "AX press failed for $1 '$2' (got: $out)"
+  [ "$out" = "pressed" ] && return 0
+  log "AX press missed for $1 '$2' (got: $out); re-activating, one retry" >&2
+  ax_reactivate "$1" "$2"
+  out="$(ax "$1" "$2")"
+  [ "$out" = "pressed" ] && { log "AX press retry ok for $1 '$2'" >&2; return 0; }
+  ax_miss "AX press failed for $1 '$2' after one retry (got: $out)"
+  return 1
 }
 
 pin_window() {
@@ -244,9 +286,15 @@ for m in re.finditer(r"Height = ([0-9.]+);\s*Width = ([0-9.]+);\s*X = (-?[0-9.]+
 print(" ".join(t.split())); sys.exit(1)')" || fatal 70 "window frame is not 1000x733 at (0,29): $frame"
 }
 
-ax_frame() {   # AXIdentifier -> "x y w h" (global points, top-left origin); a miss is exit 70
+is_frame() { [[ "$1" =~ ^-?[0-9]+\ -?[0-9]+\ [0-9]+\ [0-9]+$ ]]; }
+ax_frame() {   # AXIdentifier -> "x y w h" (global points, top-left origin) | 1 after a miss and one retry (diagnostics written)
   local out; out="$(ax frame "$1")"
-  [[ "$out" =~ ^-?[0-9]+\ -?[0-9]+\ [0-9]+\ [0-9]+$ ]] || fatal 70 "AX frame failed for '$1' (got: $out)"
+  if ! is_frame "$out"; then
+    log "AX frame missed for '$1' (got: $out); re-activating, one retry" >&2
+    ax_reactivate frame "$1"
+    out="$(ax frame "$1")"
+    is_frame "$out" || { ax_miss "AX frame failed for '$1' after one retry (got: $out)"; return 1; }
+  fi
   echo "$out"
 }
 
@@ -275,14 +323,14 @@ stop_app() {
   untrack "$PID"; PID=""
 }
 
-route_mac()    { ax_press id main-mode-mac; sleep 2; }
-route_iphone() { ax_press id main-mode-iphone; sleep 2; ax_press id iphone-tile-0; sleep 3; }
-route_table()  { route_iphone; ax_press title 'Таблица|Table'; sleep 2; }
+route_mac()    { ax_press id main-mode-mac || return 1; sleep 2; }
+route_iphone() { ax_press id main-mode-iphone || return 1; sleep 2; ax_press id iphone-tile-0 || return 1; sleep 3; }
+route_table()  { route_iphone || return 1; ax_press title 'Таблица|Table' || return 1; sleep 2; }
 # History page (Home -> History tile), range All; the G4 sweep is centred on the chart's AX frame (D16).
 route_hist() {
-  route_mac; ax_press id home-tile-history; sleep 2
-  "$BIN/drv" scroll 500 450 3 -15 >/dev/null 2>&1; sleep 1; ax_press id history-range-all; sleep 3
-  local fr fx fy fw fh; fr="$(ax_frame history-chart)" || exit 70; read -r fx fy fw fh <<< "$fr"
+  route_mac || return 1; ax_press id home-tile-history || return 1; sleep 2
+  "$BIN/drv" scroll 500 450 3 -15 >/dev/null 2>&1; sleep 1; ax_press id history-range-all || return 1; sleep 3
+  local fr fx fy fw fh; fr="$(ax_frame history-chart)" || return 1; read -r fx fy fw fh <<< "$fr"
   HIST_SWEEP_X=$((fx + fw / 2)); HIST_SWEEP_Y=$((fy + fh / 2))
   { [ "$HIST_SWEEP_X" -ge 150 ] && [ "$HIST_SWEEP_X" -le 850 ] && [ "$HIST_SWEEP_Y" -ge 29 ] && [ "$HIST_SWEEP_Y" -le 762 ]; } \
     || fatal 70 "G4: history chart centre ($HIST_SWEEP_X,$HIST_SWEEP_Y) is outside the pinned window"
@@ -290,14 +338,14 @@ route_hist() {
 }
 # Battery page; G5 holds on the rainbow "Details" capsule and on the same tile 300 pt to its left (D17).
 route_battery() {
-  route_mac; ax_press id home-tile-battery; sleep 2
-  local fr fx fy fw fh; fr="$(ax_frame battery-details)" || exit 70; read -r fx fy fw fh <<< "$fr"
+  route_mac || return 1; ax_press id home-tile-battery || return 1; sleep 2
+  local fr fx fy fw fh; fr="$(ax_frame battery-details)" || return 1; read -r fx fy fw fh <<< "$fr"
   local dx=$((fx + fw / 2)) dy=$((fy + fh / 2)) cx=$((fx - 300))
   [ "$cx" -ge 40 ] || fatal 70 "G5: control spot x=$cx is outside the window"
   G5_SPOTS="ctrl:$cx:$dy details:$dx:$dy"; export G5_SPOTS
 }
-route_system() { route_mac; ax_press id home-tile-system; sleep 2; }
-route_page()   { route_mac; ax_press id "home-tile-$1"; sleep 2; }
+route_system() { route_mac || return 1; ax_press id home-tile-system || return 1; sleep 2; }
+route_page()   { route_mac || return 1; ax_press id "home-tile-$1" || return 1; sleep 2; }
 
 topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" for the app and WindowServer
   # exec: always called as a background job, so the tracked PID is perl itself (it forwards TERM to top)
@@ -315,7 +363,7 @@ topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" f
 
 # ---------------------------------------------------------------- per-item definitions
 # CPU page (REDESIGN-CPU): Home -> CPU tile.
-route_cpu() { route_mac; ax_press id home-tile-cpu; sleep 2; }
+route_cpu() { route_mac || return 1; ax_press id home-tile-cpu || return 1; sleep 2; }
 
 # Sets S_ROUTE S_PRE (extra wait after the route, s) S_SECS (record length) S_SCEN S_ARGS S_TABLES S_INSTR.
 TP_INSTR=(--instrument 'Time Profiler' --instrument Hitches)
@@ -350,11 +398,12 @@ do_route() {
 }
 
 # ---------------------------------------------------------------- one measured run
-# attempt ITEM ARM RUN APP -> 0 valid (metrics appended to runs.tsv) | 1 invalid (power changed; nothing recorded)
+# attempt ITEM ARM RUN APP -> 0 valid (metrics appended to runs.tsv) | 1 invalid (power changed; nothing recorded) | 2 ERROR (AX miss after one retry; nothing recorded, line in errors.tsv)
 attempt() {
   local item=$1 arm=$2 run=$3 app=$4
   local tag="$item-$arm$run" prefix="$OUT/$item-$arm$run"
   local buf="$prefix-metrics.tmp"
+  CUR_PREFIX="$prefix"; rm -rf "$prefix-axdiag"
   : > "$buf"; : > "$prefix-drv.txt"; : > "$prefix-analysis.txt"
   log "$tag: start ($app)"
   local pstart; pstart="$(date +%s)"
@@ -367,7 +416,13 @@ attempt() {
 
   define_item "$item"
   launch_app "$app" "$tag"
-  do_route
+  if ! do_route; then   # S6: an AX element still missing after one retry -> this scenario is ERROR, the gate goes on
+    stop_app
+    local why; why="$(head -1 "$prefix-axdiag/miss.txt" 2>/dev/null)"
+    printf '%s\t%s\t%s\t%s\n' "$item" "$tag" "${why:-route failed}" "$prefix-axdiag" >> "$OUT/errors.tsv"
+    log "$tag: ERROR (${why:-route failed})"
+    rm -f "$buf"; cleanup_run "$prefix"; return 2
+  fi
   if [ "$S_ORPHAN" = 1 ]; then   # D18: the Autostart card exists only after the report pass
     local waited=0
     until [ "$(ax exists autostart-outdated)" = present ]; do
@@ -512,22 +567,28 @@ default_runs() { echo "${RUNS:-3}"; }
 
 for item in $ITEMS; do
   n="$(default_runs "$item")"
-  r=1
-  while [ "$r" -le "$n" ] && [ "$INVALID" = 0 ]; do
+  r=1; ERRORED=0
+  while [ "$r" -le "$n" ] && [ "$INVALID" = 0 ] && [ "$ERRORED" = 0 ]; do
     arms="cand"; [ -n "$BASELINE" ] && arms="cand base"
     for arm in $arms; do
       app="$CAND_APP"; [ "$arm" = "base" ] && app="$BASE_APP"
-      if ! attempt "$item" "$arm" "$r" "$app"; then
+      attempt "$item" "$arm" "$r" "$app"; arc=$?
+      if [ "$arc" = 1 ]; then
         log "$item-$arm$r: re-recording once"
         sleep 5
-        if ! attempt "$item" "$arm" "$r" "$app"; then
-          INVALID=1
-          break
-        fi
+        attempt "$item" "$arm" "$r" "$app"; arc=$?
+        if [ "$arc" = 1 ]; then INVALID=1; break; fi
       fi
+      if [ "$arc" = 2 ]; then ERRORED=1; break; fi
     done
     r=$((r + 1))
   done
+  if [ "$ERRORED" = 1 ]; then   # S6: no verdict on a scenario stopped mid-way; its recorded runs move aside
+    NERROR=$((NERROR + 1))
+    awk -F'\t' -v s="$item" '$1==s' "$OUT/runs.tsv" >> "$OUT/error-runs.tsv"
+    awk -F'\t' -v s="$item" '$1!=s' "$OUT/runs.tsv" > "$OUT/runs.tsv.new" && mv "$OUT/runs.tsv.new" "$OUT/runs.tsv"
+    log "$item: ERROR, remaining runs skipped (see errors.tsv)"
+  fi
   [ "$INVALID" = 1 ] && break
 done
 
@@ -559,6 +620,12 @@ fi
     sed 's/^/- /' "$OUT/invalid.log"
     echo
   fi
+  if [ -s "$OUT/errors.tsv" ]; then
+    echo "ERROR scenarios (an AX element was still missing after one retry; not measured, no verdict; their earlier runs are in error-runs.tsv):"
+    echo
+    awk -F'\t' '{print "- " $1 " (" $2 "): " $3 " — diagnostics: `" $4 "`"}' "$OUT/errors.tsv"
+    echo
+  fi
   if [ -n "$G5_NOTE" ]; then echo "$G5_NOTE"; echo; fi
   echo "## Defaults domain \`$BUNDLE_ID\`"
   echo
@@ -576,6 +643,7 @@ fi
 
 FINAL=0
 [ "${NFAIL:-0}" -gt 0 ] && FINAL=1
+[ "$NERROR" -gt 0 ] && FINAL=5
 [ "$DEFAULTS_CHANGED" = 1 ] && FINAL=4
 [ "$INVALID" = 1 ] && FINAL=3
 if [ "$DEFAULTS_CHANGED" = 1 ]; then
