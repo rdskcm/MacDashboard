@@ -9,6 +9,7 @@
 --   exists <AXIdentifier>        do not press; "present" | "absent" for an element of any class with that identifier
 --   settings                     press the app-menu item "Settings…" / "Настройки…"
 --   pin                          set window 1 to position {0, 29}, size {1000, 733} (D13)
+--   dump                         do not press; "windows: <n>", "window 1 @ x,y wxh", then one line "<id> <class> @ x,y wxh" per element of window 1 with a non-empty AXIdentifier
 -- Prints "pressed" | "present" | "absent" | "x y w h" | "pinned" | "OK" | "NOT FOUND".
 on splitAlts(theVal)
 	set AppleScript's text item delimiters to "|"
@@ -43,6 +44,38 @@ on run argv
 					end if
 				end repeat
 				return "NOT FOUND"
+			end if
+			if theKind is "dump" then
+				set out to "windows: " & ((count of windows) as text)
+				try
+					set wp to position of window 1
+					set wsz to size of window 1
+					set out to out & linefeed & "window 1 @ " & ((item 1 of wp) as integer as text) & "," & ((item 2 of wp) as integer as text) & " " & ((item 1 of wsz) as integer as text) & "x" & ((item 2 of wsz) as integer as text)
+					set allElements to entire contents of window 1
+					repeat with el in allElements
+						set elID to ""
+						try
+							set elID to (value of attribute "AXIdentifier" of el)
+						end try
+						if elID is missing value then set elID to ""
+						if elID is not "" then
+							set cls to "?"
+							try
+								set cls to (class of el) as text
+							end try
+							set geo to "?"
+							try
+								set p to position of el
+								set s to size of el
+								set geo to ((item 1 of p) as integer as text) & "," & ((item 2 of p) as integer as text) & " " & ((item 1 of s) as integer as text) & "x" & ((item 2 of s) as integer as text)
+							end try
+							set out to out & linefeed & elID & " " & cls & " @ " & geo
+						end if
+					end repeat
+				on error errMsg
+					set out to out & linefeed & "error: " & errMsg
+				end try
+				return out
 			end if
 			if theKind is "frame" or theKind is "exists" then
 				set allElements to entire contents of window 1

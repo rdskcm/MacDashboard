@@ -30,16 +30,21 @@ cd MacDashboard && ./build_app.sh && tools/perf/gate.sh --baseline tools/perf/ou
 - `--g1-max` is the absolute G1 app CPU limit: 5.6 (the level before C7), 2.5 after the process-list fix.
 
 Outputs in the run directory: `summary.tsv` (`scenario arm run metric value threshold verdict`),
-`report.md` (one table per scenario, power log, defaults verdict), `power.log`, `*-analysis.txt`, and the
-last stdout line `GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1>`.
+`report.md` (one table per scenario, power log, ERROR scenarios, defaults verdict), `power.log`, `*-analysis.txt`,
+`errors.tsv` (`scenario tag reason diagnostics-dir`, one line per ERROR scenario) with `<tag>-axdiag/` (AX identifier
+dump with frames, `drv winfo`, screenshot, display state) and `error-runs.tsv` (runs of ERROR scenarios, no verdict),
+and the last stdout line `GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1> error=<e>`.
 
 ## 3. Exit codes
 
 `0` pass (NOISY rows do not fail) · `1` any FAIL (absolute or regression rule) · `3` INVALID run: the power check after a run (or a `Using Batt`
 entry in `pmset -g log` during it) failed twice; the numbers are discarded, never averaged · `4` the defaults domain
-`com.rdskcm.mac-dashboard` differs before/after (the gate runs bench copies and never writes that domain, so 4 means another process changed it; the diff is printed) · `64` usage ·
-`65` precondition refused · `70` runtime error (an AX press missed, the window could not be pinned, xctrace failed).
-When several apply: 3 over 4 over 1.
+`com.rdskcm.mac-dashboard` differs before/after (the gate runs bench copies and never writes that domain, so 4 means another process changed it; the diff is printed) · `5` ERROR: at least one scenario was not measured because an AX element (press or frame) was still missing after one retry; the other scenarios ran and are reported · `64` usage ·
+`65` precondition refused · `70` runtime error (the window could not be pinned, the app exited at launch, xctrace failed).
+When several apply: 3 over 4 over 5 over 1. An AX miss is retried once after the app is brought to the front (for a
+Home tile after a fresh `main-mode-mac` press); this retry is robustness, not a fix: the first night's 6-of-8 Home
+tile AX tree has no known cause yet. A second miss writes `<tag>-axdiag/`, stops that app, marks the scenario ERROR
+and the gate continues with the next scenario. There is never a coordinate fallback.
 
 Preconditions (65): AC power and Low Power Mode 0 · screen unlocked · main display at least 1280x800 pt · Accessibility
 enabled · `xcrun xctrace version` works · no other `gate.sh` running · bench home not inside `~/Library`.
@@ -98,7 +103,7 @@ The terminal app that runs the gate needs Screen Recording, Accessibility and Au
 - D24: `caffeinate -d -i -s` holds the Mac and display awake for the whole run; the report records the assertion.
 - D25: the display is dimmed to 0 for the run (`brightness.swift`, DisplayServices or IOKit) and restored at the end, on Ctrl-C and by the next `--check` after a crash; where it cannot be set the run continues and the report says "not settable".
 - D26: the candidate is `origin/main` (fetch with BatchMode; offline uses the local ref); the baseline is the previous night's build; the same SHA as the last full measurement is SKIPPED "main unchanged".
-- D27: the first night has no baseline, so only absolute limits apply; only the candidate and one baseline build are kept in `builds/`.
+- D27: with no earlier finished build there is no baseline, so only absolute limits apply. `builds/` is pruned to the candidate and the baseline only after a successful full measured run (gate exit 0 or 1); after any other exit (also 5, ERROR) or a partial run nothing is deleted, and exit 5 does not mark the SHA as measured, so the next night measures it again.
 - Install and remove: `tools/perf/night.sh --install` / `--uninstall`. After a restart or crash, `--restore-brightness` puts back a saved value.
 - Hand run: `tools/perf/night.sh --run --now` starts a "Mac idle" run at once (skips window and idle checks; ~2.6 h full). `--scenarios G1 --runs 1` takes ~5 min plus the build and is a check of the runner; a run with other scenarios than `all` is marked "partial".
 - `--check --dry-run` prints the decision and starts nothing.
