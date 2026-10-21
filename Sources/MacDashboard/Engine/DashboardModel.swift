@@ -118,9 +118,13 @@ final class DashboardModel {
     /// start of the next run. Typed so the page words it (exit code, language) at render time.
     private(set) var smartInstallFailure: SmartInstallFailure? = nil
 
-    /// Re-entrancy guard for `enableFirewallNow()`, true while an in-app firewall
-    /// enable (via `PrivilegedRunner`) is in flight — mirrors `smartRefreshing`.
-    var firewallApplying = false
+    /// REDESIGN-SECURITY: the one in-flight or last-failed privileged enable (firewall / Gatekeeper).
+    /// One state is also the re-entrancy guard of `enableProtectionNow(_:)`.
+    private(set) var securityAction: SecurityActionState = .idle
+    var firewallApplying: Bool { if case .enabling(.firewall) = securityAction { return true }; return false }
+    var gatekeeperApplying: Bool { if case .enabling(.gatekeeper) = securityAction { return true }; return false }
+    /// REDESIGN-SECURITY: true while the page's Refresh re-collects security + crashes.
+    private(set) var securityRefreshing = false
 
     /// Set when the last advice-card action (currently only `enableFirewallNow()`)
     /// failed; cleared at the start of the next run. Shown as an inline error on
@@ -253,7 +257,7 @@ final class DashboardModel {
     private var updatesCache: UpdatesCache?
     private let updatesCacheURL: URL
     private var updateCheckTask: Task<Void, Never>?
-    private var isCheckingUpdates = false
+    private(set) var isCheckingUpdates = false
     private var updateCheckGeneration = 0
     /// Last successful background folder-size count (SIZES-BACKGROUND). Source of truth for
     /// report.homeDirs/serviceDirs/…Unreadable/folderSizesCountedAt — applied by applyFolderSizes(to:).
@@ -419,6 +423,11 @@ final class DashboardModel {
     func applyFixtureMemory(_ state: BlockState) { memoryBlock = state }
     /// Visual fixture only (REDESIGN-BATTERY): the detail the Battery page shows and its block.
     func applyFixtureBattery(_ detail: BatteryDetail?, block: BlockState) { batteryDetail = detail; batteryBlock = block }
+
+    /// Visual fixture only (REDESIGN-SECURITY): the privileged-action state, Refresh busy flag and update-check flag.
+    func applyFixtureSecurity(action: SecurityActionState, refreshing: Bool = false, checkingUpdates: Bool = false) {
+        securityAction = action; securityRefreshing = refreshing; isCheckingUpdates = checkingUpdates
+    }
 
     /// Visual fixture only (REDESIGN-STORAGE): smartmontools state, install-in-flight flag and typed failure.
     func applyFixtureSmartTools(_ state: ReportCollector.SmartToolsAvailability, installing: Bool, failure: SmartInstallFailure?) {
@@ -992,6 +1001,26 @@ final class DashboardModel {
     /// already tick every interval; SMART has its own button.
     func refreshStorageNow() { startSizeCountIfNeeded(trigger: .button) }
 
+    /// REDESIGN-SECURITY D7: the page's Refresh — protections + crash folders now, plus a forced update check.
+    func refreshSecurityNow() {
+        startUpdateCheckIfNeeded(trigger: .button)
+        guard !securityRefreshing else { return }
+        securityRefreshing = true
+        securityAction = .idle
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.securityRefreshing = false }
+            let box = UncheckedSendableBox(ReportCollector())
+            let sec = await box.value.collectSecurityInfo()
+            let crashes = await Task.detached(priority: .utility) { box.value.collectCrashGroups() }.value
+            guard !Task.isCancelled else { return }
+            await self.waitForReportRefreshToFinish()
+            self.report.security = sec
+            self.report.crashes = crashes
+            self.setAssessment(self.assessed(self.report))
+        }
+    }
+
     /// REDESIGN-STORAGE: Try again on the folder-count error. A count still in flight is not restarted: the Wait
     /// and a fresh 10 s watchdog come back and the running count's result still lands.
     func retryFolderCount() {
@@ -1238,36 +1267,44 @@ final class DashboardModel {
     /// password) off-main, then re-collects security state so the row disappears the
     /// instant success lands, without waiting for the next fast tick. Mirrors
     /// `refreshSmartNow()`/`upgradeBrewNow()`.
-    func enableFirewallNow() {
-        guard !firewallApplying else { return }
-        firewallApplying = true
+    func enableFirewallNow() { enableProtectionNow(.firewall) }
+
+    /// REDESIGN-SECURITY: the same flow for the firewall and Gatekeeper (Touch ID, 30 s budget). The outcome is
+    /// kept in `securityAction` so the Security page can show a banner per failure kind.
+    func enableProtectionNow(_ p: SecurityProtection) {
+        guard p == .firewall || p == .gatekeeper else { return }
+        if case .enabling = securityAction { return }
+        securityAction = .enabling(p)
         adviceActionError = nil
+        let command = SecurityPageModel.privilegedEnableCommand(p)
 
         Task { [weak self] in
             guard let self else { return }
-            defer { self.firewallApplying = false }
 
             let outcome: PrivilegedRunner.Outcome = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
-                    continuation.resume(returning: PrivilegedRunner.run(
-                        "/usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on"))
+                    continuation.resume(returning: PrivilegedRunner.run(command))
                 }
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { self.securityAction = .idle; return }
 
             switch outcome {
             case .success:
                 let collectorBox = UncheckedSendableBox(ReportCollector())
                 let s = await collectorBox.value.collectSecurityInfo()
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else { self.securityAction = .idle; return }
                 await self.waitForReportRefreshToFinish()
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else { self.securityAction = .idle; return }
                 self.report.security = s
                 self.setAssessment(self.assessed(self.report))
+                self.securityAction = .idle
             case .cancelled:
-                break
-            case .failed:
-                self.adviceActionError = L.adviceFirewallError
+                self.securityAction = .failed(p, .cancelled)
+            case .timedOut:
+                self.securityAction = .failed(p, .timedOut)
+            case .failed(let msg):
+                self.securityAction = .failed(p, .error(msg))
+                self.adviceActionError = p == .firewall ? L.adviceFirewallError : L.secGatekeeperError
             }
         }
     }
@@ -1353,6 +1390,7 @@ final class DashboardModel {
                         case .success: continuation.resume(returning: .success)
                         case .cancelled: continuation.resume(returning: .cancelled)
                         case .failed(let msg): continuation.resume(returning: .failed(msg))
+                        case .timedOut: continuation.resume(returning: .failed(L.privilegedTimedOut))
                         }
                     } else {
                         do {
@@ -1463,6 +1501,7 @@ final class DashboardModel {
                         case .success: continuation.resume(returning: .success)
                         case .cancelled: continuation.resume(returning: .cancelled)
                         case .failed(let msg): continuation.resume(returning: .failed(msg))
+                        case .timedOut: continuation.resume(returning: .failed(L.privilegedTimedOut))
                         }
                     }
                 }

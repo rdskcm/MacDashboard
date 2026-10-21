@@ -86,6 +86,7 @@ final class AdviceActionDispatch {
             trashTargetID = id
             showTrashConfirm = true
         case .enableFirewall: showFirewallConfirm = true
+        case .enableGatekeeper: model.enableProtectionNow(.gatekeeper)   // no dialog: the Touch ID prompt is the confirmation
         }
     }
 
@@ -163,6 +164,7 @@ final class AdviceActionDispatch {
         switch action {
         case .brewUpgrade: return model.brewUpgrading
         case .enableFirewall: return model.firewallApplying
+        case .enableGatekeeper: return model.gatekeeperApplying
         case .emptyTrash: return trashEmptying || trashCounting
         default: return false
         }

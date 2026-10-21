@@ -105,7 +105,7 @@ extension SerialTests {
                 r.crashes = [CrashGroup(process: "diffscore", count: 3, directory: "/x"), CrashGroup(process: "Finder", count: 1, directory: "/x")]
                 r.brewStatus = .installed(version: "Homebrew 4.6.0")
                 r.brewOutdated = ["git", "node"]
-                r.updates = ["macOS Tahoe 26.0.1"]
+                r.updates = [upd("macOS Tahoe 26.0.1")]
                 r.updatesCheckedAt = t
                 r.updatesCheckDuration = 30
                 r.sectionDurations = ["system": 0.2, "disk": 1.5, "brew": 1.5]
@@ -358,4 +358,8 @@ extension SerialTests {
             }
         }
     }
+}
+
+private func upd(_ label: String) -> SoftwareUpdate {
+    SoftwareUpdate(label: label, title: label, version: nil, sizeBytes: nil, restartRequired: false)
 }

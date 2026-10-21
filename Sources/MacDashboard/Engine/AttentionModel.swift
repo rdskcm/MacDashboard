@@ -158,7 +158,7 @@ enum AttentionModel {
             return s.attnVerbShow
         case .emptyTrash:
             return s.attnVerbEmpty
-        case .enableFirewall:
+        case .enableFirewall, .enableGatekeeper:
             return s.attnVerbEnable
         case .brewUpgrade:
             return s.attnVerbUpgrade

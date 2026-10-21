@@ -391,6 +391,8 @@ struct EnergyCard: View {
                 applyError = L.energyApplyCancelled
             case .failed(let msg):
                 applyError = L.energyApplyFailed(msg)
+            case .timedOut:
+                applyError = L.energyApplyFailed(L.privilegedTimedOut)
             }
         }
     }

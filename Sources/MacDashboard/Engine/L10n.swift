@@ -557,6 +557,57 @@ protocol AppStrings {
     var batHistoryNotEnough: String { get }
     var batHistoryFoot: String { get }
     var batHistoryFootA11y: String { get }
+    var privilegedTimedOut: String { get }   // REDESIGN-SECURITY step 2
+    var secGatekeeperError: String { get }
+    var secRestartRequired: String { get }   // REDESIGN-SECURITY (step 1 minimum; the rest of the table lands in step 3)
+    // MARK: Security page (REDESIGN-SECURITY)
+    func shortDateTime(_ d: Date) -> String
+    var secSub: String { get }
+    func secTagOffCount(_ n: Int) -> String
+    func secTagEnabling(_ p: SecurityProtection) -> String
+    var secTagUpdates: String { get }
+    func secTagCrashes(_ n: Int) -> String
+    func secTagOnCount(_ n: Int) -> String
+    func secCaptionOn(_ n: Int) -> String
+    func secCaptionEnabling(_ p: SecurityProtection) -> String
+    var secValueOn: String { get }
+    var secValueOff: String { get }
+    var secValueEnabling: String { get }
+    var secNoteUnknown: String { get }
+    var secNoteTouchID: String { get }
+    var secNoteWaitingTouchID: String { get }
+    var secNoteFileVault: String { get }
+    var secNoteFileVaultOpened: String { get }
+    var secNoteSip: String { get }
+    var secOpenSettings: String { get }
+    var secBannerTimeout: String { get }
+    var secBannerCancelled: String { get }
+    func secBannerFailed(_ p: SecurityProtection, _ detail: String) -> String
+    func secStillOff(_ p: SecurityProtection) -> String
+    func secEnableA11y(_ name: String) -> String
+    var secOpenFileVaultA11y: String { get }
+    var secRefreshA11y: String { get }
+    var secUpdatesCaptionChecking: String { get }
+    var secUpdatesCaptionNever: String { get }
+    func secUpdatesCaptionAvailable(_ n: Int) -> String
+    var secCheckingUpdates: String { get }
+    var secUpdatesNone: String { get }
+    func secUpdatesAvailable(_ n: Int) -> String
+    var secUpdatesRestart: String { get }
+    var secUpdatesFailed: String { get }
+    var secInstallA11y: String { get }
+    var secOpenSoftwareUpdateA11y: String { get }
+    var secCrashesTitle: String { get }
+    var secCrashesCaption: String { get }
+    func secCrashesCaptionCount(_ n: Int) -> String
+    var secNoCrashes: String { get }
+    var secKernelPanic: String { get }
+    func secCrashLastToday(_ t: String) -> String
+    func secCrashDate(_ d: String) -> String
+    var secCrashFootDefault: String { get }
+    func secCrashFootOpened(_ file: String) -> String
+    var secOpenInConsole: String { get }
+    func secCrashRowA11y(_ name: String, _ count: String) -> String
     func batMAh(_ s: String) -> String
     func batMA(_ s: String) -> String
     var batConditionNormal: String { get }

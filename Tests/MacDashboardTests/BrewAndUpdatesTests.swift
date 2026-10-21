@@ -155,7 +155,30 @@ extension SerialTests {
                 #expect(ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header + none)) == [],
                       "parseSoftwareUpdate: 'no new software' on stdout -> []")
                 #expect(ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header + "* Label: macOS Foo 27.0.1-27A1\n\tTitle: macOS Foo, Version: 27.0.1\n"))
-                        == ["macOS Foo 27.0.1-27A1"], "parseSoftwareUpdate: label extracted")
+                        == [SoftwareUpdate(label: "macOS Foo 27.0.1-27A1", title: "macOS Foo", version: "27.0.1", sizeBytes: nil, restartRequired: false)],
+                        "parseSoftwareUpdate: label extracted")
+                let sized = ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header
+                    + "* Label: macOS Foo 27.0.1-27A1\n\tTitle: macOS Foo, Version: 27.0.1, Size: 3276800KiB, Recommended: YES, Action: restart,\n"))
+                #expect(sized?.first?.sizeBytes == 3_276_800 * 1024 && sized?.first?.restartRequired == true,
+                        "parseSoftwareUpdate: Size + Action: restart parsed")
+                #expect(ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header + "* Label: Bar-1.0\n"))
+                        == [SoftwareUpdate(label: "Bar-1.0", title: "Bar-1.0", version: nil, sizeBytes: nil, restartRequired: false)],
+                        "parseSoftwareUpdate: label without Title line -> title = label")
+                let two = ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header
+                    + "* Label: A-1\n\tTitle: A, Version: 1, Size: 10K, Action: restart,\n* Label: B-2\n\tTitle: B, Version: 2, Size: 5MiB,\n"))
+                #expect(two?.map(\.label) == ["A-1", "B-2"] && two?.map(\.restartRequired) == [true, false]
+                        && two?.map(\.sizeBytes) == [10 * 1024, 5 * 1_048_576], "parseSoftwareUpdate: two labels, per-item fields")
+                func tl(_ s: String) -> (title: String?, version: String?, sizeBytes: Int64?, restart: Bool) {
+                    ReportCollector.parseSoftwareUpdateTitleLine(s)
+                }
+                #expect(tl("Title: X, Version: 1, Size: 7K,").sizeBytes == Int64(7 * 1024), "title line: K")
+                #expect(tl("Title: X, Size: 7KiB").sizeBytes == Int64(7 * 1024), "title line: KiB")
+                #expect(tl("Title: X, Size: 3MiB").sizeBytes == Int64(3 * 1_048_576), "title line: MiB")
+                #expect(tl("Title: X, Size: 2GiB").sizeBytes == Int64(2 * 1_073_741_824), "title line: GiB")
+                #expect(tl("Title: X, Size: 123").sizeBytes == Int64(123), "title line: no unit = bytes")
+                #expect(tl("Title: X, Size: 5TB").sizeBytes == nil, "title line: unknown unit -> nil")
+                #expect(tl("Title: X, Action: Restart,").restart && !tl("Title: X, Action: shut down,").restart, "title line: Action restart, case-insensitive")
+                #expect(tl("Title: , Version: 1").title == nil && tl("Title: X, Version: 1").title == "X", "title line: empty title -> nil")
                 #expect(ReportCollector.parseSoftwareUpdate(outcome(.exited(0), out: header)) == nil,
                       "parseSoftwareUpdate: unclassifiable output -> nil")
                 #expect(ReportCollector.parseSoftwareUpdate(outcome(.exited(1), out: header, err: "Can't connect")) == nil,
@@ -209,7 +232,7 @@ extension SerialTests {
                 let tmp = FileManager.default.temporaryDirectory
                 let file = tmp.appendingPathComponent("updates-cache-check-\(UUID().uuidString).json")
                 defer { try? FileManager.default.removeItem(at: file) }
-                let cache = UpdatesCache(items: ["macOS Foo 27.0.1-27A1"],
+                let cache = UpdatesCache(items: [SoftwareUpdate(label: "macOS Foo 27.0.1-27A1", title: "macOS Foo", version: "27.0.1", sizeBytes: nil, restartRequired: false)],
                                          checkedAt: Date(timeIntervalSince1970: 1_760_000_000), durationSeconds: 5.63)
                 do {
                     try UpdatesCacheStore.save(cache, to: file)
@@ -221,6 +244,10 @@ extension SerialTests {
                 }
                 #expect(UpdatesCacheStore.load(from: tmp.appendingPathComponent("updates-cache-missing-\(UUID().uuidString).json")) == nil,
                       "UpdatesCacheStore: missing file -> nil")
+                let old = tmp.appendingPathComponent("updates-cache-old-\(UUID().uuidString).json")
+                defer { try? FileManager.default.removeItem(at: old) }
+                try? Data(#"{"items":["a"],"checkedAt":"2025-10-01T00:00:00Z","durationSeconds":1}"#.utf8).write(to: old)
+                #expect(UpdatesCacheStore.load(from: old) == nil, "UpdatesCacheStore: old [String] items shape -> nil (never checked)")
                 let bad = tmp.appendingPathComponent("updates-cache-bad-\(UUID().uuidString).json")
                 defer { try? FileManager.default.removeItem(at: bad) }
                 try? "garbage".write(to: bad, atomically: true, encoding: .utf8)

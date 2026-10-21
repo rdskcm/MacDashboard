@@ -531,6 +531,65 @@ struct StringsEN: AppStrings {
     var batHistoryNotEnough: String { "not enough data for a trend yet" }
     var batHistoryFoot: String { "full chart in History" }
     var batHistoryFootA11y: String { "Open History with the Battery chart" }
+    var privilegedTimedOut: String { "Touch ID didn’t respond within 30 s" }
+    var secGatekeeperError: String { "Could not turn on Gatekeeper" }
+    var secRestartRequired: String { "restart required" }
+    // MARK: Security page (REDESIGN-SECURITY)
+    func shortDateTime(_ d: Date) -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = .current
+        df.dateFormat = "MMM d, HH:mm"
+        return df.string(from: d)
+    }
+    var secSub: String { "protection, updates and crashes" }
+    func secTagOffCount(_ n: Int) -> String { "\(n) of 4 off" }
+    func secTagEnabling(_ p: SecurityProtection) -> String { p == .firewall ? "enabling firewall…" : "enabling Gatekeeper…" }
+    var secTagUpdates: String { "updates available" }
+    func secTagCrashes(_ n: Int) -> String { n == 1 ? "1 crash in 7 days" : "\(n) crashes in 7 days" }
+    func secTagOnCount(_ n: Int) -> String { "\(n) of 4 on" }
+    func secCaptionOn(_ n: Int) -> String { "\(n) of 4 on" }
+    func secCaptionEnabling(_ p: SecurityProtection) -> String { p == .firewall ? "· enabling firewall…" : "· enabling Gatekeeper…" }
+    var secValueOn: String { "on" }
+    var secValueOff: String { "off" }
+    var secValueEnabling: String { "Enabling…" }
+    var secNoteUnknown: String { "not determined" }
+    var secNoteTouchID: String { "Touch ID required" }
+    var secNoteWaitingTouchID: String { "waiting for Touch ID…" }
+    var secNoteFileVault: String { "password and recovery key needed" }
+    var secNoteFileVaultOpened: String { "System Settings opened" }
+    var secNoteSip: String { "can only be turned on in Recovery mode" }
+    var secOpenSettings: String { "Open Settings…" }
+    var secBannerTimeout: String { "Touch ID didn’t respond within 30 s." }
+    var secBannerCancelled: String { "Authorization cancelled." }
+    func secBannerFailed(_ p: SecurityProtection, _ detail: String) -> String {
+        "Could not turn on \(p == .firewall ? "the firewall" : "Gatekeeper")" + (detail.isEmpty ? "" : " (\(detail))") + "."
+    }
+    func secStillOff(_ p: SecurityProtection) -> String { p == .firewall ? "The firewall is still off." : "Gatekeeper is still off." }
+    func secEnableA11y(_ name: String) -> String { "Enable \(name) with Touch ID" }
+    var secOpenFileVaultA11y: String { "Open FileVault in System Settings" }
+    var secRefreshA11y: String { "Refresh protection, updates and crashes" }
+    var secUpdatesCaptionChecking: String { "checking…" }
+    var secUpdatesCaptionNever: String { "not checked" }
+    func secUpdatesCaptionAvailable(_ n: Int) -> String { "· \(n) available" }
+    var secCheckingUpdates: String { "Checking for updates…" }
+    var secUpdatesNone: String { "No macOS updates — the system is up to date." }
+    func secUpdatesAvailable(_ n: Int) -> String { n == 1 ? "1 update available." : "\(n) updates available." }
+    var secUpdatesRestart: String { "The macOS update requires a restart." }
+    var secUpdatesFailed: String { "Could not check for updates — press Refresh to try again." }
+    var secInstallA11y: String { "Open Software Update in System Settings to install" }
+    var secOpenSoftwareUpdateA11y: String { "Open Software Update in System Settings" }
+    var secCrashesTitle: String { "Crashes in 7 days" }
+    var secCrashesCaption: String { "own app and kernel panics" }
+    func secCrashesCaptionCount(_ n: Int) -> String { (n == 1 ? "1 crash" : "\(n) crashes") + " · own app and kernel panics" }
+    var secNoCrashes: String { "No crashes found" }
+    var secKernelPanic: String { "Kernel panic" }
+    func secCrashLastToday(_ t: String) -> String { "last today, \(t)" }
+    func secCrashDate(_ d: String) -> String { d }
+    var secCrashFootDefault: String { "Click a row to open the report in Console." }
+    func secCrashFootOpened(_ file: String) -> String { "Opened in Console: \(file)" }
+    var secOpenInConsole: String { "Open in Console" }
+    func secCrashRowA11y(_ name: String, _ count: String) -> String { "\(name), \(count) — open the report in Console" }
     func batMAh(_ s: String) -> String { "\(s) mAh" }
     func batMA(_ s: String) -> String { "\(s) mA" }
     var batConditionNormal: String { "Normal" }

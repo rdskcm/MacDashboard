@@ -70,6 +70,33 @@ enum VisualFixture {
             powerCycles: 1406, unsafeShutdowns: 31, dataUnitsRead: 80_664_062, dataUnitsWritten: 231_640_625,
             mediaErrors: 27, errorLogEntries: 112, criticalWarning: 1))
 
+    /// REDESIGN-SECURITY: sample updates for the Security page snapshot states (the fixture report keeps `updates = []`).
+    static let securityUpdates: [SoftwareUpdate] = [
+        SoftwareUpdate(label: "macOS Tahoe 26.1.1-25B90", title: "macOS Tahoe 26.1.1", version: "26.1.1",
+                       sizeBytes: 3_276_800 * 1024, restartRequired: true),
+        SoftwareUpdate(label: "Safari26.2-26.2", title: "Safari 26.2", version: "26.2",
+                       sizeBytes: 188_416 * 1024, restartRequired: false),
+    ]
+
+    /// REDESIGN-SECURITY: sample crash groups for the Security page snapshot states.
+    static func securityCrashes(home: String, now: Date) -> [CrashGroup] {
+        let cal = Calendar.current
+        func at(_ daysAgo: Int, _ hour: Int, _ minute: Int) -> Date {
+            let day = cal.date(byAdding: .day, value: -daysAgo, to: now) ?? now
+            return cal.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+        }
+        let user = home + "/Library/Logs/DiagnosticReports"
+        return [
+            CrashGroup(process: "MacDashboard", count: 2, directory: user, lastReportAt: at(0, 9, 41),
+                       newestReportPath: user + "/MacDashboard-2026-01-15-094112.ips"),
+            CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: "/Library/Logs/DiagnosticReports",
+                       lastReportAt: at(3, 22, 17),
+                       newestReportPath: "/Library/Logs/DiagnosticReports/panic-full-2026-01-12-221704.panic"),
+            CrashGroup(process: "Xcode", count: 1, directory: user, lastReportAt: at(5, 16, 5),
+                       newestReportPath: user + "/Xcode-2026-01-10-160512.ips"),
+        ]
+    }
+
     /// REDESIGN-STORAGE: the folder-count result the Storage page shows (home walk + the six System paths).
     /// `unreadable` = home folders the count could not read.
     static func folderSizes(unreadable: [String]? = nil) -> FolderSizes {
@@ -181,9 +208,12 @@ enum VisualFixture {
         report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
         report.tmDest = .some(nil)
         report.updates = []
-        report.updatesCheckedAt = nil
+        // REDESIGN-SECURITY: Security page — «checked 5 min ago» and one third-party crash row (no attention, not on the Home tile).
+        report.updatesCheckedAt = referenceDate.addingTimeInterval(-5 * 60)
         report.folderSizesCountedAt = nil
-        report.crashes = []
+        report.crashes = [CrashGroup(process: "Xcode", count: 1, directory: home + "/Library/Logs/DiagnosticReports",
+                                     lastReportAt: referenceDate.addingTimeInterval(-3 * 86_400 - 2 * 3600),
+                                     newestReportPath: home + "/Library/Logs/DiagnosticReports/Xcode-2026-01-12-083000.ips")]
         report.brewStatus = .installed(version: "Homebrew 4.6.0")
         report.brewOutdated = ["git", "node", "python@3.13"]
         // REDESIGN-HOME: the Home "You can" chips — local snapshots (Backups) and the Full Disk Access notice.

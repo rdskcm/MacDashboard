@@ -11,7 +11,13 @@ enum PrivilegedRunner {
         case success
         case cancelled
         case failed(String)
+        /// The child was killed after `authTimeout`; the user never answered the prompt.
+        case timedOut
     }
+
+    /// User decision: 30 s Touch ID budget, surfaced as its own outcome (`.timedOut`). Also the
+    /// osascript password-dialog budget.
+    static let authTimeout: TimeInterval = 30
 
     /// One child launch: absolute executable, argv without argv[0], timeout. Built by the
     /// pure `*Invocation` functions below and executed by `runProcess` — split so Checks can
@@ -23,7 +29,7 @@ enum PrivilegedRunner {
     }
 
     /// Exit code plus captured output of one `Invocation`; exit code -1 = launch failure or timeout.
-    struct ProcessResult: Equatable { let exitCode: Int32; let stderr: String; let stdout: String }
+    struct ProcessResult: Equatable { let exitCode: Int32; let stderr: String; let stdout: String; var timedOut = false }
 
     /// Runs `command` as root. Tries plain `sudo` first (Touch ID via pam_tid),
     /// then falls back to an osascript admin-privileges password dialog if `sudo`
@@ -40,6 +46,8 @@ enum PrivilegedRunner {
     static func run(_ command: String, executor: (Invocation) -> ProcessResult) -> Outcome {
         let sudoResult = executor(sudoInvocation(command))
         if sudoResult.exitCode == 0 { return .success }
+        // A timed-out Touch ID must not fall through to the password dialog.
+        if sudoResult.timedOut { return .timedOut }
 
         // The privileged command RAN and failed (or sudo timed out / could not launch).
         // Re-running the same failing command as root behind a password dialog just fails
@@ -50,6 +58,7 @@ enum PrivilegedRunner {
 
         let osaResult = executor(osascriptInvocation(command))
         if osaResult.exitCode == 0 { return .success }
+        if osaResult.timedOut { return .timedOut }
 
         if Self.isUserCancellation(exitCode: osaResult.exitCode, stderr: osaResult.stderr) {
             return .cancelled
@@ -62,13 +71,13 @@ enum PrivilegedRunner {
         // Absolute /bin/sh, never the bare name `sh`: sudo resolves a bare command
         // name through the CALLER's PATH (macOS sudoers sets no secure_path), and a
         // shell-launched build inherits group-writable prefixes like /opt/homebrew/bin.
-        Invocation(path: "/usr/bin/sudo", args: ["/bin/sh", "-c", command], timeout: 120)
+        Invocation(path: "/usr/bin/sudo", args: ["/bin/sh", "-c", command], timeout: authTimeout)
     }
 
     /// The admin-password fallback: `osascript -e 'do shell script "<command>" with administrator privileges'`.
     static func osascriptInvocation(_ command: String) -> Invocation {
         let script = "do shell script \"\(appleScriptEscaped(command))\" with administrator privileges"
-        return Invocation(path: "/usr/bin/osascript", args: ["-e", script], timeout: 120)
+        return Invocation(path: "/usr/bin/osascript", args: ["-e", script], timeout: authTimeout)
     }
 
     /// Body of an AppleScript string literal that decodes back to exactly `s`: backslashes are
@@ -190,7 +199,7 @@ enum PrivilegedRunner {
         _ = drainGroup.wait(timeout: .now() + 3)
 
         if killGate.winner == .timeout {
-            return ProcessResult(exitCode: -1, stderr: "timed out", stdout: "")
+            return ProcessResult(exitCode: -1, stderr: "timed out", stdout: "", timedOut: true)
         }
         let stdoutText = String(data: stdoutBox.value, encoding: .utf8) ?? ""
         let stderrText = String(data: stderrBox.value, encoding: .utf8) ?? ""

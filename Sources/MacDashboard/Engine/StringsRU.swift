@@ -537,6 +537,64 @@ struct StringsRU: AppStrings {
     var batHistoryNotEnough: String { "данных для тренда пока мало" }
     var batHistoryFoot: String { "полный график — в разделе «История»" }
     var batHistoryFootA11y: String { "Открыть «Историю» с графиком батареи" }
+    var privilegedTimedOut: String { "Touch ID не ответил за 30 с" }
+    var secGatekeeperError: String { "Не удалось включить Gatekeeper" }
+    var secRestartRequired: String { "нужна перезагрузка" }
+    // MARK: Security page (REDESIGN-SECURITY)
+    func shortDateTime(_ d: Date) -> String {
+        let c = Calendar.current.dateComponents([.month, .day, .hour, .minute], from: d)
+        let m = c.month ?? 1
+        let month = m == 5 ? "мая" : iphoneChartMonth(m) + "."
+        return "\(c.day ?? 1) \(month), " + String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+    }
+    var secSub: String { "защита, обновления и сбои" }
+    func secTagOffCount(_ n: Int) -> String { "выключено \(n) из 4" }
+    func secTagEnabling(_ p: SecurityProtection) -> String { p == .firewall ? "включаем брандмауэр…" : "включаем Gatekeeper…" }
+    var secTagUpdates: String { "есть обновления" }
+    func secTagCrashes(_ n: Int) -> String { "\(n) \(ruPlural(n, "сбой", "сбоя", "сбоев")) за 7 дней" }
+    func secTagOnCount(_ n: Int) -> String { "\(n) из 4 включены" }
+    func secCaptionOn(_ n: Int) -> String { "\(n) из 4 включены" }
+    func secCaptionEnabling(_ p: SecurityProtection) -> String { p == .firewall ? "· включаем брандмауэр…" : "· включаем Gatekeeper…" }
+    var secValueOn: String { "включён" }
+    var secValueOff: String { "выключен" }
+    var secValueEnabling: String { "Включение…" }
+    var secNoteUnknown: String { "не определено" }
+    var secNoteTouchID: String { "нужен Touch ID" }
+    var secNoteWaitingTouchID: String { "ждём Touch ID…" }
+    var secNoteFileVault: String { "нужны пароль и ключ восстановления" }
+    var secNoteFileVaultOpened: String { "открыты Системные настройки" }
+    var secNoteSip: String { "включается только в режиме восстановления" }
+    var secOpenSettings: String { "Открыть настройки…" }
+    var secBannerTimeout: String { "Touch ID не ответил за 30 с." }
+    var secBannerCancelled: String { "Авторизация отменена." }
+    func secBannerFailed(_ p: SecurityProtection, _ detail: String) -> String {
+        "Не удалось включить \(p == .firewall ? "брандмауэр" : "Gatekeeper")" + (detail.isEmpty ? "" : " (\(detail))") + "."
+    }
+    func secStillOff(_ p: SecurityProtection) -> String { p == .firewall ? "Брандмауэр по-прежнему выключен." : "Gatekeeper по-прежнему выключен." }
+    func secEnableA11y(_ name: String) -> String { "Включить \(name) через Touch ID" }
+    var secOpenFileVaultA11y: String { "Открыть FileVault в Системных настройках" }
+    var secRefreshA11y: String { "Обновить защиту, обновления и сбои" }
+    var secUpdatesCaptionChecking: String { "проверка…" }
+    var secUpdatesCaptionNever: String { "не проверялось" }
+    func secUpdatesCaptionAvailable(_ n: Int) -> String { "· \(n) доступно" }
+    var secCheckingUpdates: String { "Проверяем обновления…" }
+    var secUpdatesNone: String { "Обновлений macOS нет — система актуальна." }
+    func secUpdatesAvailable(_ n: Int) -> String { "Доступно \(n) \(ruPlural(n, "обновление", "обновления", "обновлений"))." }
+    var secUpdatesRestart: String { "Для macOS нужна перезагрузка." }
+    var secUpdatesFailed: String { "Не удалось проверить обновления — нажмите «Обновить»." }
+    var secInstallA11y: String { "Открыть «Обновление ПО» в Системных настройках для установки" }
+    var secOpenSoftwareUpdateA11y: String { "Открыть «Обновление ПО» в Системных настройках" }
+    var secCrashesTitle: String { "Сбои за 7 дней" }
+    var secCrashesCaption: String { "своё приложение и паники ядра" }
+    func secCrashesCaptionCount(_ n: Int) -> String { "\(n) \(ruPlural(n, "сбой", "сбоя", "сбоев")) · своё приложение и паники ядра" }
+    var secNoCrashes: String { "Сбоев не найдено" }
+    var secKernelPanic: String { "Паника ядра" }
+    func secCrashLastToday(_ t: String) -> String { "последний сегодня, \(t)" }
+    func secCrashDate(_ d: String) -> String { d }
+    var secCrashFootDefault: String { "Нажмите на строку, чтобы открыть отчёт в Console." }
+    func secCrashFootOpened(_ file: String) -> String { "Открыто в Console: \(file)" }
+    var secOpenInConsole: String { "Открыть в Console" }
+    func secCrashRowA11y(_ name: String, _ count: String) -> String { "\(name), \(count) — открыть отчёт в Console" }
     func batMAh(_ s: String) -> String { "\(s) мАч" }
     func batMA(_ s: String) -> String { "\(s) мА" }
     var batConditionNormal: String { "В норме" }

@@ -130,7 +130,7 @@ enum Assess {
                                              verb: verb(action), action: action)))
             }
             if sec.gatekeeper == false {
-                let action = AdviceAction.settingsPane(AdvicePanes.privacySecurity)
+                let action = AdviceAction.enableGatekeeper
                 let text = L.assessGatekeeperOff
                 pairs.append((Problem(sev: .serious, text: text, action: action),
                                AttentionItem(kind: .gatekeeperOff, sev: .serious, label: L.attnLabelGatekeeperOff,

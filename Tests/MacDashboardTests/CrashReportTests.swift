@@ -66,6 +66,11 @@ extension SerialTests {
                 #expect(groups.first { $0.process == "MacDashboard" }?.isPanic == false,
                       "crashGroups: .ips-only group is not a panic group")
                 #expect(!groups.contains { $0.process == "ancient" }, "crashGroups: file older than the window is dropped")
+                let diff = groups.first { $0.process == "diffscore" }
+                #expect(diff?.lastReportAt == now.addingTimeInterval(-3600),
+                      "crashGroups: lastReportAt is the max mtime of the group's files")
+                #expect(diff?.newestReportPath == userCrashDir + "/diffscore-2026-08-11-163444.ips",
+                      "crashGroups: newestReportPath = directory + / + name of the newest file")
                 #expect(RC.crashGroups(byDirectory: [(directory: userCrashDir, files: [("Kernel-2026-08-11-163444.panic", now)])], now: now)
                         .map { ($0.process, $0.count, $0.isPanic) }.first.map { $0 == ("Kernel", 1, true) } == true,
                       "crashGroups: lone kernel panic -> one panic group")
@@ -126,6 +131,9 @@ extension SerialTests {
                 #expect(RC.crashDedup(byDirectory: []).isEmpty, "crashDedup: no files -> []")
                 #expect(RC.crashGroups(byDirectory: dupByDir, now: now).first { $0.process == AppInfo.name }?.count == 1,
                       "crashGroups: a report present in both directories is counted once, not twice")
+                #expect(RC.crashGroups(byDirectory: dupByDir, now: now).first { $0.process == AppInfo.name }?.newestReportPath
+                        == userCrashDir + "/\(AppInfo.name)-2026-08-11-163444.ips",
+                      "crashGroups: the per-user copy's path wins when both directories list the same name")
 
                 // --- the shared predicate ---
                 #expect(RC.crashRaisesAttention(CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: systemCrashDir)),
