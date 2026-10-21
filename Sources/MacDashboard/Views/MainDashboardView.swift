@@ -128,13 +128,10 @@ struct MainDashboardView: View {
         .background(toolbarChrome)
     }
 
-    /// `DS3.bar` over the `.regularMaterial` blur backdrop, a 1 pt inner top rim (`rimMid`, the same
+    /// `DS3GlassBar` (material + `DS3.bar`, following Liquid Glass / Reduce Transparency), a 1 pt inner top rim (`rimMid`, the same
     /// fade-to-clear stroke the card sheen uses), a 1 pt bottom `line` and the `.header` shadow stack.
     private var toolbarChrome: some View {
-        ZStack {
-            Rectangle().fill(.regularMaterial)
-            Rectangle().fill(DS3.bar)
-        }
+        DS3GlassBar()
         .overlay(
             Rectangle()
                 .strokeBorder(

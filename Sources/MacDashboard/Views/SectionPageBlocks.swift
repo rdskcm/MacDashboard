@@ -44,12 +44,7 @@ struct SectionPageBar<Tag: View, Trailing: View>: View {
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 14)
-        .background {
-            ZStack {
-                Rectangle().fill(.regularMaterial)
-                Rectangle().fill(DS3.bar)
-            }
-        }
+        .background { DS3GlassBar() }
         .overlay(alignment: .bottom) { Rectangle().fill(DS3.line).frame(height: 1) }
     }
 

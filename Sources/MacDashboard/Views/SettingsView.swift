@@ -15,9 +15,13 @@ enum SettingsSection: Hashable {
 /// one call site (`SettingsView.languageCard`, Trap 2 / README §6.6: that card
 /// must carry no backdrop blur of its own, see its doc comment).
 private struct SolidCardSurface: ViewModifier {
+    /// CARD-GLASS-LEFTOVERS: solid card colour under Reduce Transparency, like `DSCardSurface` beside it (D6).
+    @Environment(GlassSettings.self) private var glass: GlassSettings?
+
     func body(content: Content) -> some View {
         content
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(DS.glass))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill((glass?.usesMaterial ?? true) ? DS.glass : DS3.glassTint(.solid)))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(DS.line, lineWidth: 1))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)

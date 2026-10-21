@@ -40,9 +40,11 @@ extension SerialTests {
                 if f.darkAlpha < prev.darkAlpha - 1e-9 || f.lightAlpha < prev.lightAlpha - 1e-9 { ok = false }
                 if f.darkAlpha < 0.50 - 1e-9 || f.darkAlpha > 0.90 + 1e-9 { ok = false }
                 if f.lightAlpha < 0.50 - 1e-9 || f.lightAlpha > 0.90 + 1e-9 { ok = false }
+                if f.barDarkAlpha < prev.barDarkAlpha - 1e-9 || f.barLightAlpha < prev.barLightAlpha - 1e-9 { ok = false }
+                if f.barDarkAlpha < 0.30 - 1e-9 || f.barDarkAlpha > 0.85 + 1e-9 { ok = false }
                 prev = f
             }
-            #expect(ok, "GlassTint: alphas are non-decreasing and within 0.50…0.90")
+            #expect(ok, "GlassTint: alphas are non-decreasing, cards within 0.50…0.90, bars within 0.30…0.85")
         }
 
         @Test func reduceTransparencyWins() {
@@ -51,6 +53,18 @@ extension SerialTests {
                 #expect(!f.usesMaterial && near(f.darkAlpha, 1) && near(f.lightAlpha, 1),
                         "GlassTint: Reduce Transparency wins at \(String(describing: t))")
             }
+        }
+
+        @Test func barStops() {
+            let d = GlassTint.fill(tintAmount: nil, reduceTransparency: false)
+            #expect(near(d.barDarkAlpha, 0.42) && near(d.barLightAlpha, 0.42), "GlassTint: default bar is 0.42 / 0.42")
+            let c = GlassTint.fill(tintAmount: 0, reduceTransparency: false)
+            #expect(near(c.barDarkAlpha, 0.30) && near(c.barLightAlpha, 0.30), "GlassTint: Clear bar is 0.30 / 0.30")
+            let t = GlassTint.fill(tintAmount: 1, reduceTransparency: false)
+            #expect(near(t.barDarkAlpha, 0.85) && near(t.barLightAlpha, 0.85), "GlassTint: Tinted bar is 0.85 / 0.85")
+            let rt = GlassTint.fill(tintAmount: 0.5, reduceTransparency: true)
+            #expect(near(rt.barDarkAlpha, 1) && near(rt.barLightAlpha, 1) && rt == .solid,
+                    "GlassTint: Reduce Transparency bar is opaque and the fill equals .solid")
         }
 
         @Test func parse() {
@@ -78,6 +92,7 @@ extension SerialTests {
             d.set(true, forKey: GlassTint.fixtureReduceTransparencyKey)
             g.refresh()
             #expect(!g.fill.usesMaterial, "GlassSettings: fixture RT key reaches the fill on refresh")
+            #expect(!g.usesMaterial, "GlassSettings: usesMaterial follows the fill")
         }
     }
 }

@@ -32,7 +32,7 @@ usage_error() { echo "usage error: $1" >&2; echo "$HELP" >&2; exit 64; }
 precondition_refused() { echo "REFUSED: $1" >&2; exit 65; }
 runtime_error() { echo "RUNTIME ERROR: $1" >&2; exit 70; }
 
-STATE_ORDER="main-dark main-glass-clear-dark main-glass-tinted-dark main-glass-rt-dark main-report-dark settings-general-dark settings-titlebar-hover-dark main-light main-glass-clear-light main-glass-tinted-light main-glass-rt-light main-report-light settings-general-light settings-titlebar-hover-light"
+STATE_ORDER="main-dark main-glass-clear-dark main-glass-tinted-dark main-glass-rt-dark main-report-dark settings-general-dark settings-glass-rt-dark settings-titlebar-hover-dark main-light main-glass-clear-light main-glass-tinted-light main-glass-rt-light main-report-light settings-general-light settings-glass-rt-light settings-titlebar-hover-light"
 
 # edge_inset_px is 0 by default (see README §5); only changed with measured
 # evidence, in a separate documented commit.
@@ -792,6 +792,13 @@ for mode in dark light; do
   sleep 1.5
   assert_key "$SET_ID" "settings-general-$mode"
   capture_state "settings-general-$mode" "$SET_ID"
+  # Settings cards under Reduce Transparency (fixture-only key, live via KVO; CARD-GLASS-LEFTOVERS).
+  defaults write "$BENCH_ID" visualReduceTransparency -bool true
+  sleep 1.5
+  assert_key "$SET_ID" "settings-glass-rt-$mode"
+  capture_state "settings-glass-rt-$mode" "$SET_ID"
+  defaults delete "$BENCH_ID" visualReduceTransparency >/dev/null 2>&1 || true
+  sleep 1.5
 
   THALF="$(awk -v t="$T" 'BEGIN{v=t/2; if(v<8)v=8; printf "%.2f", v}')"
   HOVER_X="$(awk -v x="$SETX" 'BEGIN{printf "%d", x+98}')"
