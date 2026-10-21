@@ -81,6 +81,7 @@ private func dsShadowNavy(_ opacity: Double) -> Color {
 /// app (delegated to by `CardBackgroundModifier` in SharedUI.swift). Rounded
 /// rect, native `.regularMaterial`, a 1 pt hairline border, a three-layer
 /// elevation shadow stack, and a top-edge highlight (the only hard edge).
+/// Under Reduce Transparency the fill is the solid card colour, not the material (CARD-GLASS-LEFTOVERS).
 private enum DSCardSurfaceTokens {
     // Elevation shadows (color = black; radius values are already the
     // blur/2 SwiftUI translation — SwiftUI shadows have no CSS-style spread).
@@ -92,12 +93,18 @@ private enum DSCardSurfaceTokens {
 }
 
 struct DSCardSurface: ViewModifier {
+    /// CARD-GLASS-LEFTOVERS: nil in offscreen renders (no injection) → material, the reference look. Only the
+    /// Reduce Transparency branch is read (`usesMaterial`), so the Liquid Glass slider never re-runs this body.
+    @Environment(GlassSettings.self) private var glass: GlassSettings?
+
     func body(content: Content) -> some View {
-        content
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.regularMaterial)
-            )
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        return content
+            .background {
+                // Under Reduce Transparency the material becomes the OS grey stand-in; draw the app's solid card
+                // colour instead (the same one the DS3 glass cards use, D5).
+                if glass?.usesMaterial ?? true { shape.fill(.regularMaterial) } else { shape.fill(DS3.glassTint(.solid)) }
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(DS.line, lineWidth: 1)

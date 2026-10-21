@@ -25,15 +25,25 @@ enum GlassTint {
     /// Tint opacity at slider 0 / pivot / 1. `mockup` is the IPHONE-DESIGN `glassStrong` value.
     static let dark = Stops(clear: 0.50, mockup: 0.70, tinted: 0.90)
     static let light = Stops(clear: 0.50, mockup: 0.66, tinted: 0.90)
+    /// CARD-GLASS-LEFTOVERS: the frosted bar (`DS3GlassBar`: main header, section-page bar, iPhone device header).
+    /// `mockup` is the IPHONE-DESIGN `DS3.bar` alpha. `tinted` sits near the solid end so the Reduce Transparency flip
+    /// macOS performs at the slider's Tinted stop moves the bar by about 4 levels, not 12 (D1).
+    static let barDark = Stops(clear: 0.30, mockup: 0.42, tinted: 0.85)
+    static let barLight = Stops(clear: 0.30, mockup: 0.42, tinted: 0.85)
 
     struct Fill: Equatable {
         /// false under Reduce Transparency: no `.regularMaterial`, the tint is opaque.
         let usesMaterial: Bool
         let darkAlpha: Double
         let lightAlpha: Double
+        /// Bar tint opacity (`DS3GlassBar`), from `barDark` / `barLight`; 1 under Reduce Transparency.
+        let barDarkAlpha: Double
+        let barLightAlpha: Double
 
         /// The default look (absent key, Reduce Transparency off) — what `DS3.glassStrong` draws.
         static let standard = GlassTint.fill(tintAmount: nil, reduceTransparency: false)
+        /// Reduce Transparency: no material, every alpha 1. `DSCardSurface` draws this colour under RT (D5).
+        static let solid = GlassTint.fill(tintAmount: nil, reduceTransparency: true)
     }
 
     /// A stored value as a slider position: numbers and numeric strings, clamped to 0…1; anything else (or NaN) is nil.
@@ -55,10 +65,12 @@ enum GlassTint {
     }
 
     static func fill(tintAmount: Double?, reduceTransparency: Bool) -> Fill {
-        if reduceTransparency { return Fill(usesMaterial: false, darkAlpha: 1, lightAlpha: 1) }
+        if reduceTransparency { return Fill(usesMaterial: false, darkAlpha: 1, lightAlpha: 1, barDarkAlpha: 1, barLightAlpha: 1) }
         return Fill(usesMaterial: true,
                     darkAlpha: alpha(dark, tintAmount: tintAmount),
-                    lightAlpha: alpha(light, tintAmount: tintAmount))
+                    lightAlpha: alpha(light, tintAmount: tintAmount),
+                    barDarkAlpha: alpha(barDark, tintAmount: tintAmount),
+                    barLightAlpha: alpha(barLight, tintAmount: tintAmount))
     }
 }
 
@@ -66,14 +78,22 @@ enum GlassTint {
 @MainActor @Observable
 final class GlassSettings {
     private(set) var fill: GlassTint.Fill
+    /// `fill.usesMaterial` as its own observed property: surfaces that only care about Reduce Transparency
+    /// (`DSCardSurface`, Settings' `SolidCardSurface`) read this and are not re-run by slider drags (D4).
+    private(set) var usesMaterial: Bool
 
     @ObservationIgnored private let fixture: Bool
     @ObservationIgnored private var keyObserver: DefaultsKeyObserver?
+    /// Never removed, by design: `GlassSettings` is created once in `MacDashboardApp.init` and lives as long as the
+    /// process, so removal could only happen at exit. Registered only when `fixture == false`, so the test instances
+    /// (`GlassSettings(fixture: true)`) register no workspace observer. `DefaultsKeyObserver` removes its KVO in deinit.
     @ObservationIgnored private var workspaceToken: NSObjectProtocol?
 
     init(fixture: Bool = VisualFixture.isRequested) {
         self.fixture = fixture
-        self.fill = GlassSettings.read(fixture: fixture)
+        let initial = GlassSettings.read(fixture: fixture)
+        self.fill = initial
+        self.usesMaterial = initial.usesMaterial
         let keys = fixture
             ? [GlassTint.fixtureTintKey, GlassTint.fixtureReduceTransparencyKey]
             : [GlassTint.systemKey]
@@ -94,6 +114,7 @@ final class GlassSettings {
     func refresh() {
         let new = GlassSettings.read(fixture: fixture)
         if new != fill { fill = new }
+        if new.usesMaterial != usesMaterial { usesMaterial = new.usesMaterial }
     }
 
     private static func read(fixture: Bool) -> GlassTint.Fill {

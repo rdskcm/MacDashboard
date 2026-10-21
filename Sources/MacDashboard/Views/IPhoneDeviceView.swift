@@ -50,12 +50,7 @@ struct IPhoneDeviceView: View {
         .padding(.horizontal, 28)
         .padding(.top, 16)
         .padding(.bottom, 14)
-        .background {
-            ZStack {
-                Rectangle().fill(.regularMaterial)
-                Rectangle().fill(DS3.bar)
-            }
-        }
+        .background { DS3GlassBar() }
         .overlay(alignment: .bottom) { Rectangle().fill(DS3.line).frame(height: 1) }
     }
 

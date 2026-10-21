@@ -227,6 +227,22 @@ private struct DS3GlassCard: ViewModifier {
     }
 }
 
+/// CARD-GLASS-LEFTOVERS: the frosted bar surface (main header, `SectionPageBar`, `IPhoneDeviceView.header`): material
+/// plus `DS3.bar`, following the Liquid Glass slider and Reduce Transparency through the same `GlassSettings` as
+/// `DS3GlassCard` (bar stops `GlassTint.barDark` / `barLight`). Under Reduce Transparency: no material, opaque bar
+/// colour. A View, not a modifier: the header stacks its own rim, line and shadow on it, and those stay at the call sites.
+struct DS3GlassBar: View {
+    @Environment(GlassSettings.self) private var glass: GlassSettings?
+
+    var body: some View {
+        let fill = glass?.fill ?? .standard
+        ZStack {
+            if fill.usesMaterial { Rectangle().fill(.regularMaterial) }
+            Rectangle().fill(DS3.barTint(fill))
+        }
+    }
+}
+
 // MARK: - Rim
 
 /// Pointer-following edge highlight, dark appearance only. The gradient is a pre-rendered image rotated by a

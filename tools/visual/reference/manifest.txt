@@ -9,7 +9,9 @@ settings-titlebar-hover-dark	2026-10-20	27.0.1	27	fbeabcf-dirty
 main-light	2026-10-20	27.0.1	27	fbeabcf-dirty
 main-glass-clear-light	2026-10-20	27.0.1	27	fbeabcf-dirty
 main-glass-tinted-light	2026-10-20	27.0.1	27	fbeabcf-dirty
-main-glass-rt-light	2026-10-20	27.0.1	27	fbeabcf-dirty
+main-glass-rt-light	2026-10-21	27.0.1	27	b38d611-dirty
 main-report-light	2026-10-20	27.0.1	27	fbeabcf-dirty
 settings-general-light	2026-10-20	27.0.1	27	fbeabcf-dirty
 settings-titlebar-hover-light	2026-10-20	27.0.1	27	fbeabcf-dirty
+settings-glass-rt-dark	2026-10-21	27.0.1	27	b38d611-dirty
+settings-glass-rt-light	2026-10-21	27.0.1	27	b38d611-dirty

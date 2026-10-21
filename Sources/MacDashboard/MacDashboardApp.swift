@@ -43,7 +43,7 @@ struct MacDashboardApp: App {
         // (`.fullSizeContentView`) breaks the fixed-size 680×420 layout — see the
         // comment in `VisualEffectBackground.swift`.
         Settings {
-            SettingsView(model: model)
+            SettingsView(model: model).environment(glass)
         }
     }
 }
