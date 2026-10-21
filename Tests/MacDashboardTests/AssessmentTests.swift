@@ -203,7 +203,7 @@ extension SerialTests {
 
             do {
                 var report = FullReport()
-                report.updates = ["a", "b"]
+                report.updates = [upd("a"), upd("b")]
                 let a = Assess.assess(report: report, live: LiveSnapshot())
                 #expect(a.problems.contains { $0.text.contains("2 шт.") }, "assess updates [a,b]: warn '...2 шт.'")
             }
@@ -336,7 +336,7 @@ extension SerialTests {
 
             do {
                 var report = FullReport()
-                report.updates = ["u1"]
+                report.updates = [upd("u1")]
                 let a = Assess.assess(report: report, live: diskLive(pct: 0.94))
                 #expect(a.summaryText == "Замечаний: \(a.problems.count)", "assess summary: 'Замечаний: N' text")
                 #expect(a.summarySev == a.problems.first?.sev, "assess summary: summarySev == worst")
@@ -366,6 +366,11 @@ extension SerialTests {
                 let a = Assess.assess(report: report, live: LiveSnapshot())
                 #expect(a.problems.first { $0.text.contains("Файрвол") }?.action == .enableFirewall,
                       "assess advice: firewall==false ⇒ action == .enableFirewall")
+                var gkReport = FullReport()
+                gkReport.security = SecurityState(fileVault: true, gatekeeper: false, sip: true, firewall: true)
+                let gk = Assess.assess(report: gkReport, live: LiveSnapshot())
+                #expect(gk.problems.first { $0.text.contains("Gatekeeper") }?.action == .enableGatekeeper,
+                      "assess advice: gatekeeper==false ⇒ action == .enableGatekeeper")
                 let sipProblem = a.problems.first { $0.text.contains("SIP") }
                 #expect(sipProblem != nil && sipProblem?.action == nil,
                       "assess advice: sip==false ⇒ problem present with action == nil")
@@ -397,7 +402,7 @@ extension SerialTests {
             }
             do {
                 var report = FullReport()
-                report.updates = ["u1", "u2"]
+                report.updates = [upd("u1"), upd("u2")]
                 let a = Assess.assess(report: report, live: LiveSnapshot())
                 #expect(a.problems.first { $0.text.contains("2 шт.") }?.action == .settingsPane(AdvicePanes.softwareUpdate),
                       "assess advice: updates available ⇒ action == .settingsPane(softwareUpdate)")
@@ -412,4 +417,8 @@ extension SerialTests {
             }
         }
     }
+}
+
+private func upd(_ label: String) -> SoftwareUpdate {
+    SoftwareUpdate(label: label, title: label, version: nil, sizeBytes: nil, restartRequired: false)
 }

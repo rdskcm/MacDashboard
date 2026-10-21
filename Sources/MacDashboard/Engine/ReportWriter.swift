@@ -390,9 +390,15 @@ enum ReportWriter {
 
     // MARK: - ОБНОВЛЕНИЯ macOS
 
-    private static func renderUpdates(_ updates: [String]?, checkedAt: Date?) -> [String] {
+    private static func renderUpdates(_ updates: [SoftwareUpdate]?, checkedAt: Date?) -> [String] {
         guard let u = updates else { return [L.reportNotChecked] }
-        var lines = u.isEmpty ? ["No new software available."] : u
+        var lines = u.isEmpty ? ["No new software available."] : u.map { item in
+            var line = item.title
+            if let v = item.version, !item.title.contains(v) { line += " \(v)" }
+            if let size = item.sizeBytes { line += " — \(fmtBytes(size))" }
+            if item.restartRequired { line += ", " + L.secRestartRequired }
+            return line
+        }
         if let at = checkedAt { lines.append(L.reportUpdatesCheckedAt(reportUpdatedTimeString(at))) }
         return lines
     }

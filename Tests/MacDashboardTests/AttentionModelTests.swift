@@ -9,7 +9,7 @@ import Testing
 private func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
     var report = FullReport()
     report.security = SecurityState(fileVault: false, gatekeeper: false, sip: false, firewall: false)
-    report.updates = ["u1"]
+    report.updates = [upd("u1")]
     report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
     report.tmDest = .some(.none)
     report.smart = [
@@ -48,6 +48,8 @@ private func attnMegaBadFixture() -> (FullReport, LiveSnapshot) {
 extension SerialTests {
     struct AttentionModelTests {
         @Test func attentionModel() async {
+            #expect(AttentionModel.verb(for: .enableGatekeeper, lang: .en) == "Enable",
+                  "AttentionModel.verb(.enableGatekeeper) == 'Enable'")
             // =====================================================================
             // MARK: - AttentionModel
             // =====================================================================
@@ -124,7 +126,7 @@ extension SerialTests {
                 r2.updates = []; r2.crashes = nil
                 #expect(!QuietState.quiet(report: r2).updatesQuiet, "QuietState: crashes=nil -> updatesQuiet false")
 
-                r2.updates = ["u1"]; r2.crashes = []
+                r2.updates = [upd("u1")]; r2.crashes = []
                 #expect(!QuietState.quiet(report: r2).updatesQuiet, "QuietState: updates non-empty -> updatesQuiet false")
             }
 
@@ -240,7 +242,7 @@ extension SerialTests {
                 r2.updates = []; r2.crashes = []
                 #expect(QuietState.quiet(report: r2).updates == .quiet, "QuietState: updates=[] & crashes=[] -> .quiet")
 
-                r2.updates = ["u1", "u2"]; r2.crashes = []
+                r2.updates = [upd("u1"), upd("u2")]; r2.crashes = []
                 do {
                     let qs = QuietState.quiet(report: r2)
                     #expect(qs.updates == .loud, "QuietState: 2 updates + 0 crashes -> .loud")
@@ -256,4 +258,8 @@ extension SerialTests {
             }
         }
     }
+}
+
+private func upd(_ label: String) -> SoftwareUpdate {
+    SoftwareUpdate(label: label, title: label, version: nil, sizeBytes: nil, restartRequired: false)
 }

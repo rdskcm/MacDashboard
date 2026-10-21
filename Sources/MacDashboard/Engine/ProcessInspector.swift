@@ -105,7 +105,7 @@ enum ProcessInspector {
             switch privileged(cmd) {
             case .success: return .sent
             case .cancelled: return .cancelled
-            case .failed: return .failed
+            case .failed, .timedOut: return .failed
             }
         }
     }

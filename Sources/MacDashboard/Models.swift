@@ -98,6 +98,17 @@ struct SecurityState: Equatable {
     var fileVault: Bool?; var gatekeeper: Bool?; var sip: Bool?; var firewall: Bool?
 }
 
+/// One pending macOS update as `softwareupdate -l` lists it (REDESIGN-SECURITY). `label` is the
+/// `* Label:` value (what `softwareupdate -i` would take); the rest comes from the `Title:` line.
+struct SoftwareUpdate: Codable, Equatable, Sendable, Identifiable {
+    var label: String
+    var title: String
+    var version: String?
+    var sizeBytes: Int64?        // nil = size not stated or unparsable
+    var restartRequired: Bool
+    var id: String { label }
+}
+
 /// Why the last-backup date could not be obtained. A case, never a localized
 /// sentence: the Time Machine card used to detect "no Full Disk Access" by comparing
 /// the stored string against the current language's translation, so right after a
@@ -177,11 +188,15 @@ struct EnergySettings: Equatable { var battery: [(String, String)]; var ac: [(St
 /// raise attention whatever process logged them. `directory` is the absolute path
 /// of the DiagnosticReports directory the group's first surviving report was
 /// listed in (V2-CRASH-REVEAL); it is what the reveal action opens.
+/// `lastReportAt` is the mtime of the group's newest surviving report and
+/// `newestReportPath` its absolute path (REDESIGN-SECURITY; what the page row opens in Console).
 struct CrashGroup: Identifiable, Equatable {
     var process: String         // "diffscore"
     var count: Int              // reports from that process inside the window
     var isPanic: Bool = false   // at least one of them a kernel panic (.panic)
     var directory: String       // "/Library/Logs/DiagnosticReports" — where its first report was found
+    var lastReportAt: Date? = nil       // mtime of the newest surviving report of the group
+    var newestReportPath: String? = nil // absolute path of that report
     var id: String { process }
 }
 
@@ -216,7 +231,7 @@ struct FullReport {
     var crashes: [CrashGroup]?          // grouped, ≤7 days old (V2-CRASH-SIGNAL)
     var brewStatus: BrewStatus?          // nil = not checked yet
     var brewOutdated: [String]?         // [] = none outdated; nil with brewStatus .installed = `brew outdated` failed (BREW-OUTDATED-FAIL)
-    var updates: [String]?              // pending macOS updates ([] = up to date)
+    var updates: [SoftwareUpdate]?    // pending macOS updates ([] = up to date)
     var updatesCheckedAt: Date?          // when the shown `updates` value was obtained (cache); nil = never checked
     var updatesCheckDuration: TimeInterval?  // wall time of the background check that produced it
     var folderSizesCountedAt: Date?            // when the shown homeDirs/serviceDirs were counted (cache); nil = never

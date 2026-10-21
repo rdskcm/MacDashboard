@@ -35,6 +35,17 @@ enum AdviceActionRunner {
             }
         }
     }
+    /// REDESIGN-SECURITY D5: opens a DiagnosticReports file in Console (bundle lookup, never a hard-coded path);
+    /// without a Console bundle the system's default handler for .ips/.panic opens it.
+    static func openInConsole(_ path: String) {
+        let file = URL(fileURLWithPath: path)
+        guard let console = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Console") else {
+            NSWorkspace.shared.open(file); return
+        }
+        NSWorkspace.shared.open([file], withApplicationAt: console, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            if let error { NSLog("[MacDashboard] openInConsole failed for %@: %@", path, error.localizedDescription) }
+        }
+    }
     /// Reveals `path` in Finder. Regular directories are opened directly (users expect
     /// the folder itself, not its parent with the folder selected); files, missing paths,
     /// and file packages (bundles, .rtfd, etc.) use "select in enclosing folder" instead.

@@ -31,6 +31,11 @@ extension SerialTests {
             #expect(d1.assessment.items.count == 5, "VisualFixture: 5 attention items (got \(d1.assessment.items.count))")
             #expect(d1.assessment.capsules.count == 4, "VisualFixture: 4 tip capsules (got \(d1.assessment.capsules.count))")
 
+            // --- REDESIGN-SECURITY: the Security page fixture facts (Home-invisible: the kinds above are unchanged) ---
+            #expect(d1.report.crashes?.map(\.process) == ["Xcode"], "VisualFixture: one third-party crash group")
+            #expect(d1.report.updatesCheckedAt == VisualFixture.referenceDate.addingTimeInterval(-300),
+                  "VisualFixture: updates checked 5 min before the reference date")
+
             // --- VISUAL-HARNESS-STALE: fixed, fresh Claude backup ---
             let expectedBackup = ClaudeBackupStatus.lastSuccess(VisualFixture.referenceDate.addingTimeInterval(-2 * 3600))
             #expect(d1.claudeBackup == expectedBackup, "VisualFixture: claudeBackup == lastSuccess(referenceDate - 2 h) (got \(d1.claudeBackup))")

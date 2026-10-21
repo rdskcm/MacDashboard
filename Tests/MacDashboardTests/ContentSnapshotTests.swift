@@ -252,6 +252,22 @@ extension SerialTests {
                 s.fail(.noReading)
                 return s
             }()) }
+            // REDESIGN-SECURITY: Security page states. Fixture = FV/GK/SIP on, firewall off, no updates (checked 5 min ago), one Xcode crash.
+            let secHome = FileManager.default.homeDirectoryForCurrentUser.path
+            @MainActor func security(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
+            let secFirewallOff = security()
+            let secAllOn = security { $0.report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true); $0.report.crashes = [] }
+            let secEnabling = security { $0.applyFixtureSecurity(action: .enabling(.firewall)) }
+            let secTimeout = security { $0.applyFixtureSecurity(action: .failed(.firewall, .timedOut)) }
+            let secCancelled = security { $0.report.security = SecurityState(fileVault: true, gatekeeper: false, sip: true, firewall: true); $0.applyFixtureSecurity(action: .failed(.gatekeeper, .cancelled)) }
+            let secOffStates = security { $0.report.security = SecurityState(fileVault: false, gatekeeper: true, sip: false, firewall: true) }
+            let secUnknown = security { $0.report.security = SecurityState() }
+            let secCollecting = security { $0.report.security = nil; $0.report.crashes = nil }
+            let secUpdates = security { $0.report.updates = VisualFixture.securityUpdates }
+            let secChecking = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil; $0.applyFixtureSecurity(action: .idle, checkingUpdates: true) }
+            let secCheckFailed = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil }
+            let secCrashes = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef) }
+            let secRefreshing = security { $0.applyFixtureSecurity(action: .idle, refreshing: true) }
             let fixtureDays = m.history.mac_history
             let historyNoDays = fixtureHistory([])
             let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -457,6 +473,43 @@ extension SerialTests {
                 }
                 run.snap("content-battery-bars", mode, width: 1150) {
                     VStack(spacing: 12) { BatteryPageBar(model: batWorn) {}; BatteryPageBar(model: batNormal) {}; BatteryPageBar(model: batService) {}; BatteryPageBar(model: batReading) {}; BatteryPageBar(model: batFailedSaved) {} }
+                }
+                run.snap("content-security-firewall-off", mode, width: 1094) {
+                    VStack(spacing: 16) { SecurityProtectionCard(model: secFirewallOff, narrow: false); SecurityUpdatesCard(model: secFirewallOff); SecurityCrashesCard(model: secFirewallOff) }
+                }
+                run.snap("content-security-all-on", mode, width: 1094) {
+                    VStack(spacing: 16) { SecurityProtectionCard(model: secAllOn, narrow: false); SecurityCrashesCard(model: secAllOn) }
+                }
+                run.snap("content-security-enabling", mode, width: 1094) {
+                    SecurityProtectionCard(model: secEnabling, narrow: false)
+                }
+                run.snap("content-security-banners", mode, width: 1094) {
+                    VStack(spacing: 16) { SecurityProtectionCard(model: secTimeout, narrow: false); SecurityProtectionCard(model: secCancelled, narrow: false) }
+                }
+                run.snap("content-security-off-states", mode, width: 1094) {
+                    SecurityProtectionCard(model: secOffStates, narrow: false, initialFileVaultOpened: true)
+                }
+                run.snap("content-security-unknown", mode, width: 1094) {
+                    VStack(spacing: 16) { SecurityProtectionCard(model: secUnknown, narrow: false); SecurityProtectionCard(model: secCollecting, narrow: false); SecurityCrashesCard(model: secCollecting) }
+                }
+                run.snap("content-security-updates", mode, width: 1094) {
+                    VStack(spacing: 16) { SecurityUpdatesCard(model: secUpdates); SecurityUpdatesCard(model: secChecking); SecurityUpdatesCard(model: secCheckFailed) }
+                }
+                run.snap("content-security-crashes", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SecurityCrashesCard(model: secCrashes)
+                        SecurityCrashesCard(model: secCrashes, initialOpenedReport: secHome + "/Library/Logs/DiagnosticReports/MacDashboard-2026-01-15-094112.ips")
+                    }
+                }
+                run.snap("content-security-narrow", mode, width: 904) {
+                    SecurityProtectionCard(model: secFirewallOff, narrow: true)
+                }
+                run.snap("content-security-bars", mode, width: 1150) {
+                    VStack(spacing: 12) {
+                        SecurityPageBar(model: secAllOn) {}; SecurityPageBar(model: secFirewallOff) {}; SecurityPageBar(model: secEnabling) {}
+                        SecurityPageBar(model: secOffStates) {}; SecurityPageBar(model: secUpdates) {}; SecurityPageBar(model: secCrashes) {}
+                        SecurityPageBar(model: secCollecting) {}; SecurityPageBar(model: secRefreshing) {}
+                    }
                 }
                 run.snap("content-claude-backup", mode, width: 589) {
                     ClaudeBackupCard(model: m)

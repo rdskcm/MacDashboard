@@ -309,6 +309,8 @@ final class IPhoneModel {
             break
         case .failed(let msg):
             restartError = L.iphoneRestartFailed(msg)
+        case .timedOut:
+            restartError = L.iphoneRestartFailed(L.privilegedTimedOut)
         }
         return outcome
     }

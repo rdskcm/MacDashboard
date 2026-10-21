@@ -28,7 +28,7 @@ enum CollectTrigger: Sendable, Equatable {
 /// Persisted result of the last SUCCESSFUL `softwareupdate -l`
 /// (~/Library/Application Support/MacDashboard/updates_cache.json).
 struct UpdatesCache: Codable, Equatable {
-    var items: [String]          // [] = up to date
+    var items: [SoftwareUpdate]  // [] = up to date
     var checkedAt: Date
     var durationSeconds: Double
 }
@@ -270,22 +270,26 @@ final class ReportCollector {
     static func crashGroups(byDirectory: [CrashDirectoryListing], now: Date,
                             window: TimeInterval = crashAgeWindow,
                             maxGroups: Int = crashMaxGroups) -> [CrashGroup] {
-        var acc: [String: (count: Int, isPanic: Bool, directory: String)] = [:]
+        var acc: [String: (count: Int, isPanic: Bool, directory: String, latest: (mtime: Date, path: String))] = [:]
         for f in crashDedup(byDirectory: byDirectory)
             where crashIsProcessCrash(from: f.name)
                   && isCrashRecent(mtime: f.mtime, now: now, window: window) {
             let name = crashProcessName(from: f.name)
+            let path = (f.directory as NSString).appendingPathComponent(f.name)
             if var prev = acc[name] {
                 prev.count += 1
                 prev.isPanic = prev.isPanic || crashIsPanic(from: f.name)
+                if f.mtime > prev.latest.mtime { prev.latest = (mtime: f.mtime, path: path) }
                 acc[name] = prev                      // directory: first surviving report wins
             } else {
-                acc[name] = (count: 1, isPanic: crashIsPanic(from: f.name), directory: f.directory)
+                acc[name] = (count: 1, isPanic: crashIsPanic(from: f.name), directory: f.directory,
+                             latest: (mtime: f.mtime, path: path))
             }
         }
         let sorted = acc
             .map { CrashGroup(process: $0.key, count: $0.value.count,
-                              isPanic: $0.value.isPanic, directory: $0.value.directory) }
+                              isPanic: $0.value.isPanic, directory: $0.value.directory,
+                              lastReportAt: $0.value.latest.mtime, newestReportPath: $0.value.latest.path) }
             .sorted {
                 if $0.count != $1.count { return $0.count > $1.count }
                 return $0.process < $1.process
@@ -613,11 +617,15 @@ final class ReportCollector {
 
     // MARK: - crashes (FileManager, no shell)
 
-    private func collectCrashes() -> Outcome {
+    func collectCrashGroups() -> [CrashGroup] {
         let byDirectory = Self.crashReportDirectories.map {
             (directory: $0.path, files: Self.crashFiles(in: $0))
         }
-        let groups = Self.crashGroups(byDirectory: byDirectory, now: Date())
+        return Self.crashGroups(byDirectory: byDirectory, now: Date())
+    }
+
+    private func collectCrashes() -> Outcome {
+        let groups = collectCrashGroups()
         return Outcome(section: .crashes) { $0.crashes = groups }
     }
 
@@ -1241,18 +1249,68 @@ final class ReportCollector {
 
     // MARK: - macOS updates (background check, not part of the pass)
 
-    /// Pure (Checks-tested). Labels found => labels; "no new software available" on stdout OR
+    /// Pure (Checks-tested). Labels found => items; "no new software available" on stdout OR
     /// stderr (softwareupdate prints it to stderr) => []; anything else (timeout, launch failure,
     /// network error, unrecognised text) => nil = the check failed, never "up to date".
-    static func parseSoftwareUpdate(_ o: CommandOutcome) -> [String]? {
+    /// A `* Label:` line opens an item; the next `Title:` line fills it (REDESIGN-SECURITY).
+    static func parseSoftwareUpdate(_ o: CommandOutcome) -> [SoftwareUpdate]? {
         guard let out = o.text else { return nil }
-        let labels = out.components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { $0.hasPrefix("* Label:") }
-            .map { $0.replacingOccurrences(of: "* Label:", with: "").trimmingCharacters(in: .whitespaces) }
-        if !labels.isEmpty { return labels }
+        var items: [SoftwareUpdate] = []
+        var open = false
+        for raw in out.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("* Label:") {
+                let label = line.replacingOccurrences(of: "* Label:", with: "").trimmingCharacters(in: .whitespaces)
+                items.append(SoftwareUpdate(label: label, title: label, version: nil, sizeBytes: nil, restartRequired: false))
+                open = true
+            } else if open, line.hasPrefix("Title:") {
+                let p = parseSoftwareUpdateTitleLine(line)
+                items[items.count - 1].title = p.title ?? items[items.count - 1].label
+                items[items.count - 1].version = p.version
+                items[items.count - 1].sizeBytes = p.sizeBytes
+                items[items.count - 1].restartRequired = p.restart
+                open = false
+            }
+        }
+        if !items.isEmpty { return items }
         if (out + "\n" + o.stderrHead).lowercased().contains("no new software available") { return [] }
         return nil
+    }
+
+    /// Pure. `Title: macOS Tahoe 26.1.1, Version: 26.1.1, Size: 3276800KiB, Recommended: YES, Action: restart,`
+    /// -> fields split on ", " then on the first ": ". Size digits with unit K/KiB (x1024), M/MiB (x1 048 576),
+    /// G/GiB (x1 073 741 824), none (bytes); any other unit -> nil. Restart iff `Action` lowercased == "restart".
+    static func parseSoftwareUpdateTitleLine(_ line: String) -> (title: String?, version: String?, sizeBytes: Int64?, restart: Bool) {
+        var s = line.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("Title:") { s = String(s.dropFirst("Title:".count)).trimmingCharacters(in: .whitespaces) }
+        let fields = s.components(separatedBy: ", ")
+        let first = fields.first?.trimmingCharacters(in: .whitespaces) ?? ""
+        let title: String? = first.isEmpty ? nil : first
+        var version: String?; var size: Int64?; var restart = false
+        for f in fields.dropFirst() {
+            guard let r = f.range(of: ": ") else { continue }
+            let key = f[..<r.lowerBound].trimmingCharacters(in: .whitespaces)
+            let val = f[r.upperBound...].trimmingCharacters(in: CharacterSet(charactersIn: ", ").union(.whitespaces))
+            switch key {
+            case "Version": version = val.isEmpty ? nil : val
+            case "Size": size = parseUpdateSize(val)
+            case "Action": restart = val.lowercased() == "restart"
+            default: break
+            }
+        }
+        return (title, version, size, restart)
+    }
+
+    private static func parseUpdateSize(_ v: String) -> Int64? {
+        let digits = v.prefix { $0.isNumber }
+        guard !digits.isEmpty, let n = Int64(digits) else { return nil }
+        switch v.dropFirst(digits.count).trimmingCharacters(in: .whitespaces) {
+        case "": return n
+        case "K", "KiB": return n * 1024
+        case "M", "MiB": return n * 1_048_576
+        case "G", "GiB": return n * 1_073_741_824
+        default: return nil
+        }
     }
 
     /// One background macOS update check (COLLECT-FASTPATH). nil = failed; the caller keeps its cache.

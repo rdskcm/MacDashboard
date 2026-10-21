@@ -93,7 +93,7 @@ extension SerialTests {
             let cmd = PR.removeCommand(paths: ["/Library/LaunchAgents/it's \"q\".plist"])
 
             // --- Builders ---
-            #expect(PR.sudoInvocation("x") == PR.Invocation(path: "/usr/bin/sudo", args: ["/bin/sh", "-c", "x"], timeout: 120),
+            #expect(PR.sudoInvocation("x") == PR.Invocation(path: "/usr/bin/sudo", args: ["/bin/sh", "-c", "x"], timeout: 30),
                   "PrivilegedRunner: [sudoInvocation] fixed shape")
             for (label, v) in prCorpus {
                 #expect(PR.sudoInvocation(v).args == ["/bin/sh", "-c", v],
@@ -101,7 +101,7 @@ extension SerialTests {
             }
             #expect(PR.osascriptInvocation("echo \"hi\"") == PR.Invocation(
                     path: "/usr/bin/osascript",
-                    args: ["-e", "do shell script \"echo \\\"hi\\\"\" with administrator privileges"], timeout: 120),
+                    args: ["-e", "do shell script \"echo \\\"hi\\\"\" with administrator privileges"], timeout: 30),
                   "PrivilegedRunner: [osascriptInvocation] double quotes")
             #expect(PR.osascriptInvocation("a\\b").args == ["-e", "do shell script \"a\\\\b\" with administrator privileges"],
                   "PrivilegedRunner: [osascriptInvocation backslash]")
@@ -193,6 +193,19 @@ extension SerialTests {
                 ("P15 200-char cap", [R(2, String(repeating: "x", count: 250), "")],
                  .failed(String(repeating: "x", count: 200)), onlySudo),
             ]
+            // REDESIGN-SECURITY: a timed-out prompt is its own outcome and never reaches the password dialog.
+            let tmo = PR.ProcessResult(exitCode: -1, stderr: "timed out", stdout: "", timedOut: true)
+            let timeoutFlows: [(String, [PR.ProcessResult], PR.Outcome, [PR.Invocation])] = [
+                ("P17 sudo timed out", [tmo], .timedOut, onlySudo),
+                ("P18 sudo-own, osascript timed out", [sudoOwn, tmo], .timedOut, both),
+            ]
+            for (name, scripted, outcome, calls) in timeoutFlows {
+                let fake = PRFakeExecutor(scripted)
+                #expect(PR.run(cmd, executor: fake.execute) == outcome, "PrivilegedRunner: [flow] \(name) outcome")
+                #expect(fake.calls == calls, "PrivilegedRunner: [flow] \(name) calls")
+            }
+            #expect(PR.sudoInvocation("x").timeout == 30 && PR.osascriptInvocation("x").timeout == 30,
+                  "PrivilegedRunner: [authTimeout] both invocations 30 s")
             for (name, scripted, outcome, calls) in flows {
                 let fake = PRFakeExecutor(scripted)
                 let got = PR.run(cmd, executor: fake.execute)
@@ -227,7 +240,7 @@ extension SerialTests {
             do {
                 let t0 = Date()
                 let e6 = PR.runProcess(.init(path: "/bin/sleep", args: ["5"], timeout: 0.3))
-                #expect(e6 == R(-1, "timed out", ""), "PrivilegedRunner: [runProcess timeout] E6 result")
+                #expect(e6 == PR.ProcessResult(exitCode: -1, stderr: "timed out", stdout: "", timedOut: true), "PrivilegedRunner: [runProcess timeout] E6 result")
                 #expect(Date().timeIntervalSince(t0) < 3, "PrivilegedRunner: [runProcess timeout] E6 wall time")
             }
             for (label, v) in prCorpus {

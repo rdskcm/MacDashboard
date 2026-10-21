@@ -208,7 +208,7 @@ enum HomeModel {
         case .updates:
             let n = report.updates?.count ?? 0
             (section, focus) = (.security, .updates)
-            (object, state, verb, tag) = (updateObject(report.updates),
+            (object, state, verb, tag) = (updateObject(report.updates?.map(\.label)),
                                           n == 1 ? L.homeStateUpdateAvailable : L.homeStateUpdatesAvailable(n),
                                           L.commonInstall, L.homeTagUpdateAvailable)
         case .swapHigh:

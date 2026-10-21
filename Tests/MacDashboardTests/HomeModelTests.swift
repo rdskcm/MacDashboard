@@ -7,7 +7,7 @@ import Testing
 private func homeBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
     var report = FullReport()
     report.security = SecurityState(fileVault: false, gatekeeper: false, sip: false, firewall: false)
-    report.updates = ["macOS Tahoe 26.1.1-25B90"]
+    report.updates = [upd("macOS Tahoe 26.1.1-25B90")]
     report.crashes = [CrashGroup(process: AppInfo.name, count: 2, directory: userCrashDir)]
     report.tmDest = .some(.none)
     report.smart = [
@@ -414,4 +414,8 @@ extension SerialTests {
             #expect(HomeModel.sparkline([(Date(), 150), (Date(), -3)]) == [100, 0])
         }
     }
+}
+
+private func upd(_ label: String) -> SoftwareUpdate {
+    SoftwareUpdate(label: label, title: label, version: nil, sizeBytes: nil, restartRequired: false)
 }

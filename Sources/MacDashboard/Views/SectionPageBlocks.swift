@@ -151,6 +151,8 @@ struct SectionNote: View {
     let text: String
     var button: (title: String, a11y: String, busy: Bool, action: () -> Void)? = nil
     var buttonIdentifier: String? = nil
+    /// REDESIGN-SECURITY: «Install…» is a primary button; every older call site keeps the secondary one.
+    var primary = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -168,7 +170,7 @@ struct SectionNote: View {
                         ProgressView().controlSize(.small).opacity(button.busy ? 1 : 0)
                     }
                 }
-                .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
+                .buttonStyle(DS3ButtonStyle(kind: primary ? .primary : .secondary, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(button.busy)
                 .accessibilityLabel(button.a11y)
                 .accessibilityIdentifier(buttonIdentifier ?? "")

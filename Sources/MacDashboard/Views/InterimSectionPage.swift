@@ -2,6 +2,7 @@
 // REDESIGN-HOME (stage B): until each section page is redesigned in its own stage, a section opens
 // on this interim page — a DS3 page bar (Back chip, icon, name, sub line, tag) over the section's
 // EXISTING cards, unchanged. Each later page stage replaces exactly one case of `cards`.
+// Backups, System and History still render here; every other section has its own page.
 // `Destination.focus`, `foldersSegment` and `historyMetric` are ignored here.
 
 import SwiftUI
@@ -45,7 +46,8 @@ struct InterimSectionPage: View {
             // .battery renders BatteryPage (MainDashboardView), never this page.
             EmptyView()
         case .security:
-            InterimSecurityCards(model: model)
+            // .security renders SecurityPage (MainDashboardView), never this page.
+            EmptyView()
         case .backups:
             TimeMachineCard(model: model)
             ClaudeBackupCard(model: model)
@@ -57,35 +59,6 @@ struct InterimSectionPage: View {
             HistoryRestartNotice(model: model)
             HistoryCard(model: model)
         }
-    }
-}
-
-/// Security and Updates/Crashes cards, collapsing into `QuietStrip` rows once quiet — the code that lived in
-/// `MainDashboardView.systemBand` / `quietSections`, moved here unchanged.
-@MainActor
-private struct InterimSecurityCards: View {
-    let model: DashboardModel
-
-    var body: some View {
-        let q = QuietState.quiet(report: model.report)
-        let sections = quietSections(q)
-        if q.security != .quiet { SecurityCard(model: model, state: q) }
-        if q.updates != .quiet { UpdatesCrashesCard(model: model, state: q) }
-        if !sections.isEmpty { QuietStrip(sections: sections) }
-    }
-
-    private func quietSections(_ q: QuietState) -> [QuietSection] {
-        var sections: [QuietSection] = []
-        if q.security == .quiet {
-            sections.append(QuietSection(id: "sec", title: L.securityTitle, status: L.quietStatusAllEnabled,
-                                          rows: securityRows(model.report.security ?? SecurityState())))
-        }
-        if q.updates == .quiet {
-            sections.append(QuietSection(id: "maint", title: L.quietUpdatesTitle, status: L.quietStatusAllClear,
-                                          rows: updatesRows(updates: model.report.updates ?? [], crashes: model.report.crashes ?? []),
-                                          checkedAt: model.report.updatesCheckedAt))
-        }
-        return sections
     }
 }
 
