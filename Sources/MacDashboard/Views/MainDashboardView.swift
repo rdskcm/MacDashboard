@@ -79,6 +79,9 @@ struct MainDashboardView: View {
             } else if router.destination.page == .storage {
                 StoragePage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
                     .id(router.destination.page)
+            } else if router.destination.page == .battery {
+                BatteryPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
+                    .id(router.destination.page)
             } else if router.destination.page != .home {
                 InterimSectionPage(model: model, page: router.destination.page, windowWidth: windowWidth, onConfirmShown: { router.isInlineConfirmOpen = $0 }) { _ = router.back() }
                     .id(router.destination.page)

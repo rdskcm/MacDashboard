@@ -42,7 +42,8 @@ struct InterimSectionPage: View {
             // .storage renders StoragePage (MainDashboardView), never this page.
             EmptyView()
         case .battery:
-            HStack(alignment: .top, spacing: 12) { BatteryTile(model: model).frame(maxWidth: .infinity) }
+            // .battery renders BatteryPage (MainDashboardView), never this page.
+            EmptyView()
         case .security:
             InterimSecurityCards(model: model)
         case .backups:

@@ -208,6 +208,50 @@ extension SerialTests {
                                    SmartDisk(device: "/dev/disk4", title: "External SSD", status: "NO ACCESS")]
             }
             let stNoDisks = storageOK { $0.report.smart = [] }
+            // REDESIGN-BATTERY: Battery page states. The fixture detail is charging + worn (76 %); each state changes one thing.
+            let batOKBlock: BlockState = {
+                var s = BlockState(.battery, createdAt: homeRef.addingTimeInterval(-4))
+                s.begin(at: homeRef.addingTimeInterval(-3), showsLoading: false)
+                s.succeed(at: homeRef)
+                return s
+            }()
+            let batFailedBlock: BlockState = {
+                var s = BlockState(.battery, createdAt: homeRef.addingTimeInterval(-60))
+                s.begin(at: homeRef.addingTimeInterval(-40), showsLoading: false)
+                s.succeed(at: homeRef.addingTimeInterval(-38))
+                s.begin(at: homeRef.addingTimeInterval(-5), showsLoading: false)
+                s.fail(.timedOut)
+                return s
+            }()
+            @MainActor func battery(_ tweak: (inout BatteryDetail) -> Void = { _ in }, condition: String = "Normal",
+                                    block: BlockState? = nil) -> DashboardModel {
+                fixtureHome {
+                    var d = VisualFixture.batteryDetail
+                    tweak(&d)
+                    $0.report.battery?.condition = condition
+                    $0.applyFixtureBattery(d, block: block ?? batOKBlock)
+                }
+            }
+            let batWorn = battery()                                              // charging, 76 % → amber note
+            let batNormal = battery { $0.maxCapacityMAh = 4491; $0.currentCapacityMAh = 3683; $0.healthPercent = 88 }
+            let batOnBattery = battery {
+                $0.externalConnected = false; $0.isCharging = false; $0.adapter = nil; $0.charger = nil
+                $0.percent = 64; $0.amperageMA = -604; $0.powerW = -7.9; $0.timeToFullMin = nil; $0.timeToEmptyMin = 380
+            }
+            let batService = battery({ $0.maxCapacityMAh = 3623; $0.currentCapacityMAh = 2319; $0.healthPercent = 71
+                                       $0.cycleCount = 1012; $0.externalConnected = false; $0.isCharging = false
+                                       $0.adapter = nil; $0.charger = nil; $0.percent = 64; $0.amperageMA = -604
+                                       $0.powerW = -7.9; $0.timeToFullMin = nil; $0.timeToEmptyMin = 230
+                                       $0.lifetime?.totalOperatingTimeH = 11920 },
+                                     condition: "Service Recommended")
+            let batReading = fixtureHome { $0.applyFixtureBattery(nil, block: BlockState(.battery, createdAt: homeRef)) }
+            let batFailedSaved = battery(block: batFailedBlock)
+            let batFailedEmpty = fixtureHome { $0.applyFixtureBattery(nil, block: {
+                var s = BlockState(.battery, createdAt: homeRef.addingTimeInterval(-6))
+                s.begin(at: homeRef.addingTimeInterval(-5), showsLoading: true)
+                s.fail(.noReading)
+                return s
+            }()) }
             let fixtureDays = m.history.mac_history
             let historyNoDays = fixtureHistory([])
             let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -386,6 +430,33 @@ extension SerialTests {
                         StorageSmartCard(model: stFailing, windowWidth: 980)
                         StorageSmartCard(model: stInstallable, windowWidth: 980)
                     }
+                }
+                run.snap("content-battery-worn", mode, width: 1094) {
+                    VStack(spacing: 16) { BatteryNowCard(model: batWorn, narrow: false); BatteryHealthCard(model: batWorn, narrow: false); BatteryChargingCard(model: batWorn) }
+                }
+                run.snap("content-battery-rest", mode, width: 1094) {
+                    VStack(spacing: 16) { BatteryLifetimeCard(model: batWorn); BatteryPassportCard(model: batWorn); BatteryHistoryCard(model: batWorn, router: NavigationRouter()) }
+                }
+                run.snap("content-battery-normal", mode, width: 1094) {
+                    BatteryHealthCard(model: batNormal, narrow: false)
+                }
+                run.snap("content-battery-on-battery", mode, width: 1094) {
+                    VStack(spacing: 16) { BatteryNowCard(model: batOnBattery, narrow: false); BatteryChargingCard(model: batOnBattery) }
+                }
+                run.snap("content-battery-service", mode, width: 1094) {
+                    VStack(spacing: 16) { BatteryNowCard(model: batService, narrow: false); BatteryHealthCard(model: batService, narrow: false) }
+                }
+                run.snap("content-battery-reading", mode, width: 1094) {
+                    VStack(spacing: 16) { BatteryNowCard(model: batReading, narrow: false); BatteryHealthCard(model: batReading, narrow: false) }
+                }
+                run.snap("content-battery-failed", mode, width: 1094) {
+                    VStack(spacing: 16) { BatteryNowCard(model: batFailedSaved, narrow: false); BatteryHealthCard(model: batFailedSaved, narrow: false); BatteryNowCard(model: batFailedEmpty, narrow: false) }
+                }
+                run.snap("content-battery-narrow", mode, width: 904) {
+                    VStack(spacing: 16) { BatteryNowCard(model: batWorn, narrow: true); BatteryHealthCard(model: batWorn, narrow: true); BatteryNowCard(model: batFailedSaved, narrow: true) }
+                }
+                run.snap("content-battery-bars", mode, width: 1150) {
+                    VStack(spacing: 12) { BatteryPageBar(model: batWorn) {}; BatteryPageBar(model: batNormal) {}; BatteryPageBar(model: batService) {}; BatteryPageBar(model: batReading) {}; BatteryPageBar(model: batFailedSaved) {} }
                 }
                 run.snap("content-claude-backup", mode, width: 589) {
                     ClaudeBackupCard(model: m)

@@ -59,7 +59,7 @@ All run on the synthetic bench home with the window pinned to 1000x733 pt at (0,
 | G2 | Home idle, 30 s, record 20 s | CA Commits, CA Server, Time Profiler | commits, server intervals, server ms, render passes per 20 s |
 | G3 | scroll to the bottom of Home, `t0` 2 s after the scroll, 9 s quiet | Time Profiler, Hitches | main busy ms/s over [t0, t0+7), app % there |
 | G4 | History page (Home → History tile), range All (365+ points), pointer sweep 5 s over the centre of the chart's AX frame (`history-chart`) | Time Profiler, Hitches | hitches/s, main busy ms/s |
-| G5 | Battery page: pointer held 4 s on the tile (ctrl, 300 pt left of the capsule) and on the rainbow Details capsule (`battery-details`); traced and untraced runs; skipped on a Mac without battery | CA Commits, CA Server (+TP, Hitches) | commits/s median, server passes/s; untraced app %, WS % per window |
+| G5 | PARKED since REDESIGN-BATTERY (its target, the popover's `battery-details` capsule, no longer exists; the gate skips it with a note; retarget in HARNESS-REDESIGN-RETARGET). Was: Battery page, pointer held 4 s on the tile (ctrl) and on the rainbow Details capsule; traced and untraced runs | CA Commits, CA Server (+TP, Hitches) | commits/s median, server passes/s; untraced app %, WS % per window |
 | G6 | iPhone page, Table and hover scenarios (3 runs) | Time Profiler, Hitches | hitches, ms, main busy total, `rgba64_shade_conic` samples |
 | G7 | This Mac scroll | Time Profiler, Hitches | hitches, ms, main busy total |
 | G8 | System page with an orphan launchd plist in the bench home; waits <= 60 s for the Outdated capsule (`autostart-outdated`, else exit 70), then as G3 | as G3 | as G3 plus `orphan_visible` |

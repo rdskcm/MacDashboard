@@ -133,7 +133,7 @@ private struct SettingsSidebarRow: View {
 
 struct SettingsView: View {
     // Harness-only init param so offscreen renders can show any section without
-    // clicks (same precedent as BatteryDetailView.startLifetimeExpanded).
+    // clicks (same precedent as MemoryCompositionCard.initialView).
     init(model: DashboardModel, startSection: SettingsSection = .general) {
         self.model = model
         _section = State(initialValue: startSection)

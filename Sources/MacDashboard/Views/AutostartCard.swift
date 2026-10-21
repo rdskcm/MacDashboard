@@ -166,9 +166,9 @@ struct AutostartCard: View {
     }
 
     /// Slow pulsing glow for the "check for outdated" button when it has orphans to
-    /// show — mirrors `PulsingBoltModifier` in `BatteryDetailPopover.swift` (same
-    /// reduce-motion fallback + 2s easeInOut timing), adapted to a border/glow instead
-    /// of icon opacity/scale.
+    /// show — originally mirrored the battery popover's bolt pulse (removed in
+    /// REDESIGN-BATTERY): same reduce-motion fallback + 2 s easeInOut timing, as a
+    /// border/glow instead of icon opacity/scale.
     ///
     /// The pulse is a FINITE Core Animation breath (`BreathingCapsuleGlow`, 5 legs =
     /// 2.5 breaths, ~10 s; GPU-RENDER-AUDIT C1/P7) run by the render server, not a

@@ -38,6 +38,28 @@ enum VisualFixture {
         powerCycles: 812, unsafeShutdowns: 14, dataUnitsRead: 74_609_375, dataUnitsWritten: 57_812_500,
         mediaErrors: 0, errorLogEntries: 0, criticalWarning: 0)
 
+    /// REDESIGN-BATTERY: the ioreg detail the Battery page renders in the fixture (charging on a 35 W adapter, worn
+    /// battery — health 76 % matches `make().battery.maxCapacity` and Home's «Battery 24% worn» task).
+    static let batteryDetail = BatteryDetail(
+        percent: 82, voltageMV: 13270, amperageMA: 2140, powerW: 28.4, temperatureC: 31.2,
+        cellVoltagesMV: [4421, 4425, 4423], externalConnected: true, isCharging: true, fullyCharged: false,
+        timeToEmptyMin: nil, timeToFullMin: 70, currentCapacityMAh: 3177, maxCapacityMAh: 3874,
+        designCapacityMAh: 5103, cycleCount: 312, designCycleCount: 1000, healthPercent: 76,
+        adapter: BatteryAdapterInfo(watts: 35, voltageMV: 20000, currentMA: 1750, name: "Apple 35W Dual USB-C",
+                                    manufacturer: "Apple", adapterDescription: nil, isWireless: false,
+                                    pdProfiles: [PDProfile(index: 0, maxVoltageMV: 5000, maxCurrentMA: 3000),
+                                                 PDProfile(index: 1, maxVoltageMV: 9000, maxCurrentMA: 3000),
+                                                 PDProfile(index: 2, maxVoltageMV: 15000, maxCurrentMA: 2330),
+                                                 PDProfile(index: 3, maxVoltageMV: 20000, maxCurrentMA: 1750)],
+                                    selectedProfileIndex: 3),
+        charger: BatteryChargerInfo(chargingVoltageMV: 13300, chargingCurrentMA: 2140, notChargingReason: 0,
+                                    slowChargingReason: 0, timeChargingThermallyLimited: 0),
+        lifetime: BatteryLifetimeInfo(maxTemperatureC: 47, minTemperatureC: 12, avgTemperatureC: 29.0,
+                                      maxChargeCurrentMA: 3960, maxDischargeCurrentMA: 5210,
+                                      maxPackVoltageMV: 13100, minPackVoltageMV: 10200, totalOperatingTimeH: 6480),
+        serial: "F8Y4213A7Q1MXLKA", manufacturerCode: "SDI", mfgYear: 2024, mfgWeek: 10, mfgCode: "2410",
+        lowPowerMode: false)
+
     /// REDESIGN-STORAGE: a failing external drive (the `storage-smart-failing` state).
     static let externalFailingDisk = SmartDisk(
         device: "/dev/disk4", title: "External SSD", status: "FAILING",

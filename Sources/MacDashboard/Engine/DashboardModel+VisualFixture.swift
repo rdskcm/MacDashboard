@@ -62,5 +62,12 @@ extension DashboardModel {
             s.succeed(at: ref)
             return s
         }())
+        // REDESIGN-BATTERY: an ok battery block + the fixture detail, so the Battery page renders live values.
+        applyFixtureBattery(VisualFixture.batteryDetail, block: {
+            var s = BlockState(.battery, createdAt: ref.addingTimeInterval(-4))
+            s.begin(at: ref.addingTimeInterval(-3), showsLoading: false)
+            s.succeed(at: ref)
+            return s
+        }())
     }
 }

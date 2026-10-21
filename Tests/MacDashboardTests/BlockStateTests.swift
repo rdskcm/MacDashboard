@@ -11,6 +11,7 @@ struct BlockStateTests {
     @Test func timeouts() {
         #expect(BlockID.cpu.timeout == 5, "BlockID.cpu.timeout == 5")
         #expect(BlockID.memory.timeout == 5, "BlockID.memory.timeout == 5")
+        #expect(BlockID.battery.timeout == 5, "BlockID.battery.timeout == 5 (06-battery Reading timeout)")
         #expect(BlockID.scan.timeout == 30, "BlockID.scan.timeout == 30")
         #expect(BlockID.folders.timeout == 10, "folders timeout = 10 (the visible Counting wait; du keeps its 90 s deadline)")
         #expect(ReportCollector.folderSizesDeadline == 90, "folderSizesDeadline == 90 (tripwire: Storage copy must follow)")

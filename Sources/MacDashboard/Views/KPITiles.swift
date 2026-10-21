@@ -1,5 +1,5 @@
 // Views/KPITiles.swift
-// The remaining live KPI tiles (disk, battery).
+// The remaining v1 KPI tile (disk); the battery tile was replaced by the Battery page (REDESIGN-BATTERY).
 
 import SwiftUI
 
@@ -57,44 +57,3 @@ struct DiskTile: View {
     }
 }
 
-@MainActor
-struct BatteryTile: View {
-    let model: DashboardModel
-    @State private var showDetails = false
-
-    static func isVisible(_ model: DashboardModel) -> Bool { (model.battery ?? model.report.battery) != nil }
-
-    private var battery: BatteryInfo? {
-        BatteryInfo.merged(live: model.battery, report: model.report.battery)
-    }
-
-    var body: some View {
-        if let batt = battery {
-            let footer: String? = {
-                guard let charge = batt.charge else { return nil }
-                var cur = L.kpiBatteryChargeNow(charge)
-                if let state = batt.state { cur += ", \(state)" }
-                return cur
-            }()
-            KPITileView(
-                label: L.kpiBatteryLabel,
-                value: batt.maxCapacity.map { "\($0)" } ?? "—",
-                unit: "%",
-                footer: footer
-            ) {
-                // Satellite: the "Детали" pill — the rainbow hover ring lives in
-                // the header itself now (it belongs to the tile header per the
-                // Overview recipe), not floated over the tile as a v1 overlay.
-                RainbowCapsuleButton(title: L.kpiBatteryDetailsButton, size: .compact) { showDetails.toggle() }
-                    .accessibilityLabel(L.kpiBatteryDetailsButton)
-                    .accessibilityIdentifier("battery-details")
-                    .popover(isPresented: $showDetails, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
-                        BatteryDetailView(condition: model.report.battery?.condition ?? model.battery?.condition)
-                    }
-            } visual: {
-                // TRAP: never `assessment.battSev.color` — go through the v2 tone table.
-                MeterBar(fraction: batt.maxCapacity.map { Double($0) / 100 } ?? 0, color: tone(for: model.assessment.battSev))
-            }
-        }
-    }
-}
