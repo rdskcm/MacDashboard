@@ -45,6 +45,13 @@ struct BatteryLifetimeInfo: Equatable {
     var totalOperatingTimeH: Int?              // TotalOperatingTime (unit undocumented; treated as hours, best-effort)
 }
 
+/// What one `ioreg` read produced (REDESIGN-BATTERY): the page's state machine needs the timeout apart from «no battery».
+enum BatteryReadResult: Equatable {
+    case detail(BatteryDetail)
+    case timedOut        // ioreg did not finish within the 5 s CommandRunner deadline
+    case unavailable     // ioreg finished without a usable AppleSmartBattery entry (no battery, launch failure, unparsable)
+}
+
 struct BatteryDetail: Equatable {
     var percent: Int?                          // CurrentCapacity
     var voltageMV: Int?
@@ -172,14 +179,19 @@ enum BatteryInspector {
         return detail
     }
 
-    /// App path: runs ioreg and parses. Returns nil if battery service missing.
-    static func collect() async -> BatteryDetail? {
-        guard let out = await CommandRunner.run("/usr/sbin/ioreg", ["-r", "-c", "AppleSmartBattery", "-a", "-l"], timeout: 5).text else {
-            return nil
-        }
-        guard var detail = parse(Data(out.utf8)) else { return nil }
+    /// App path: runs ioreg (5 s deadline) and parses. `DashboardModel.readBatteryNow` consumes this.
+    static func read() async -> BatteryReadResult {
+        let out = await CommandRunner.run("/usr/sbin/ioreg", ["-r", "-c", "AppleSmartBattery", "-a", "-l"], timeout: 5)
+        if out.termination == .timedOut { return .timedOut }
+        guard let text = out.text, var detail = parse(Data(text.utf8)) else { return .unavailable }
         detail.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
-        return detail
+        return .detail(detail)
+    }
+
+    /// `read()` as an optional, for callers that only need a detail (BatteryInspectorTests' live probes).
+    static func collect() async -> BatteryDetail? {
+        if case .detail(let d) = await read() { return d }
+        return nil
     }
 
     /// Decodes the length-prefixed ASCII segments of the 32-byte ManufacturerData blob

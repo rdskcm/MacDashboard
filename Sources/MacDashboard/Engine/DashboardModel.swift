@@ -22,7 +22,7 @@ final class DashboardModel {
     var mem: MemSnapshot? = nil
     var swap: SwapInfo? = nil
     var disk: DiskInfo? = nil
-    var battery: BatteryInfo? = nil   // read by BatteryTile (falls back to report.battery)
+    var battery: BatteryInfo? = nil   // Home battery tile / Now cell (falls back to report.battery)
     /// Block N7: rounded SOC die temperature (°C), max over valid PMU tdie sensors,
     /// sampled by the fast task via ThermalHIDReader (app-only private API). nil =
     /// unavailable (Intel / API failure) — the CPU page shows «—» (honest-empty).
@@ -43,6 +43,12 @@ final class DashboardModel {
     private(set) var memoryBlock = BlockState(.memory)
     private(set) var foldersBlock = BlockState(.folders)
     private(set) var scanBlock = BlockState(.scan)
+    private(set) var batteryBlock = BlockState(.battery)
+    /// REDESIGN-BATTERY: the last successful `ioreg` read; kept through failures (the page's «last saved values», D5).
+    /// nil until the Battery page's first successful read.
+    var batteryDetail: BatteryDetail? = nil
+    /// True while `readBatteryNow` awaits ioreg (re-entrancy guard, D2).
+    private(set) var batteryReading = false
     let ncpu = ProcessInfo.processInfo.activeProcessorCount   // constant → not tracked
 
     /// Timestamp of the last SMART collection — launch report, manual refresh, or the
@@ -382,6 +388,7 @@ final class DashboardModel {
         case .memory: return memoryBlock
         case .folders: return foldersBlock
         case .scan: return scanBlock
+        case .battery: return batteryBlock
         }
     }
 
@@ -395,6 +402,7 @@ final class DashboardModel {
         case .memory: memoryBlock = next
         case .folders: foldersBlock = next
         case .scan: scanBlock = next
+        case .battery: batteryBlock = next
         }
     }
 
@@ -409,6 +417,8 @@ final class DashboardModel {
 
     /// Visual fixture only: sets the memory block.
     func applyFixtureMemory(_ state: BlockState) { memoryBlock = state }
+    /// Visual fixture only (REDESIGN-BATTERY): the detail the Battery page shows and its block.
+    func applyFixtureBattery(_ detail: BatteryDetail?, block: BlockState) { batteryDetail = detail; batteryBlock = block }
 
     /// Visual fixture only (REDESIGN-STORAGE): smartmontools state, install-in-flight flag and typed failure.
     func applyFixtureSmartTools(_ state: ReportCollector.SmartToolsAvailability, installing: Bool, failure: SmartInstallFailure?) {
@@ -1044,6 +1054,30 @@ final class DashboardModel {
             if self.swap != snap.swap { self.swap = snap.swap }
             if self.memPressure != pressure { self.memPressure = pressure }
             self.succeedBlock(.memory)
+        }
+    }
+
+    /// REDESIGN-BATTERY: one ioreg read for the Battery page (the page's `.task` calls it every
+    /// `BatteryPageModel.refreshSeconds`; «Try again» calls it with `showsLoading: true`). Awaits the read, so a
+    /// loop never overlaps itself. A call while a read is in flight only re-arms the block (same shape as
+    /// `retryFolderCount`): the Wait and a fresh 5 s watchdog come back, the running read's result still lands.
+    func readBatteryNow(showsLoading: Bool) async {
+        if batteryReading {
+            if showsLoading { beginBlock(.battery, showsLoading: true) }
+            return
+        }
+        batteryReading = true
+        defer { batteryReading = false }
+        beginBlock(.battery, showsLoading: showsLoading)
+        let result = await BatteryInspector.read()
+        switch result {
+        case .detail(let d):
+            if batteryDetail != d { batteryDetail = d }
+            succeedBlock(.battery)
+        case .timedOut:
+            failBlock(.battery, .timedOut)
+        case .unavailable:
+            failBlock(.battery, .noReading)
         }
     }
 

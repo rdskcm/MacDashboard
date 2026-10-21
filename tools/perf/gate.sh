@@ -186,12 +186,12 @@ done
 mkdir -p "$OUT" || fatal 70 "cannot create $OUT"
 STARTED=1
 G5_NOTE=""
+# REDESIGN-BATTERY: G5 hovered the battery popover's rainbow «Details» capsule (`battery-details`), which no longer
+# exists; the scenario is parked (definitions kept) until HARNESS-REDESIGN-RETARGET retargets it.
 case " $ITEMS " in *" G5 "*|*" G5-top "*)
-  if ! pmset -g batt 2>/dev/null | grep -q InternalBattery; then
-    ITEMS="$(for i in $ITEMS; do case "$i" in G5|G5-top) ;; *) echo -n " $i" ;; esac; done)"
-    G5_NOTE="G5 skipped: this Mac has no battery"
-    log "$G5_NOTE"
-  fi ;;
+  ITEMS="$(for i in $ITEMS; do case "$i" in G5|G5-top) ;; *) echo -n " $i" ;; esac; done)"
+  G5_NOTE="G5 parked: its target (battery-details) was removed in REDESIGN-BATTERY; retarget in HARNESS-REDESIGN-RETARGET"
+  log "$G5_NOTE" ;;
 esac
 # Bench copies: own bundle id, so the gate never touches the real defaults domain (R11); removed on exit.
 CAND_APP="$("$ROOT/tools/bench-app.sh" "$APP" "$OUT/apps/cand")" || fatal 70 "bench copy of --app failed"

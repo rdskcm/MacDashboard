@@ -60,8 +60,6 @@ struct StringsRU: AppStrings {
     func kpiDiskPurgeableDetail(_ base: String, _ purgeable: String) -> String { base + " · очищаемое \(purgeable)" }
     var kpiBatteryLabel: String { "Батарея" }
     func kpiBatteryCycles(_ n: Int) -> String { "\(n) " + ruPlural(n, "цикл", "цикла", "циклов") }
-    func kpiBatteryChargeNow(_ charge: Int) -> String { "сейчас \(charge)%" }
-    var kpiBatteryDetailsButton: String { "Детали" }
 
     // MARK: Security card
     var securityTitle: String { "Безопасность" }
@@ -459,10 +457,8 @@ struct StringsRU: AppStrings {
     var energyColBattery: String { "От батареи" }
     var energyColAC: String { "От сети" }
 
-    // MARK: Battery detail popover
-    func batteryUpdatedAt(_ time: String) -> String { "обновлено \(time)" }
+    // MARK: Battery page (REDESIGN-BATTERY; strings.json › Battery + 06-battery.md)
     var batteryLoadingText: String { "Читаем данные батареи…" }
-    var batteryPercentSign: String { "%" }
     func batteryMinutes(_ m: Int) -> String { "\(m) мин" }
     func batteryHoursMinutes(_ h: Int, _ m: Int) -> String { "\(h) ч \(m) мин" }
     var batteryStatusOnBattery: String { "От батареи" }
@@ -475,7 +471,6 @@ struct StringsRU: AppStrings {
     var batteryLabelPower: String { "Мощность" }
     func batteryWatts(_ v: String) -> String { "\(v) Вт" }
     var batteryLabelCurrent: String { "Ток" }
-    func batteryMA(_ n: Int) -> String { "\(n) мА" }
     var batteryLabelVoltage: String { "Напряжение" }
     func batteryVolts(_ v: String) -> String { "\(v) В" }
     var batteryLabelTemperature: String { "Температура" }
@@ -486,9 +481,8 @@ struct StringsRU: AppStrings {
     func batteryMAh(_ n: Int) -> String { "\(n) мАч" }
     var batteryCapDesign: String { "Проектная" }
     var batteryCapHealth: String { "Здоровье" }
-    func batteryPercent(_ n: Int) -> String { "\(n)%" }
     var batteryCapCycles: String { "Циклы" }
-    func batteryCyclesOf(_ cycles: Int, _ design: Int) -> String { "\(cycles) из \(design)" }
+    func batteryCyclesOf(_ cycles: String, _ design: String) -> String { "\(cycles) из \(design)" }
     var batteryCapCurrentCharge: String { "Текущий заряд" }
     var batteryCapCondition: String { "Состояние" }
     var batterySectionCharging: String { "Зарядка" }
@@ -512,13 +506,44 @@ struct StringsRU: AppStrings {
     var batteryLifetimeVoltage: String { "Напряжение пакета" }
     func batteryLifetimeVoltageRange(_ min: String, _ max: String) -> String { "\(min)–\(max) В" }
     var batteryLifetimeOperatingTime: String { "Наработка" }
-    func batteryOperatingHours(_ n: Int) -> String { "\(n) ч (оценка)" }
     var batteryDetailLowPower: String { "Энергосбережение" }
     var batteryDetailPassportSection: String { "Паспорт" }
     var batteryDetailManufacturer: String { "Производитель" }
     var batteryDetailSerial: String { "Серийный номер" }
-    var batteryDetailMfgDate: String { "Дата производства" }
-    func batteryDetailMfgDateValue(_ month: String, _ code: String) -> String { "\(month) (код \(code))" }
+    var batteryDetailMfgDate: String { "Дата изготовления" }
+    func batSub(_ cycles: Int?) -> String { cycles.map { "встроенная · \(fmtGrouped($0)) " + ruPlural($0, "цикл", "цикла", "циклов") } ?? "встроенная" }
+    func batTagCapacity(_ pct: String) -> String { "ёмкость \(pct)" }
+    var batTagReadFailed: String { "Ошибка чтения" }
+    var batTagUnknown: String { "здоровье неизвестно" }
+    func batNowCaption(_ time: String) -> String { "обновлено \(time) · каждые 3 с" }
+    var batFailTimedOut: String { "Не удалось прочитать данные батареи: ioreg не ответил за 5 с." }
+    var batFailNoReading: String { "Не удалось прочитать данные батареи: ioreg не нашёл батарею." }
+    var batFailShowingSaved: String { "Показаны последние сохранённые значения." }
+    var batTryAgainA11y: String { "Повторить чтение данных батареи" }
+    var batHealthNote: String { "максимальная от проектной" }
+    var batWornNote: String { "Ёмкость ниже 80 %: батарея приближается к сервисному порогу. Замена — в сервисе Apple." }
+    func batServiceNote(_ parts: [String]) -> String { "macOS рекомендует обслуживание" + (parts.isEmpty ? "" : ": " + parts.joined(separator: ", ")) + ". Mac может работать от батареи меньше или внезапно выключаться. Замена — в сервисе Apple." }
+    func batServiceCapacity(_ pct: String) -> String { "ёмкость \(pct)" }
+    var batServiceCycles: String { "циклов больше расчётных" }
+    var batBatterySettings: String { "Настройки батареи" }
+    var batBatterySettingsA11y: String { "Открыть системные настройки батареи" }
+    var batChargingCaption: String { "адаптер подключён" }
+    var batLifetimeCaption: String { "по данным контроллера батареи" }
+    func batHours(_ s: String) -> String { "\(s) ч" }
+    var batEstimate: String { "оценка" }
+    func batCode(_ code: String) -> String { "код \(code)" }
+    var batHistoryTitle: String { "История ёмкости" }
+    func batHistoryDelta(_ signedPct: String, months: Int) -> String { "\(signedPct) за \(months) " + ruPlural(months, "месяц", "месяца", "месяцев") }
+    var batHistoryNotEnough: String { "данных для тренда пока мало" }
+    var batHistoryFoot: String { "полный график — в разделе «История»" }
+    var batHistoryFootA11y: String { "Открыть «Историю» с графиком батареи" }
+    func batMAh(_ s: String) -> String { "\(s) мАч" }
+    func batMA(_ s: String) -> String { "\(s) мА" }
+    var batConditionNormal: String { "В норме" }
+    var batConditionService: String { "Рекомендуется сервис" }
+    var batConditionReplaceSoon: String { "Скоро заменить" }
+    var batConditionReplaceNow: String { "Заменить" }
+    var batConditionCheck: String { "Проверить батарею" }
 
     // MARK: Assessment
     func assessDiskFull(_ pct: String) -> String { "Диск заполнен на \(pct)% — срочно освободите место." }

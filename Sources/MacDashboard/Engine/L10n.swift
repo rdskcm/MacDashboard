@@ -76,8 +76,6 @@ protocol AppStrings {
     func kpiDiskPurgeableDetail(_ base: String, _ purgeable: String) -> String
     var kpiBatteryLabel: String { get }
     func kpiBatteryCycles(_ n: Int) -> String
-    func kpiBatteryChargeNow(_ charge: Int) -> String
-    var kpiBatteryDetailsButton: String { get }
 
     // MARK: Security card
     var securityTitle: String { get }
@@ -479,10 +477,8 @@ protocol AppStrings {
     var energyColBattery: String { get }
     var energyColAC: String { get }
 
-    // MARK: Battery detail popover
-    func batteryUpdatedAt(_ time: String) -> String
+    // MARK: Battery page (REDESIGN-BATTERY; strings.json › Battery + 06-battery.md)
     var batteryLoadingText: String { get }
-    var batteryPercentSign: String { get }
     func batteryMinutes(_ m: Int) -> String
     func batteryHoursMinutes(_ h: Int, _ m: Int) -> String
     var batteryStatusOnBattery: String { get }
@@ -495,7 +491,6 @@ protocol AppStrings {
     var batteryLabelPower: String { get }
     func batteryWatts(_ v: String) -> String
     var batteryLabelCurrent: String { get }
-    func batteryMA(_ n: Int) -> String
     var batteryLabelVoltage: String { get }
     func batteryVolts(_ v: String) -> String
     var batteryLabelTemperature: String { get }
@@ -506,9 +501,8 @@ protocol AppStrings {
     func batteryMAh(_ n: Int) -> String
     var batteryCapDesign: String { get }
     var batteryCapHealth: String { get }
-    func batteryPercent(_ n: Int) -> String
     var batteryCapCycles: String { get }
-    func batteryCyclesOf(_ cycles: Int, _ design: Int) -> String
+    func batteryCyclesOf(_ cycles: String, _ design: String) -> String
     var batteryCapCurrentCharge: String { get }
     var batteryCapCondition: String { get }
     var batterySectionCharging: String { get }
@@ -532,13 +526,44 @@ protocol AppStrings {
     var batteryLifetimeVoltage: String { get }
     func batteryLifetimeVoltageRange(_ min: String, _ max: String) -> String
     var batteryLifetimeOperatingTime: String { get }
-    func batteryOperatingHours(_ n: Int) -> String
     var batteryDetailLowPower: String { get }
     var batteryDetailPassportSection: String { get }
     var batteryDetailManufacturer: String { get }
     var batteryDetailSerial: String { get }
     var batteryDetailMfgDate: String { get }
-    func batteryDetailMfgDateValue(_ month: String, _ code: String) -> String
+    func batSub(_ cycles: Int?) -> String
+    func batTagCapacity(_ pct: String) -> String
+    var batTagReadFailed: String { get }
+    var batTagUnknown: String { get }
+    func batNowCaption(_ time: String) -> String
+    var batFailTimedOut: String { get }
+    var batFailNoReading: String { get }
+    var batFailShowingSaved: String { get }
+    var batTryAgainA11y: String { get }
+    var batHealthNote: String { get }
+    var batWornNote: String { get }
+    func batServiceNote(_ parts: [String]) -> String
+    func batServiceCapacity(_ pct: String) -> String
+    var batServiceCycles: String { get }
+    var batBatterySettings: String { get }
+    var batBatterySettingsA11y: String { get }
+    var batChargingCaption: String { get }
+    var batLifetimeCaption: String { get }
+    func batHours(_ s: String) -> String
+    var batEstimate: String { get }
+    func batCode(_ code: String) -> String
+    var batHistoryTitle: String { get }
+    func batHistoryDelta(_ signedPct: String, months: Int) -> String
+    var batHistoryNotEnough: String { get }
+    var batHistoryFoot: String { get }
+    var batHistoryFootA11y: String { get }
+    func batMAh(_ s: String) -> String
+    func batMA(_ s: String) -> String
+    var batConditionNormal: String { get }
+    var batConditionService: String { get }
+    var batConditionReplaceSoon: String { get }
+    var batConditionReplaceNow: String { get }
+    var batConditionCheck: String { get }
 
     // MARK: Assessment
     func assessDiskFull(_ pct: String) -> String

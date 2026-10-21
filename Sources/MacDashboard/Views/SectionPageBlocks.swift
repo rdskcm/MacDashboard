@@ -150,6 +150,7 @@ struct SectionNote: View {
     let tone: Color
     let text: String
     var button: (title: String, a11y: String, busy: Bool, action: () -> Void)? = nil
+    var buttonIdentifier: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -170,6 +171,7 @@ struct SectionNote: View {
                 .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(button.busy)
                 .accessibilityLabel(button.a11y)
+                .accessibilityIdentifier(buttonIdentifier ?? "")
             }
         }
         .padding(.vertical, 12)
