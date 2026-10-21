@@ -8,6 +8,17 @@ All notable changes to this project are documented in this file.
 
 - [feat] iPhone firmware, engine only (nothing is visible in the app yet): on a click, Apple's catalogue gives the iOS build Apple restores the phone's model to; a separate, labelled click asks ipsw.me which builds are still signed (it sends the model identifier only). Apple's build can be downloaded to `~/Downloads` over https from Apple's firmware servers only, after size and free-space checks, verified against every checksum both sources publish, without ever replacing an existing file. The network is used only on these clicks; the hosts and what they receive are listed in the README.
 
+## [2.3.3] (Krieg) - 2026-10-14
+
+Lower CPU use by the app's animations, a History placeholder on a new Mac, and clearer install
+script messages for contributors.
+
+### Fixed
+
+- Animations: the breathing glow on the Maintenance and Autostart cards, the rainbow ring and the History chart hover did their work on the main thread every frame. They now run in Core Animation: the main thread's busy time after a scroll dropped from 286 to 15 ms per second, the rainbow ring adds 0.6 instead of 10 percentage points of CPU, and History chart hover stutters dropped from 19.5 to 1.0 per second. Bar fills no longer animate moves smaller than a point.
+- History: on a Mac with fewer than two days of checks, the History section showed nothing below its title. It now shows a card explaining that History appears after checks on two different days.
+- For contributors: when `./build_app.sh --install` cannot finish replacing the app, it now says what actually happened — whether the previous app was put back, where it is if not, and where the new build is — and a failed restore stops with an error instead of exiting silently. `tools/ls-prune.sh` stops every process `lsregister` started when it times out. `tools/visual/run.sh` flags text-only changes on screenshots.
+
 ## [2.3.2] (Krieg) - 2026-10-10
 
 Three fixes: the Homebrew outdated list when the package index is slow to download, the folder-size
