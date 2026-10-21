@@ -590,6 +590,72 @@ struct StringsEN: AppStrings {
     func secCrashFootOpened(_ file: String) -> String { "Opened in Console: \(file)" }
     var secOpenInConsole: String { "Open in Console" }
     func secCrashRowA11y(_ name: String, _ count: String) -> String { "\(name), \(count) — open the report in Console" }
+    // MARK: Backups page (REDESIGN-BACKUPS)
+    var bkSub: String { "Time Machine and Claude backup" }
+    var bkTagTMNotSet: String { "Time Machine not set up" }
+    var bkTagOverdue: String { "Backup overdue" }
+    var bkTagBacking: String { "Backing up…" }
+    var bkTagClaudeStale: String { "Claude backup is stale" }
+    var bkTagClaudeMissing: String { "Claude log not found" }
+    var bkTagClaudeUnreadable: String { "Claude log unreadable" }
+    var bkCaptionAutoHourly: String { "automatic · every hour" }
+    var bkCaptionAutoDaily: String { "automatic · every day" }
+    var bkCaptionAutoWeekly: String { "automatic · every week" }
+    func bkCaptionAutoEveryHours(_ n: Int) -> String { "automatic · every \(n) h" }
+    var bkCaptionManual: String { "manual" }
+    var bkCaptionDiskNotConnected: String { "disk not connected" }
+    var bkCaptionBacking: String { "backup in progress" }
+    var bkNoteNotSet: String { "Time Machine is not set up — there are no backups of this Mac." }
+    func bkNoteOverdueDisconnected(_ days: Int, _ disk: String) -> String { "The last backup was \(days) \(days == 1 ? "day" : "days") ago. Connect \(disk) to continue." }
+    func bkNoteOverdueDisconnectedHot(_ days: Int, _ disk: String) -> String { "The last backup was \(days) days ago, more than a month. Connect \(disk) and back up now." }
+    func bkNoteOverdueConnected(_ days: Int) -> String { "The last backup was \(days) \(days == 1 ? "day" : "days") ago. Back up now to catch up." }
+    func bkNoteOverdueConnectedHot(_ days: Int) -> String { "The last backup was \(days) days ago, more than a month. Back up now." }
+    var bkTheBackupDisk: String { "the backup disk" }
+    func bkDaysAgo(_ n: Int) -> String { "\(n) \(n == 1 ? "day" : "days") ago" }
+    func bkToday(_ t: String) -> String { "today, \(t)" }
+    func bkYesterday(_ t: String) -> String { "yesterday, \(t)" }
+    var bkLastBackup: String { "Last backup" }
+    var bkNextBackup: String { "Next backup" }
+    func bkNextIn(_ d: String) -> String { "in \(d)" }
+    var bkNextSoon: String { "soon" }
+    var bkNextWhenConnected: String { "when connected" }
+    var bkNextAfterThis: String { "after this one" }
+    var bkNextAutoOff: String { "automatic backups are off" }
+    func bkFree(_ s: String) -> String { "\(s) free" }
+    var bkNotConnected: String { "not connected" }
+    var bkPurgeable: String { "Purgeable" }
+    var bkPurgeableNote: String { "snapshots and caches" }
+    func bkLatestSnapshotToday(_ t: String) -> String { "latest today at \(t)" }
+    func bkLatestSnapshot(_ d: String) -> String { "latest \(d)" }
+    var bkBackUpNow: String { "Back up now" }
+    var bkBackUpNowA11y: String { "Start a Time Machine backup now" }
+    func bkConnectFirst(_ disk: String) -> String { "Connect \(disk) first" }
+    var bkStop: String { "Stop" }
+    var bkStopA11y: String { "Stop the running Time Machine backup" }
+    var bkSetUpA11y: String { "Open Time Machine settings" }
+    func bkBackingTo(_ disk: String) -> String { "Backing up to \(disk)" }
+    func bkProgressBytes(_ done: String, _ total: String) -> String { "\(done) of \(total)" }
+    func bkTimeLeft(_ d: String) -> String { "about \(d) left" }
+    var bkPreparing: String { "preparing…" }
+    func bkFindingChanges(_ count: String) -> String { "Looking for changes · found \(count)" }
+    var bkFindingChangesNoCount: String { "Looking for changes…" }
+    var bkStopping: String { "stopping…" }
+    func bkStartFailed(_ why: String) -> String { "Couldn’t start the backup: \(why)" }
+    var bkStartDidNotBegin: String { "The backup did not start. Check Time Machine in System Settings." }
+    func bkStopFailed(_ why: String) -> String { "Couldn’t stop the backup: \(why)" }
+    var bkFailedNoReason: String { "tmutil gave no reason" }
+    func bkClaudeCaption(_ path: String) -> String { "from \(path)" }
+    var bkAgeOK: String { "OK" }
+    var bkOverLimit: String { "over the limit" }
+    var bkChangeInSettings: String { "change in Settings" }
+    func bkNoteClaudeStale(_ limit: String) -> String { "The last Claude backup is older than \(limit). Check that the backup job still runs." }
+    var bkNoteClaudeNone: String { "No successful Claude backup in the log. Check that the backup job still runs." }
+    func bkNoteClaudeMissing(_ path: String) -> String { "Log not found: \(path)" }
+    var bkOpenSettingsBackups: String { "Settings › Backup location" }
+    var bkOpenSettingsBackupsA11y: String { "Open MacDashboard Settings on the Backup section" }
+    func bkNoteClaudeUnreadable(_ path: String) -> String { "Can’t read \(path). Full Disk Access may be needed." }
+    var bkOpenPrivacy: String { "Open Privacy settings…" }
+    var bkOpenPrivacyA11y: String { "Open System Settings › Privacy & Security › Full Disk Access" }
     func batMAh(_ s: String) -> String { "\(s) mAh" }
     func batMA(_ s: String) -> String { "\(s) mA" }
     var batConditionNormal: String { "Normal" }

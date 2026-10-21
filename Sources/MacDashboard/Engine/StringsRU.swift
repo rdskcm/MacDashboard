@@ -595,6 +595,79 @@ struct StringsRU: AppStrings {
     func secCrashFootOpened(_ file: String) -> String { "Открыто в Console: \(file)" }
     var secOpenInConsole: String { "Открыть в Console" }
     func secCrashRowA11y(_ name: String, _ count: String) -> String { "\(name), \(count) — открыть отчёт в Console" }
+    // MARK: Backups page (REDESIGN-BACKUPS)
+    var bkSub: String { "Time Machine и бэкап Claude" }
+    var bkTagTMNotSet: String { "Time Machine не настроена" }
+    var bkTagOverdue: String { "Копия просрочена" }
+    var bkTagBacking: String { "Идёт копирование…" }
+    var bkTagClaudeStale: String { "Бэкап Claude устарел" }
+    var bkTagClaudeMissing: String { "Лог Claude не найден" }
+    var bkTagClaudeUnreadable: String { "Лог Claude не читается" }
+    var bkCaptionAutoHourly: String { "автоматически · каждый час" }
+    var bkCaptionAutoDaily: String { "автоматически · каждый день" }
+    var bkCaptionAutoWeekly: String { "автоматически · каждую неделю" }
+    func bkCaptionAutoEveryHours(_ n: Int) -> String { "автоматически · каждые \(n) ч" }
+    var bkCaptionManual: String { "вручную" }
+    var bkCaptionDiskNotConnected: String { "диск не подключён" }
+    var bkCaptionBacking: String { "идёт резервное копирование" }
+    var bkNoteNotSet: String { "Time Machine не настроена — копий этого Mac нет." }
+    func bkNoteOverdueDisconnected(_ days: Int, _ disk: String) -> String { "Последняя копия была \(days) \(ruDays(days)) назад. Подключите \(disk), чтобы продолжить." }
+    func bkNoteOverdueDisconnectedHot(_ days: Int, _ disk: String) -> String { "Последняя копия была \(days) \(ruDays(days)) назад — больше месяца. Подключите \(disk) и создайте копию." }
+    func bkNoteOverdueConnected(_ days: Int) -> String { "Последняя копия была \(days) \(ruDays(days)) назад. Создайте копию сейчас." }
+    func bkNoteOverdueConnectedHot(_ days: Int) -> String { "Последняя копия была \(days) \(ruDays(days)) назад — больше месяца. Создайте копию сейчас." }
+    var bkTheBackupDisk: String { "диск для копий" }
+    func bkDaysAgo(_ n: Int) -> String { "\(n) \(ruDays(n)) назад" }
+    func bkToday(_ t: String) -> String { "сегодня, \(t)" }
+    func bkYesterday(_ t: String) -> String { "вчера, \(t)" }
+    var bkLastBackup: String { "Последняя копия" }
+    var bkNextBackup: String { "Следующая копия" }
+    func bkNextIn(_ d: String) -> String { "через \(d)" }
+    var bkNextSoon: String { "скоро" }
+    var bkNextWhenConnected: String { "при подключении" }
+    var bkNextAfterThis: String { "после текущей" }
+    var bkNextAutoOff: String { "автоматические копии выключены" }
+    func bkFree(_ s: String) -> String { "свободно \(s)" }
+    var bkNotConnected: String { "не подключён" }
+    var bkPurgeable: String { "Очищаемое место" }
+    var bkPurgeableNote: String { "снимки и кэши" }
+    func bkLatestSnapshotToday(_ t: String) -> String { "последний сегодня в \(t)" }
+    func bkLatestSnapshot(_ d: String) -> String { "последний \(d)" }
+    var bkBackUpNow: String { "Создать копию" }
+    var bkBackUpNowA11y: String { "Начать резервное копирование Time Machine сейчас" }
+    func bkConnectFirst(_ disk: String) -> String { "Сначала подключите \(disk)" }
+    var bkStop: String { "Остановить" }
+    var bkStopA11y: String { "Остановить текущее копирование Time Machine" }
+    var bkSetUpA11y: String { "Открыть настройки Time Machine" }
+    func bkBackingTo(_ disk: String) -> String { "Копирование на \(disk)" }
+    func bkProgressBytes(_ done: String, _ total: String) -> String { "\(done) из \(total)" }
+    func bkTimeLeft(_ d: String) -> String { "осталось около \(d)" }
+    var bkPreparing: String { "подготовка…" }
+    func bkFindingChanges(_ count: String) -> String { "Поиск изменений · найдено \(count)" }
+    var bkFindingChangesNoCount: String { "Поиск изменений…" }
+    var bkStopping: String { "остановка…" }
+    func bkStartFailed(_ why: String) -> String { "Не удалось начать копирование: \(why)" }
+    var bkStartDidNotBegin: String { "Копирование не началось. Проверьте Time Machine в Системных настройках." }
+    func bkStopFailed(_ why: String) -> String { "Не удалось остановить копирование: \(why)" }
+    var bkFailedNoReason: String { "tmutil не сообщил причину" }
+    func bkClaudeCaption(_ path: String) -> String { "из \(path)" }
+    var bkAgeOK: String { "в норме" }
+    var bkOverLimit: String { "старше порога" }
+    var bkChangeInSettings: String { "меняется в Настройках" }
+    func bkNoteClaudeStale(_ limit: String) -> String { "Последний бэкап Claude старше \(limit). Проверьте, что задача резервного копирования запускается." }
+    var bkNoteClaudeNone: String { "В журнале нет успешных бэкапов Claude. Проверьте, что задача резервного копирования запускается." }
+    func bkNoteClaudeMissing(_ path: String) -> String { "Лог не найден: \(path)" }
+    var bkOpenSettingsBackups: String { "Настройки › Расположение бэкапа" }
+    var bkOpenSettingsBackupsA11y: String { "Открыть настройки MacDashboard, раздел «Бэкап»" }
+    func bkNoteClaudeUnreadable(_ path: String) -> String { "Не удалось прочитать \(path). Возможно, нужен полный доступ к диску." }
+    var bkOpenPrivacy: String { "Открыть «Конфиденциальность»…" }
+    var bkOpenPrivacyA11y: String { "Открыть Системные настройки › Конфиденциальность › Полный доступ к диску" }
+    private func ruDays(_ n: Int) -> String {
+        let r = n % 100, d = n % 10
+        if r >= 11 && r <= 14 { return "дней" }
+        if d == 1 { return "день" }
+        if (2...4).contains(d) { return "дня" }
+        return "дней"
+    }
     func batMAh(_ s: String) -> String { "\(s) мАч" }
     func batMA(_ s: String) -> String { "\(s) мА" }
     var batConditionNormal: String { "В норме" }

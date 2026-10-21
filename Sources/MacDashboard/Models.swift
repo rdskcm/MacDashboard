@@ -136,6 +136,12 @@ enum TMBackupUnavailableReason: Equatable {
     }
 }
 
+/// REDESIGN-BACKUPS: `AutoBackup` / `AutoBackupInterval` of /Library/Preferences/com.apple.TimeMachine.plist.
+enum TMSchedule: Equatable, Sendable {
+    case automatic(intervalSeconds: Int)
+    case manual
+}
+
 struct TMDestination: Equatable {
     var name: String?; var kind: String?; var mountPoint: String?; var quotaBytes: Int64?; var lastBackup: String?
     // nil when lastBackup is set (or destination not yet checked); otherwise an
@@ -143,6 +149,13 @@ struct TMDestination: Equatable {
     // date unreadable without Full Disk Access) — shown instead of a bare "—".
     // Stored as a case, not a sentence — see TMBackupUnavailableReason.
     var lastBackupUnavailableReason: TMBackupUnavailableReason? = nil
+    /// REDESIGN-BACKUPS: the same instant `lastBackup` was formatted from; the Backups page computes
+    /// overdue days and «today/yesterday» from it. nil whenever `lastBackup` is nil.
+    var lastBackupDate: Date? = nil
+    /// REDESIGN-BACKUPS: `statfs` f_bavail × f_bsize on `mountPoint`; nil when not mounted or statfs failed.
+    var freeBytes: Int64? = nil
+    /// REDESIGN-BACKUPS: automatic-backup schedule from the TimeMachine prefs plist; nil = unreadable (no FDA).
+    var schedule: TMSchedule? = nil
 }
 struct AutostartInfo: Equatable {
     var loginItems: [String]?   // nil = no permission

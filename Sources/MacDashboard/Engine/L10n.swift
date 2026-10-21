@@ -608,6 +608,72 @@ protocol AppStrings {
     func secCrashFootOpened(_ file: String) -> String
     var secOpenInConsole: String { get }
     func secCrashRowA11y(_ name: String, _ count: String) -> String
+    // MARK: Backups page (REDESIGN-BACKUPS)
+    var bkSub: String { get }
+    var bkTagTMNotSet: String { get }
+    var bkTagOverdue: String { get }
+    var bkTagBacking: String { get }
+    var bkTagClaudeStale: String { get }
+    var bkTagClaudeMissing: String { get }
+    var bkTagClaudeUnreadable: String { get }
+    var bkCaptionAutoHourly: String { get }
+    var bkCaptionAutoDaily: String { get }
+    var bkCaptionAutoWeekly: String { get }
+    func bkCaptionAutoEveryHours(_ n: Int) -> String
+    var bkCaptionManual: String { get }
+    var bkCaptionDiskNotConnected: String { get }
+    var bkCaptionBacking: String { get }
+    var bkNoteNotSet: String { get }
+    func bkNoteOverdueDisconnected(_ days: Int, _ disk: String) -> String
+    func bkNoteOverdueDisconnectedHot(_ days: Int, _ disk: String) -> String
+    func bkNoteOverdueConnected(_ days: Int) -> String
+    func bkNoteOverdueConnectedHot(_ days: Int) -> String
+    var bkTheBackupDisk: String { get }
+    func bkDaysAgo(_ n: Int) -> String
+    func bkToday(_ t: String) -> String
+    func bkYesterday(_ t: String) -> String
+    var bkLastBackup: String { get }
+    var bkNextBackup: String { get }
+    func bkNextIn(_ d: String) -> String
+    var bkNextSoon: String { get }
+    var bkNextWhenConnected: String { get }
+    var bkNextAfterThis: String { get }
+    var bkNextAutoOff: String { get }
+    func bkFree(_ s: String) -> String
+    var bkNotConnected: String { get }
+    var bkPurgeable: String { get }
+    var bkPurgeableNote: String { get }
+    func bkLatestSnapshotToday(_ t: String) -> String
+    func bkLatestSnapshot(_ d: String) -> String
+    var bkBackUpNow: String { get }
+    var bkBackUpNowA11y: String { get }
+    func bkConnectFirst(_ disk: String) -> String
+    var bkStop: String { get }
+    var bkStopA11y: String { get }
+    var bkSetUpA11y: String { get }
+    func bkBackingTo(_ disk: String) -> String
+    func bkProgressBytes(_ done: String, _ total: String) -> String
+    func bkTimeLeft(_ d: String) -> String
+    var bkPreparing: String { get }
+    func bkFindingChanges(_ count: String) -> String
+    var bkFindingChangesNoCount: String { get }
+    var bkStopping: String { get }
+    func bkStartFailed(_ why: String) -> String
+    var bkStartDidNotBegin: String { get }
+    func bkStopFailed(_ why: String) -> String
+    var bkFailedNoReason: String { get }
+    func bkClaudeCaption(_ path: String) -> String
+    var bkAgeOK: String { get }
+    var bkOverLimit: String { get }
+    var bkChangeInSettings: String { get }
+    func bkNoteClaudeStale(_ limit: String) -> String
+    var bkNoteClaudeNone: String { get }
+    func bkNoteClaudeMissing(_ path: String) -> String
+    var bkOpenSettingsBackups: String { get }
+    var bkOpenSettingsBackupsA11y: String { get }
+    func bkNoteClaudeUnreadable(_ path: String) -> String
+    var bkOpenPrivacy: String { get }
+    var bkOpenPrivacyA11y: String { get }
     func batMAh(_ s: String) -> String
     func batMA(_ s: String) -> String
     var batConditionNormal: String { get }

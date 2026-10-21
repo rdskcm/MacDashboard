@@ -1,0 +1,13 @@
+Backup session status:
+{
+    BackupPhase = FindingChanges;
+    ChangedItemCount = 4;
+    ClientID = "com.apple.backupd";
+    DateOfStateChange = "2026-10-21 17:54:09 +0000";
+    DestinationID = "00000000-0000-0000-0000-000000000000";
+    DestinationMountPoint = "/Volumes/Backup SSD";
+    FractionDone = 0;
+    FractionOfProgressBar = "0.1";
+    Running = 1;
+    attemptOptions = 1;
+}

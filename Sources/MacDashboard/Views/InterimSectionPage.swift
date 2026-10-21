@@ -2,7 +2,7 @@
 // REDESIGN-HOME (stage B): until each section page is redesigned in its own stage, a section opens
 // on this interim page — a DS3 page bar (Back chip, icon, name, sub line, tag) over the section's
 // EXISTING cards, unchanged. Each later page stage replaces exactly one case of `cards`.
-// Backups, System and History still render here; every other section has its own page.
+// System and History still render here; every other section has its own page.
 // `Destination.focus`, `foldersSegment` and `historyMetric` are ignored here.
 
 import SwiftUI
@@ -49,8 +49,8 @@ struct InterimSectionPage: View {
             // .security renders SecurityPage (MainDashboardView), never this page.
             EmptyView()
         case .backups:
-            TimeMachineCard(model: model)
-            ClaudeBackupCard(model: model)
+            // .backups renders BackupsPage (MainDashboardView), never this page.
+            EmptyView()
         case .system:
             AutostartCard(model: model)
             EnergyCard(model: model)
