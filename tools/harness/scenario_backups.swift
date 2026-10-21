@@ -39,6 +39,7 @@ MainActor.assumeIsolated {
     let backing = tm(backingDest, backup: sample)
     let stopping = tm(backingDest, backup: sample, action: .stopping)
     let preparing = tm(backingDest, backup: TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes"))
+    let findingChanges = tm(backingDest, backup: TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53))
     let failed = tm(dest(last: ref - 9 * 86_400, mounted: true), action: .failed(L.bkStartDidNotBegin))
     @MainActor func claude(_ s: ClaudeBackupStatus?) -> DashboardModel { model { $0.claudeBackup = s } }
 
@@ -60,6 +61,7 @@ MainActor.assumeIsolated {
         HarnessSection(label: "G: backing up 14 %") { BackupsTimeMachineCard(model: backing, narrow: false) }
         HarnessSection(label: "H: stopping") { BackupsTimeMachineCard(model: stopping, narrow: false) }
         HarnessSection(label: "I: preparing (no percent)") { BackupsTimeMachineCard(model: preparing, narrow: false) }
+        HarnessSection(label: "I2: looking for changes (31 711, 53 %)") { BackupsTimeMachineCard(model: findingChanges, narrow: false) }
         HarnessSection(label: "J: start failed") { BackupsTimeMachineCard(model: failed, narrow: false) }
         HarnessSection(label: "K: Claude ok") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600))) }
         HarnessSection(label: "L: Claude stale") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 4 * 86_400))) }

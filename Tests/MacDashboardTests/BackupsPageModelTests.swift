@@ -250,6 +250,23 @@ extension SerialTests {
             }
         }
 
+        @Test func findingChangesCaption() {
+            let d = dest(last: nil)
+            let fc = TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53)
+            let none = TMBackupProgress(running: true, stopping: false, phase: "FindingChanges")
+            withLanguage(.en) {
+                let p = BackupsPageModel.progress(dest: d, backup: fc, action: .idle)
+                #expect(p.caption == "Looking for changes · found 31,711"); #expect(p.fraction == 0.53); #expect(p.text == "Backing up to Backup SSD")
+                let n = BackupsPageModel.progress(dest: d, backup: none, action: .idle)
+                #expect(n.caption == "Looking for changes…"); #expect(n.fraction == nil)
+                #expect(BackupsPageModel.progress(dest: d, backup: fc, action: .stopping).caption == "stopping…")
+            }
+            withLanguage(.ru) {
+                #expect(BackupsPageModel.progress(dest: d, backup: fc, action: .idle).caption == "Поиск изменений · найдено 31\u{2009}711")
+                #expect(BackupsPageModel.progress(dest: d, backup: none, action: .idle).caption == "Поиск изменений…")
+            }
+        }
+
         // MARK: Claude
 
         @Test func claudeStates() {

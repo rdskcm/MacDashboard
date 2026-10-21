@@ -30,6 +30,30 @@ struct TimeMachineStatusTests {
         #expect(p.destinationMountPoint == "/Volumes/Backup")
     }
 
+    @Test func copyingLiveCapture() throws {
+        let p = try #require(TimeMachineStatus.parse(text: try fixture("tmutil-status-macos27.0-copying.txt")))
+        #expect(p.running == true)
+        #expect(p.phase == "Copying")
+        #expect(abs(try #require(p.percent) - 0.2664) < 0.0005)
+        #expect(p.bytesDone == 16_728_473_600)
+        #expect(p.bytesTotal == 113_784_774_656)
+        #expect(p.secondsRemaining == 371)
+    }
+
+    @Test func findingChangesLiveCapture() throws {
+        let p = try #require(TimeMachineStatus.parse(text: try fixture("tmutil-status-macos27.0-findingchanges.txt")))
+        #expect(p.running == true)
+        #expect(p.phase == "FindingChanges")
+        #expect(p.changedItems == 4)
+        #expect(p.scanFraction == 0)
+        #expect(p.percent == nil)
+    }
+
+    @Test func topLevelPercentFallback() {
+        #expect(TimeMachineStatus.parse(text: "{ Running = 1; Percent = \"0.25\"; }")?.percent == 0.25)
+        #expect(TimeMachineStatus.parse(text: "{ Running = 1; Percent = \"0.25\"; Progress = { Percent = \"0.5\"; }; }")?.percent == 0.5)
+    }
+
     @Test func openStepForm() {
         let text = "Backup session status:\n{\n    ClientID = \"com.apple.backupd\";\n    Percent = \"-1\";\n    Running = 0;\n}\n"
         let p = TimeMachineStatus.parse(text: text)

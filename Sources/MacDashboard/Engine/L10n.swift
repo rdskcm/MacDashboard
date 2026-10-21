@@ -655,6 +655,8 @@ protocol AppStrings {
     func bkProgressBytes(_ done: String, _ total: String) -> String
     func bkTimeLeft(_ d: String) -> String
     var bkPreparing: String { get }
+    func bkFindingChanges(_ count: String) -> String
+    var bkFindingChangesNoCount: String { get }
     var bkStopping: String { get }
     func bkStartFailed(_ why: String) -> String
     var bkStartDidNotBegin: String { get }

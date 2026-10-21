@@ -642,6 +642,8 @@ struct StringsRU: AppStrings {
     func bkProgressBytes(_ done: String, _ total: String) -> String { "\(done) из \(total)" }
     func bkTimeLeft(_ d: String) -> String { "осталось около \(d)" }
     var bkPreparing: String { "подготовка…" }
+    func bkFindingChanges(_ count: String) -> String { "Поиск изменений · найдено \(count)" }
+    var bkFindingChangesNoCount: String { "Поиск изменений…" }
     var bkStopping: String { "остановка…" }
     func bkStartFailed(_ why: String) -> String { "Не удалось начать копирование: \(why)" }
     var bkStartDidNotBegin: String { "Копирование не началось. Проверьте Time Machine в Системных настройках." }

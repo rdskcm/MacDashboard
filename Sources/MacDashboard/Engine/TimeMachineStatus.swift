@@ -10,13 +10,16 @@ struct TMBackupProgress: Equatable, Sendable {
     var running: Bool
     var stopping: Bool
     // Optionals default to nil so the synthesized memberwise init takes just `running:` and
-    // `stopping:` when that is all a caller has; the parser fills all eight fields.
+    // `stopping:` when that is all a caller has; the parser fills all ten fields.
     var phase: String? = nil
     var percent: Double? = nil
     var bytesDone: Int64? = nil
     var bytesTotal: Int64? = nil
     var secondsRemaining: Int? = nil
     var destinationMountPoint: String? = nil
+    /// FindingChanges only: top-level `ChangedItemCount` and the scan's own `FractionDone` (0…1).
+    var changedItems: Int? = nil
+    var scanFraction: Double? = nil
 
     /// What the page assumes when tmutil could not be run at all.
     static let idle = TMBackupProgress(running: false, stopping: false)
@@ -31,7 +34,7 @@ enum TimeMachineStatus {
         guard let any = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
               let root = any as? [String: Any], let running = num(root["Running"]) else { return nil }
         let progress = root["Progress"] as? [String: Any]
-        let pct = num(root["Percent"]).flatMap { $0 < 0 ? nil : min(max($0, 0), 1) }
+        let pct = num(progress?["Percent"] ?? root["Percent"]).flatMap { $0 < 0 ? nil : min(max($0, 0), 1) }
         return TMBackupProgress(
             running: running != 0,
             stopping: (num(root["Stopping"]) ?? 0) != 0,
@@ -40,7 +43,9 @@ enum TimeMachineStatus {
             bytesDone: progress.flatMap { num($0["bytes"]) }.map { Int64($0) },
             bytesTotal: progress.flatMap { num($0["totalBytes"]) }.map { Int64($0) },
             secondsRemaining: progress.flatMap { num($0["TimeRemaining"]) }.map { Int($0) },
-            destinationMountPoint: root["DestinationMountPoint"] as? String)
+            destinationMountPoint: root["DestinationMountPoint"] as? String,
+            changedItems: num(root["ChangedItemCount"]).map { Int($0) },
+            scanFraction: num(root["FractionDone"]).map { min(max($0, 0), 1) })
     }
 
     /// Lenient number: Int / Double / Bool / NSNumber / numeric String (OpenStep form quotes numbers).

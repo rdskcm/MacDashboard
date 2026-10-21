@@ -291,6 +291,10 @@ extension SerialTests {
                 $0.report.tmDest = .some(bkBackingDest)
                 $0.applyFixtureTimeMachine(backup: TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes"), action: .idle)
             }
+            let bkFindingChanges = backups {
+                $0.report.tmDest = .some(bkBackingDest)
+                $0.applyFixtureTimeMachine(backup: TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53), action: .idle)
+            }
             let bkStartFailed = backups {
                 $0.report.tmDest = .some(bkDest(last: homeRef - 9 * 86_400, mounted: true))
                 $0.applyFixtureTimeMachine(backup: nil, action: .failed(L.bkStartDidNotBegin))
@@ -558,7 +562,8 @@ extension SerialTests {
                 run.snap("content-backups-backing", mode, width: 1094) {
                     VStack(spacing: 16) {
                         BackupsTimeMachineCard(model: bkBacking, narrow: false); BackupsTimeMachineCard(model: bkStopping, narrow: false)
-                        BackupsTimeMachineCard(model: bkPreparing, narrow: false); BackupsTimeMachineCard(model: bkStartFailed, narrow: false)
+                        BackupsTimeMachineCard(model: bkPreparing, narrow: false); BackupsTimeMachineCard(model: bkFindingChanges, narrow: false)
+                        BackupsTimeMachineCard(model: bkStartFailed, narrow: false)
                     }
                 }
                 run.snap("content-backups-claude", mode, width: 1094) {

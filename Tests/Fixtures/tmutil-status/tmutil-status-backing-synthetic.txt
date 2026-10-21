@@ -8,9 +8,9 @@
 	<key>DestinationID</key><string>00000000-0000-0000-0000-000000000000</string>
 	<key>DestinationMountPoint</key><string>/Volumes/Backup</string>
 	<key>FirstBackup</key><false/>
-	<key>Percent</key><real>0.140625</real>
 	<key>Progress</key>
 	<dict>
+		<key>Percent</key><real>0.140625</real>
 		<key>TimeRemaining</key><real>600</real>
 		<key>_raw_Percent</key><real>0.140625</real>
 		<key>_raw_totalBytes</key><integer>12800000000</integer>

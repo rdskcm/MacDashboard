@@ -637,6 +637,8 @@ struct StringsEN: AppStrings {
     func bkProgressBytes(_ done: String, _ total: String) -> String { "\(done) of \(total)" }
     func bkTimeLeft(_ d: String) -> String { "about \(d) left" }
     var bkPreparing: String { "preparing…" }
+    func bkFindingChanges(_ count: String) -> String { "Looking for changes · found \(count)" }
+    var bkFindingChangesNoCount: String { "Looking for changes…" }
     var bkStopping: String { "stopping…" }
     func bkStartFailed(_ why: String) -> String { "Couldn’t start the backup: \(why)" }
     var bkStartDidNotBegin: String { "The backup did not start. Check Time Machine in System Settings." }

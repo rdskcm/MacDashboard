@@ -53,7 +53,12 @@ recapture or edit it.
   replaced by the Russian ones (`Количество циклов:`, `Состояние:`,
   `Максимальная ёмкость:`), covering the localised-negative case from R3.
 - `tmutil-status/tmutil-status-backing-synthetic.txt`: shape of the observed `tmutil status -X`
-  dictionary during a Copying phase, values invented.
+  dictionary during a Copying phase, values invented. Corrected 2026-10-21 (A1) to the real
+  shape: `Percent` lives inside `Progress`, there is no top-level `Percent` during Copying.
+- `tmutil-status/tmutil-status-macos27.0-copying.txt`: real capture, 2026-10-21, scrubbed:
+  DestinationID, mount point (`tmutil status -X`, Copying phase).
+- `tmutil-status/tmutil-status-macos27.0-findingchanges.txt`: real capture, 2026-10-21, scrubbed:
+  DestinationID, mount point (`tmutil status`, OpenStep form, FindingChanges phase).
 
 ## Adding your own capture
 Name the file per the naming law (get the version with `sw_vers -productVersion`) and

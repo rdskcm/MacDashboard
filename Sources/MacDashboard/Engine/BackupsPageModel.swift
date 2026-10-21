@@ -254,11 +254,13 @@ struct BackupsPageModel: Equatable {
     static func progress(dest: TMDestination, backup: TMBackupProgress, action: TMActionState) -> BackupsProgress {
         let stopping = action == .stopping || backup.stopping
         let caption: String
+        let finding = backup.phase == "FindingChanges"
         if stopping { caption = L.bkStopping }
+        else if finding { caption = backup.changedItems.map { L.bkFindingChanges(fmtGrouped($0)) } ?? L.bkFindingChangesNoCount }
         else if action == .starting && !backup.running { caption = L.bkPreparing }
         else { caption = bytesCaption(done: backup.bytesDone, total: backup.bytesTotal, secondsRemaining: backup.secondsRemaining) }
         return BackupsProgress(text: L.bkBackingTo(dest.name ?? L.bkTheBackupDisk), caption: caption,
-                               fraction: backup.percent, stopping: stopping)
+                               fraction: finding && !stopping ? backup.scanFraction : backup.percent, stopping: stopping)
     }
 
     static func bytesCaption(done: Int64?, total: Int64?, secondsRemaining: Int?) -> String {
