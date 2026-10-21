@@ -17,6 +17,8 @@ enum ParsedCommand: String, CaseIterable {
     case spHardware = "sp-hardware"
     case uptime
     case tmutilDestinationInfo = "tmutil-destinationinfo"
+    /// REDESIGN-BACKUPS: `tmutil status -X` (idle output verified on macOS 27.0.1: exit 0, XML plist with `Running`).
+    case tmutilStatus = "tmutil-status"
     case diskutilInfo = "diskutil-info"
     case smartctl
     case fdesetup
@@ -33,7 +35,7 @@ enum ParsedCommand: String, CaseIterable {
         case .pmsetBatt, .pmsetCustom, .pmsetAssertions: return "/usr/bin/pmset"
         case .spPower, .spHardware: return "/usr/sbin/system_profiler"
         case .uptime: return "/usr/bin/uptime"
-        case .tmutilDestinationInfo: return "/usr/bin/tmutil"
+        case .tmutilDestinationInfo, .tmutilStatus: return "/usr/bin/tmutil"
         case .diskutilInfo: return "/usr/sbin/diskutil"
         case .smartctl: return nil
         case .fdesetup: return "/usr/bin/fdesetup"
@@ -55,6 +57,7 @@ enum ParsedCommand: String, CaseIterable {
         case .spHardware: return ["-json", "SPHardwareDataType"]
         case .uptime: return []
         case .tmutilDestinationInfo: return ["destinationinfo", "-X"]
+        case .tmutilStatus: return ["status", "-X"]
         case .diskutilInfo: return ["info", "-plist", device]
         case .smartctl: return ["-A", "-j", device]
         case .fdesetup, .csrutil: return ["status"]
@@ -68,14 +71,14 @@ enum ParsedCommand: String, CaseIterable {
         case .ps: return 5
         case .spPower, .spHardware: return 25
         case .top, .tmutilDestinationInfo, .diskutilInfo, .smartctl: return 15
-        case .pmsetBatt, .pmsetCustom, .pmsetAssertions, .uptime, .fdesetup, .spctl, .csrutil, .socketfilterfw: return 10
+        case .pmsetBatt, .pmsetCustom, .pmsetAssertions, .uptime, .fdesetup, .spctl, .csrutil, .socketfilterfw, .tmutilStatus: return 10
         }
     }
 
     /// Output is decoded as a whole (JSON/plist), not line by line.
     var isStructured: Bool {
         switch self {
-        case .spHardware, .tmutilDestinationInfo, .diskutilInfo, .smartctl: return true
+        case .spHardware, .tmutilDestinationInfo, .tmutilStatus, .diskutilInfo, .smartctl: return true
         default: return false
         }
     }
@@ -98,6 +101,7 @@ enum ParsedCommand: String, CaseIterable {
         case .spHardware: return Parsers.hardwareProfile(json: Data(stdout.utf8)) != nil
         case .uptime: return Parsers.uptimeHuman(stdout) != nil
         case .tmutilDestinationInfo: return Parsers.tmDestination(plist: Data(stdout.utf8)) != .undecodable
+        case .tmutilStatus: return TimeMachineStatus.parse(text: stdout) != nil
         case .diskutilInfo:
             let r = Parsers.diskutilSmart(plist: Data(stdout.utf8))
             return r.status != nil || r.mediaName != nil

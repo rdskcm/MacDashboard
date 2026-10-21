@@ -426,9 +426,20 @@ final class ReportCollector {
             .filter { $0.hasPrefix("com.apple.TimeMachine.") }
     }
 
-    private func collectSnapshots() async -> Outcome {
+    /// REDESIGN-BACKUPS: free space for a non-root user on the volume at `path` (statfs f_bavail × f_bsize, what `df` shows).
+    static func volumeFreeBytes(atPath path: String) -> Int64? {
+        var s = statfs()
+        guard statfs(path, &s) == 0 else { return nil }
+        return Int64(s.f_bavail) * Int64(s.f_bsize)
+    }
+
+    func collectLocalSnapshotNames() async -> [String]? {
         let out = await CommandRunner.run("/usr/bin/tmutil", ["listlocalsnapshots", "/"], timeout: 15).text
-        let names = out.map(Self.localSnapshotNames)
+        return out.map(Self.localSnapshotNames)
+    }
+
+    private func collectSnapshots() async -> Outcome {
+        let names = await collectLocalSnapshotNames()
         return Outcome(section: .snapshots) { $0.snapshots = names }
     }
 
@@ -505,6 +516,8 @@ final class ReportCollector {
         case .notConfigured: return (.some(nil), nil)
         case .configured(var d):
             await applyLastBackup(to: &d)
+            d.schedule = readTMPlist().flatMap(Parsers.tmPlistSchedule)   // REDESIGN-BACKUPS; nil without FDA
+            if let mount = d.mountPoint { d.freeBytes = Self.volumeFreeBytes(atPath: mount) }
             return (.some(d), nil)
         }
     }
@@ -559,6 +572,7 @@ final class ReportCollector {
             }
             if !s.isEmpty, let date = Parsers.tmLatestBackupDate(fromPath: s) {
                 dest.lastBackup = Parsers.formatTMBackupDate(date)
+                dest.lastBackupDate = date
                 return
             }
         }
@@ -568,6 +582,7 @@ final class ReportCollector {
             switch Parsers.tmDiskutilLatestBackupDate(out) {
             case .found(let date):
                 dest.lastBackup = Parsers.formatTMBackupDate(date)
+                dest.lastBackupDate = date
                 return
             case .noBackupsFound:
                 // diskutil ran fine and produced a recognizable (empty) listing — the
@@ -582,6 +597,7 @@ final class ReportCollector {
         }
         if let plistDate = readTMPlistLatestSnapshotDate() {
             dest.lastBackup = Parsers.formatTMBackupDate(plistDate)
+            dest.lastBackupDate = plistDate
             return
         }
         if dest.mountPoint == nil {
@@ -593,15 +609,18 @@ final class ReportCollector {
         }
     }
 
-    /// See `applyLastBackup` doc comment: reads the system TimeMachine prefs plist
-    /// directly, no shell-out needed.
-    private func readTMPlistLatestSnapshotDate() -> Date? {
+    /// The TimeMachine prefs plist as a dictionary, or nil when unreadable (Full Disk Access gated — see applyLastBackup).
+    /// Reads the system plist directly, no shell-out needed.
+    private func readTMPlist() -> [String: Any]? {
         let path = "/Library/Preferences/com.apple.TimeMachine.plist"
         guard let data = FileManager.default.contents(atPath: path),
-              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
-              let root = plist as? [String: Any] else { return nil }
-        return Parsers.tmPlistLatestSnapshotDate(root)
+              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+        else { return nil }
+        return plist as? [String: Any]
     }
+
+    /// See `applyLastBackup` doc comment.
+    private func readTMPlistLatestSnapshotDate() -> Date? { readTMPlist().flatMap(Parsers.tmPlistLatestSnapshotDate) }
 
     // MARK: - spotlight
 

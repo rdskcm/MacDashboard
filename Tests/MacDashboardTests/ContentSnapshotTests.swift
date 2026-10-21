@@ -268,6 +268,38 @@ extension SerialTests {
             let secCheckFailed = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil }
             let secCrashes = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef) }
             let secRefreshing = security { $0.applyFixtureSecurity(action: .idle, refreshing: true) }
+            // REDESIGN-BACKUPS: Backups page states. Reference instants are relative to the fixture clock (2026-01-15 10:30).
+            @MainActor func backups(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
+            func bkDest(last: Date?, mounted: Bool, schedule: TMSchedule? = .automatic(intervalSeconds: 3600)) -> TMDestination {
+                TMDestination(name: "Backup SSD", kind: "Local", mountPoint: mounted ? "/Volumes/Backup SSD" : nil,
+                              quotaBytes: nil, lastBackup: last.map { Parsers.formatTMBackupDate($0) },
+                              lastBackupDate: last, freeBytes: mounted ? 612_000_000_000 : nil, schedule: schedule)
+            }
+            let bkSample = TimeMachineStatus.parse(text: (try? String(
+                contentsOf: fixturesRoot.appendingPathComponent("tmutil-status/tmutil-status-backing-synthetic.txt"),
+                encoding: .utf8)) ?? "")!
+            let bkNotSet = backups()
+            let bkOk = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 50 * 60, mounted: true)) }
+            let bkOkNoFDA = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 50 * 60, mounted: true, schedule: nil)) }
+            let bkOverdue7 = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 9 * 86_400, mounted: false)) }
+            let bkOverdue30 = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 34 * 86_400, mounted: false)) }
+            let bkOverdue7Mounted = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 9 * 86_400, mounted: true)) }
+            let bkBackingDest = bkDest(last: homeRef - 86_400 - 2 * 3600, mounted: true)
+            let bkBacking = backups { $0.report.tmDest = .some(bkBackingDest); $0.applyFixtureTimeMachine(backup: bkSample, action: .idle) }
+            let bkStopping = backups { $0.report.tmDest = .some(bkBackingDest); $0.applyFixtureTimeMachine(backup: bkSample, action: .stopping) }
+            let bkPreparing = backups {
+                $0.report.tmDest = .some(bkBackingDest)
+                $0.applyFixtureTimeMachine(backup: TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes"), action: .idle)
+            }
+            let bkStartFailed = backups {
+                $0.report.tmDest = .some(bkDest(last: homeRef - 9 * 86_400, mounted: true))
+                $0.applyFixtureTimeMachine(backup: nil, action: .failed(L.bkStartDidNotBegin))
+            }
+            let bkClaudeStale = backups { $0.claudeBackup = .lastSuccess(homeRef - 4 * 86_400) }
+            let bkClaudeNone = backups { $0.claudeBackup = .noSuccessFound }
+            let bkClaudeMissing = backups { $0.claudeBackup = nil }
+            let bkClaudeUnreadable = backups { $0.claudeBackup = .unreadable }
+            let bkWait = backups { $0.report.tmDest = nil }
             let fixtureDays = m.history.mac_history
             let historyNoDays = fixtureHistory([])
             let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -511,8 +543,42 @@ extension SerialTests {
                         SecurityPageBar(model: secCollecting) {}; SecurityPageBar(model: secRefreshing) {}
                     }
                 }
-                run.snap("content-claude-backup", mode, width: 589) {
-                    ClaudeBackupCard(model: m)
+                run.snap("content-backups-notset", mode, width: 1094) {
+                    VStack(spacing: 16) { BackupsTimeMachineCard(model: bkNotSet, narrow: false); BackupsClaudeCard(model: bkNotSet) }
+                }
+                run.snap("content-backups-ok", mode, width: 1094) {
+                    VStack(spacing: 16) { BackupsTimeMachineCard(model: bkOk, narrow: false); BackupsTimeMachineCard(model: bkOkNoFDA, narrow: false) }
+                }
+                run.snap("content-backups-overdue", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        BackupsTimeMachineCard(model: bkOverdue7, narrow: false); BackupsTimeMachineCard(model: bkOverdue30, narrow: false)
+                        BackupsTimeMachineCard(model: bkOverdue7Mounted, narrow: false)
+                    }
+                }
+                run.snap("content-backups-backing", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        BackupsTimeMachineCard(model: bkBacking, narrow: false); BackupsTimeMachineCard(model: bkStopping, narrow: false)
+                        BackupsTimeMachineCard(model: bkPreparing, narrow: false); BackupsTimeMachineCard(model: bkStartFailed, narrow: false)
+                    }
+                }
+                run.snap("content-backups-claude", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        BackupsClaudeCard(model: bkClaudeStale); BackupsClaudeCard(model: bkClaudeNone)
+                        BackupsClaudeCard(model: bkClaudeMissing); BackupsClaudeCard(model: bkClaudeUnreadable)
+                    }
+                }
+                run.snap("content-backups-wait", mode, width: 1094) {
+                    BackupsTimeMachineCard(model: bkWait, narrow: false)
+                }
+                run.snap("content-backups-narrow", mode, width: 904) {
+                    VStack(spacing: 16) { BackupsTimeMachineCard(model: bkOk, narrow: true); BackupsTimeMachineCard(model: bkOverdue7, narrow: true) }
+                }
+                run.snap("content-backups-bars", mode, width: 1150) {
+                    VStack(spacing: 12) {
+                        BackupsPageBar(model: bkNotSet) {}; BackupsPageBar(model: bkOk) {}; BackupsPageBar(model: bkOverdue7) {}
+                        BackupsPageBar(model: bkOverdue30) {}; BackupsPageBar(model: bkBacking) {}; BackupsPageBar(model: bkClaudeStale) {}
+                        BackupsPageBar(model: bkClaudeMissing) {}; BackupsPageBar(model: bkWait) {}
+                    }
                 }
                 run.snap("content-history-disk", mode, width: 1150) {
                     HistoryCard(model: m, initialMetric: .disk, initialRange: .month)

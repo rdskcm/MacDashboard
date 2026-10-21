@@ -28,6 +28,7 @@ extension DashboardModel {
         fixtureNow = VisualFixture.referenceDate
         reportUpdatedAt = VisualFixture.referenceDate
         smartUpdatedAt = VisualFixture.referenceDate
+        tmUpdatedAt = VisualFixture.referenceDate
         lastSampleAt = VisualFixture.referenceDate
         isCollectingReport = false
         // REDESIGN-HOME: Home's CPU tile «Processes» and the scan state («checked at 10:30»).

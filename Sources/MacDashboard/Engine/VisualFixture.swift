@@ -228,7 +228,7 @@ enum VisualFixture {
         let wakeHolders = [WakeHolder(owner: "caffeinate", requester: "Terminal", ageSeconds: 5400)]
 
         // VISUAL-HARNESS-STALE: fresh Claude backup, 2 h before the reference date, so the
-        // Settings Backups row and ClaudeBackupCard are in the baseline. Age is pinned by
+        // Settings Backups row and the Backups page's Claude card are in the baseline. Age is pinned by
         // assessing at `now: referenceDate` here and by DashboardModel.fixtureNow in the views.
         let claudeBackup = ClaudeBackupStatus.lastSuccess(referenceDate.addingTimeInterval(-2 * 3600))
 

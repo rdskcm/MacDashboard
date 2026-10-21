@@ -538,6 +538,18 @@ enum Parsers {
         return dates.max()
     }
 
+    /// REDESIGN-BACKUPS: `AutoBackup` (Bool/Int) and `AutoBackupInterval` (seconds) of the TimeMachine prefs root.
+    /// Missing `AutoBackup` → nil (unknown). `AutoBackup` false → .manual. true with no/zero interval → 3600
+    /// (Apple's documented hourly default, support.apple.com/104984).
+    static func tmPlistSchedule(_ root: [String: Any]) -> TMSchedule? {
+        guard let raw = root["AutoBackup"] else { return nil }
+        let on: Bool
+        if let b = raw as? Bool { on = b } else if let n = raw as? NSNumber { on = n.intValue != 0 } else { return nil }
+        guard on else { return .manual }
+        let interval = (root["AutoBackupInterval"] as? NSNumber)?.intValue ?? 0
+        return .automatic(intervalSeconds: interval > 0 ? interval : 3600)
+    }
+
     /// "16.07.2026, 10:50" — Russian-locale day.month.year + 24h time, used for the
     /// TM card's "Последний бэкап" value regardless of which source (tmutil path
     /// timestamp vs plist `SnapshotDates`) produced the `Date`.

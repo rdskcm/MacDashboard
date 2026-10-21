@@ -63,6 +63,16 @@ final class DashboardModel {
     /// assessments treat as "now", so fixture captures do not depend on the wall clock. nil = wall clock.
     var fixtureNow: Date? = nil
 
+    /// REDESIGN-BACKUPS: last `tmutil status` sample while the Backups page polls; nil = not probed on this visit.
+    private(set) var tmBackup: TMBackupProgress? = nil
+    /// REDESIGN-BACKUPS: in-flight / last-failed Back up now / Stop.
+    private(set) var tmAction: TMActionState = .idle
+    /// REDESIGN-BACKUPS: when the Time Machine destination was last (re)collected — the card's «updated HH:MM».
+    var tmUpdatedAt: Date? = nil
+    /// REDESIGN-BACKUPS: a page asks the Settings window to open on this section; SettingsView consumes and clears it.
+    var settingsSectionRequest: SettingsSection? = nil
+    private var tmRefreshing = false
+
     /// Re-entrancy guard for `refreshSmartNow()` (SPEC Block H follow-up): true while a
     /// manual SMART refresh is in flight, so the card's «Обновить» button can disable
     /// itself and avoid overlapping ReportCollector instances.
@@ -429,6 +439,9 @@ final class DashboardModel {
         securityAction = action; securityRefreshing = refreshing; isCheckingUpdates = checkingUpdates
     }
 
+    /// REDESIGN-BACKUPS: snapshot states (backing, stopping, failed start).
+    func applyFixtureTimeMachine(backup: TMBackupProgress?, action: TMActionState) { tmBackup = backup; tmAction = action }
+
     /// Visual fixture only (REDESIGN-STORAGE): smartmontools state, install-in-flight flag and typed failure.
     func applyFixtureSmartTools(_ state: ReportCollector.SmartToolsAvailability, installing: Bool, failure: SmartInstallFailure?) {
         smartToolsState = state; smartInstalling = installing; smartInstallFailure = failure
@@ -635,6 +648,7 @@ final class DashboardModel {
                 guard !Task.isCancelled else { return }
                 if self.report.smart != disks { self.report.smart = disks }
                 if self.report.tmDest != tmDest { self.report.tmDest = tmDest }
+                self.tmUpdatedAt = Date()
                 await self.refreshClaudeBackup()
                 self.smartUpdatedAt = Date()
             }
@@ -744,6 +758,11 @@ final class DashboardModel {
                     // launch/manual report too, not only the periodic sampler.
                     if partial.progress["smart"] == true, self.report.progress["smart"] != true {
                         self.smartUpdatedAt = Date()
+                    }
+                    // REDESIGN-BACKUPS: the Time Machine destination section's arrival stamps the Backups card's «updated HH:MM».
+                    let tmKey = ReportSection.tmDest.rawValue
+                    if partial.progress[tmKey] == true, self.report.progress[tmKey] != true {
+                        self.tmUpdatedAt = Date()
                     }
                     // Scan block (D14): decided by the system section — system_profiler — of this pass.
                     let systemKey = ReportSection.system.rawValue
@@ -940,6 +959,7 @@ final class DashboardModel {
             guard !Task.isCancelled else { return }
             if self.report.smart != disks { self.report.smart = disks }
             if self.report.tmDest != tmDest { self.report.tmDest = tmDest }
+            self.tmUpdatedAt = Date()
             await self.refreshClaudeBackup()
             self.smartUpdatedAt = Date()
         }
@@ -995,6 +1015,90 @@ final class DashboardModel {
             self.recordCPUSample(cpu, at: snap.t)
             self.succeedBlock(.cpu)
         }
+    }
+
+    /// REDESIGN-BACKUPS: Time Machine destination + local snapshots now (after a backup ends; after Stop).
+    func refreshTimeMachineNow() {
+        guard !tmRefreshing else { return }
+        tmRefreshing = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.tmRefreshing = false }
+            let box = UncheckedSendableBox(ReportCollector())
+            let tmDest = await box.value.collectTMDestInfo()
+            let snaps = await box.value.collectLocalSnapshotNames()
+            guard !Task.isCancelled else { return }
+            await self.waitForReportRefreshToFinish()
+            if let tmDest, self.report.tmDest != tmDest { self.report.tmDest = tmDest }   // nil = tmutil failed: keep the old value
+            if let snaps, self.report.snapshots != snaps { self.report.snapshots = snaps }
+            self.tmUpdatedAt = Date()
+            await self.refreshClaudeBackup()
+            self.setAssessment(self.assessed(self.report))
+        }
+    }
+
+    /// REDESIGN-BACKUPS D2/D3: awaited by BackupsPage's `.task`; cancelled when the page leaves. Spawns
+    /// `tmutil status` only for the first probe, while a backup runs, or while a start/stop is in flight,
+    /// and never while the window is hidden (`isPaused`). 2 s between samples.
+    func observeTimeMachineStatus() async {
+        defer {
+            tmBackup = nil
+            if case .failed = tmAction { tmAction = .idle }
+        }
+        var pollsSinceStart = 0
+        while !Task.isCancelled {
+            let needed = tmBackup == nil || tmBackup?.running == true || tmAction == .starting || tmAction == .stopping
+            if needed && !isPaused {
+                let outcome = await ParsedCommand.tmutilStatus.run()
+                guard !Task.isCancelled else { return }
+                let wasRunning = tmBackup?.running == true
+                let sample = outcome.nonEmptyText.flatMap { TimeMachineStatus.parse(text: $0) } ?? .idle
+                if tmBackup != sample { tmBackup = sample }
+                switch tmAction {
+                case .starting:
+                    if sample.running { tmAction = .idle; pollsSinceStart = 0 }
+                    else { pollsSinceStart += 1; if pollsSinceStart >= 5 { tmAction = .failed(L.bkStartDidNotBegin); pollsSinceStart = 0 } }
+                case .stopping:
+                    if !sample.running { tmAction = .idle }
+                default: break
+                }
+                if wasRunning && !sample.running { refreshTimeMachineNow() }
+            }
+            try? await Task.sleep(for: .seconds(2))
+        }
+    }
+
+    /// REDESIGN-BACKUPS R3: `tmutil startbackup` (no root per tmutil(8)); the poll loop above confirms it began.
+    func startTimeMachineBackupNow() {
+        switch tmAction { case .idle, .failed: break; case .starting, .stopping: return }   // a failed attempt may be retried
+        guard case .some(.some(let dest)) = report.tmDest, dest.mountPoint != nil else { return }
+        tmAction = .starting
+        Task { [weak self] in
+            guard let self else { return }
+            let outcome = await CommandRunner.run("/usr/bin/tmutil", ["startbackup"], timeout: 15)
+            guard !Task.isCancelled else { return }
+            if case .exited(0) = outcome.termination { return }   // the poll loop takes over (.starting → .idle / .failed)
+            self.tmAction = .failed(L.bkStartFailed(Self.firstLine(outcome.stderrHead)))
+        }
+    }
+
+    /// REDESIGN-BACKUPS R3: `tmutil stopbackup`; the poll loop clears `.stopping` once Running == 0.
+    func stopTimeMachineBackupNow() {
+        switch tmAction { case .idle, .failed: break; case .starting, .stopping: return }   // a failed action is cleared by a new stop
+        guard tmBackup?.running == true else { return }
+        tmAction = .stopping
+        Task { [weak self] in
+            guard let self else { return }
+            let outcome = await CommandRunner.run("/usr/bin/tmutil", ["stopbackup"], timeout: 15)
+            guard !Task.isCancelled else { return }
+            if case .exited(0) = outcome.termination { return }
+            self.tmAction = .failed(L.bkStopFailed(Self.firstLine(outcome.stderrHead)))
+        }
+    }
+
+    /// First non-blank line of a command's stderr, or a generic reason.
+    private static func firstLine(_ s: String) -> String {
+        s.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? L.bkFailedNoReason
     }
 
     /// REDESIGN-STORAGE D22: Storage page Refresh = a folder recount with the `.button` trigger. Live disk figures

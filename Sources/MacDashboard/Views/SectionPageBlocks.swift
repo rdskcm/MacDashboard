@@ -153,6 +153,9 @@ struct SectionNote: View {
     var buttonIdentifier: String? = nil
     /// REDESIGN-SECURITY: «Install…» is a primary button; every older call site keeps the secondary one.
     var primary = false
+    /// REDESIGN-BACKUPS: a disabled button («Back up now» with the disk unplugged) and its tooltip.
+    var buttonDisabled = false
+    var buttonHelp: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -171,11 +174,13 @@ struct SectionNote: View {
                     }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: primary ? .primary : .secondary, height: 30, hPad: 13, fontSize: 12.5))
-                .disabled(button.busy)
+                .disabled(button.busy || buttonDisabled)
                 .accessibilityLabel(button.a11y)
                 .accessibilityIdentifier(buttonIdentifier ?? "")
             }
         }
+        // A disabled macOS button shows no help tag, so the tooltip sits on the container.
+        .help(buttonHelp ?? "")
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
         .ds3TintPanel(tone, from: 0.16, to: 0.06, ring: 0.42, cornerRadius: 20)

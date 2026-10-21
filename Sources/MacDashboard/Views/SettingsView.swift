@@ -184,6 +184,10 @@ struct SettingsView: View {
         // case: they must reach under the titlebar. On macOS 27 without them the
         // titlebar strip above the sidebar is left unpainted — see-through to the
         // desktop — and only the red window button is drawn.
+        .task(id: model.settingsSectionRequest) {
+            // REDESIGN-BACKUPS D10: a page asked for a section (Backups card → Settings › Backup).
+            if let s = model.settingsSectionRequest { section = s; model.settingsSectionRequest = nil }
+        }
         .frame(width: 680, height: 420)
         // The window's own title. macOS supplies one for a `Settings` scene, but in the
         // SYSTEM language: an English macOS with the app set to Russian showed an

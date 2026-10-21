@@ -531,7 +531,7 @@ private struct HistoryTrendChart: View {
         /// localization keys needed). V2-FIX-UNITS follow-up: this monospaced
         /// tooltip renders a literal space as a full glyph advance, so disk/swap
         /// split value and unit into two `Text` views with a tight
-        /// `.padding(.leading, 1.5)` gap, matching TMRow.valueParts and
+        /// `.padding(.leading, 1.5)` gap, matching the former TMRow.valueParts (deleted in REDESIGN-BACKUPS) and
         /// the Memory page legend elsewhere in this block. Battery/cycles don't have the
         /// gap defect (`%` touches the number directly; cycles is a count + word
         /// label, not a byte/capacity unit) so they stay single strings.
