@@ -189,7 +189,7 @@ G5_NOTE=""
 # REDESIGN-BATTERY: G5 hovered the battery popover's rainbow «Details» capsule (`battery-details`), which no longer
 # exists; the scenario is parked (definitions kept) until HARNESS-REDESIGN-RETARGET retargets it.
 case " $ITEMS " in *" G5 "*|*" G5-top "*)
-  ITEMS="$(for i in $ITEMS; do case "$i" in G5|G5-top) ;; *) echo -n " $i" ;; esac; done)"
+  ITEMS="$(for i in $ITEMS; do case "$i" in (G5|G5-top) ;; (*) echo -n " $i" ;; esac; done)"
   G5_NOTE="G5 parked: its target (battery-details) was removed in REDESIGN-BATTERY; retarget in HARNESS-REDESIGN-RETARGET"
   log "$G5_NOTE" ;;
 esac
