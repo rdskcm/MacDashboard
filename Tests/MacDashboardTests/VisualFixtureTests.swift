@@ -31,6 +31,11 @@ extension SerialTests {
             #expect(d1.assessment.items.count == 5, "VisualFixture: 5 attention items (got \(d1.assessment.items.count))")
             #expect(d1.assessment.capsules.count == 4, "VisualFixture: 4 tip capsules (got \(d1.assessment.capsules.count))")
 
+            // --- REDESIGN-SYSTEM: the System page fixture facts (no new attention kind: system holders raise none) ---
+            #expect(d1.report.autostart != nil, "VisualFixture: autostart info present")
+            #expect(d1.report.energy != nil, "VisualFixture: energy settings present")
+            #expect(d1.report.brewInstalledCount == 48, "VisualFixture: 48 installed Homebrew packages")
+
             // --- REDESIGN-SECURITY: the Security page fixture facts (Home-invisible: the kinds above are unchanged) ---
             #expect(d1.report.crashes?.map(\.process) == ["Xcode"], "VisualFixture: one third-party crash group")
             #expect(d1.report.updatesCheckedAt == VisualFixture.referenceDate.addingTimeInterval(-300),

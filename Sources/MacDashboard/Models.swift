@@ -220,6 +220,22 @@ enum BrewStatus: Equatable, Sendable {
     case installed(version: String?)
 }
 
+/// One outdated package as `brew outdated --verbose` names it; versions are nil when the line has none.
+struct BrewOutdatedPackage: Equatable, Sendable {
+    var name: String
+    var current: String?
+    var latest: String?
+}
+
+/// One Homebrew collection: presence, the outdated names (nil = the check failed), their versions
+/// and the installed formula + cask count (nil = a count failed).
+struct BrewSnapshot: Equatable, Sendable {
+    var status: BrewStatus
+    var outdated: [String]?
+    var outdatedDetail: [BrewOutdatedPackage]?
+    var installedCount: Int?
+}
+
 struct FullReport {
     var createdAt: Date?
     var system: SystemInfo?
@@ -243,6 +259,8 @@ struct FullReport {
     var spotlight: String?
     var crashes: [CrashGroup]?          // grouped, ≤7 days old (V2-CRASH-SIGNAL)
     var brewStatus: BrewStatus?          // nil = not checked yet
+    var brewOutdatedDetail: [BrewOutdatedPackage]?   // REDESIGN-SYSTEM: versions for the System page rows
+    var brewInstalledCount: Int?                      // REDESIGN-SYSTEM: formulae + casks
     var brewOutdated: [String]?         // [] = none outdated; nil with brewStatus .installed = `brew outdated` failed (BREW-OUTDATED-FAIL)
     var updates: [SoftwareUpdate]?    // pending macOS updates ([] = up to date)
     var updatesCheckedAt: Date?          // when the shown `updates` value was obtained (cache); nil = never checked

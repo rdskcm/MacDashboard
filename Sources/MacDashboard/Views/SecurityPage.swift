@@ -297,9 +297,9 @@ struct SecurityUpdatesCard: View {
                                     buttonIdentifier: "security-updates-install", primary: true)
                     }
                     if !m.updateRows.isEmpty {
-                        SecurityList {
+                        SectionList {
                             ForEach(m.updateRows, id: \.id) { r in
-                                SecurityListRow(dot: DS3.amber, name: r.name, sub: r.sub, value: r.value)
+                                SectionListRow(dot: DS3.amber, name: r.name, sub: r.sub, value: r.value)
                             }
                         }
                     }
@@ -336,12 +336,12 @@ struct SecurityCrashesCard: View {
             if m.crashesWait {
                 SectionWait(text: L.commonCollectingData)
             } else if m.crashesNone {
-                SecurityList {
-                    SecurityListRow(dot: DS3.green, name: L.secNoCrashes, sub: "", value: "✓")
+                SectionList {
+                    SectionListRow(dot: DS3.green, name: L.secNoCrashes, sub: "", value: "✓")
                 }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    SecurityList {
+                    SectionList {
                         ForEach(m.crashRows, id: \.id) { r in
                             CrashRow(row: r, opened: r.path != nil && r.path == openedReportPath) {
                                 guard let p = r.path else { return }
@@ -373,7 +373,7 @@ private struct CrashRow: View {
     private var clickable: Bool { row.path != nil }
 
     var body: some View {
-        SecurityListRow(dot: toneColor(row.tone), name: row.name, sub: row.sub, value: row.value)
+        SectionListRow(dot: toneColor(row.tone), name: row.name, sub: row.sub, value: row.value)
             .background {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(hover || opened ? DS3.lens : Color.clear)
@@ -391,52 +391,5 @@ private struct CrashRow: View {
             .accessibilityLabel(L.secCrashRowA11y(row.name, row.value))
             .accessibilityIdentifier("security-crash-\(row.id)")
             .accessibilityAction { if clickable { open() } }
-    }
-}
-
-// MARK: - List blocks
-
-/// The `BatteryHistoryCard.list` container: padding 6, radius 22, `DS3.row`, rows spaced 4.
-private struct SecurityList<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        VStack(spacing: 4) { content() }
-            .padding(6)
-            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(DS3.row))
-    }
-}
-
-private struct SecurityListRow: View {
-    let dot: Color
-    let name: String
-    let sub: String
-    let value: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Circle().fill(dot).frame(width: 7, height: 7)
-            Text(name)
-                .font(.system(size: 14))
-                .foregroundStyle(DS3.ink)
-                .lineLimit(1)
-                .help(name)
-            if !sub.isEmpty {
-                Text(sub)
-                    .font(.system(size: 12.5))
-                    .monospacedDigit()
-                    .foregroundStyle(DS3.muted)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            Text(value)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(DS3.ink)
-                .lineLimit(1)
-                .frame(minWidth: 64, alignment: .trailing)
-        }
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
     }
 }

@@ -16,6 +16,8 @@ struct DS3ButtonStyle: ButtonStyle {
     var glow = false
     var topRim: Double = 0.6
     var disabledOpacity: Double = 0.45
+    /// REDESIGN-SYSTEM: a secondary button whose label and ring turn red under the pointer (row «Delete»).
+    var dangerOnHover = false
 
     func makeBody(configuration: Configuration) -> some View {
         DS3ButtonBody(configuration: configuration, style: self)
@@ -45,10 +47,15 @@ private struct DS3ButtonBody: View {
                 primary
             }
         case .secondary:
-            label(DS3.ink)
-                .background(Capsule().fill(DS3.chip))
-                .ds3InsetRims(Capsule(), top: style.topRim > 0 ? DS3.rimMid : nil, ring: DS3.lineStrong)
-                .contentShape(Capsule())
+            if style.dangerOnHover {
+                // Colour only, 0.12 s under Reduce Motion (`reduce-motion`).
+                let hot = hover
+                secondary(ink: hot ? DS3.hotInk : DS3.ink, ring: hot ? DS3.hot.opacity(0.45) : DS3.lineStrong)
+                    .onHover { hover = $0 }
+                    .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.14), value: hover)
+            } else {
+                secondary(ink: DS3.ink, ring: DS3.lineStrong)
+            }
         case .danger:
             label(DS3.hotInk)
                 .background(Capsule().fill(DS3.hot.opacity(0.14)))
@@ -66,6 +73,13 @@ private struct DS3ButtonBody: View {
                 .onHover { hover = $0 }
                 .animation(.easeOut(duration: 0.12), value: hover)
         }
+    }
+
+    private func secondary(ink: Color, ring: Color) -> some View {
+        label(ink)
+            .background(Capsule().fill(DS3.chip))
+            .ds3InsetRims(Capsule(), top: style.topRim > 0 ? DS3.rimMid : nil, ring: ring)
+            .contentShape(Capsule())
     }
 
     private var primary: some View {

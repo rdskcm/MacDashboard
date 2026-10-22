@@ -21,6 +21,7 @@ struct LaunchdPlistInfo: Equatable {
 enum PlistDeleteOutcome: Equatable {
     case success
     case cancelled
+    case timedOut
     case failed(String)
 }
 

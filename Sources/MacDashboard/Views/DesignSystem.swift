@@ -35,7 +35,7 @@ enum DSMotion {
     /// Reduce Motion fallback duration for color/opacity/border/shadow transitions.
     static let reduceMotionFallback: Double = 0.12
     /// Hover transition for controls that ALSO carry a `.rainbowBorder()` glow
-    /// (e.g. EnergyCard's Reset button). `RainbowBorder` fades its own ring with
+    /// (e.g. a Reset button). `RainbowBorder` fades its own ring with
     /// a hardcoded internal `.easeInOut(duration: 0.25)` (SharedUI.swift); a
     /// caller-side hover animation on a *different* curve/duration (e.g. the
     /// plain `cardHover` easeOut/0.16 s used by non-glow hover controls) settles
@@ -50,7 +50,7 @@ enum DSMotion {
 // MARK: - Disclosure transition
 
 /// Fade + slight rise, shared by every collapse/expand disclosure in the v2.0 UI
-/// (AutostartCard, EnergyCard) so appearing/disappearing content reads as one
+/// (QuietStrip rows, the process-row panels, SectionRows) so appearing/disappearing content reads as one
 /// consistent motion instead of each call site inventing its own combination.
 private struct DSFadeSlide: ViewModifier {
     let progress: Double            // 1 = hidden, 0 = shown

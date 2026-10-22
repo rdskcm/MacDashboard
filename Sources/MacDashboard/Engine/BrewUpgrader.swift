@@ -37,14 +37,21 @@ enum BrewUpgrader {
                            onProgress: @escaping (BrewProgress) -> Void, run: Runner) async -> String? {
         guard let brew = brewPath else { return L.maintenanceBrewUpgradeFailed }
         var parser = BrewProgressParser(total: totalOutdated)
+        var lastStderr: String?
         let outcome = await run(invocation(brewPath: brew), { line, isStderr in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if isStderr, !trimmed.isEmpty { lastStderr = trimmed }
             if parser.consume(line: line, isStderr: isStderr), let p = parser.progress {
                 onProgress(p)
             }
         })
         // Success is brew's exit status, never the presence of output: a partial failure
         // prints `==> Upgrading …` before exiting non-zero (BREW-PARTIAL-FAIL).
-        return outcome.termination == .exited(0) ? nil : L.maintenanceBrewUpgradeFailed
+        // After an ordinary non-zero exit the last non-empty stderr line is shown (REDESIGN-SYSTEM «Update failed: …»).
+        // A timeout or kill ends the run mid-output, so that line says nothing about the cause: generic message.
+        if outcome.termination == .exited(0) { return nil }
+        if case .exited = outcome.termination, let lastStderr { return L.sysBrewFailedLine(lastStderr) }
+        return L.maintenanceBrewUpgradeFailed
     }
 
     static func invocation(brewPath: String) -> Invocation {
@@ -52,8 +59,8 @@ enum BrewUpgrader {
         // (ruby, git, curl, …) inside that prefix — same reason `collectBrewInfo()`
         // builds this environment for `update`/`--version`/`outdated`. It was missing here, on
         // the one call that actually matters, until V2-POLISH B1.
-        // Generous timeout: downloads can take a while.
-        Invocation(path: brewPath, args: ["upgrade"], timeout: 900,
+        // 5 min (user decision, REDESIGN-SYSTEM); a timeout is a failure like any other non-zero exit.
+        Invocation(path: brewPath, args: ["upgrade"], timeout: 300,
                    // User Stop: SIGINT lets Homebrew roll back the current keg (Utils::Interrupts); SIGKILL only if it has not exited 30 s later (BREW-CANCEL).
                    interruptGrace: 30,
                    environment: CommandRunner.environment(

@@ -70,5 +70,12 @@ extension DashboardModel {
             s.succeed(at: ref)
             return s
         }())
+        // REDESIGN-SYSTEM: the System page — one user holder + one system holder (sampled), brew checked just now,
+        // startup list never checked, no energy apply in flight.
+        applyFixtureWakeHolders(user: [WakeHolder(owner: "caffeinate", requester: "Terminal", ageSeconds: 5400)],
+                                system: VisualFixture.systemWakeHolders, sampled: true)
+        applyFixtureBrew(checkedAt: ref, upgrading: false, progress: nil, error: nil, notice: nil, stoppable: false)
+        applyFixtureStartup(checkedAt: nil, removed: 0, checking: false, deleting: [], failure: nil)
+        applyFixtureEnergyApply(.idle)
     }
 }

@@ -146,6 +146,21 @@ extension SerialTests {
                     == "/bin/rm -f -- '/Library/LaunchAgents/a b.plist' '/Library/LaunchDaemons/it'\\''s.plist'",
                   "PrivilegedRunner: [removeCommand two]")
             #expect(PR.removeCommand(paths: []) == "/bin/rm -f -- ", "PrivilegedRunner: [removeCommand empty]")
+            // REDESIGN-SYSTEM: bootout (errors discarded) before the rm, domain by path
+            #expect(PR.removeStartupItemsCommand(paths: ["/Library/LaunchDaemons/a.plist"], uid: 501)
+                    == "/bin/launchctl bootout system '/Library/LaunchDaemons/a.plist' >/dev/null 2>&1; /bin/rm -f -- '/Library/LaunchDaemons/a.plist'",
+                  "PrivilegedRunner: [removeStartupItemsCommand daemon]")
+            #expect(PR.removeStartupItemsCommand(paths: ["/Library/LaunchAgents/b.plist"], uid: 501)
+                    == "/bin/launchctl bootout gui/501 '/Library/LaunchAgents/b.plist' >/dev/null 2>&1; /bin/rm -f -- '/Library/LaunchAgents/b.plist'",
+                  "PrivilegedRunner: [removeStartupItemsCommand agent]")
+            #expect(PR.removeStartupItemsCommand(paths: ["/Library/LaunchDaemons/a.plist", "/Library/LaunchAgents/b.plist"], uid: 501)
+                    == "/bin/launchctl bootout system '/Library/LaunchDaemons/a.plist' >/dev/null 2>&1; "
+                     + "/bin/launchctl bootout gui/501 '/Library/LaunchAgents/b.plist' >/dev/null 2>&1; "
+                     + "/bin/rm -f -- '/Library/LaunchDaemons/a.plist' '/Library/LaunchAgents/b.plist'",
+                  "PrivilegedRunner: [removeStartupItemsCommand mixed]")
+            #expect(PR.removeStartupItemsCommand(paths: ["/Library/LaunchDaemons/it's.plist"], uid: 501)
+                    == "/bin/launchctl bootout system '/Library/LaunchDaemons/it'\\''s.plist' >/dev/null 2>&1; /bin/rm -f -- '/Library/LaunchDaemons/it'\\''s.plist'",
+                  "PrivilegedRunner: [removeStartupItemsCommand quote]")
             // PRIV-RM-DASHDASH: `--` ends rm's options before the first path, so a leading `-` stays an operand.
             #expect(PR.removeCommand(paths: ["-rf"]) == "/bin/rm -f -- '-rf'",
                   "PrivilegedRunner: [removeCommand leading dash] single")

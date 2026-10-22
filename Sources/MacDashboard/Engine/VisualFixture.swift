@@ -71,6 +71,42 @@ enum VisualFixture {
             mediaErrors: 27, errorLogEntries: 112, criticalWarning: 1))
 
     /// REDESIGN-SECURITY: sample updates for the Security page snapshot states (the fixture report keeps `updates = []`).
+    // REDESIGN-SYSTEM: the System page fixtures (Sleep, Startup items, Energy settings).
+    static func autostart(home: String) -> AutostartInfo {
+        func info(_ path: String, orphan: Bool = false, description: String? = nil, exe: String? = nil) -> LaunchdPlistInfo {
+            LaunchdPlistInfo(path: path, label: nil, executablePath: exe, isOrphan: orphan, description: description)
+        }
+        let user = home + "/Library/LaunchAgents/"
+        return AutostartInfo(
+            loginItems: ["Claude", "Rectangle", "Dropbox", "iStat Menus"],
+            userAgents: [info(user + "com.google.keystone.agent.plist"),
+                         info(user + "com.dropbox.DropboxMacUpdate.agent.plist"),
+                         info(user + "homebrew.mxcl.postgresql@14.plist", orphan: true, description: "PostgreSQL 14 server",
+                              exe: "/opt/homebrew/opt/postgresql@14/bin/postgres")],
+            systemAgents: [info("/Library/LaunchAgents/com.adobe.ARMDCHelper.plist", orphan: true),
+                           info("/Library/LaunchAgents/com.microsoft.update.agent.plist")],
+            systemDaemons: [info("/Library/LaunchDaemons/com.docker.vmnetd.plist"),
+                            info("/Library/LaunchDaemons/com.objective-see.lulu.plist"),
+                            info("/Library/LaunchDaemons/org.cups.cupsd.plist"),
+                            info("/Library/LaunchDaemons/com.microsoft.autoupdate.helper.plist"),
+                            info("/Library/LaunchDaemons/com.adobe.acc.installer.v2.plist")],
+            background: [(pid: "1123", label: "Dropbox"), (pid: "2290", label: "Docker")])
+    }
+
+    /// No battery `womp` on purpose: that cell shows «—», as in the handoff table.
+    static let energy = EnergySettings(
+        battery: [("displaysleep", "2"), ("sleep", "1"), ("disksleep", "10"), ("powernap", "0"), ("lowpowermode", "0"),
+                  ("standby", "1"), ("hibernatemode", "3"), ("tcpkeepalive", "1"), ("lidwake", "1")],
+        ac: [("displaysleep", "10"), ("sleep", "0"), ("disksleep", "10"), ("powernap", "1"), ("lowpowermode", "0"),
+             ("standby", "1"), ("womp", "1"), ("hibernatemode", "3"), ("tcpkeepalive", "1"), ("lidwake", "1")])
+
+    /// A system service holding the Mac awake: listed, never warned about.
+    static let systemWakeHolders = [WakeHolder(owner: "backupd", requester: nil, ageSeconds: 720)]
+
+    static let hiddenHolders = [
+        IgnoredWakeHolder(key: WakeHolderKey(owner: "Zoom", requester: nil), since: referenceDate.addingTimeInterval(-3 * 86_400)),
+        IgnoredWakeHolder(key: WakeHolderKey(owner: "backupd", requester: "Time Machine"), since: nil)]
+
     static let securityUpdates: [SoftwareUpdate] = [
         SoftwareUpdate(label: "macOS Tahoe 26.1.1-25B90", title: "macOS Tahoe 26.1.1", version: "26.1.1",
                        sizeBytes: 3_276_800 * 1024, restartRequired: true),
@@ -216,6 +252,13 @@ enum VisualFixture {
                                      newestReportPath: home + "/Library/Logs/DiagnosticReports/Xcode-2026-01-12-083000.ips")]
         report.brewStatus = .installed(version: "Homebrew 4.6.0")
         report.brewOutdated = ["git", "node", "python@3.13"]
+        // REDESIGN-SYSTEM: versions and the installed count for the System page's Homebrew card.
+        report.brewOutdatedDetail = [BrewOutdatedPackage(name: "git", current: "2.46.0", latest: "2.47.0"),
+                                     BrewOutdatedPackage(name: "node", current: "22.9.0", latest: "22.11.0"),
+                                     BrewOutdatedPackage(name: "python@3.13", current: "3.13.0", latest: "3.13.1")]
+        report.brewInstalledCount = 48
+        report.autostart = autostart(home: home)
+        report.energy = energy
         // REDESIGN-HOME: the Home "You can" chips — local snapshots (Backups) and the Full Disk Access notice.
         report.snapshots = ["com.apple.TimeMachine.2026-01-15-090000.local",
                             "com.apple.TimeMachine.2026-01-15-080000.local",

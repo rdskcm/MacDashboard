@@ -13,10 +13,6 @@ struct StringsRU: AppStrings {
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) с" }
     var settingsIntervalNoteBalanced: String { "Рабочий диапазон: живые графики без заметной нагрузки." }
     var settingsIntervalNoteEconomy: String { "Экономный режим: значения обновляются реже, батарея живёт дольше." }
-    var settingsWakeIgnoredLabel: String { "Сон: не предупреждать про эти приложения" }
-    var settingsWakeIgnoredEmpty: String { "Список пуст. Чтобы добавить приложение, щёлкните правой кнопкой по предупреждению «Сон» в главном окне." }
-    var settingsWakeIgnoredRestore: String { "Снова предупреждать" }
-    func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String { "Снова предупреждать про \(holder)" }
     var settingsSectionBackup: String { "Бэкап" }
     var settingsBackupStaleLabel: String { "Бэкап Claude: предупреждать, если старше" }
     func settingsBackupStaleOption(_ hours: Int) -> String { "\(hours / 24) дн" }
@@ -278,22 +274,14 @@ struct StringsRU: AppStrings {
     func processSignalFailed(_ name: String) -> String { "Не удалось завершить «\(name)»." }
 
     // MARK: Maintenance card
-    var maintenanceTitle: String { "Обслуживание системы" }
     var maintenanceBrewNotInstalled: String { "не установлен" }
     var maintenanceBrewVersionUnknown: String { "Homebrew установлен, но версию определить не удалось" }
-    var maintenanceBrewAllFresh: String { "Все пакеты свежие \u{2713}" }
-    func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Устаревших пакетов: \(n)" }
     var maintenanceBrewOutdatedCheckFailed: String { "Не удалось проверить устаревшие пакеты — запустите brew outdated в Терминале" }
-    var maintenanceUpdatesSection: String { "Обновления" }
-    var maintenanceUpdatesAllUpdated: String { "\u{2713}" }
-    var maintenanceCrashesSection: String { "Краши" }
-    var maintenanceCrashesNone: String { "\u{2713}" }
     var maintenanceUpdatesTip: String { "Ожидающие обновления macOS и App Store." }
     var maintenanceCrashesTip: String { "Отчёты о падениях приложений за последние 7 дней." }
     func maintenanceCrashRow(_ process: String, _ count: Int) -> String { count > 1 ? "\(process) \u{00D7}\(count)" : process }
     func maintenanceCrashRevealA11y(_ process: String) -> String { "Показать отчёты о падениях «\(process)» в Finder" }
     func maintenanceAndMore(_ n: Int) -> String { "и ещё \(n)" }
-    var maintenanceBrewUpgradeButton: String { "Обновить пакеты" }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String {
         "Обновить \(n) \(ruPlural(n, "пакет", "пакета", "пакетов"))?"
     }
@@ -344,25 +332,7 @@ struct StringsRU: AppStrings {
     var claudeBackupUnreadable: String { "журнал не удалось прочитать" }
 
     // MARK: Autostart card
-    var autostartTitle: String { "Автозагрузка" }
     var autostartNoPermission: String { "(нет разрешения)" }
-    var autostartUserAgents: String { "Агенты пользователя" }
-    var autostartSystemAgents: String { "Системные агенты" }
-    var autostartSystemDaemons: String { "Системные демоны" }
-    var autostartBackgroundTasks: String { "Фоновые задачи (не Apple)" }
-    var autostartCheckOutdated: String { "Проверить устаревшие" }
-    func autostartCheckOutdatedCount(_ n: Int) -> String { "Устаревших: \(n)" }
-    var autostartOrphanEmptyText: String { "Устаревших плистов нет" }
-    var autostartOrphanTooltip: String { "Устарел — приложение удалено, безопасно удалить" }
-    var autostartDeleteButton: String { "Удалить" }
-    var autostartDeleteConfirmMessageUser: String { "Файл будет перемещён в Корзину. Изменение вступит в силу после повторного входа в систему или перезагрузки." }
-    var autostartDeleteConfirmMessageSystem: String { "Файл будет удалён без возможности восстановления (потребуется Touch ID или пароль администратора). Изменение вступит в силу после повторного входа в систему или перезагрузки." }
-    func autostartDeleteError(_ detail: String) -> String { "Не удалось удалить: \(detail)" }
-    func autostartDeleteAllButton(_ n: Int) -> String { "Удалить все (\(n))" }
-    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String { "Переместить в Корзину все устаревшие плисты (\(n))?" }
-    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String { "Среди них есть системные — потребуется пароль. Удалить все (\(n))?" }
-    var autostartDeletingAll: String { "Удаляю…" }
-    var autostartOkTooltip: String { "В порядке" }
     var autostartDeleteInvalidPath: String { "путь не похож на плист автозагрузки" }
     func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String {
         "\(failed) из \(total): \(detail)"
@@ -423,38 +393,9 @@ struct StringsRU: AppStrings {
     var historyInfoShowLabel: String { "Показать пояснения к столбцам" }
 
     // MARK: Energy card
-    var energyParamDisplaySleep: String { "Гашение экрана, мин" }
-    var energyParamSleep: String { "Сон системы, мин" }
-    var energyParamDiskSleep: String { "Сон дисков, мин" }
-    var energyParamLowPowerMode: String { "Энергосбережение" }
-    var energyParamHibernateMode: String { "Режим гибернации" }
-    var energyParamWoMP: String { "Пробуждение по сети" }
-    var energyInfoDisplaySleep: String { "Через сколько минут бездействия гаснет экран. 0 — никогда. По умолчанию у ноутбуков: 2 мин от батареи, 10 мин от сети." }
-    var energyInfoSleep: String { "Через сколько минут бездействия засыпает вся система (экран к этому моменту уже погашен). 0 — никогда. Обычно от сети ставят 0, чтобы Mac не засыпал." }
-    var energyInfoDiskSleep: String { "Через сколько минут простоя останавливаются жёсткие диски. Для встроенного SSD не играет роли, влияет на внешние HDD. 0 — никогда." }
-    var energyInfoPowerNap: String { "Power Nap: во сне Mac периодически просыпается для почты, iCloud и Time Machine. По умолчанию включён от сети и выключен от батареи." }
-    var energyInfoLowPowerMode: String { "Энергосбережение: снижает частоту процессора и яркость ради времени работы. По умолчанию выключено; от батареи включать разумно." }
-    var energyInfoStandby: String { "Standby: после ~3 часов обычного сна содержимое памяти сбрасывается на SSD и питание RAM отключается (глубокий сон). По умолчанию включён." }
-    var energyInfoHibernateMode: String { "Формат сна: 0 — только RAM (настольные Mac), 3 — RAM + копия на SSD (ноутбуки, по умолчанию), 25 — только копия на SSD (медленное пробуждение, максимальная экономия). Меняется только вручную — параметр рискованный." }
-    var energyInfoWoMP: String { "Пробуждение по сети (Wake on LAN): Mac можно разбудить сетевым пакетом. Работает от сети питания; по умолчанию включено от сети." }
     var energyValueOn: String { "вкл" }
     var energyValueOff: String { "выкл" }
-    var energyValueNever: String { "никогда" }
-    var energyCardTitle: String { "Настройки энергии (pmset)" }
     func energyApply(_ n: Int) -> String { "Применить (\(n))" }
-    func energyApplyConfirmTitle(_ n: Int) -> String {
-        "Применить \(n) \(ruPlural(n, "изменение", "изменения", "изменений"))?"
-    }
-    var energyApplyConfirmButton: String { "Применить" }
-    var energyApplyConfirmAdmin: String { "Понадобится Touch ID или пароль администратора." }
-    var energyCancel: String { "Отменить" }
-    var energyResetToDefaults: String { "Сбросить к стандартным" }
-    var energyResetHelp: String { "Вернуть редактируемые параметры к значениям macOS по умолчанию" }
-    var energyApplyCancelled: String { "Отменено" }
-    func energyApplyFailed(_ msg: String) -> String { "Не удалось применить: \(msg)" }
-    var energyColParam: String { "Параметр" }
-    var energyColBattery: String { "От батареи" }
-    var energyColAC: String { "От сети" }
 
     // MARK: Battery page (REDESIGN-BATTERY; strings.json › Battery + 06-battery.md)
     var batteryLoadingText: String { "Читаем данные батареи…" }
@@ -660,6 +601,114 @@ struct StringsRU: AppStrings {
     func bkNoteClaudeUnreadable(_ path: String) -> String { "Не удалось прочитать \(path). Возможно, нужен полный доступ к диску." }
     var bkOpenPrivacy: String { "Открыть «Конфиденциальность»…" }
     var bkOpenPrivacyA11y: String { "Открыть Системные настройки › Конфиденциальность › Полный доступ к диску" }
+    // MARK: - System page (REDESIGN-SYSTEM)
+    func shortDate(_ d: Date) -> String {
+        let c = Calendar.current.dateComponents([.month, .day], from: d)
+        let m = c.month ?? 1
+        let month = m == 5 ? "мая" : iphoneChartMonth(m) + "."
+        return "\(c.day ?? 1) \(month)"
+    }
+    var sysSub: String { "сон, автозагрузка, Homebrew, энергия" }
+    var sysTagApplyFailed: String { "Ошибка применения" }
+    var sysTagOutdated: String { "Есть устаревшие пакеты" }
+    var sysTagUpdating: String { "Обновление…" }
+    var sysOK: String { "OK" }
+    var sysSleepTitle: String { "Сон" }
+    var sysSleepCaption: String { "кто не даёт Mac уснуть" }
+    var sysSleepCaptionNone: String { "Mac засыпает как обычно" }
+    var sysSleepNone: String { "Ничто не мешает сну." }
+    var sysActivityMonitor: String { "Мониторинг системы" }
+    var sysDontWarn: String { "Не предупреждать" }
+    func sysDontWarnA11y(_ name: String) -> String { "Не предупреждать про \(name)" }
+    var sysHidden: String { "Скрытые" }
+    func sysHiddenSince(_ date: String) -> String { "не предупреждаем с \(date)" }
+    var sysHiddenNoDate: String { "не предупреждаем" }
+    var sysWarnAgain: String { "Снова предупреждать" }
+    func sysWarnAgainA11y(_ name: String) -> String { "Снова предупреждать про \(name)" }
+    var sysStartupTitle: String { "Автозагрузка" }
+    func sysStartupItems(_ n: Int) -> String { "\(n) " + ruPlural(n, "объект", "объекта", "объектов") }
+    func sysStartupRemoved(_ n: Int) -> String { " · удалено \(n)" }
+    var sysCheckedJustNow: String { " · проверено только что" }
+    func sysCheckedAt(_ t: String) -> String { " · проверено \(t)" }
+    var sysCheckStale: String { "Проверить устаревшие" }
+    var sysChecking: String { "Проверяю…" }
+    var sysGroupLogin: String { "Объекты входа" }
+    var sysGroupUserAgents: String { "Агенты пользователя" }
+    var sysGroupSystemAgents: String { "Системные агенты" }
+    var sysGroupSystemDaemons: String { "Системные демоны" }
+    var sysGroupBackground: String { "Фоновые задачи (не Apple)" }
+    var sysGroupExpandedA11y: String { "развёрнуто" }
+    var sysGroupCollapsedA11y: String { "свёрнуто" }
+    func sysGroupStale(_ n: Int) -> String { "устарело: \(n)" }
+    var sysStaleHelp: String { "Устарел — приложение удалено, можно убрать" }
+    var sysNoStale: String { "Устаревших нет" }
+    var sysDelete: String { "Удалить" }
+    func sysDeleteA11y(_ file: String) -> String { "Удалить \(file)" }
+    func sysDeleteAll(_ n: Int) -> String { "Удалить все (\(n))" }
+    var sysDeleting: String { "Удаляю…" }
+    func sysDeleteConfirmTitle(_ n: Int) -> String { "Удалить \(n) " + ruPlural(n, "объект", "объекта", "объектов") + " автозагрузки?" }
+    var sysDeleteParagraphUser: String { "Файл будет перемещён в Корзину. Изменение вступит в силу после следующего входа или перезагрузки." }
+    var sysDeleteParagraphSystem: String { "Файл будет удалён без возможности восстановления. Нужен Touch ID или пароль администратора. Изменение вступит в силу после перезагрузки." }
+    func sysDeleteFailed(_ detail: String) -> String { "Не удалось удалить: \(detail)" }
+    var sysDeleteCancelled: String { "Авторизация отменена. Ничего не удалено." }
+    var sysDeleteTimedOut: String { "Touch ID не ответил за 30 с. Ничего не удалено." }
+    var sysBrewTitle: String { "Homebrew" }
+    func sysBrewCaptionOutdated(_ v: String, _ n: Int, _ total: Int?) -> String { total.map { "\(v) · \(n) из \($0) пакетов " + ruPlural(n, "устарел", "устарели", "устарели") } ?? "\(v) · \(n) " + ruPlural(n, "пакет устарел", "пакета устарели", "пакетов устарели") }
+    func sysBrewCaptionUpdating(_ v: String) -> String { "\(v) · обновление" }
+    func sysBrewCaptionOk(_ v: String, _ total: Int?) -> String { total.map { "\(v) · \($0) " + ruPlural($0, "пакет", "пакета", "пакетов") } ?? v }
+    var sysBrewCaptionNone: String { "не установлен" }
+    var sysBrewCaptionUnknown: String { "версия неизвестна" }
+    var sysBrewUpdate: String { "Обновить пакеты…" }
+    func sysBrewUpdatingN(_ n: Int) -> String { "Обновляю \(n) " + ruPlural(n, "пакет", "пакета", "пакетов") + "…" }
+    func sysBrewAllUpToDate(_ total: Int?) -> String { total.map { "Все \($0) " + ruPlural($0, "пакет актуален", "пакета актуальны", "пакетов актуальны") + "." } ?? "Все пакеты актуальны." }
+    func sysBrewCheckedToday(_ t: String) -> String { "Проверено сегодня в \(t)." }
+    func sysBrewCheckedOn(_ d: String) -> String { "Проверено \(d)." }
+    var sysBrewNotInstalled: String { "Homebrew не установлен — разделу нечего показать." }
+    var sysBrewHowToInstall: String { "Как установить" }
+    func sysBrewFailedLine(_ line: String) -> String { "Обновление не удалось: \(line)" }
+    var sysBrewCheckFailed: String { "Не удалось проверить устаревшие пакеты." }
+    var sysEnergyTitle: String { "Энергосбережение (pmset)" }
+    var sysEnergyCaption: String { "изменения применяются с паролем администратора" }
+    var sysEnergyEmpty: String { "Не удалось прочитать настройки энергии (pmset)." }
+    var sysEnergyColSetting: String { "Параметр" }
+    var sysEnergyColBattery: String { "От батареи" }
+    var sysEnergyColAC: String { "От сети" }
+    var sysEnergyRowDisplaySleep: String { "Сон дисплея, мин" }
+    var sysEnergyRowSleep: String { "Сон системы, мин" }
+    var sysEnergyRowDiskSleep: String { "Сон диска, мин" }
+    var sysEnergyRowPowerNap: String { "Power Nap" }
+    var sysEnergyRowLPM: String { "Энергосбережение" }
+    var sysEnergyRowStandby: String { "Режим ожидания" }
+    var sysEnergyRowWoN: String { "Пробуждение по сети" }
+    var sysEnergyRowHibernate: String { "Режим гибернации" }
+    var sysEnergyRowTcpKeepalive: String { "tcpkeepalive" }
+    var sysEnergyRowLidwake: String { "lidwake" }
+    var sysEnergyInfoDisplaySleep: String { "Через сколько минут бездействия гаснет экран." }
+    var sysEnergyInfoSleep: String { "0 — Mac не засыпает сам, пока подключён к сети." }
+    var sysEnergyInfoDiskSleep: String { "Для SSD почти не влияет на расход энергии." }
+    var sysEnergyInfoPowerNap: String { "Mac проверяет почту и обновления во сне." }
+    var sysEnergyInfoLPM: String { "Снижает частоту процессора и яркость экрана." }
+    var sysEnergyInfoStandby: String { "После долгого сна сохраняет память на диск и почти полностью выключается." }
+    var sysEnergyInfoWoN: String { "Позволяет будить Mac по сети, например для общего доступа к файлам." }
+    var sysEnergyInfoHibernate: String { "3 — память хранится и в ОЗУ, и на диске. Меняется только из Терминала." }
+    var sysEnergyInfoTcpKeepalive: String { "Поддерживает сетевые соединения во сне. Только для чтения." }
+    var sysEnergyInfoLidwake: String { "Пробуждение при открытии крышки. Только для чтения." }
+    var sysEnergyOn: String { "вкл" }
+    var sysEnergyOff: String { "выкл" }
+    func sysEnergyInfoA11y(_ row: String) -> String { "Пояснение: \(row)" }
+    func sysEnergyApply(_ n: Int) -> String { "Применить (\(n))" }
+    var sysEnergyCancel: String { "Отменить" }
+    var sysEnergyReset: String { "Сбросить к стандартным" }
+    var sysEnergyResetHelp: String { "Подставляет стандартные значения; применяются они кнопкой «Применить»" }
+    var sysEnergyApplied: String { "Применено ✓" }
+    func sysEnergyConfirmTitle(_ n: Int) -> String { "Применить \(n) " + ruPlural(n, "изменение", "изменения", "изменений") + "?" }
+    var sysEnergyOnBattery: String { "От батареи:" }
+    var sysEnergyOnAC: String { "От сети:" }
+    var sysEnergyConfirmAdmin: String { "Потребуется Touch ID или пароль администратора." }
+    var sysEnergyConfirmApply: String { "Применить" }
+    var sysEnergyCancelled: String { "Авторизация отменена. Ничего не изменено — правки остались, их можно применить снова." }
+    var sysEnergyTimedOut: String { "Touch ID не ответил за 30 с. Ничего не изменено — правки остались, их можно применить снова." }
+    func sysEnergyFailed(_ detail: String) -> String { "Не удалось применить: pmset вернул ошибку (\(detail)). Значения откатились к прежним." }
     private func ruDays(_ n: Int) -> String {
         let r = n % 100, d = n % 10
         if r >= 11 && r <= 14 { return "дней" }

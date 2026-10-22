@@ -81,6 +81,8 @@ final class DashboardModel {
     /// Re-entrancy guard for `refreshEnergyNow()` (SPEC Block K), true while a
     /// manual energy (pmset) refresh is in flight — mirrors `smartRefreshing`.
     var energyRefreshing = false
+    /// Set by a `refreshEnergy()` call that arrives while a read is in flight; the in-flight call reads again.
+    private var energyReadNeeded = false
 
     /// Re-entrancy guard for `refreshProcessesNow()`, true while a manual process-list
     /// refresh is in flight — mirrors `smartRefreshing`.
@@ -146,9 +148,16 @@ final class DashboardModel {
     /// stay disabled while its own delete is in flight, without blocking other rows.
     var deletingPlistPaths: Set<String> = []
 
-    /// Set when the last `deleteOrphanPlist()` run failed; cleared at the start of
-    /// the next run. Shown as an inline error on the Автозагрузка card.
-    var plistDeleteError: String? = nil
+    /// Set when the last `deleteOrphanPlist()` run failed, was cancelled or timed out; cleared at
+    /// the start of the next run. Shown as an inline note on the Startup items card.
+    private(set) var plistDeleteFailure: PrivilegedActionFailure? = nil
+
+    /// REDESIGN-SYSTEM «Check for stale»: a re-scan of the startup items is running.
+    private(set) var startupChecking = false
+    /// When the last «Check for stale» finished; stale marks are shown only once this is set.
+    private(set) var startupCheckedAt: Date? = nil
+    /// Items removed on the Startup items card since the last check.
+    private(set) var startupRemovedCount = 0
 
     /// Paths whose most recent delete attempt did NOT remove the file — the user
     /// dismissed the Touch ID/admin prompt, the file op failed, validation
@@ -208,7 +217,11 @@ final class DashboardModel {
     /// Top apps by memory footprint, from the most recent process sample (TIPS-MEMORY).
     private var topApps: [AppMemory] = []
     /// Non-system programs holding a sleep assertion ≥ 5 min, from the slow task (WAKE-HOLDERS).
-    private var wakeHolders: [WakeHolder] = []
+    private(set) var wakeHolders: [WakeHolder] = []
+    /// OS services holding a sleep assertion ≥ 5 min (REDESIGN-SYSTEM): listed on the System page, never warned about.
+    private(set) var systemWakeHolders: [WakeHolder] = []
+    /// True after the first `pmset -g assertions` sample returned, whatever its result.
+    private(set) var wakeSampled = false
     /// pmset-assertions output the parser rejected on the last slow tick. Separate from
     /// procParseFailures so refreshProcessesNow() (which overwrites that) cannot drop it.
     private var wakeParseFailures: [ParseFailure] = []
@@ -249,11 +262,14 @@ final class DashboardModel {
     @ObservationIgnored private var blockWatchdogs: [BlockID: Task<Void, Never>] = [:]
 
     /// Session cache for the brew section (Block N5): last collected
-    /// (status, outdated) and when. Reused by refreshReport() within
+    /// snapshot (status, outdated, versions, count) and when. Reused by refreshReport() within
     /// ReportCollector.brewCacheWindow so a manual «Обновить отчёт» doesn't pay
     /// the `brew update` + `brew outdated` cost every time. In-memory only.
-    private var lastBrewInfo: (status: BrewStatus, outdated: [String]?)?
-    private var lastBrewCollectedAt: Date?
+    private var lastBrewInfo: BrewSnapshot?
+    /// When the cache was filled; also the System page's «Checked today at HH:MM».
+    private(set) var brewCheckedAt: Date?
+    /// True while `refreshBrewNow()` re-checks brew on its own (System page «Try again»).
+    private(set) var brewRefreshing = false
 
     /// Set when refreshReport() is requested while a collect is already in flight
     /// (e.g. a language switch during the launch collect). The in-flight pass kicks
@@ -307,8 +323,7 @@ final class DashboardModel {
     /// miniaturize/deminiaturize, and occlusion-state change. Registered once, from
     /// start(), directly on NSApplication's / NSWindow's notification center — this
     /// needs no changes to MacDashboardApp.swift / no ScenePhase plumbing.
-    /// Also read (via @Observable tracking) by AutostartCard's breathing-badge
-    /// gate, so the badge animation pauses/resumes together with the collectors.
+    /// Read only inside this model (the collector loops skip their work while it is true).
     private(set) var isPaused = false
     private var activityObservers: [NSObjectProtocol] = []
 
@@ -381,15 +396,15 @@ final class DashboardModel {
     /// ignore list and re-assess now rather than on the next fast tick (which does not run
     /// while paused). Same report choice as the fast tick: never a partial (V2-HEADER-CHURN).
     func setWakeHolderIgnored(_ key: WakeHolderKey, ignored: Bool) {
-        var list = AppSettings.shared.ignoredWakeHolders
+        var list = AppSettings.shared.ignoredWakeHolderEntries
         if ignored {
-            guard !list.contains(key) else { return }
-            list.append(key)
+            guard !list.contains(where: { $0.key == key }) else { return }
+            list.append(IgnoredWakeHolder(key: key, since: Date()))
         } else {
-            guard list.contains(key) else { return }
-            list.removeAll { $0 == key }
+            guard list.contains(where: { $0.key == key }) else { return }
+            list.removeAll { $0.key == key }
         }
-        AppSettings.shared.ignoredWakeHolders = list
+        AppSettings.shared.ignoredWakeHolderEntries = list
         setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
     }
 
@@ -433,6 +448,11 @@ final class DashboardModel {
     func applyFixtureMemory(_ state: BlockState) { memoryBlock = state }
     /// Visual fixture only (REDESIGN-BATTERY): the detail the Battery page shows and its block.
     func applyFixtureBattery(_ detail: BatteryDetail?, block: BlockState) { batteryDetail = detail; batteryBlock = block }
+
+    /// Visual fixture only (REDESIGN-SYSTEM): the Sleep card's holders.
+    func applyFixtureWakeHolders(user: [WakeHolder], system: [WakeHolder], sampled: Bool) {
+        wakeHolders = user; systemWakeHolders = system; wakeSampled = sampled
+    }
 
     /// Visual fixture only (REDESIGN-SECURITY): the privileged-action state, Refresh busy flag and update-check flag.
     func applyFixtureSecurity(action: SecurityActionState, refreshing: Bool = false, checkingUpdates: Bool = false) {
@@ -607,6 +627,8 @@ final class DashboardModel {
                 if self.topApps != procs.topApps { self.topApps = procs.topApps }
                 if self.procParseFailures != procs.parseFailures { self.procParseFailures = procs.parseFailures }
                 if self.wakeHolders != wake.holders { self.wakeHolders = wake.holders }
+                if self.systemWakeHolders != wake.system { self.systemWakeHolders = wake.system }
+                if !self.wakeSampled { self.wakeSampled = true }
                 let wakeFailures = wake.failure.map { [$0] } ?? []
                 if self.wakeParseFailures != wakeFailures { self.wakeParseFailures = wakeFailures }
 
@@ -747,8 +769,8 @@ final class DashboardModel {
                 }
             }
 
-            let cachedBrew: (status: BrewStatus, outdated: [String]?)? =
-                ReportCollector.isBrewCacheFresh(collectedAt: self.lastBrewCollectedAt, now: Date())
+            let cachedBrew: BrewSnapshot? =
+                ReportCollector.isBrewCacheFresh(collectedAt: self.brewCheckedAt, now: Date())
                     ? self.lastBrewInfo : nil
             let collected = await CommandRunner.$qos.withValue(trigger.commandQoS) {
                 await ReportCollector().collect(skipSlow: false, cachedBrew: cachedBrew) { partial in
@@ -790,11 +812,13 @@ final class DashboardModel {
                 // check (BREW-OUTDATED-FAIL, BREW-VERSION-FAIL): the next refresh must retry it.
                 let failed = ReportCollector.brewCheckFailed(status: final.brewStatus, outdated: final.brewOutdated)
                 if !failed, let status = final.brewStatus {
-                    self.lastBrewInfo = (status, final.brewOutdated)
-                    self.lastBrewCollectedAt = Date()
+                    self.lastBrewInfo = BrewSnapshot(status: status, outdated: final.brewOutdated,
+                                                     outdatedDetail: final.brewOutdatedDetail,
+                                                     installedCount: final.brewInstalledCount)
+                    self.brewCheckedAt = Date()
                 } else {
                     self.lastBrewInfo = nil
-                    self.lastBrewCollectedAt = nil
+                    self.brewCheckedAt = nil
                 }
             }
 
@@ -971,22 +995,66 @@ final class DashboardModel {
     /// Mirrors `refreshSmartNow()` exactly — a fresh ReportCollector instance is
     /// created per call, one-shot only (no sampler loop).
     func refreshEnergyNow() {
-        guard !energyRefreshing else { return }
+        Task { [weak self] in await self?.refreshEnergy() }
+    }
+
+    /// The body of `refreshEnergyNow()`, awaitable so an apply can show its result only after the
+    /// table has been re-read. Guarded by `energyRefreshing`.
+    func refreshEnergy() async {
+        if energyRefreshing {
+            // A read is in flight and may have started before the caller's change: request one more
+            // read and return only once the loop below has finished it.
+            energyReadNeeded = true
+            while energyRefreshing { try? await Task.sleep(for: .milliseconds(50)) }
+            return
+        }
         energyRefreshing = true
+        defer { energyRefreshing = false }
 
-        Task { [weak self] in
-            guard let self else { return }
-            defer { self.energyRefreshing = false }
-
+        repeat {
+            energyReadNeeded = false
             let collectorBox = UncheckedSendableBox(ReportCollector())
             let settings = await collectorBox.value.collectEnergySettings()
             guard !Task.isCancelled else { return }
 
-            await self.waitForReportRefreshToFinish()
+            await waitForReportRefreshToFinish()
             guard !Task.isCancelled else { return }
-            if self.report.energy != settings { self.report.energy = settings }
+            if report.energy != settings { report.energy = settings }
+        } while energyReadNeeded
+    }
+
+    /// Last result of `applyEnergyChanges(_:)` (REDESIGN-SYSTEM); the page bar reads it for the tag.
+    private(set) var energyApply: EnergyApplyState = .idle
+
+    /// Applies the staged pmset edits through one privileged call (Touch ID / admin password, 30 s),
+    /// then re-reads the table. Outcomes: applied / failed(cancelled | timedOut | error).
+    func applyEnergyChanges(_ changes: [EnergyChange]) {
+        guard energyApply != .applying, let command = SystemPageModel.pmsetCommand(changes) else { return }
+        energyApply = .applying
+        Task { [weak self] in
+            let outcome = await Task.detached { PrivilegedRunner.run(command) }.value
+            guard let self else { return }
+            switch outcome {
+            case .success:
+                await self.refreshEnergy()
+                self.energyApply = .applied
+            case .cancelled: self.energyApply = .failed(.cancelled)
+            case .timedOut:
+                // `pmset -b … && pmset -c …` may have applied the first half: show what the system holds.
+                await self.refreshEnergy()
+                self.energyApply = .failed(.timedOut)
+            case .failed(let msg):
+                await self.refreshEnergy()
+                self.energyApply = .failed(.error(msg))
+            }
         }
     }
+
+    /// Clears the apply result (OK on the banner; also when the user edits again after «Applied ✓»).
+    func dismissEnergyApplyResult() { energyApply = .idle }
+
+    /// Visual fixture only (REDESIGN-SYSTEM): the Energy card's apply state.
+    func applyFixtureEnergyApply(_ s: EnergyApplyState) { energyApply = s }
 
     /// REDESIGN-CPU: CPU page «Try again» (the page-bar Refresh button was removed in CPU-REFRESH-REMOVE). One user-initiated sample on a fresh LiveCollector
     /// (its own 0.5 s delta window, independent of the fast loop's baseline) plus a process re-sample.
@@ -1286,26 +1354,55 @@ final class DashboardModel {
             let stoppedByUser = self.brewStopRequested && error != nil
             guard !Task.isCancelled else { return }        // global teardown: no re-check, no write-back
 
-            let collectorBox = UncheckedSendableBox(ReportCollector())
-            let info = await collectorBox.value.collectBrewInfo(refreshIndex: false)
-            guard !Task.isCancelled else { return }
-
-            // The collect that starts while `brew upgrade` runs captures the PRE-upgrade
-            // cachedBrew and would write it over these values (`self.report = final`).
-            // Same reason the three sibling updaters wait — see
-            // waitForReportRefreshToFinish()'s doc comment.
-            await self.waitForReportRefreshToFinish()
-            guard !Task.isCancelled else { return }
-
+            guard let info = await self.recollectBrew() else { return }
             self.brewUpgradeError = stoppedByUser ? nil : error
             self.brewUpgradeNotice = stoppedByUser
                 ? BrewUpgrader.stoppedNotice(before: before, after: info.outdated) : nil
-            self.report.brewStatus = info.status
-            self.report.brewOutdated = info.outdated
-            let failed = ReportCollector.brewCheckFailed(status: info.status, outdated: info.outdated)
-            self.lastBrewInfo = failed ? nil : info
-            self.lastBrewCollectedAt = failed ? nil : Date()
         }
+    }
+
+    /// Re-checks brew on its own (System page «Try again» after a failed check), without a full report
+    /// pass: `refreshReport()` rebuilds every section blank for 10-30 s (assessment-complete-collect).
+    func refreshBrewNow() {
+        guard !brewUpgrading, !brewRefreshing else { return }
+        brewRefreshing = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.brewRefreshing = false }
+            _ = await self.recollectBrew()
+        }
+    }
+
+    /// The re-check tail shared by `upgradeBrewNow()` and `refreshBrewNow()`: collect a fresh brew
+    /// snapshot (no index update), wait for any report pass, write the four report fields and refill
+    /// the session cache. nil = cancelled (teardown): nothing written.
+    private func recollectBrew() async -> BrewSnapshot? {
+        let collectorBox = UncheckedSendableBox(ReportCollector())
+        let info = await collectorBox.value.collectBrewInfo(refreshIndex: false)
+        guard !Task.isCancelled else { return nil }
+
+        // The collect that starts while `brew upgrade` runs captures the PRE-upgrade
+        // cachedBrew and would write it over these values (`self.report = final`).
+        // Same reason the three sibling updaters wait — see
+        // waitForReportRefreshToFinish()'s doc comment.
+        await waitForReportRefreshToFinish()
+        guard !Task.isCancelled else { return nil }
+
+        report.brewStatus = info.status
+        report.brewOutdated = info.outdated
+        report.brewOutdatedDetail = info.outdatedDetail
+        report.brewInstalledCount = info.installedCount
+        let failed = ReportCollector.brewCheckFailed(status: info.status, outdated: info.outdated)
+        lastBrewInfo = failed ? nil : info
+        brewCheckedAt = failed ? nil : Date()
+        return info
+    }
+
+    /// Visual fixture only (REDESIGN-SYSTEM): the Homebrew card's transient state.
+    func applyFixtureBrew(checkedAt: Date?, upgrading: Bool, progress: BrewProgress?, error: String?,
+                          notice: String?, stoppable: Bool) {
+        brewCheckedAt = checkedAt; brewUpgrading = upgrading; brewProgress = progress
+        brewUpgradeError = error; brewUpgradeNotice = notice; brewUpgradeStoppable = stoppable
     }
 
     /// User Stop (BREW-CANCEL). Interrupts only the running `brew upgrade`: SIGINT to its process
@@ -1424,9 +1521,11 @@ final class DashboardModel {
     /// just the removed row instead.
     private func removeAutostartPlistsLocally(_ paths: Set<String>) {
         guard var auto = report.autostart, !paths.isEmpty else { return }
+        let before = auto.userAgents.count + auto.systemAgents.count + auto.systemDaemons.count
         auto.userAgents.removeAll { paths.contains($0.path) }
         auto.systemAgents.removeAll { paths.contains($0.path) }
         auto.systemDaemons.removeAll { paths.contains($0.path) }
+        startupRemovedCount += (before - (auto.userAgents.count + auto.systemAgents.count + auto.systemDaemons.count))
         report.autostart = auto
         // Deliberately NO setAssessment here: `report` is a PARTIAL for most of a collect
         // and a partial must never be assessed (V2-HEADER-CHURN) — a delete landing
@@ -1459,16 +1558,41 @@ final class DashboardModel {
     /// Clears the delete banner. It is otherwise only ever cleared by STARTING the next
     /// delete, so a failure message stayed pinned under the card long after the row it
     /// referred to was gone.
-    func clearPlistDeleteError() { plistDeleteError = nil }
+    func clearPlistDeleteFailure() { plistDeleteFailure = nil }
 
-    /// Deletes an orphaned launchd .plist detected by the Автозагрузка card's
-    /// "check for outdated" flow. `isSystemLevel` selects the deletion path:
+    /// «Check for stale» (REDESIGN-SYSTEM): re-collects the autostart section, then reveals the stale marks.
+    /// A second press while a check runs is ignored.
+    func checkStaleStartupItemsNow() {
+        guard !startupChecking else { return }
+        startupChecking = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.startupChecking = false }
+            let info = await UncheckedSendableBox(ReportCollector()).value.collectAutostartInfo()
+            guard !Task.isCancelled else { return }
+            await self.waitForReportRefreshToFinish()
+            guard !Task.isCancelled else { return }
+            self.report.autostart = info
+            self.startupCheckedAt = Date()
+            self.startupRemovedCount = 0
+        }
+    }
+
+    /// Visual fixture only (REDESIGN-SYSTEM): the Startup items card's transient state.
+    func applyFixtureStartup(checkedAt: Date?, removed: Int, checking: Bool, deleting: Set<String>,
+                             failure: PrivilegedActionFailure?) {
+        startupCheckedAt = checkedAt; startupRemovedCount = removed; startupChecking = checking
+        deletingPlistPaths = deleting; plistDeleteFailure = failure
+    }
+
+    /// Deletes an orphaned launchd .plist detected by the System page's startup-items re-scan. `isSystemLevel` selects the deletion path:
     /// user-level (~/Library/LaunchAgents) goes to Trash via FileManager (reversible);
     /// system-level (/Library/LaunchAgents|LaunchDaemons) is a permanent `rm` via
     /// PrivilegedRunner (Touch ID/admin password), since Trash semantics don't apply
-    /// across privilege boundaries. Neither unloads a currently-running agent/daemon
-    /// (no `launchctl bootout` in v1) — the UI confirmation dialog must say so; the
-    /// change takes effect after relogin/reboot. Removes the deleted entry from
+    /// across privilege boundaries. The system-level command first runs `launchctl bootout`
+    /// (errors ignored, see `PrivilegedRunner.removeStartupItemsCommand`) and then `rm`; the
+    /// user-level path only trashes the file and does not unload an already-loaded job,
+    /// which stays until relogin/reboot. Removes the deleted entry from
     /// `report.autostart` locally on success (see `removeAutostartPlistsLocally`)
     /// so it drops out of the list without a full report recollect.
     func deleteOrphanPlist(path: String, isSystemLevel: Bool) {
@@ -1476,12 +1600,12 @@ final class DashboardModel {
         // signalling here would restore a row whose delete may still succeed.
         guard !deletingPlistPaths.contains(path) else { return }
         guard LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel) else {
-            plistDeleteError = L.autostartDeleteInvalidPath
+            plistDeleteFailure = .error(L.autostartDeleteInvalidPath)
             signalPlistsNotDeleted([path])
             return
         }
         deletingPlistPaths.insert(path)
-        plistDeleteError = nil
+        plistDeleteFailure = nil
 
         Task { [weak self] in
             guard let self else { return }
@@ -1490,11 +1614,11 @@ final class DashboardModel {
             let outcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
                     if isSystemLevel {
-                        switch PrivilegedRunner.run(PrivilegedRunner.removeCommand(paths: [path])) {
+                        switch PrivilegedRunner.run(PrivilegedRunner.removeStartupItemsCommand(paths: [path], uid: getuid())) {
                         case .success: continuation.resume(returning: .success)
                         case .cancelled: continuation.resume(returning: .cancelled)
                         case .failed(let msg): continuation.resume(returning: .failed(msg))
-                        case .timedOut: continuation.resume(returning: .failed(L.privilegedTimedOut))
+                        case .timedOut: continuation.resume(returning: .timedOut)
                         }
                     } else {
                         do {
@@ -1518,11 +1642,13 @@ final class DashboardModel {
             case .success:
                 self.removeAutostartPlistsLocally([path])
             case .cancelled:
-                // User dismissed Touch ID/admin prompt — no error banner, but the row
-                // must come back (finding A3).
+                self.plistDeleteFailure = .cancelled
+                self.signalPlistsNotDeleted([path])
+            case .timedOut:
+                self.plistDeleteFailure = .timedOut
                 self.signalPlistsNotDeleted([path])
             case .failed(let msg):
-                self.plistDeleteError = msg
+                self.plistDeleteFailure = .error(msg)
                 self.signalPlistsNotDeleted([path])
             }
         }
@@ -1555,12 +1681,12 @@ final class DashboardModel {
             // skipped only because a delete is already in flight are NOT an error;
             // that call owns their outcome, so a batch that is empty for that reason
             // alone stays quiet and leaves any existing error text as it was.
-            if !rejected.isEmpty { plistDeleteError = L.autostartDeleteInvalidPath }
+            if !rejected.isEmpty { plistDeleteFailure = .error(L.autostartDeleteInvalidPath) }
             return
         }
 
         for path in batch { deletingPlistPaths.insert(path) }
-        plistDeleteError = nil
+        plistDeleteFailure = nil
 
         let userPaths = batch.filter { !$0.hasPrefix("/Library/") }
         let systemPaths = batch.filter { $0.hasPrefix("/Library/") }
@@ -1597,7 +1723,7 @@ final class DashboardModel {
             }
 
             if !systemPaths.isEmpty {
-                let command = PrivilegedRunner.removeCommand(paths: systemPaths)
+                let command = PrivilegedRunner.removeStartupItemsCommand(paths: systemPaths, uid: getuid())
 
                 let systemOutcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .utility).async {
@@ -1605,7 +1731,7 @@ final class DashboardModel {
                         case .success: continuation.resume(returning: .success)
                         case .cancelled: continuation.resume(returning: .cancelled)
                         case .failed(let msg): continuation.resume(returning: .failed(msg))
-                        case .timedOut: continuation.resume(returning: .failed(L.privilegedTimedOut))
+                        case .timedOut: continuation.resume(returning: .timedOut)
                         }
                     }
                 }
@@ -1618,9 +1744,13 @@ final class DashboardModel {
                 return nil
             }
             if let firstFailure = failures.first {
-                self.plistDeleteError = failures.count > 1
+                self.plistDeleteFailure = .error(failures.count > 1
                     ? L.autostartDeleteBulkFailure(failures.count, results.count, firstFailure)
-                    : firstFailure
+                    : firstFailure)
+            } else if results.contains(where: { $0.outcome == .timedOut }) {
+                self.plistDeleteFailure = .timedOut
+            } else if results.contains(where: { $0.outcome == .cancelled }) {
+                self.plistDeleteFailure = .cancelled
             }
 
             let succeededPaths = Set(results.compactMap { result -> String? in
