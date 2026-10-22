@@ -265,7 +265,6 @@ struct StringsEN: AppStrings {
     var cpuSubCollecting: String { "collecting data…" }
     var cpuFailTimedOut: String { "Couldn’t read CPU counters: no response within 5 s." }
     var cpuFailNoReading: String { "Couldn’t read CPU counters: the system returned no data." }
-    var cpuRefreshA11y: String { "Refresh CPU data" }
     var cpuTryAgainA11y: String { "Read the CPU counters again" }
     var procsTopByCPU: String { "top by CPU" }
     var procsTopByMemory: String { "top by memory" }

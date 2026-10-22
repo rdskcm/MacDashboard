@@ -289,7 +289,6 @@ protocol AppStrings {
     var cpuSubCollecting: String { get }
     var cpuFailTimedOut: String { get }
     var cpuFailNoReading: String { get }
-    var cpuRefreshA11y: String { get }
     var cpuTryAgainA11y: String { get }
     var procsTopByCPU: String { get }
     var procsTopByMemory: String { get }

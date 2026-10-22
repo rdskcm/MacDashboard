@@ -86,7 +86,7 @@ final class DashboardModel {
     /// refresh is in flight — mirrors `smartRefreshing`.
     var processesRefreshing = false
 
-    /// True while refreshCPUNow() runs (CPU page Refresh / Try again).
+    /// True while refreshCPUNow() runs (CPU page «Try again»).
     private(set) var cpuRefreshing = false
 
     /// REDESIGN-MEMORY: Memory page Refresh / Try again in flight.
@@ -988,7 +988,7 @@ final class DashboardModel {
         }
     }
 
-    /// REDESIGN-CPU: CPU page Refresh / Try again. One user-initiated sample on a fresh LiveCollector
+    /// REDESIGN-CPU: CPU page «Try again» (the page-bar Refresh button was removed in CPU-REFRESH-REMOVE). One user-initiated sample on a fresh LiveCollector
     /// (its own 0.5 s delta window, independent of the fast loop's baseline) plus a process re-sample.
     func refreshCPUNow() {
         guard !cpuRefreshing else { return }

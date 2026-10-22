@@ -6,7 +6,7 @@ content-cpu-high-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-cpu-hot-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-cpu-failed-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-cpu-loading-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
-content-cpu-bars-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
+content-cpu-bars-dark	2026-10-22	27.0.1	Xcode 27.1	f2b3476-dirty
 content-processes-cpu-open-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-processes-cpu-confirm-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-processes-cpu-quitting-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
@@ -39,7 +39,7 @@ content-cpu-high-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-cpu-hot-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-cpu-failed-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-cpu-loading-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
-content-cpu-bars-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
+content-cpu-bars-light	2026-10-22	27.0.1	Xcode 27.1	f2b3476-dirty
 content-processes-cpu-open-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-processes-cpu-confirm-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-processes-cpu-quitting-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
