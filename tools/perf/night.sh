@@ -3,9 +3,10 @@
 #
 # Usage:
 #   tools/perf/night.sh --check [--dry-run]      LaunchAgent entry (every 60 s): start tonight's run if due; --dry-run prints the decision only
-#   tools/perf/night.sh --run [--now] [--scenarios LIST] [--runs N]
+#   tools/perf/night.sh --run [--now] [--keep-dark] [--scenarios LIST] [--runs N]
 #                                                the run (normally opened in Terminal by --check); --now skips the time window
-#                                                and idle checks (a "Mac idle" run started by hand); LIST/N pass to gate.sh
+#                                                and idle checks (a "Mac idle" run started by hand); --keep-dark leaves the
+#                                                display dimmed after the run (the user restores it); LIST/N pass to gate.sh
 #                                                (default all / 3); a run with --scenarios other than all is marked "partial"
 #   tools/perf/night.sh --install | --uninstall  add / remove the user LaunchAgent com.rdskcm.macdashboard.night
 #   tools/perf/night.sh --restore-brightness     put back a brightness value a crashed run left saved
@@ -23,12 +24,13 @@ usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 fatal() { echo "night.sh: $2" >&2; exit "$1"; }
 
 # ---------------------------------------------------------------- argument parsing
-MODE=""; DRY=0; NOW=0; LIST=""; N=""
+MODE=""; DRY=0; NOW=0; KEEP_DARK=0; LIST=""; N=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --check|--run|--install|--uninstall|--restore-brightness) MODE="$1"; shift ;;
     --dry-run) DRY=1; shift ;;
     --now) NOW=1; shift ;;
+    --keep-dark) KEEP_DARK=1; shift ;;
     --scenarios) [ $# -ge 2 ] || fatal 64 "--scenarios needs a value"; LIST="$2"; shift 2 ;;
     --runs) [ $# -ge 2 ] || fatal 64 "--runs needs a value"; N="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -37,7 +39,8 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$MODE" ] || { usage >&2; exit 64; }
 [ "$DRY" = 0 ] || [ "$MODE" = "--check" ] || fatal 64 "--dry-run only with --check"
-{ [ "$NOW" = 0 ] && [ -z "$LIST" ] && [ -z "$N" ]; } || [ "$MODE" = "--run" ] || fatal 64 "--now/--scenarios/--runs only with --run"
+{ [ "$NOW" = 0 ] && [ "$KEEP_DARK" = 0 ] && [ -z "$LIST" ] && [ -z "$N" ]; } || [ "$MODE" = "--run" ] \
+  || fatal 64 "--now/--keep-dark/--scenarios/--runs only with --run"
 
 mkdir -p "$NIGHT/builds" "$NIGHT/runs" "$NIGHT/reports" "$NIGHT/state" "$NIGHT/.bin" || fatal 70 "cannot create $NIGHT"
 # first use only; tmutil can take ~10 s here, so it runs detached and never delays --check
@@ -194,7 +197,9 @@ finish() {
   local rc=$?
   [ "$FINISHED" = 0 ] || return; FINISHED=1
   if [ -n "$SRC" ]; then rm -rf "$SRC"; fi
-  if [ -f "$NIGHT/state/brightness-saved" ]; then
+  if [ -f "$NIGHT/state/brightness-saved" ] && [ "$KEEP_DARK" = 1 ]; then
+    rm -f "$NIGHT/state/brightness-saved"; BR_LINE="$BR_LINE -> left dimmed (--keep-dark)"
+  elif [ -f "$NIGHT/state/brightness-saved" ]; then
     if restore_brightness; then BR_LINE="$BR_LINE -> restored ($BR_NOTE)"
     else BR_LINE="$BR_LINE; $BR_NOTE"; fi
   fi
@@ -317,7 +322,9 @@ case "$GRC" in
 esac
 END_EPOCH="$(date +%s)"; DUR=$((END_EPOCH - START_EPOCH))
 # brightness is restored here so the report states the real outcome (finish restores again if this fails)
-if [ -f "$NIGHT/state/brightness-saved" ]; then
+if [ -f "$NIGHT/state/brightness-saved" ] && [ "$KEEP_DARK" = 1 ]; then
+  rm -f "$NIGHT/state/brightness-saved"; BR_LINE="${BR_LINE} -> left dimmed (--keep-dark)"
+elif [ -f "$NIGHT/state/brightness-saved" ]; then
   if restore_brightness; then BR_LINE="${BR_LINE} -> ${BR_NOTE%% *} (restored)"
   else BR_LINE="$BR_LINE; $BR_NOTE"; fi
 fi
