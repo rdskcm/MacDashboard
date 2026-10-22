@@ -163,12 +163,12 @@ struct HomeAttentionCard: View {
         let tone: HomeTone = anyHot ? .hot : .amber
         let hot = tasks.filter { $0.tone == .hot }.count
         let warn = tasks.count - hot
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 0) {
             Text(L.homeMacStatus)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(tone.ink)
                 .lineLimit(1)
-            Spacer(minLength: 0)
+            Spacer(minLength: 12)
             VStack(alignment: .leading, spacing: 4) {
                 Text(L.homeTaskCount(tasks.count))
                     .font(.system(size: 40, weight: .heavy))
@@ -181,11 +181,12 @@ struct HomeAttentionCard: View {
                     .foregroundStyle(DS3.inkSoft)
                     .lineLimit(1)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 12)
             VStack(spacing: 6) {
                 countRow(tone: .hot, label: L.homeCriticalCount, count: hot)
                 countRow(tone: .amber, label: L.homeWarnings, count: warn)
             }
+            Spacer(minLength: 12)
             HomeCheckedLine(scan: scan)
         }
         .padding(18)
@@ -346,8 +347,8 @@ private struct HomeTaskRow: View {
                 .foregroundStyle(DS3.muted)
                 .accessibilityHidden(true)
         }
-        .frame(minHeight: 50)
         .padding(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 8))
+        .frame(minHeight: 50) // border-box 50 per 02-home.md: padding is inside the min height
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(hover ? DS3.lens : Color.clear)
