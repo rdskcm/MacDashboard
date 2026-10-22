@@ -8,6 +8,8 @@
 // as parsed, and an unreadable file is renamed aside instead of overwritten.
 // HISTORY-UNREADABLE-NOTICE: Section F — the renamed-aside file's name is recorded, survives a
 // reload, is removed on dismissal, and only a plain sibling name is ever loaded.
+// REDESIGN-HISTORY: `fileUnreadable` follows the same transitions (true after an unreadable load,
+// false once save() renamed the file aside, true while the rename keeps failing).
 import Foundation
 import Testing
 @testable import MacDashboard
@@ -93,6 +95,7 @@ extension SerialTests {
                 #expect(st.mac_history.isEmpty && st.last_run == nil, "HistoryStore.load: missing file ⇒ empty state")
                 #expect(s.state.mac_history.isEmpty, "HistoryStore.load: missing file ⇒ store.state empty too")
                 #expect(!fm.fileExists(atPath: url.path), "HistoryStore.load: missing file is not created by load")
+                #expect(!s.fileUnreadable, "HistoryStore.fileUnreadable: false for a missing file")
             }
 
             do {
@@ -122,6 +125,7 @@ extension SerialTests {
                 hsWrite("{\"last_run\":\"2024-01-01\",\"mac_history\":[{\"date\":\"2024-01-01\"}],\"stale_key\":1}", to: url)
                 let s = HistoryStore(url: url)
                 s.load()
+                #expect(!s.fileUnreadable, "HistoryStore.fileUnreadable: false after loading a readable file")
                 try? fm.removeItem(at: url)
                 s.load()
                 s.upsertToday(from: FullReport(), live: LiveSnapshot())
@@ -473,8 +477,10 @@ extension SerialTests {
                     hsWriteData(bytes, to: url)
                     let s = HistoryStore(url: url)
                     #expect(s.load().mac_history.isEmpty, "HistoryStore.load: \(label) ⇒ empty state")
+                    #expect(s.fileUnreadable, "HistoryStore.fileUnreadable: \(label) ⇒ true after load")
                     s.upsertToday(from: FullReport(), live: LiveSnapshot())
                     #expect(!hsSaveThrows(s), "HistoryStore.save: \(label) ⇒ save succeeds")
+                    #expect(!s.fileUnreadable, "HistoryStore.fileUnreadable: false once the file is renamed aside")
                     let backups = hsBackups(dir)
                     #expect(backups.count == 1 && hsBytes(dir.appendingPathComponent(backups.first ?? "-")) == bytes,
                           "HistoryStore.save: \(label) ⇒ the unreadable file is renamed aside byte-identical, not overwritten")
@@ -514,6 +520,7 @@ extension SerialTests {
                 immutablePaths.append(url.path)
                 try? fm.setAttributes([.immutable: true], ofItemAtPath: url.path)
                 #expect(hsSaveThrows(s), "HistoryStore.save: throws when the unreadable file cannot be renamed aside (immutable)")
+                #expect(s.fileUnreadable, "HistoryStore.fileUnreadable: stays true when the rename failed")
                 #expect(hsBytes(url) == junk && hsBackups(dir).isEmpty, "HistoryStore.save: a failed rename leaves the unreadable file in place, byte-identical")
                 try? fm.setAttributes([.immutable: false], ofItemAtPath: url.path)
                 #expect(!hsSaveThrows(s), "HistoryStore.save: retry succeeds once the obstacle is gone")

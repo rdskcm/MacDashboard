@@ -61,10 +61,11 @@ extension SerialTests {
 
             // MARK: formattedSwap
 
-            #expect(HistorySeries.formattedSwap("512MB/2048MB") == "\(fmtBytes(Int64(512) * 1_048_576)) / \(fmtBytes(Int64(2048) * 1_048_576))",
-                  "formattedSwap: valid string ⇒ \"X / Y\" via shared fmtBytes")
-            #expect(HistorySeries.formattedSwap(nil) == "—", "formattedSwap: nil ⇒ em dash")
-            #expect(HistorySeries.formattedSwap("garbage") == "—", "formattedSwap: unparseable ⇒ em dash")
+            L10nStore.shared.language = .en
+            #expect(HistorySeries.formattedSwap("512MB/2048MB") == "0.50 / 2 GB", "formattedSwap: valid string ⇒ \"used 2 dec / total 0 dec GB\"")
+            #expect(HistorySeries.formattedSwap("1280MB/3072MB") == "1.25 / 3 GB", "formattedSwap: 1.25 / 3 GB")
+            #expect(HistorySeries.formattedSwap(nil) == nil, "formattedSwap: nil ⇒ nil")
+            #expect(HistorySeries.formattedSwap("garbage") == nil, "formattedSwap: unparseable ⇒ nil")
 
             // MARK: dateRange (HistoryRange windows)
 

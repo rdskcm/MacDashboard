@@ -32,6 +32,9 @@ final class HistoryStore {
     /// true when load() found a file it could not read as a history object. The next
     /// save() renames that file aside before writing, so its bytes are never overwritten.
     private var loadedUnreadableFile = false
+    /// true after a load() that found an unreadable file, until save() has renamed it aside
+    /// (REDESIGN-HISTORY: the History page's «Can't read the history file» state and Refresh).
+    var fileUnreadable: Bool { loadedUnreadableFile }
 
     private(set) var state: HistoryState = HistoryState()
 

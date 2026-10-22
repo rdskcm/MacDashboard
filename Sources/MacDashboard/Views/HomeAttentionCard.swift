@@ -268,7 +268,8 @@ struct HomeAttentionCard: View {
 
 // MARK: - Show all
 
-private struct HomeShowAllButton: View {
+/// Internal: the History table's «Show all (n) / Show less» reuses it (10-history: Home button verbatim).
+struct HomeShowAllButton: View {
     let title: String
     let action: () -> Void
     @State private var hover = false

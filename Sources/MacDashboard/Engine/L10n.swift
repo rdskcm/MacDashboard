@@ -47,7 +47,6 @@ protocol AppStrings {
     var overviewKickerProcesses: String { get }
     var overviewKickerFolders: String { get }
     var overviewKickerSystem: String { get }
-    var overviewKickerHistory: String { get }
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String
     func headerUptimeChip(_ uptime: String) -> String
     var headerRefreshReport: String { get }
@@ -373,45 +372,57 @@ protocol AppStrings {
     var memoryNoteSpeculative: String { get }
     var memoryNoteFree: String { get }
 
-    // MARK: History card
-    var historyTitle: String { get }
-    func historyCaption(_ n: Int) -> String
-    var historyColDate: String { get }
-    var historyColDiskUsed: String { get }
-    var historyColFree: String { get }
-    var historyColCycles: String { get }
-    var historyMetricPickerDisk: String { get }
-    var historyMetricPickerBattery: String { get }
-    var historyMetricPickerCycles: String { get }
-    var historyMetricPickerSwap: String { get }
-    var historyMetricA11y: String { get }
-    var historyMetricYLabelDisk: String { get }
-    var historyMetricYLabelBattery: String { get }
-    var historyMetricYLabelCycles: String { get }
-    var historyMetricYLabelSwap: String { get }
-    var historyMetricInsufficientData: String { get }
-    var historyNotEnoughDays: String { get }
-    var historyRangeMonth: String { get }
-    var historyRangeQuarter: String { get }
-    var historyRangeYear: String { get }
-    var historyRangeAll: String { get }
-    var historyRangeA11y: String { get }
-    func historyGbValue(_ n: Int) -> String
-    var historyRestartTitle: String { get }
-    func historyRestartDetail(_ file: String) -> String
-    var historyRestartReveal: String { get }
-    var historyRestartRevealA11y: String { get }
-    var historyRestartHide: String { get }
-    var historyRestartHideA11y: String { get }
-    var historyInfoDate: String { get }
-    var historyInfoDiskFree: String { get }
-    var historyInfoBattery: String { get }
-    var historyInfoCycles: String { get }
-    var historyInfoSwap: String { get }
-    var historyInfoMacos: String { get }
-    var historyInfoSource: String { get }
-    var historyInfoHideLabel: String { get }
-    var historyInfoShowLabel: String { get }
+    // MARK: History page (REDESIGN-HISTORY)
+    func historySub(_ samples: Int) -> String                 // "500 daily samples · mac_check_state.json"
+    var historyTagUnreadable: String { get }                   // "file unreadable"
+    var historyTagReading: String { get }                      // "reading…"
+    func historySince(day: Int, month: Int, year: Int?) -> String   // "since Sep 2, 2025" / "с 2 сентября 2025"
+    var historyTitleDisk: String { get }                       // "Disk: used"
+    var historyTitleBattery: String { get }                    // "Battery: maximum capacity"
+    var historyTitleCycles: String { get }                     // "Battery: charge cycles"
+    var historyTitleSwap: String { get }                       // "Swap: used"
+    var historyAllMetrics: String { get }                      // "All metrics"
+    func historyDaysCaption(_ n: Int) -> String                // "30 days"
+    func historySamples(_ n: Int) -> String                    // "1 sample" / "5 samples"
+    var historyEmptyTitle: String { get }                      // "Not enough data yet"
+    func historyEmptySub(_ samples: Int) -> String             // "1 sample · the chart needs at least 2"
+    var historyNeedsTwo: String { get }                        // "Needs at least 2 samples"
+    func historyOnlyMonths(_ n: Int) -> String                 // "Only 4 months of data"
+    var historyRangeMonth: String { get }                      // "1M"   (kept, value changes)
+    var historyRangeQuarter: String { get }                    // "3M"
+    var historyRangeYear: String { get }                       // "1Y"
+    var historyRangeAll: String { get }                        // "All"
+    var historyRangeA11y: String { get }                       // "Range" (kept, value changes)
+    var historyMetricPickerDisk: String { get }                // kept
+    var historyMetricPickerBattery: String { get }             // kept
+    var historyMetricPickerCycles: String { get }              // kept
+    var historyMetricPickerSwap: String { get }                // kept
+    var historyMetricA11y: String { get }                      // kept
+    var historyViewA11y: String { get }                        // "History view"
+    func historyDeltaPerMonth(_ value: String) -> String       // "+24 GB per month"
+    func historyCycles(_ n: Int) -> String                     // "412 cycles"
+    func historyPercent(_ n: Int) -> String                    // "76%" / "76 %"
+    func historyPercentText(_ number: String) -> String        // "0.37%" / "0,37 %" (already formatted number)
+    var historyColDate: String { get }                         // kept
+    var historyColDiskUsed: String { get }                     // kept
+    var historyColFree: String { get }                         // kept
+    var historyColCycles: String { get }                       // kept
+    func historyGbValue(_ n: Int) -> String                    // kept, "312 GB"
+    var historyBatteryHelp: String { get }                     // "Maximum capacity, not the current charge"
+    var historyTableA11y: String { get }                       // "Sample history"
+    var historyReading: String { get }                         // "Reading history…"
+    var historyUnreadableTitle: String { get }                 // "Can’t read the history file"
+    var historyTryAgainA11y: String { get }                    // "Read the history file again"
+    var historyRefreshA11y: String { get }                     // "Reload history from disk"
+    func historyShortDate(day: Int, month: Int, year: Int?) -> String            // "Oct 14" · "Sep 2, 2025"
+    func historyTooltipDate(weekday: Int, day: Int, month: Int, year: Int) -> String   // "Fri, Oct 17, 2026"
+    func historyMonthLabel(_ month: Int) -> String             // "Jun" / "июнь" (standalone form)
+    var historyRestartTitle: String { get }                    // kept
+    func historyRestartDetail(_ file: String) -> String        // kept
+    var historyRestartReveal: String { get }                   // kept
+    var historyRestartRevealA11y: String { get }               // kept
+    var historyRestartHide: String { get }                     // kept
+    var historyRestartHideA11y: String { get }                 // kept
 
     // MARK: Energy card
     var energyValueOn: String { get }

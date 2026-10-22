@@ -232,6 +232,12 @@ final class DashboardModel {
     }
     /// History figures for the Home History tile, recomputed only when `history` changes (not on live ticks).
     private(set) var homeHistoryDigest = HomeHistoryDigest.empty
+    /// REDESIGN-HISTORY: the last load found a file that exists but cannot be read as a history object
+    /// (`HistoryStore.fileUnreadable`); the History page shows its error block until a reload or a save clears it.
+    private(set) var historyUnreadable = false
+    /// REDESIGN-HISTORY: `refreshHistoryNow()` in flight (the read takes milliseconds; the flag exists for the
+    /// button's swap-in-place label and the visual fixture).
+    private(set) var historyRefreshing = false
     var reportText: String?           // rendered text report (for Отчёт tab)
 
     /// Timestamp of the report currently shown in the Отчёт tab: the on-disk file's
@@ -245,8 +251,8 @@ final class DashboardModel {
 
     /// Sibling of reportURL in the same App Support dir (SPEC §2).
     private let historyURL: URL
-    /// The app is the only writer of the history file, so this in-memory instance
-    /// (loaded once at init) is authoritative — no need to re-load it per refresh.
+    /// The app is the only writer of the history file; this in-memory instance is loaded at init and
+    /// re-read only by `refreshHistoryNow()` (the History page's Refresh / Try again).
     private let historyStore: HistoryStore
 
     // Two independent live cadences (SPEC §5.1 decoupling): the fast task samples the
@@ -345,6 +351,7 @@ final class DashboardModel {
         let loadedHistory = historyStore.load()
         history = loadedHistory
         homeHistoryDigest = HomeModel.historyDigest(loadedHistory.mac_history)
+        historyUnreadable = historyStore.fileUnreadable
         updatesCacheURL = url.deletingLastPathComponent().appendingPathComponent("updates_cache.json")
         updatesCache = UpdatesCacheStore.load(from: updatesCacheURL)
         folderSizesURL = url.deletingLastPathComponent().appendingPathComponent("folder_sizes_cache.json")
@@ -377,6 +384,23 @@ final class DashboardModel {
         }
         history = historyStore.state
     }
+
+    /// REDESIGN-HISTORY: the History page's Refresh and the error block's Try again. Re-reads the file
+    /// synchronously (the store is main-actor state; the file is ~50 KB) — a file restored from a backup or
+    /// made readable again shows at once. Never writes.
+    func refreshHistoryNow() {
+        guard !historyRefreshing else { return }
+        historyRefreshing = true
+        history = historyStore.load()
+        historyUnreadable = historyStore.fileUnreadable
+        historyRefreshing = false
+    }
+
+    /// Display path of the history file for the error block («~/Library/Application Support/MacDashboard/mac_check_state.json»).
+    var historyFilePath: String { (historyURL.path as NSString).abbreviatingWithTildeInPath }
+
+    /// Visual fixture only (REDESIGN-HISTORY): the unreadable-file and reload-in-flight flags.
+    func applyFixtureHistory(unreadable: Bool, refreshing: Bool) { historyUnreadable = unreadable; historyRefreshing = refreshing }
 
     /// BACKUP-AGE: re-read the backup log off the main actor; guarded so an unchanged status notifies nobody.
     func refreshClaudeBackup() async {
@@ -829,6 +853,7 @@ final class DashboardModel {
                 self.lastError = L.errorHistorySaveFailed(error.localizedDescription)
             }
             self.history = self.historyStore.state
+            self.historyUnreadable = self.historyStore.fileUnreadable
 
             let text = ReportWriter.render(report: final, live: self.live, history: self.historyStore.state)
             do {

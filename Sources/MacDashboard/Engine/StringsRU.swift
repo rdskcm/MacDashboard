@@ -33,7 +33,6 @@ struct StringsRU: AppStrings {
     var overviewKickerProcesses: String { "Процессы" }
     var overviewKickerFolders: String { "Папки" }
     var overviewKickerSystem: String { "Система" }
-    var overviewKickerHistory: String { "История" }
 
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String {
         "load \(load) · \(ncpu) \(ruPlural(ncpu, "ядро", "ядра", "ядер"))"
@@ -352,45 +351,71 @@ struct StringsRU: AppStrings {
     var memoryNoteSpeculative: String { "Прочитано с диска впрок, «на всякий случай»; освобождается в первую очередь." }
     var memoryNoteFree: String { "Совсем не занятая память. Малое значение — норма." }
 
-    // MARK: History card
-    var historyTitle: String { "История" }
-    func historyCaption(_ n: Int) -> String { "mac_check_state.json · замеров: \(n)" }
-    var historyColDate: String { "Дата" }
-    var historyColDiskUsed: String { "Диск занято" }
-    var historyColFree: String { "Свободно" }
-    var historyColCycles: String { "Циклы" }
+    // MARK: History page (REDESIGN-HISTORY)
+    func historySub(_ samples: Int) -> String {
+        "\(fmtGrouped(samples)) \(ruPlural(samples, "ежедневный замер", "ежедневных замера", "ежедневных замеров")) · mac_check_state.json"
+    }
+    var historyTagUnreadable: String { "файл не читается" }
+    var historyTagReading: String { "чтение…" }
+    func historySince(day: Int, month: Int, year: Int?) -> String {
+        let genitive = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+        return "с \(day) \(genitive[min(max(month, 1), 12) - 1])" + (year.map { " \($0)" } ?? "")
+    }
+    var historyTitleDisk: String { "Диск: занято" }
+    var historyTitleBattery: String { "Батарея: максимальная ёмкость" }
+    var historyTitleCycles: String { "Батарея: циклы зарядки" }
+    var historyTitleSwap: String { "Swap: занято" }
+    var historyAllMetrics: String { "Все метрики" }
+    func historyDaysCaption(_ n: Int) -> String { "\(fmtGrouped(n)) \(ruPlural(n, "день", "дня", "дней"))" }
+    func historySamples(_ n: Int) -> String { "\(fmtGrouped(n)) \(ruPlural(n, "замер", "замера", "замеров"))" }
+    var historyEmptyTitle: String { "Пока недостаточно данных" }
+    func historyEmptySub(_ samples: Int) -> String { "\(historySamples(samples)) · для графика нужно минимум 2" }
+    var historyNeedsTwo: String { "Нужно минимум 2 замера" }
+    func historyOnlyMonths(_ n: Int) -> String { "Данных только за \(n) \(ruPlural(n, "месяц", "месяца", "месяцев"))" }
+    var historyRangeMonth: String { "1 мес" }
+    var historyRangeQuarter: String { "3 мес" }
+    var historyRangeYear: String { "1 год" }
+    var historyRangeAll: String { "Всё" }
+    var historyRangeA11y: String { "Период" }
     var historyMetricPickerDisk: String { "Диск" }
     var historyMetricPickerBattery: String { "Батарея" }
     var historyMetricPickerCycles: String { "Циклы" }
     var historyMetricPickerSwap: String { "Swap" }
     var historyMetricA11y: String { "Метрика истории" }
-    var historyMetricYLabelDisk: String { "Занято, ГБ" }
-    var historyMetricYLabelBattery: String { "%" }
-    var historyMetricYLabelCycles: String { "циклы" }
-    var historyMetricYLabelSwap: String { "ГБ" }
-    var historyMetricInsufficientData: String { "Недостаточно данных для графика по этому показателю" }
-    var historyNotEnoughDays: String { "История появится здесь, когда приложение проверит этот Mac в два разных дня — оно сохраняет один снимок в день." }
-    var historyRangeMonth: String { "Месяц" }
-    var historyRangeQuarter: String { "3 мес" }
-    var historyRangeYear: String { "Год" }
-    var historyRangeAll: String { "Всё" }
-    var historyRangeA11y: String { "Период графика истории" }
-    func historyGbValue(_ n: Int) -> String { "\(n) ГБ" }
+    var historyViewA11y: String { "Вид истории" }
+    func historyDeltaPerMonth(_ value: String) -> String { "\(value) за месяц" }
+    func historyCycles(_ n: Int) -> String { "\(fmtGrouped(n)) \(ruPlural(n, "цикл", "цикла", "циклов"))" }
+    func historyPercent(_ n: Int) -> String { "\(n) %" }
+    func historyPercentText(_ number: String) -> String { "\(number) %" }
+    var historyColDate: String { "Дата" }
+    var historyColDiskUsed: String { "Диск занято" }
+    var historyColFree: String { "Свободно" }
+    var historyColCycles: String { "Циклы" }
+    func historyGbValue(_ n: Int) -> String { "\(fmtGrouped(n)) ГБ" }
+    var historyBatteryHelp: String { "Максимальная ёмкость, а не текущий заряд" }
+    var historyTableA11y: String { "История замеров" }
+    var historyReading: String { "Чтение истории…" }
+    var historyUnreadableTitle: String { "Не удаётся прочитать файл истории" }
+    var historyTryAgainA11y: String { "Прочитать файл истории ещё раз" }
+    var historyRefreshA11y: String { "Перечитать историю с диска" }
+    func historyShortDate(day: Int, month: Int, year: Int?) -> String {
+        let names = ["янв.", "февр.", "мар.", "апр.", "мая", "июн.", "июл.", "авг.", "сент.", "окт.", "нояб.", "дек."]
+        return "\(day) \(names[min(max(month, 1), 12) - 1])" + (year.map { " \($0)" } ?? "")
+    }
+    func historyTooltipDate(weekday: Int, day: Int, month: Int, year: Int) -> String {
+        let days = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"]
+        return "\(days[min(max(weekday, 1), 7) - 1]), \(historyShortDate(day: day, month: month, year: year))"
+    }
+    func historyMonthLabel(_ month: Int) -> String {
+        let names = ["янв.", "февр.", "март", "апр.", "май", "июнь", "июль", "авг.", "сент.", "окт.", "нояб.", "дек."]
+        return names[min(max(month, 1), 12) - 1]
+    }
     var historyRestartTitle: String { "История началась заново" }
     func historyRestartDetail(_ file: String) -> String { "Прежний файл истории не удалось прочитать, поэтому история ведётся заново. Старый файл не удалён: он сохранён в той же папке под именем «\(file)»." }
     var historyRestartReveal: String { "Показать в Finder" }
     var historyRestartRevealA11y: String { "Показать прежний файл истории в Finder" }
     var historyRestartHide: String { "Скрыть" }
     var historyRestartHideA11y: String { "Скрыть сообщение о том, что история началась заново" }
-    var historyInfoDate: String { "Дата — один снимок в день (хранятся все дни)" }
-    var historyInfoDiskFree: String { "Диск занято / Свободно — данные и свободное место на системном томе" }
-    var historyInfoBattery: String { "Батарея — максимальная ёмкость в % от новой (здоровье батареи), не текущий заряд" }
-    var historyInfoCycles: String { "Циклы — счётчик циклов перезарядки" }
-    var historyInfoSwap: String { "Swap — использование файла подкачки на момент снимка" }
-    var historyInfoMacos: String { "macOS — версия системы на момент снимка" }
-    var historyInfoSource: String { "Источник: mac_check_state.json (Application Support)" }
-    var historyInfoHideLabel: String { "Скрыть пояснения к столбцам" }
-    var historyInfoShowLabel: String { "Показать пояснения к столбцам" }
 
     // MARK: Energy card
     var energyValueOn: String { "вкл" }

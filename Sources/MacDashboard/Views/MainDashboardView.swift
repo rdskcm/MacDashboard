@@ -2,7 +2,7 @@
 // One window chrome for both modes (REDESIGN-HOME, 01-window-chrome.md): the header (title block, mode switch,
 // per-mode actions) and the single background (`DS3.ground` + `DS3OrbField`). Under the header the This Mac
 // content is the Home page (HomeView.swift) with section pages shown in place over it (the real CPU, Memory,
-// Storage, Battery, Security, Backups and System pages; InterimSectionPage.swift still renders History); the Report
+// Storage, Battery, Security, Backups, System and History pages); the Report
 // view replaces both while `router.isReportShown`.
 
 import SwiftUI
@@ -92,8 +92,8 @@ struct MainDashboardView: View {
             } else if router.destination.page == .system {
                 SystemPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
                     .id(router.destination.page)
-            } else if router.destination.page != .home {
-                InterimSectionPage(model: model, page: router.destination.page, windowWidth: windowWidth, onConfirmShown: { router.isInlineConfirmOpen = $0 }) { _ = router.back() }
+            } else if router.destination.page == .history {
+                HistoryPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
                     .id(router.destination.page)
             }
         }
