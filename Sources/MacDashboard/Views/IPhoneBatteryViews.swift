@@ -514,7 +514,8 @@ private struct IPhoneHealthChart: View {
 }
 
 /// IPHONE-DESIGN: history table columns 1.2 : 1 : 1 : 1.4 with 12 pt gaps.
-private struct IPhoneFractionRow: Layout {
+/// REDESIGN-HISTORY: the History table uses it with equal fractions and 16 pt spacing.
+struct IPhoneFractionRow: Layout {
     var fractions: [CGFloat] = [1.2, 1, 1, 1.4]
     var spacing: CGFloat = 12
     private func widths(_ w: CGFloat) -> [CGFloat] {

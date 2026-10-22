@@ -1,8 +1,8 @@
 // Engine/HistorySeries.swift
 // Block H: pure series extraction for the История chart's metric picker
 // (Диск / Батарея / Циклы / Swap). Also the single source of truth for
-// swap-string parsing, shared by the chart series path and HistoryCard's
-// table formatting — no duplicated parsing logic between the two.
+// swap-string parsing, shared by the chart series path and
+// HistoryPageModel.table — no duplicated parsing logic between the two.
 // HISTORY-RANGE: also the chart's range window (HistoryRange) and point cap.
 //
 // Pure Foundation-only, no SwiftUI/Charts import, so it's covered by
@@ -62,20 +62,19 @@ enum HistorySeries {
         return Int64(usedMiB) * 1_048_576
     }
 
-    /// Table-display formatting: reparses both used+total and reuses the shared
-    /// `fmtBytes` formatter so the column matches the ГБ styling of the disk
-    /// columns instead of showing raw "512MB/2048MB" text. "—" if unparseable/nil.
-    static func formattedSwap(_ raw: String?) -> String {
-        guard let raw else { return "—" }
+    /// Table cell «<used, 2 decimals> / <total, 0 decimals> GB» (10-history: «1.25 / 2 GB»); nil if the raw
+    /// string is nil or unparseable — the table renders nil as «—».
+    static func formattedSwap(_ raw: String?) -> String? {
+        guard let raw else { return nil }
         let parts = raw.split(separator: "/")
         guard parts.count == 2,
               parts[0].hasSuffix("MB"), parts[1].hasSuffix("MB"),
               let usedMiB = Int(parts[0].dropLast(2)),
               let totalMiB = Int(parts[1].dropLast(2))
-        else { return "—" }
-        let usedBytes = Int64(usedMiB) * 1_048_576
-        let totalBytes = Int64(totalMiB) * 1_048_576
-        return "\(fmtBytes(usedBytes)) / \(fmtBytes(totalBytes))"
+        else { return nil }
+        let used = Double(usedMiB) / 1024
+        let total = (Double(totalMiB) / 1024).rounded()
+        return "\(fmtFixed(used, decimals: 2)) / \(fmtGrouped(Int(total))) \(L.byteUnitGB)"
     }
 
     /// Same locale/timeZone/format as HistoryStore's `dayFormatter` and

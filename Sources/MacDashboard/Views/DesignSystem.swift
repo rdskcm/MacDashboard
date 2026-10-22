@@ -430,6 +430,10 @@ struct DSSlidingSegmented<T: Hashable>: View {
     /// the language-independent, script-readable handle. `nil` for every
     /// existing call site (no identifier set, unchanged from before).
     let identifier: (T) -> String?
+    /// REDESIGN-HISTORY: segments that cannot be chosen (History ranges longer than the data). Default: none.
+    let disabled: (T) -> Bool
+    /// `.help` shown on every disabled segment (one reason for all of them), nil = no tooltip.
+    let disabledHelp: String?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var stretch: CGFloat = 1.0
@@ -461,12 +465,15 @@ struct DSSlidingSegmented<T: Hashable>: View {
     init(options: [T], selection: Binding<T>, size: DSSegmentedSize = .card,
          groupLabel: String? = nil,
          identifier: @escaping (T) -> String? = { _ in nil },
+         disabled: @escaping (T) -> Bool = { _ in false }, disabledHelp: String? = nil,
          onReselect: ((T) -> Void)? = nil, label: @escaping (T) -> String) {
         self.options = options
         self._selection = selection
         self.size = size
         self.groupLabel = groupLabel
         self.identifier = identifier
+        self.disabled = disabled
+        self.disabledHelp = disabledHelp
         self.onReselect = onReselect
         self.label = label
     }
@@ -498,8 +505,13 @@ struct DSSlidingSegmented<T: Hashable>: View {
                         .padding(.horizontal, size.hPad)
                         .padding(.vertical, size.vPad)
                         .contentShape(Rectangle())
+                        // macOS shows no help tag on a disabled button, so the tooltip sits on the label
+                        // view, which stays hit-testable (History.dc.html:82 `title` on a wrapper).
+                        .help(disabled(option) ? (disabledHelp ?? "") : "")
                 }
                 .buttonStyle(.plain)
+                .disabled(disabled(option))
+                .opacity(disabled(option) ? 0.45 : 1)
                 .accessibilityLabel(label(option))
                 .accessibilityAddTraits(option == selection ? .isSelected : [])
                 .modifier(DSOptionalAXIdentifier(id: identifier(option)))
@@ -593,6 +605,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
     }
 
     private func select(_ option: T) {
+        guard !disabled(option) else { return }
         guard option != selection else {
             onReselect?(option)
             return

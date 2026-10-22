@@ -33,7 +33,6 @@ struct StringsEN: AppStrings {
     var overviewKickerProcesses: String { "Processes" }
     var overviewKickerFolders: String { "Folders" }
     var overviewKickerSystem: String { "System" }
-    var overviewKickerHistory: String { "History" }
 
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String { "load \(load) · \(ncpu) cores" }
     func headerUptimeChip(_ uptime: String) -> String { "uptime \(uptime)" }
@@ -348,45 +347,67 @@ struct StringsEN: AppStrings {
     var memoryNoteSpeculative: String { "Read from disk ahead of time, “just in case”; the first to be freed." }
     var memoryNoteFree: String { "Completely unused memory. A small value here is normal." }
 
-    // MARK: History card
-    var historyTitle: String { "History" }
-    func historyCaption(_ n: Int) -> String { "mac_check_state.json · \(n) samples" }
-    var historyColDate: String { "Date" }
-    var historyColDiskUsed: String { "Disk used" }
-    var historyColFree: String { "Free" }
-    var historyColCycles: String { "Cycles" }
+    // MARK: History page (REDESIGN-HISTORY)
+    func historySub(_ samples: Int) -> String { "\(fmtGrouped(samples)) daily \(samples == 1 ? "sample" : "samples") · mac_check_state.json" }
+    var historyTagUnreadable: String { "file unreadable" }
+    var historyTagReading: String { "reading…" }
+    func historySince(day: Int, month: Int, year: Int?) -> String {
+        "since \(historyMonthLabel(month)) \(day)" + (year.map { ", \($0)" } ?? "")
+    }
+    var historyTitleDisk: String { "Disk: used" }
+    var historyTitleBattery: String { "Battery: maximum capacity" }
+    var historyTitleCycles: String { "Battery: charge cycles" }
+    var historyTitleSwap: String { "Swap: used" }
+    var historyAllMetrics: String { "All metrics" }
+    func historyDaysCaption(_ n: Int) -> String { "\(fmtGrouped(n)) \(n == 1 ? "day" : "days")" }
+    func historySamples(_ n: Int) -> String { "\(fmtGrouped(n)) \(n == 1 ? "sample" : "samples")" }
+    var historyEmptyTitle: String { "Not enough data yet" }
+    func historyEmptySub(_ samples: Int) -> String { "\(historySamples(samples)) · the chart needs at least 2" }
+    var historyNeedsTwo: String { "Needs at least 2 samples" }
+    func historyOnlyMonths(_ n: Int) -> String { "Only \(n) \(n == 1 ? "month" : "months") of data" }
+    var historyRangeMonth: String { "1M" }
+    var historyRangeQuarter: String { "3M" }
+    var historyRangeYear: String { "1Y" }
+    var historyRangeAll: String { "All" }
+    var historyRangeA11y: String { "Range" }
     var historyMetricPickerDisk: String { "Disk" }
     var historyMetricPickerBattery: String { "Battery" }
     var historyMetricPickerCycles: String { "Cycles" }
     var historyMetricPickerSwap: String { "Swap" }
     var historyMetricA11y: String { "History metric" }
-    var historyMetricYLabelDisk: String { "Used, GB" }
-    var historyMetricYLabelBattery: String { "%" }
-    var historyMetricYLabelCycles: String { "cycles" }
-    var historyMetricYLabelSwap: String { "GB" }
-    var historyMetricInsufficientData: String { "Not enough data for this metric's chart" }
-    var historyNotEnoughDays: String { "History will appear here once the app has checked this Mac on two different days — it saves one snapshot per day." }
-    var historyRangeMonth: String { "Month" }
-    var historyRangeQuarter: String { "3 mo" }
-    var historyRangeYear: String { "Year" }
-    var historyRangeAll: String { "All" }
-    var historyRangeA11y: String { "History chart period" }
-    func historyGbValue(_ n: Int) -> String { "\(n) GB" }
+    var historyViewA11y: String { "History view" }
+    func historyDeltaPerMonth(_ value: String) -> String { "\(value) per month" }
+    func historyCycles(_ n: Int) -> String { "\(fmtGrouped(n)) \(n == 1 ? "cycle" : "cycles")" }
+    func historyPercent(_ n: Int) -> String { "\(n)%" }
+    func historyPercentText(_ number: String) -> String { "\(number)%" }
+    var historyColDate: String { "Date" }
+    var historyColDiskUsed: String { "Disk used" }
+    var historyColFree: String { "Free" }
+    var historyColCycles: String { "Cycles" }
+    func historyGbValue(_ n: Int) -> String { "\(fmtGrouped(n)) GB" }
+    var historyBatteryHelp: String { "Maximum capacity, not the current charge" }
+    var historyTableA11y: String { "Sample history" }
+    var historyReading: String { "Reading history…" }
+    var historyUnreadableTitle: String { "Can’t read the history file" }
+    var historyTryAgainA11y: String { "Read the history file again" }
+    var historyRefreshA11y: String { "Reload history from disk" }
+    func historyShortDate(day: Int, month: Int, year: Int?) -> String {
+        "\(historyMonthLabel(month)) \(day)" + (year.map { ", \($0)" } ?? "")
+    }
+    func historyTooltipDate(weekday: Int, day: Int, month: Int, year: Int) -> String {
+        let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        return "\(days[min(max(weekday, 1), 7) - 1]), \(historyMonthLabel(month)) \(day), \(year)"
+    }
+    func historyMonthLabel(_ month: Int) -> String {
+        let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        return names[min(max(month, 1), 12) - 1]
+    }
     var historyRestartTitle: String { "History started over" }
     func historyRestartDetail(_ file: String) -> String { "The previous history file could not be read, so History is being recorded from scratch. The old file was not deleted: it is kept in the same folder as “\(file)”." }
     var historyRestartReveal: String { "Show in Finder" }
     var historyRestartRevealA11y: String { "Show the previous history file in Finder" }
     var historyRestartHide: String { "Hide" }
     var historyRestartHideA11y: String { "Hide the History started over notice" }
-    var historyInfoDate: String { "Date — one snapshot per day (every day is kept)" }
-    var historyInfoDiskFree: String { "Disk used / Free — data and free space on the system volume" }
-    var historyInfoBattery: String { "Battery — maximum capacity as % of new (battery health), not current charge" }
-    var historyInfoCycles: String { "Cycles — charge cycle counter" }
-    var historyInfoSwap: String { "Swap — swap file usage at the time of the snapshot" }
-    var historyInfoMacos: String { "macOS — system version at the time of the snapshot" }
-    var historyInfoSource: String { "Source: mac_check_state.json (Application Support)" }
-    var historyInfoHideLabel: String { "Hide column explanations" }
-    var historyInfoShowLabel: String { "Show column explanations" }
 
     // MARK: Energy card
     var energyValueOn: String { "on" }

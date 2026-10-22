@@ -1,7 +1,7 @@
 // Views/SectionPageBlocks.swift
 // REDESIGN-CPU: the shared §8 section-page blocks (00-shared §8) — page bar, hero, tile, note, wait,
 // hero/tiles split layout and the deep-link focus pulse. The CPU page is the first consumer; pages 04–10
-// and `InterimSectionPage`'s bar use them too. All colours DS3; text roles use the `-ink` variants
+// use them too. All colours DS3; text roles use the `-ink` variants
 // (`light-theme-ink-variants`).
 
 import SwiftUI

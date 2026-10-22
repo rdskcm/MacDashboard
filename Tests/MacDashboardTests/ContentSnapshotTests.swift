@@ -9,19 +9,6 @@ import Testing
 @testable import MacDashboard
 
 
-/// The История section as the old Overview stacked it: kicker, restart
-/// notice, card (NEWMAC-HISTORY-EMPTY).
-struct HistorySectionSpecimen: View {
-    let model: DashboardModel
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(L.overviewKickerHistory).dsKicker()
-            HistoryRestartNotice(model: model)
-            HistoryCard(model: model)
-        }
-    }
-}
-
 extension SerialTests {
     @Suite(.enabled(if: SnapshotEnv.outDir != nil, "set MACDASH_SNAPSHOTS: run tools/visual/snapshots.sh"))
     struct SnapshotTests {
@@ -65,6 +52,7 @@ extension SerialTests {
                 let h = DashboardModel()
                 h.applyVisualFixture()
                 h.history = HistoryState(last_run: entries.last?.date, mac_history: entries, unreadable_backup: backup)
+                h.fixtureNow = VisualFixture.referenceDate   // History year labels must not follow the wall clock
                 return h
             }
             // REDESIGN-HOME: the same fixture with one thing changed per Home state (one model per state).
@@ -365,11 +353,21 @@ extension SerialTests {
                 $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
             }
             let fixtureDays = m.history.mac_history
+            let historyAll = fixtureHistory(fixtureDays)
             let historyNoDays = fixtureHistory([])
             let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
             let historyRestarted = fixtureHistory(Array(fixtureDays.suffix(1)),
                                                   backup: "mac_check_state.json.unreadable-20260115-103000")
             let historyTwoDays = fixtureHistory(Array(fixtureDays.suffix(2)))
+            let history122 = fixtureHistory(Array(fixtureDays.suffix(122)))
+            let historyUnreadable = fixtureHistory([]); historyUnreadable.applyFixtureHistory(unreadable: true, refreshing: false)
+            let historyReading = fixtureHistory([]); historyReading.applyFixtureHistory(unreadable: true, refreshing: true)
+            let historyNoBattery = fixtureHistory(fixtureDays.map { var e = $0; e.battery_pct = nil; e.cycles = nil; return e })
+            /// Index of the largest swap value inside the 1M window (the «top» tooltip pin).
+            let swapTopIndex: Int = {
+                let pts = HistoryPageModel.visiblePoints(fixtureDays, metric: .swap, range: .month, calendar: .current)
+                return pts.indices.max { pts[$0].value < pts[$1].value } ?? 0
+            }()
 
             for mode in ["dark", "light"] {
 
@@ -706,41 +704,49 @@ extension SerialTests {
                         SystemPageBar(model: sysBarStale) {}; SystemPageBar(model: sysBarApplyFailed) {}; SystemPageBar(model: sysBarClear) {}
                     }
                 }
-                run.snap("content-history-disk", mode, width: 1150) {
-                    HistoryCard(model: m, initialMetric: .disk, initialRange: .month)
+                let nav = NavigationRouter()
+                run.snap("content-history-disk", mode, width: 1094) { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .disk, initialRange: .month) }
+                run.snap("content-history-battery", mode, width: 1094) { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .battery, initialRange: .month) }
+                run.snap("content-history-cycles", mode, width: 1094) { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .cycles, initialRange: .month) }
+                run.snap("content-history-swap", mode, width: 1094) { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .swap, initialRange: .month) }
+                run.snap("content-history-disk-quarter", mode, width: 1094) { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .disk, initialRange: .quarter) }
+                run.snap("content-history-disk-year", mode, width: 1094) { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .disk, initialRange: .year) }
+                run.snap("content-history-disk-all", mode, width: 1094) { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .disk, initialRange: .all) }
+                run.snap("content-history-tooltip", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .disk, initialRange: .month, initialHover: 0)
+                        HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .cycles, initialRange: .month, initialHover: 29)
+                        HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .swap, initialRange: .month, initialHover: swapTopIndex)
+                    }
                 }
-                run.snap("content-history-battery", mode, width: 1150) {
-                    HistoryCard(model: m, initialMetric: .battery, initialRange: .month)
+                run.snap("content-history-table", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        HistoryCardView(model: historyAll, router: nav, narrow: false, initialRange: .month, initialView: .table)
+                        HistoryCardView(model: historyAll, router: nav, narrow: false, initialRange: .month, initialView: .table, initialShowAll: true)
+                    }
                 }
-                run.snap("content-history-cycles", mode, width: 1150) {
-                    HistoryCard(model: m, initialMetric: .cycles, initialRange: .month)
+                run.snap("content-history-narrow", mode, width: 844) {
+                    VStack(spacing: 16) {
+                        HistoryCardView(model: historyAll, router: nav, narrow: true, initialRange: .month, initialView: .table)
+                        HistoryCardView(model: historyAll, router: nav, narrow: true, initialMetric: .disk, initialRange: .year)
+                    }
                 }
-                run.snap("content-history-swap", mode, width: 1150) {
-                    HistoryCard(model: m, initialMetric: .swap, initialRange: .month)
-                }
-                run.snap("content-history-disk-quarter", mode, width: 1150) {
-                    HistoryCard(model: m, initialMetric: .disk, initialRange: .quarter)
-                }
-                run.snap("content-history-disk-year", mode, width: 1150) {
-                    HistoryCard(model: m, initialMetric: .disk, initialRange: .year)
-                }
-                run.snap("content-history-disk-all", mode, width: 1150) {
-                    HistoryCard(model: m, initialMetric: .disk, initialRange: .all)
-                }
-                run.snap("content-history-fresh", mode, width: 1150) {
+                run.snap("content-history-states", mode, width: 1094) {
                     VStack(alignment: .leading, spacing: 24) {
-                        HarnessSection(label: "History: no days recorded (new Mac)") {
-                            HistorySectionSpecimen(model: historyNoDays)
-                        }
-                        HarnessSection(label: "History: one day recorded") {
-                            HistorySectionSpecimen(model: historyOneDay)
-                        }
-                        HarnessSection(label: "History: started over, one day recorded (notice + placeholder)") {
-                            HistorySectionSpecimen(model: historyRestarted)
-                        }
-                        HarnessSection(label: "History: two days recorded (full card)") {
-                            HistorySectionSpecimen(model: historyTwoDays)
-                        }
+                        HarnessSection(label: "History: 122 days, 1Y disabled, selected 1Y falls back to All") { HistoryCardView(model: history122, router: nav, narrow: false, initialRange: .year) }
+                        HarnessSection(label: "History: two days recorded (only All enabled)") { HistoryCardView(model: historyTwoDays, router: nav, narrow: false) }
+                        HarnessSection(label: "History: one day recorded") { HistoryCardView(model: historyOneDay, router: nav, narrow: false) }
+                        HarnessSection(label: "History: no days recorded (new Mac)") { HistoryCardView(model: historyNoDays, router: nav, narrow: false) }
+                        HarnessSection(label: "History: started over, one day recorded (notice + panel)") { HistoryCardView(model: historyRestarted, router: nav, narrow: false) }
+                        HarnessSection(label: "History: file unreadable") { HistoryCardView(model: historyUnreadable, router: nav, narrow: false) }
+                        HarnessSection(label: "History: reading…") { HistoryCardView(model: historyReading, router: nav, narrow: false) }
+                        HarnessSection(label: "History: no battery data, Battery metric") { HistoryCardView(model: historyNoBattery, router: nav, narrow: false, initialMetric: .battery) }
+                    }
+                }
+                run.snap("content-history-bars", mode, width: 1150) {
+                    VStack(spacing: 12) {
+                        HistoryPageBar(model: historyAll) {}; HistoryPageBar(model: historyOneDay) {}; HistoryPageBar(model: historyNoDays) {}
+                        HistoryPageBar(model: historyUnreadable) {}; HistoryPageBar(model: historyReading) {}
                     }
                 }
                 run.snap("content-home-attention", mode, width: 1094) {
