@@ -20,7 +20,7 @@ content-history-disk-year-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-history-disk-all-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-history-fresh-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-home-attention-dark	2026-10-22	27.0.1	Xcode 27.1	dd349af-dirty
-content-home-sections-dark	2026-10-20	27.0.1	Xcode 27.1	fbeabcf-dirty
+content-home-sections-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
 content-home-now-dark	2026-10-20	27.0.1	Xcode 27.1	fbeabcf-dirty
 content-iphone-tiles-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-iphone-notices-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
@@ -30,7 +30,7 @@ content-iphone-logs-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-iphone-import-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-iphone-identity-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-iphone-dialogs-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
-content-settings-monitoring-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
+content-settings-monitoring-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
 content-settings-backup-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-processes-cpu-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-processes-mem-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
@@ -53,7 +53,7 @@ content-history-disk-year-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-history-disk-all-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-history-fresh-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-home-attention-light	2026-10-22	27.0.1	Xcode 27.1	dd349af-dirty
-content-home-sections-light	2026-10-20	27.0.1	Xcode 27.1	fbeabcf-dirty
+content-home-sections-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
 content-home-now-light	2026-10-20	27.0.1	Xcode 27.1	fbeabcf-dirty
 content-iphone-tiles-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-iphone-notices-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
@@ -63,7 +63,7 @@ content-iphone-logs-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-iphone-import-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-iphone-identity-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-iphone-dialogs-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
-content-settings-monitoring-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
+content-settings-monitoring-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
 content-settings-backup-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
 content-memory-usage-live-dark	2026-10-19	27.0.1	Xcode 27.1	5127feb-dirty
 content-memory-usage-medium-dark	2026-10-19	27.0.1	Xcode 27.1	5127feb-dirty
@@ -179,3 +179,21 @@ content-backups-claude-light	2026-10-21	27.0.1	Xcode 27.1	5b81413-dirty
 content-backups-wait-light	2026-10-21	27.0.1	Xcode 27.1	5b81413-dirty
 content-backups-narrow-light	2026-10-21	27.0.1	Xcode 27.1	5b81413-dirty
 content-backups-bars-light	2026-10-21	27.0.1	Xcode 27.1	5b81413-dirty
+content-system-sleep-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-startup-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-startup-flow-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-startup-fail-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-brew-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-energy-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-energy-result-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-narrow-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-bars-dark	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-sleep-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-startup-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-startup-flow-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-startup-fail-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-brew-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-energy-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-energy-result-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-narrow-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-system-bars-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty

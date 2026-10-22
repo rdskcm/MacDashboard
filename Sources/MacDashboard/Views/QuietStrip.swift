@@ -97,18 +97,16 @@ private struct QuietStripRow: View {
 
     @State private var hovering = false
     /// Single source of truth for the disclosure's progress, 0 = fully closed,
-    /// 1 = fully open — ported from `EnergyCard.openAmount` (see its doc
-    /// comment, EnergyCard.swift:88-99, and `AutoSectionRow.openAmount` in
-    /// AutostartCard.swift for the full writeup) to replace this row's former
-    /// implicit `if isOpen { }.transition(...)` mechanism with the same
-    /// explicit, permanently-mounted pattern. Unlike EnergyCard (which always
-    /// starts collapsed), this row's open/closed state is owned by the parent
+    /// 1 = fully open. The disclosure is permanently mounted (an implicit
+    /// `if isOpen { }.transition(...)` is not used): height, opacity and offset are
+    /// pure functions of this one value, committed by a single explicit
+    /// `withAnimation`. The row's open/closed state is owned by the parent
     /// `QuietStrip` via `isOpen`/`open: Set<String>`, so the initial value is
     /// seeded from `isOpen` in `init` below rather than hardcoded to 0.
     @State private var openAmount: Double
     /// Natural (fully-expanded) height of the disclosed grid below, captured
-    /// via `.onGeometryChange` — see `EnergyCard.measuredHeight` /
-    /// `AutoSectionRow.measuredHeight` for the full root-cause writeup.
+    /// via `.onGeometryChange`; the height animates between 0 and this
+    /// measured value, so the disclosure needs no fixed-height guess.
     @State private var measuredHeight: CGFloat?
 
     init(section: QuietSection, isOpen: Bool, reduceMotion: Bool, toggle: @escaping () -> Void) {
@@ -187,9 +185,7 @@ private struct QuietStripRow: View {
             .opacity(openAmount)
             .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
         }
-        // Outer backstop clip — same rationale as `EnergyCard`'s (see its
-        // comment above `.clipShape(BleedRect(leading: 20, trailing: 20))`,
-        // EnergyCard.swift:146-159): the inner clip above is itself offset
+        // Outer backstop clip: the inner clip above is itself offset
         // upward by up to `DSMotion.discloseRiseY` while collapsing/collapsed,
         // so an already-clipped-to-zero-height box can still poke a sliver
         // above the header without this outer re-clip.

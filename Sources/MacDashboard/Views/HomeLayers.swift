@@ -1,7 +1,7 @@
 // Views/HomeLayers.swift
 // REDESIGN-HOME (stage B): the two ambient animations of Home — the pulsing "All good" dot and the
 // skeleton shimmer — as Core Animation layers. Drawn once, animated by the render server
-// (rule gpu-per-frame, same pattern as BreathingCapsuleGlow.swift): no SwiftUI state changes per frame.
+// (rule gpu-per-frame, same layer-based approach for every ambient animation): no SwiftUI state changes per frame.
 
 import SwiftUI
 import AppKit

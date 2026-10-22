@@ -27,11 +27,6 @@ protocol AppStrings {
     /// switching with the current `fastIntervalSeconds` selection.
     var settingsIntervalNoteBalanced: String { get }
     var settingsIntervalNoteEconomy: String { get }
-    /// Settings → Мониторинг, SLEEP-IGNORE-APP card.
-    var settingsWakeIgnoredLabel: String { get }
-    var settingsWakeIgnoredEmpty: String { get }
-    var settingsWakeIgnoredRestore: String { get }
-    func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String
     var settingsSectionBackup: String { get }
     var settingsBackupStaleLabel: String { get }
     func settingsBackupStaleOption(_ hours: Int) -> String
@@ -300,22 +295,14 @@ protocol AppStrings {
     func processSignalFailed(_ name: String) -> String
 
     // MARK: Maintenance card
-    var maintenanceTitle: String { get }
     var maintenanceBrewNotInstalled: String { get }
     var maintenanceBrewVersionUnknown: String { get }
-    var maintenanceBrewAllFresh: String { get }
-    func maintenanceBrewOutdatedCount(_ n: Int) -> String
     var maintenanceBrewOutdatedCheckFailed: String { get }
-    var maintenanceUpdatesSection: String { get }
-    var maintenanceUpdatesAllUpdated: String { get }
-    var maintenanceCrashesSection: String { get }
-    var maintenanceCrashesNone: String { get }
     var maintenanceUpdatesTip: String { get }
     var maintenanceCrashesTip: String { get }
     func maintenanceCrashRow(_ process: String, _ count: Int) -> String
     func maintenanceCrashRevealA11y(_ process: String) -> String
     func maintenanceAndMore(_ n: Int) -> String
-    var maintenanceBrewUpgradeButton: String { get }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String
     var maintenanceBrewConfirmButton: String { get }
     var maintenanceBrewUpgrading: String { get }
@@ -363,25 +350,7 @@ protocol AppStrings {
     var claudeBackupUnreadable: String { get }
 
     // MARK: Autostart card
-    var autostartTitle: String { get }
     var autostartNoPermission: String { get }
-    var autostartUserAgents: String { get }
-    var autostartSystemAgents: String { get }
-    var autostartSystemDaemons: String { get }
-    var autostartBackgroundTasks: String { get }
-    var autostartCheckOutdated: String { get }
-    func autostartCheckOutdatedCount(_ n: Int) -> String
-    var autostartOrphanEmptyText: String { get }
-    var autostartOrphanTooltip: String { get }
-    var autostartDeleteButton: String { get }
-    var autostartDeleteConfirmMessageUser: String { get }
-    var autostartDeleteConfirmMessageSystem: String { get }
-    func autostartDeleteError(_ detail: String) -> String
-    func autostartDeleteAllButton(_ n: Int) -> String
-    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String
-    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String
-    var autostartDeletingAll: String { get }
-    var autostartOkTooltip: String { get }
     /// Detail for `autostartDeleteError` when a delete request contains no path the
     /// validator accepts — both the single-path guard and the bulk "nothing survived
     /// validation" case, which used to no-op silently (V2-POLISH B7).
@@ -445,36 +414,9 @@ protocol AppStrings {
     var historyInfoShowLabel: String { get }
 
     // MARK: Energy card
-    var energyParamDisplaySleep: String { get }
-    var energyParamSleep: String { get }
-    var energyParamDiskSleep: String { get }
-    var energyParamLowPowerMode: String { get }
-    var energyParamHibernateMode: String { get }
-    var energyParamWoMP: String { get }
-    var energyInfoDisplaySleep: String { get }
-    var energyInfoSleep: String { get }
-    var energyInfoDiskSleep: String { get }
-    var energyInfoPowerNap: String { get }
-    var energyInfoLowPowerMode: String { get }
-    var energyInfoStandby: String { get }
-    var energyInfoHibernateMode: String { get }
-    var energyInfoWoMP: String { get }
     var energyValueOn: String { get }
     var energyValueOff: String { get }
-    var energyValueNever: String { get }
-    var energyCardTitle: String { get }
     func energyApply(_ n: Int) -> String
-    func energyApplyConfirmTitle(_ n: Int) -> String
-    var energyApplyConfirmButton: String { get }
-    var energyApplyConfirmAdmin: String { get }
-    var energyCancel: String { get }
-    var energyResetToDefaults: String { get }
-    var energyResetHelp: String { get }
-    var energyApplyCancelled: String { get }
-    func energyApplyFailed(_ msg: String) -> String
-    var energyColParam: String { get }
-    var energyColBattery: String { get }
-    var energyColAC: String { get }
 
     // MARK: Battery page (REDESIGN-BATTERY; strings.json › Battery + 06-battery.md)
     var batteryLoadingText: String { get }
@@ -673,6 +615,109 @@ protocol AppStrings {
     func bkNoteClaudeUnreadable(_ path: String) -> String
     var bkOpenPrivacy: String { get }
     var bkOpenPrivacyA11y: String { get }
+    // MARK: - System page (REDESIGN-SYSTEM)
+    func shortDate(_ d: Date) -> String
+    var sysSub: String { get }
+    var sysTagApplyFailed: String { get }
+    var sysTagOutdated: String { get }
+    var sysTagUpdating: String { get }
+    var sysOK: String { get }
+    var sysSleepTitle: String { get }
+    var sysSleepCaption: String { get }
+    var sysSleepCaptionNone: String { get }
+    var sysSleepNone: String { get }
+    var sysActivityMonitor: String { get }
+    var sysDontWarn: String { get }
+    func sysDontWarnA11y(_ name: String) -> String
+    var sysHidden: String { get }
+    func sysHiddenSince(_ date: String) -> String
+    var sysHiddenNoDate: String { get }
+    var sysWarnAgain: String { get }
+    func sysWarnAgainA11y(_ name: String) -> String
+    var sysStartupTitle: String { get }
+    func sysStartupItems(_ n: Int) -> String
+    func sysStartupRemoved(_ n: Int) -> String
+    var sysCheckedJustNow: String { get }
+    func sysCheckedAt(_ t: String) -> String
+    var sysCheckStale: String { get }
+    var sysChecking: String { get }
+    var sysGroupLogin: String { get }
+    var sysGroupUserAgents: String { get }
+    var sysGroupSystemAgents: String { get }
+    var sysGroupSystemDaemons: String { get }
+    var sysGroupBackground: String { get }
+    var sysGroupExpandedA11y: String { get }
+    var sysGroupCollapsedA11y: String { get }
+    func sysGroupStale(_ n: Int) -> String
+    var sysStaleHelp: String { get }
+    var sysNoStale: String { get }
+    var sysDelete: String { get }
+    func sysDeleteA11y(_ file: String) -> String
+    func sysDeleteAll(_ n: Int) -> String
+    var sysDeleting: String { get }
+    func sysDeleteConfirmTitle(_ n: Int) -> String
+    var sysDeleteParagraphUser: String { get }
+    var sysDeleteParagraphSystem: String { get }
+    func sysDeleteFailed(_ detail: String) -> String
+    var sysDeleteCancelled: String { get }
+    var sysDeleteTimedOut: String { get }
+    var sysBrewTitle: String { get }
+    func sysBrewCaptionOutdated(_ v: String, _ n: Int, _ total: Int?) -> String
+    func sysBrewCaptionUpdating(_ v: String) -> String
+    func sysBrewCaptionOk(_ v: String, _ total: Int?) -> String
+    var sysBrewCaptionNone: String { get }
+    var sysBrewCaptionUnknown: String { get }
+    var sysBrewUpdate: String { get }
+    func sysBrewUpdatingN(_ n: Int) -> String
+    func sysBrewAllUpToDate(_ total: Int?) -> String
+    func sysBrewCheckedToday(_ t: String) -> String
+    func sysBrewCheckedOn(_ d: String) -> String
+    var sysBrewNotInstalled: String { get }
+    var sysBrewHowToInstall: String { get }
+    func sysBrewFailedLine(_ line: String) -> String
+    var sysBrewCheckFailed: String { get }
+    var sysEnergyTitle: String { get }
+    var sysEnergyCaption: String { get }
+    var sysEnergyEmpty: String { get }
+    var sysEnergyColSetting: String { get }
+    var sysEnergyColBattery: String { get }
+    var sysEnergyColAC: String { get }
+    var sysEnergyRowDisplaySleep: String { get }
+    var sysEnergyRowSleep: String { get }
+    var sysEnergyRowDiskSleep: String { get }
+    var sysEnergyRowPowerNap: String { get }
+    var sysEnergyRowLPM: String { get }
+    var sysEnergyRowStandby: String { get }
+    var sysEnergyRowWoN: String { get }
+    var sysEnergyRowHibernate: String { get }
+    var sysEnergyRowTcpKeepalive: String { get }
+    var sysEnergyRowLidwake: String { get }
+    var sysEnergyInfoDisplaySleep: String { get }
+    var sysEnergyInfoSleep: String { get }
+    var sysEnergyInfoDiskSleep: String { get }
+    var sysEnergyInfoPowerNap: String { get }
+    var sysEnergyInfoLPM: String { get }
+    var sysEnergyInfoStandby: String { get }
+    var sysEnergyInfoWoN: String { get }
+    var sysEnergyInfoHibernate: String { get }
+    var sysEnergyInfoTcpKeepalive: String { get }
+    var sysEnergyInfoLidwake: String { get }
+    var sysEnergyOn: String { get }
+    var sysEnergyOff: String { get }
+    func sysEnergyInfoA11y(_ row: String) -> String
+    func sysEnergyApply(_ n: Int) -> String
+    var sysEnergyCancel: String { get }
+    var sysEnergyReset: String { get }
+    var sysEnergyResetHelp: String { get }
+    var sysEnergyApplied: String { get }
+    func sysEnergyConfirmTitle(_ n: Int) -> String
+    var sysEnergyOnBattery: String { get }
+    var sysEnergyOnAC: String { get }
+    var sysEnergyConfirmAdmin: String { get }
+    var sysEnergyConfirmApply: String { get }
+    var sysEnergyCancelled: String { get }
+    var sysEnergyTimedOut: String { get }
+    func sysEnergyFailed(_ detail: String) -> String
     func batMAh(_ s: String) -> String
     func batMA(_ s: String) -> String
     var batConditionNormal: String { get }

@@ -13,10 +13,6 @@ struct StringsEN: AppStrings {
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) s" }
     var settingsIntervalNoteBalanced: String { "The working range: live charts with no noticeable load." }
     var settingsIntervalNoteEconomy: String { "Economy: values update less often, the battery lasts longer." }
-    var settingsWakeIgnoredLabel: String { "Sleep: don't warn about these apps" }
-    var settingsWakeIgnoredEmpty: String { "The list is empty. To add an app, right-click the Sleep warning in the main window." }
-    var settingsWakeIgnoredRestore: String { "Warn again" }
-    func settingsWakeIgnoredRestoreA11y(_ holder: String) -> String { "Warn again about \(holder)" }
     var settingsSectionBackup: String { "Backup" }
     var settingsBackupStaleLabel: String { "Claude backup: warn when older than" }
     func settingsBackupStaleOption(_ hours: Int) -> String { "\(hours / 24) d" }
@@ -276,22 +272,14 @@ struct StringsEN: AppStrings {
     func processSignalFailed(_ name: String) -> String { "Couldn’t quit “\(name)”." }
 
     // MARK: Maintenance card
-    var maintenanceTitle: String { "System maintenance" }
     var maintenanceBrewNotInstalled: String { "not installed" }
     var maintenanceBrewVersionUnknown: String { "Homebrew is installed, but its version couldn't be determined" }
-    var maintenanceBrewAllFresh: String { "All packages up to date \u{2713}" }
-    func maintenanceBrewOutdatedCount(_ n: Int) -> String { "Outdated packages: \(n)" }
     var maintenanceBrewOutdatedCheckFailed: String { "Couldn't check for outdated packages — run brew outdated in Terminal" }
-    var maintenanceUpdatesSection: String { "macOS updates" }
-    var maintenanceUpdatesAllUpdated: String { "\u{2713}" }
-    var maintenanceCrashesSection: String { "Recent crashes" }
-    var maintenanceCrashesNone: String { "\u{2713}" }
     var maintenanceUpdatesTip: String { "Pending macOS and App Store updates." }
     var maintenanceCrashesTip: String { "Crash reports macOS recorded in the last 7 days." }
     func maintenanceCrashRow(_ process: String, _ count: Int) -> String { count > 1 ? "\(process) \u{00D7}\(count)" : process }
     func maintenanceCrashRevealA11y(_ process: String) -> String { "Show \(process) crash reports in Finder" }
     func maintenanceAndMore(_ n: Int) -> String { "and \(n) more" }
-    var maintenanceBrewUpgradeButton: String { "Upgrade packages" }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String { "Upgrade \(n) \(n == 1 ? "package" : "packages")?" }
     var maintenanceBrewConfirmButton: String { "Upgrade" }
     var maintenanceBrewUpgrading: String { "Upgrading packages… (may take a few minutes)" }
@@ -340,25 +328,7 @@ struct StringsEN: AppStrings {
     var claudeBackupUnreadable: String { "the log could not be read" }
 
     // MARK: Autostart card
-    var autostartTitle: String { "Startup items" }
     var autostartNoPermission: String { "(no permission)" }
-    var autostartUserAgents: String { "User agents" }
-    var autostartSystemAgents: String { "System agents" }
-    var autostartSystemDaemons: String { "System daemons" }
-    var autostartBackgroundTasks: String { "Background tasks (non-Apple)" }
-    var autostartCheckOutdated: String { "Check for outdated" }
-    func autostartCheckOutdatedCount(_ n: Int) -> String { "Outdated: \(n)" }
-    var autostartOrphanEmptyText: String { "No outdated plists" }
-    var autostartOrphanTooltip: String { "Orphaned — app no longer installed, safe to remove" }
-    var autostartDeleteButton: String { "Delete" }
-    var autostartDeleteConfirmMessageUser: String { "The file will be moved to the Trash. The change takes effect after the next login or restart." }
-    var autostartDeleteConfirmMessageSystem: String { "The file will be permanently deleted (requires Touch ID or an admin password). The change takes effect after the next login or restart." }
-    func autostartDeleteError(_ detail: String) -> String { "Couldn't delete: \(detail)" }
-    func autostartDeleteAllButton(_ n: Int) -> String { "Delete all (\(n))" }
-    func autostartDeleteAllConfirmMessageUser(_ n: Int) -> String { "Move all \(n) plists to the Trash?" }
-    func autostartDeleteAllConfirmMessageSystem(_ n: Int) -> String { "Some are system-level — a password is required. Delete all \(n)?" }
-    var autostartDeletingAll: String { "Deleting…" }
-    var autostartOkTooltip: String { "OK" }
     var autostartDeleteInvalidPath: String { "the path is not a valid autostart plist" }
     func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String {
         "\(failed) of \(total): \(detail)"
@@ -419,36 +389,9 @@ struct StringsEN: AppStrings {
     var historyInfoShowLabel: String { "Show column explanations" }
 
     // MARK: Energy card
-    var energyParamDisplaySleep: String { "Display sleep, min" }
-    var energyParamSleep: String { "System sleep, min" }
-    var energyParamDiskSleep: String { "Disk sleep, min" }
-    var energyParamLowPowerMode: String { "Low Power Mode" }
-    var energyParamHibernateMode: String { "Hibernate mode" }
-    var energyParamWoMP: String { "Wake on network access" }
-    var energyInfoDisplaySleep: String { "Minutes of inactivity before the display turns off. 0 — never. Laptop defaults: 2 min on battery, 10 min on AC power." }
-    var energyInfoSleep: String { "Minutes of inactivity before the whole system sleeps (the display is already off by then). 0 — never. Usually set to 0 on AC power so the Mac doesn't sleep." }
-    var energyInfoDiskSleep: String { "Minutes of idle time before hard disks spin down. Doesn't matter for the built-in SSD, affects external HDDs. 0 — never." }
-    var energyInfoPowerNap: String { "Power Nap: while asleep, the Mac periodically wakes up for mail, iCloud, and Time Machine. On by default on AC power, off on battery." }
-    var energyInfoLowPowerMode: String { "Low Power Mode: reduces CPU frequency and brightness to extend battery life. Off by default; sensible to enable on battery." }
-    var energyInfoStandby: String { "Standby: after ~3 hours of regular sleep, memory contents are flushed to the SSD and RAM power is cut (deep sleep). On by default." }
-    var energyInfoHibernateMode: String { "Sleep format: 0 — RAM only (desktop Macs), 3 — RAM + SSD copy (laptops, default), 25 — SSD copy only (slower wake, maximum savings). Change manually only — a risky setting." }
-    var energyInfoWoMP: String { "Wake on LAN: lets the Mac be woken by a network packet. Works on AC power; on by default on AC power." }
     var energyValueOn: String { "on" }
     var energyValueOff: String { "off" }
-    var energyValueNever: String { "never" }
-    var energyCardTitle: String { "Energy settings (pmset)" }
     func energyApply(_ n: Int) -> String { "Apply (\(n))" }
-    func energyApplyConfirmTitle(_ n: Int) -> String { "Apply \(n) \(n == 1 ? "change" : "changes")?" }
-    var energyApplyConfirmButton: String { "Apply" }
-    var energyApplyConfirmAdmin: String { "Touch ID or an administrator password will be required." }
-    var energyCancel: String { "Cancel" }
-    var energyResetToDefaults: String { "Reset to defaults" }
-    var energyResetHelp: String { "Reset the editable parameters to macOS defaults" }
-    var energyApplyCancelled: String { "Cancelled" }
-    func energyApplyFailed(_ msg: String) -> String { "Failed to apply: \(msg)" }
-    var energyColParam: String { "Parameter" }
-    var energyColBattery: String { "Battery" }
-    var energyColAC: String { "AC power" }
 
     // MARK: Battery page (REDESIGN-BATTERY; strings.json › Battery + 06-battery.md)
     var batteryLoadingText: String { "Reading battery data…" }
@@ -655,6 +598,115 @@ struct StringsEN: AppStrings {
     func bkNoteClaudeUnreadable(_ path: String) -> String { "Can’t read \(path). Full Disk Access may be needed." }
     var bkOpenPrivacy: String { "Open Privacy settings…" }
     var bkOpenPrivacyA11y: String { "Open System Settings › Privacy & Security › Full Disk Access" }
+    // MARK: - System page (REDESIGN-SYSTEM)
+    func shortDate(_ d: Date) -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = .current
+        df.dateFormat = "MMM d"
+        return df.string(from: d)
+    }
+    var sysSub: String { "sleep, startup items, Homebrew, energy" }
+    var sysTagApplyFailed: String { "Apply failed" }
+    var sysTagOutdated: String { "Outdated packages" }
+    var sysTagUpdating: String { "Updating…" }
+    var sysOK: String { "OK" }
+    var sysSleepTitle: String { "Sleep" }
+    var sysSleepCaption: String { "what keeps the Mac awake" }
+    var sysSleepCaptionNone: String { "Mac sleeps normally" }
+    var sysSleepNone: String { "Nothing prevents sleep." }
+    var sysActivityMonitor: String { "Activity Monitor" }
+    var sysDontWarn: String { "Don’t warn" }
+    func sysDontWarnA11y(_ name: String) -> String { "Don’t warn about \(name)" }
+    var sysHidden: String { "Hidden" }
+    func sysHiddenSince(_ date: String) -> String { "not warned since \(date)" }
+    var sysHiddenNoDate: String { "not warned" }
+    var sysWarnAgain: String { "Warn again" }
+    func sysWarnAgainA11y(_ name: String) -> String { "Warn again about \(name)" }
+    var sysStartupTitle: String { "Startup items" }
+    func sysStartupItems(_ n: Int) -> String { n == 1 ? "1 item" : "\(n) items" }
+    func sysStartupRemoved(_ n: Int) -> String { " · \(n) removed" }
+    var sysCheckedJustNow: String { " · checked just now" }
+    func sysCheckedAt(_ t: String) -> String { " · checked \(t)" }
+    var sysCheckStale: String { "Check for stale" }
+    var sysChecking: String { "Checking…" }
+    var sysGroupLogin: String { "Login items" }
+    var sysGroupUserAgents: String { "User agents" }
+    var sysGroupSystemAgents: String { "System agents" }
+    var sysGroupSystemDaemons: String { "System daemons" }
+    var sysGroupBackground: String { "Background tasks (non-Apple)" }
+    var sysGroupExpandedA11y: String { "expanded" }
+    var sysGroupCollapsedA11y: String { "collapsed" }
+    func sysGroupStale(_ n: Int) -> String { "stale: \(n)" }
+    var sysStaleHelp: String { "Stale — the app was removed, safe to delete" }
+    var sysNoStale: String { "No stale items" }
+    var sysDelete: String { "Delete" }
+    func sysDeleteA11y(_ file: String) -> String { "Delete \(file)" }
+    func sysDeleteAll(_ n: Int) -> String { "Delete all (\(n))" }
+    var sysDeleting: String { "Deleting…" }
+    func sysDeleteConfirmTitle(_ n: Int) -> String { n == 1 ? "Delete 1 startup item?" : "Delete \(n) startup items?" }
+    var sysDeleteParagraphUser: String { "The file will be moved to the Trash. The change takes effect after the next login or restart." }
+    var sysDeleteParagraphSystem: String { "The file will be deleted permanently. Touch ID or an administrator password is required. The change takes effect after a restart." }
+    func sysDeleteFailed(_ detail: String) -> String { "Couldn’t delete: \(detail)" }
+    var sysDeleteCancelled: String { "Authorization cancelled. Nothing was deleted." }
+    var sysDeleteTimedOut: String { "Touch ID didn’t respond within 30 s. Nothing was deleted." }
+    var sysBrewTitle: String { "Homebrew" }
+    func sysBrewCaptionOutdated(_ v: String, _ n: Int, _ total: Int?) -> String { total.map { "\(v) · \(n) of \($0) packages outdated" } ?? "\(v) · \(n) outdated" }
+    func sysBrewCaptionUpdating(_ v: String) -> String { "\(v) · updating" }
+    func sysBrewCaptionOk(_ v: String, _ total: Int?) -> String { total.map { "\(v) · \($0) " + ($0 == 1 ? "package" : "packages") } ?? v }
+    var sysBrewCaptionNone: String { "not installed" }
+    var sysBrewCaptionUnknown: String { "version unknown" }
+    var sysBrewUpdate: String { "Update packages…" }
+    func sysBrewUpdatingN(_ n: Int) -> String { n == 1 ? "Updating 1 package…" : "Updating \(n) packages…" }
+    func sysBrewAllUpToDate(_ total: Int?) -> String { total.map { "All \($0) packages are up to date." } ?? "All packages are up to date." }
+    func sysBrewCheckedToday(_ t: String) -> String { "Checked today at \(t)." }
+    func sysBrewCheckedOn(_ d: String) -> String { "Checked \(d)." }
+    var sysBrewNotInstalled: String { "Homebrew isn’t installed, so there is nothing to show here." }
+    var sysBrewHowToInstall: String { "How to install" }
+    func sysBrewFailedLine(_ line: String) -> String { "Update failed: \(line)" }
+    var sysBrewCheckFailed: String { "Couldn’t check for outdated packages." }
+    var sysEnergyTitle: String { "Energy settings (pmset)" }
+    var sysEnergyCaption: String { "changes require an administrator password" }
+    var sysEnergyEmpty: String { "Couldn’t read the energy settings (pmset)." }
+    var sysEnergyColSetting: String { "Setting" }
+    var sysEnergyColBattery: String { "Battery" }
+    var sysEnergyColAC: String { "AC power" }
+    var sysEnergyRowDisplaySleep: String { "Display sleep, min" }
+    var sysEnergyRowSleep: String { "System sleep, min" }
+    var sysEnergyRowDiskSleep: String { "Disk sleep, min" }
+    var sysEnergyRowPowerNap: String { "Power Nap" }
+    var sysEnergyRowLPM: String { "Low Power Mode" }
+    var sysEnergyRowStandby: String { "Standby" }
+    var sysEnergyRowWoN: String { "Wake on network" }
+    var sysEnergyRowHibernate: String { "Hibernate mode" }
+    var sysEnergyRowTcpKeepalive: String { "tcpkeepalive" }
+    var sysEnergyRowLidwake: String { "lidwake" }
+    var sysEnergyInfoDisplaySleep: String { "Minutes of inactivity before the display turns off." }
+    var sysEnergyInfoSleep: String { "0 means the Mac never sleeps on its own while on AC power." }
+    var sysEnergyInfoDiskSleep: String { "Has almost no effect on energy use with an SSD." }
+    var sysEnergyInfoPowerNap: String { "The Mac checks mail and updates while asleep." }
+    var sysEnergyInfoLPM: String { "Lowers CPU clock and screen brightness." }
+    var sysEnergyInfoStandby: String { "After long sleep, saves memory to disk and powers down almost fully." }
+    var sysEnergyInfoWoN: String { "Lets the Mac wake for network access, e.g. file sharing." }
+    var sysEnergyInfoHibernate: String { "3 keeps memory in both RAM and on disk. Change it only in Terminal." }
+    var sysEnergyInfoTcpKeepalive: String { "Keeps network connections alive during sleep. Read-only." }
+    var sysEnergyInfoLidwake: String { "Wakes the Mac when the lid opens. Read-only." }
+    var sysEnergyOn: String { "on" }
+    var sysEnergyOff: String { "off" }
+    func sysEnergyInfoA11y(_ row: String) -> String { "Explain \(row)" }
+    func sysEnergyApply(_ n: Int) -> String { "Apply (\(n))" }
+    var sysEnergyCancel: String { "Cancel" }
+    var sysEnergyReset: String { "Reset to defaults" }
+    var sysEnergyResetHelp: String { "Fills in default values; press Apply to apply them" }
+    var sysEnergyApplied: String { "Applied ✓" }
+    func sysEnergyConfirmTitle(_ n: Int) -> String { n == 1 ? "Apply 1 change?" : "Apply \(n) changes?" }
+    var sysEnergyOnBattery: String { "On battery:" }
+    var sysEnergyOnAC: String { "On AC power:" }
+    var sysEnergyConfirmAdmin: String { "Touch ID or administrator password required." }
+    var sysEnergyConfirmApply: String { "Apply" }
+    var sysEnergyCancelled: String { "Authentication cancelled. Nothing was changed; your edits are kept and can be applied again." }
+    var sysEnergyTimedOut: String { "Touch ID didn’t respond within 30 s. Nothing was changed; your edits are kept and can be applied again." }
+    func sysEnergyFailed(_ detail: String) -> String { "Couldn’t apply: pmset returned an error (\(detail)). Values were reverted." }
     func batMAh(_ s: String) -> String { "\(s) mAh" }
     func batMA(_ s: String) -> String { "\(s) mA" }
     var batConditionNormal: String { "Normal" }

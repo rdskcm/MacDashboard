@@ -29,6 +29,9 @@ extension SerialTests {
                 #expect(LaunchdPlistInspector.pathsNotDeleted(
                         results: [(a.path, .failed("boom")), (b.path, .cancelled)]) == [a.path, b.path],
                       "pathsNotDeleted: failed and cancelled both restore")
+                #expect(LaunchdPlistInspector.pathsNotDeleted(
+                        results: [(a.path, .success), (b.path, .timedOut), (c.path, .timedOut)]) == [b.path, c.path],
+                      "pathsNotDeleted: a timed-out system batch keeps its rows like a cancelled one")
                 #expect(LaunchdPlistInspector.pathsNotDeleted(results: []).isEmpty,
                       "pathsNotDeleted: empty results restore nothing")
 

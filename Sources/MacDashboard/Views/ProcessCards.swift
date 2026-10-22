@@ -191,8 +191,7 @@ struct ProcessListCard: View {
                         // its own `openAmount`/`.onGeometryChange`/single
                         // `withAnimation` disclosure replaces the old
                         // `.transition` + this container's `.animation(value:
-                        // expandedPID)`, matching `QuietStripRow`/
-                        // `AutoSectionRow`/`OrphanRow`.
+                        // expandedPID)`, matching `QuietStripRow`.
                         if !memoryPage {
                             ProcessDetailView(
                                 row: row, isOpen: isOpen,
@@ -418,7 +417,7 @@ private struct ProcessDetailView: View {
         _quitting = State(initialValue: fixture?.phase == .quitting)
         // Seeds `openAmount` from the CURRENT `isOpen` (never true on first
         // mount here — a row is only ever mounted collapsed — but mirrors the
-        // seeding idiom of `QuietStripRow`/`AutoSectionRow` so this stays
+        // seeding idiom of `QuietStripRow` so this stays
         // correct if that assumption ever changes) instead of defaulting to 0
         // and animating in on the next tick.
         _openAmount = State(initialValue: isOpen ? 1 : 0)
@@ -452,8 +451,7 @@ private struct ProcessDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Single source of truth for the disclosure's progress, 0 = fully
-    /// closed, 1 = fully open — same recipe as `QuietStripRow.openAmount` /
-    /// `AutoSectionRow.openAmount` / `AutostartCard.OrphanRow.openAmount`:
+    /// closed, 1 = fully open — same recipe as `QuietStripRow.openAmount`:
     /// permanently mounted, height/opacity/offset are pure functions of this
     /// one value, committed by a single explicit `withAnimation` in
     /// `.onChange(of: isOpen)` below — replaces the old `if expandedPID ==
@@ -598,7 +596,7 @@ private struct ProcessDetailView: View {
                     // Force-quit confirmation is INLINE (not a `.confirmationDialog` system
                     // sheet): a single boolean gates whether the action row or the confirm
                     // panel renders (the same "click destructive action → inline line appears
-                    // in its place" shape as `AutostartCard`'s orphan-plist delete flow).
+                    // in its place" shape as the System page's startup-item delete confirm).
                     // No action buttons for pid <= 1 (kernel_task, launchd).
                     if CPUPageModel.showsActions(pid: row.pid) {
                         if showForceQuitConfirm {

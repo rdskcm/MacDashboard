@@ -101,6 +101,16 @@ enum PrivilegedRunner {
         "/bin/rm -f -- " + paths.map(shellQuoted).joined(separator: " ")
     }
 
+    /// REDESIGN-SYSTEM: `launchctl bootout` for each startup item (errors discarded: an orphan is usually not
+    /// loaded, and the file removal is the goal), then `removeCommand(paths:)`. One prompt for the whole batch.
+    static func removeStartupItemsCommand(paths: [String], uid: uid_t) -> String {
+        let boots = paths.map { path -> String in
+            let domain = path.hasPrefix("/Library/LaunchDaemons/") ? "system" : "gui/\(uid)"
+            return "/bin/launchctl bootout \(domain) \(shellQuoted(path)) >/dev/null 2>&1; "
+        }.joined()
+        return boots + removeCommand(paths: paths)
+    }
+
     /// True when osascript reported the ADMIN-PASSWORD DIALOG being dismissed, i.e.
     /// AppleEvent error -128. Anchored on the trailing `(-128)` error-number field of
     /// osascript's error line, never a bare substring: the command we ran is embedded

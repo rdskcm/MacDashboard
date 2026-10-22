@@ -188,6 +188,30 @@ extension SerialTests {
 
                 #expect(ReportCollector.parseBrewOutdated(outcome(.exited(0), out: "git\n  node \n\n")) == ["git", "node"],
                       "parseBrewOutdated: exit 0 with list -> names")
+                #expect(ReportCollector.parseBrewOutdated(outcome(.exited(0), out: "node (22.9.0) < 22.11.0\n")) == ["node"],
+                      "parseBrewOutdated: a --verbose line gives its first token")
+                #expect(ReportCollector.parseBrewOutdated(outcome(.exited(0), out: "git\nnode (22.9.0) < 22.11.0\n")) == ["git", "node"],
+                      "parseBrewOutdated: plain and verbose lines mix")
+                #expect(ReportCollector.parseBrewOutdatedDetail(outcome(.exited(0), out: "node (22.9.0) < 22.11.0\n"))
+                        == [BrewOutdatedPackage(name: "node", current: "22.9.0", latest: "22.11.0")],
+                      "parseBrewOutdatedDetail: name (old) < new")
+                #expect(ReportCollector.parseBrewOutdatedDetail(outcome(.exited(0), out: "python@3.13 (3.13.0, 3.13.1) < 3.13.2\n"))
+                        == [BrewOutdatedPackage(name: "python@3.13", current: "3.13.1", latest: "3.13.2")],
+                      "parseBrewOutdatedDetail: the last version inside the parens is the current one")
+                #expect(ReportCollector.parseBrewOutdatedDetail(outcome(.exited(0), out: "firefox (130.0) != 131.0\n"))
+                        == [BrewOutdatedPackage(name: "firefox", current: "130.0", latest: "131.0")],
+                      "parseBrewOutdatedDetail: cask form with !=")
+                #expect(ReportCollector.parseBrewOutdatedDetail(outcome(.exited(0), out: "git\n"))
+                        == [BrewOutdatedPackage(name: "git", current: nil, latest: nil)],
+                      "parseBrewOutdatedDetail: a bare name has no versions")
+                #expect(ReportCollector.parseBrewOutdatedDetail(outcome(.exited(0))) == [], "parseBrewOutdatedDetail: empty -> []")
+                #expect(ReportCollector.parseBrewOutdatedDetail(outcome(.exited(1), out: "git\n")) == nil, "parseBrewOutdatedDetail: exit 1 -> nil")
+                #expect(ReportCollector.parseBrewOutdatedDetail(CommandOutcome(termination: .exited(0), stdout: "git\n",
+                                                                             stdoutTruncated: true, stderrHead: "")) == nil,
+                      "parseBrewOutdatedDetail: truncated -> nil")
+                #expect(ReportCollector.parseBrewInstalledCount(outcome(.exited(0), out: "a\nb\n c \n")) == 3, "parseBrewInstalledCount: 3 lines")
+                #expect(ReportCollector.parseBrewInstalledCount(outcome(.exited(0), out: "\n \n")) == 0, "parseBrewInstalledCount: blank -> 0")
+                #expect(ReportCollector.parseBrewInstalledCount(outcome(.exited(1), out: "a\n")) == nil, "parseBrewInstalledCount: exit 1 -> nil")
                 #expect(ReportCollector.parseBrewOutdated(outcome(.exited(0))) == [], "parseBrewOutdated: exit 0, empty -> []")
                 #expect(ReportCollector.parseBrewOutdated(outcome(.exited(0), out: " \n\n")) == [], "parseBrewOutdated: exit 0, blank -> []")
                 #expect(ReportCollector.parseBrewOutdated(outcome(.exited(1))) == nil, "parseBrewOutdated: exit 1, empty -> nil")

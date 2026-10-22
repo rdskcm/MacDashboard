@@ -24,7 +24,7 @@ MainActor.assumeIsolated {
 
     harnessRender(width: 460) {               // width per card column; omit `to:` —
         HarnessSection(label: "A: my state") {//   output path arrives as argv[1]
-            MaintenanceCard(model: m)
+            SystemBrewCard(model: m)
         }
         // more HarnessSection(...) blocks stack vertically in one PNG
     }

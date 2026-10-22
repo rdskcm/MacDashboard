@@ -35,12 +35,12 @@ extension SerialTests {
             defer { VisualFixture.forced = false }
             // D8: Settings panes render with AppSettings at their unset defaults.
             let settings = AppSettings.shared
-            let saved = (settings.fastIntervalSeconds, settings.ignoredWakeHolders, settings.backupStaleHours, settings.lowSpacePercent)
+            let saved = (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleHours, settings.lowSpacePercent)
             settings.fastIntervalSeconds = AppSettings.resolveFastInterval(raw: 0)
-            settings.ignoredWakeHolders = []
+            settings.ignoredWakeHolderEntries = []
             settings.backupStaleHours = AppSettings.resolveBackupStaleHours(raw: 0)
             settings.lowSpacePercent = AppSettings.defaultLowSpacePercent
-            defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolders, settings.backupStaleHours, settings.lowSpacePercent) = saved }
+            defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleHours, settings.lowSpacePercent) = saved }
             L10nStore.shared.language = .en
             let run = try SnapshotRun(out: outDir)
             let m = DashboardModel()
@@ -304,6 +304,66 @@ extension SerialTests {
             let bkClaudeMissing = backups { $0.claudeBackup = nil }
             let bkClaudeUnreadable = backups { $0.claudeBackup = .unreadable }
             let bkWait = backups { $0.report.tmDest = nil }
+            // REDESIGN-SYSTEM: System page states. Fixture = caffeinate (amber) + backupd (system), brew outdated (3), nothing checked.
+            @MainActor func system(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
+            let sysHome = FileManager.default.homeDirectoryForCurrentUser.path
+            let sysFixtureAutostart = VisualFixture.autostart(home: sysHome)
+            let sysOrphanPaths = (sysFixtureAutostart.userAgents + sysFixtureAutostart.systemAgents + sysFixtureAutostart.systemDaemons)
+                .filter(\.isOrphan).map(\.path)
+            let sysChecked20 = homeRef.addingTimeInterval(-20)
+            let sysDefault = system()
+            let sysNone = system { $0.applyFixtureWakeHolders(user: [], system: [], sampled: true) }
+            let sysWait = system { $0.applyFixtureWakeHolders(user: [], system: [], sampled: false) }
+            let sysChecked = system { $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: nil) }
+            let sysDeleting = system { $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 0, checking: false, deleting: Set(sysOrphanPaths), failure: nil) }
+            let sysRemoved = system {
+                var a = sysFixtureAutostart
+                a.userAgents.removeAll(where: \.isOrphan); a.systemAgents.removeAll(where: \.isOrphan)
+                $0.report.autostart = a
+                $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 2, checking: false, deleting: [], failure: nil)
+            }
+            func sysFailed(_ f: PrivilegedActionFailure) -> DashboardModel {
+                system { $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: f) }
+            }
+            let sysFailError = sysFailed(.error("permission denied"))
+            let sysFailCancelled = sysFailed(.cancelled)
+            let sysFailTimedOut = sysFailed(.timedOut)
+            let sysBrewUpdating = system { $0.applyFixtureBrew(checkedAt: homeRef, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true) }
+            let sysBrewOK = system { $0.report.brewOutdated = []; $0.report.brewOutdatedDetail = [] }
+            let sysBrewNone = system { $0.report.brewStatus = .notInstalled }
+            let sysBrewCheckFailed = system { $0.report.brewOutdated = nil; $0.report.brewOutdatedDetail = nil }
+            let sysBrewUpgradeFailed = system {
+                $0.applyFixtureBrew(checkedAt: homeRef, upgrading: false, progress: nil,
+                                    error: "Update failed: Error: node: checksum mismatch", notice: nil, stoppable: false)
+            }
+            let sysBrewStopped = system {
+                $0.report.brewOutdated = ["node", "python@3.13"]
+                $0.report.brewOutdatedDetail = Array(($0.report.brewOutdatedDetail ?? []).dropFirst())
+                $0.applyFixtureBrew(checkedAt: homeRef, upgrading: false, progress: nil, error: nil,
+                                    notice: "Upgrade stopped: 1 of 3 packages upgraded", stoppable: false)
+            }
+            let sysEnergyApplied = system { $0.applyFixtureEnergyApply(.applied) }
+            let sysEnergyCancelled = system { $0.applyFixtureEnergyApply(.failed(.cancelled)) }
+            let sysEnergyTimedOut = system { $0.applyFixtureEnergyApply(.failed(.timedOut)) }
+            let sysEnergyError = system { $0.applyFixtureEnergyApply(.failed(.error("code 1"))) }
+            let sysPending = [EnergyChange(bucket: .battery, key: "displaysleep", value: "5"),
+                              EnergyChange(bucket: .ac, key: "powernap", value: "0")]
+            let sysBarStale = system {
+                $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
+                $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: nil)
+            }
+            let sysBarUpdating = system {
+                $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
+                $0.applyFixtureBrew(checkedAt: homeRef, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true)
+            }
+            let sysBarApplyFailed = system { $0.applyFixtureEnergyApply(.failed(.error("code 1"))) }
+            let sysBarClear = system {
+                $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
+                $0.report.brewOutdated = []; $0.report.brewOutdatedDetail = []
+            }
+            let sysBarNoneOutdated = system {
+                $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
+            }
             let fixtureDays = m.history.mac_history
             let historyNoDays = fixtureHistory([])
             let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -583,6 +643,67 @@ extension SerialTests {
                         BackupsPageBar(model: bkNotSet) {}; BackupsPageBar(model: bkOk) {}; BackupsPageBar(model: bkOverdue7) {}
                         BackupsPageBar(model: bkOverdue30) {}; BackupsPageBar(model: bkBacking) {}; BackupsPageBar(model: bkClaudeStale) {}
                         BackupsPageBar(model: bkClaudeMissing) {}; BackupsPageBar(model: bkWait) {}
+                    }
+                }
+                run.snap("content-system-sleep", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SystemSleepCard(model: sysDefault, initialHidden: VisualFixture.hiddenHolders, initialHiddenOpen: true)
+                        SystemSleepCard(model: sysNone, initialHidden: VisualFixture.hiddenHolders)
+                        SystemSleepCard(model: sysWait)
+                    }
+                }
+                run.snap("content-system-startup", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SystemStartupCard(model: sysDefault, router: NavigationRouter())
+                        SystemStartupCard(model: sysChecked, router: NavigationRouter(), initialOpen: [.login, .userAgents, .systemAgents])
+                    }
+                }
+                run.snap("content-system-startup-flow", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SystemStartupCard(model: sysChecked, router: NavigationRouter(), initialOpen: [.login, .userAgents, .systemAgents], initialConfirm: true)
+                        SystemStartupCard(model: sysDeleting, router: NavigationRouter(), initialOpen: [.login, .userAgents, .systemAgents])
+                        SystemStartupCard(model: sysRemoved, router: NavigationRouter())
+                    }
+                }
+                run.snap("content-system-startup-fail", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SystemStartupCard(model: sysFailError, router: NavigationRouter(), initialOpen: [.userAgents])
+                        SystemStartupCard(model: sysFailCancelled, router: NavigationRouter(), initialOpen: [.userAgents])
+                        SystemStartupCard(model: sysFailTimedOut, router: NavigationRouter(), initialOpen: [.userAgents])
+                    }
+                }
+                run.snap("content-system-brew", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SystemBrewCard(model: sysDefault); SystemBrewCard(model: sysBrewUpdating); SystemBrewCard(model: sysBrewOK)
+                        SystemBrewCard(model: sysBrewNone); SystemBrewCard(model: sysBrewCheckFailed)
+                        SystemBrewCard(model: sysBrewUpgradeFailed); SystemBrewCard(model: sysBrewStopped)
+                    }
+                }
+                run.snap("content-system-energy", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SystemEnergyCard(model: sysDefault, router: NavigationRouter())
+                        SystemEnergyCard(model: sysDefault, router: NavigationRouter(), initialPending: sysPending, initialInfoKey: "sleep")
+                        SystemEnergyCard(model: sysDefault, router: NavigationRouter(), initialPending: sysPending, initialConfirm: true)
+                    }
+                }
+                run.snap("content-system-energy-result", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SystemEnergyCard(model: sysEnergyApplied, router: NavigationRouter())
+                        SystemEnergyCard(model: sysEnergyCancelled, router: NavigationRouter())
+                        SystemEnergyCard(model: sysEnergyTimedOut, router: NavigationRouter())
+                        SystemEnergyCard(model: sysEnergyError, router: NavigationRouter())
+                    }
+                }
+                run.snap("content-system-narrow", mode, width: 904) {
+                    VStack(spacing: 16) {
+                        SystemSleepCard(model: sysDefault, initialHidden: VisualFixture.hiddenHolders, initialHiddenOpen: true)
+                        SystemStartupCard(model: sysChecked, router: NavigationRouter(), initialOpen: [.login, .userAgents, .systemAgents])
+                    }
+                }
+                run.snap("content-system-bars", mode, width: 1150) {
+                    VStack(spacing: 12) {
+                        SystemPageBar(model: sysDefault) {}; SystemPageBar(model: sysBarNoneOutdated) {}; SystemPageBar(model: sysBarUpdating) {}
+                        SystemPageBar(model: sysBarStale) {}; SystemPageBar(model: sysBarApplyFailed) {}; SystemPageBar(model: sysBarClear) {}
                     }
                 }
                 run.snap("content-history-disk", mode, width: 1150) {

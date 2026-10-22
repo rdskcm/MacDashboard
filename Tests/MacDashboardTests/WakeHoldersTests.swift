@@ -318,14 +318,51 @@ extension SerialTests {
                   "SleepIgnore: label(for: key) EN (got \(WakeHolders.label(for: claudeCaf.key)))")
             L10nStore.shared.language = .ru
 
-            let storedKeys = [claudeCaf.key, zoomHolder.key]
-            #expect(AppSettings.decodeIgnoredWakeHolders(AppSettings.encodeIgnoredWakeHolders(storedKeys)) == storedKeys,
-                  "SleepIgnore: codec round trip keeps entries and order")
+            let d1 = Date(timeIntervalSince1970: 1_760_000_000)
+            let stored = [IgnoredWakeHolder(key: claudeCaf.key, since: d1), IgnoredWakeHolder(key: zoomHolder.key, since: nil)]
+            #expect(AppSettings.decodeIgnoredWakeHolders(AppSettings.encodeIgnoredWakeHolders(stored)) == stored,
+                  "SleepIgnore: codec round trip keeps entries, dates and order")
             #expect(AppSettings.decodeIgnoredWakeHolders(nil).isEmpty, "SleepIgnore: no stored data -> []")
             #expect(AppSettings.decodeIgnoredWakeHolders(Data("not json".utf8)).isEmpty, "SleepIgnore: unreadable stored data -> []")
-            let duplicated = AppSettings.encodeIgnoredWakeHolders([claudeCaf.key, zoomHolder.key, claudeCaf.key, termCaf.key, zoomHolder.key])
-            #expect(AppSettings.decodeIgnoredWakeHolders(duplicated) == [claudeCaf.key, zoomHolder.key, termCaf.key],
+            let legacy = Data(#"[{"owner":"Zoom"},{"owner":"caffeinate","requester":"Terminal"}]"#.utf8)
+            #expect(AppSettings.decodeIgnoredWakeHolders(legacy) == [
+                IgnoredWakeHolder(owner: "Zoom", requester: nil, since: nil),
+                IgnoredWakeHolder(owner: "caffeinate", requester: "Terminal", since: nil),
+            ], "SleepIgnore: legacy dateless JSON decodes with since == nil, nothing lost")
+            let duplicated = AppSettings.encodeIgnoredWakeHolders([
+                IgnoredWakeHolder(key: claudeCaf.key, since: d1), IgnoredWakeHolder(key: zoomHolder.key, since: nil),
+                IgnoredWakeHolder(key: claudeCaf.key, since: nil), IgnoredWakeHolder(key: termCaf.key, since: nil),
+                IgnoredWakeHolder(key: zoomHolder.key, since: d1)])
+            #expect(AppSettings.decodeIgnoredWakeHolders(duplicated).map(\.key) == [claudeCaf.key, zoomHolder.key, termCaf.key],
                   "SleepIgnore: duplicate stored keys dropped, first-occurrence order kept")
+            #expect(AppSettings.decodeIgnoredWakeHolders(duplicated).first?.since == d1,
+                  "SleepIgnore: the first duplicate wins with its date")
+
+            // --- REDESIGN-SYSTEM: classified(from:) splits warnable programs from OS services ---
+            do {
+                let sysTable: [Int32: ProcRecord] = [
+                    349: ProcRecord(path: "/System/Library/CoreServices/powerd.bundle/powerd", ppid: 1),
+                    350: ProcRecord(path: "/usr/libexec/backupd", ppid: 1, name: "backupd"),
+                    7000: ProcRecord(path: "/usr/bin/caffeinate", ppid: 5000),
+                    5000: ProcRecord(path: "/bin/zsh", ppid: 4999),
+                    4999: ProcRecord(path: "/usr/bin/login", ppid: 4998),
+                    4998: ProcRecord(path: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", ppid: 1),
+                ]
+                func a(_ pid: Int32, _ name: String, _ age: Int = 600) -> PowerAssertion {
+                    PowerAssertion(pid: pid, processName: name, ageSeconds: age, type: "PreventUserIdleSystemSleep", name: "x")
+                }
+                let c = WakeHolders.classified(from: [a(350, "backupd"), a(349, "powerd", 900), a(7000, "caffeinate"), a(9999, "ghost")],
+                                               lookup: { sysTable[$0] }, minimumAge: 0)
+                #expect(c.user == [WakeHolder(owner: "caffeinate", requester: "Terminal", ageSeconds: 600)],
+                      "WakeHolders: classified user = caffeinate on behalf of Terminal only (got \(c.user))")
+                #expect(c.system == [WakeHolder(owner: "powerd", requester: nil, ageSeconds: 900),
+                                     WakeHolder(owner: "backupd", requester: nil, ageSeconds: 600)],
+                      "WakeHolders: classified system = OS services, oldest first (got \(c.system))")
+                #expect(!(c.user + c.system).contains { $0.owner == "ghost" },
+                      "WakeHolders: unreadable owner path is in neither list")
+                #expect(WakeHolders.holders(from: [a(350, "backupd")], lookup: { sysTable[$0] }, minimumAge: 0).isEmpty,
+                      "WakeHolders: holders(from:) stays user-only")
+            }
 
             let allIgnored = Assess.assess(report: FullReport(), live: LiveSnapshot(),
                                            wakeHolders: [claudeCaf], ignoredWakeHolders: [claudeCaf.key])

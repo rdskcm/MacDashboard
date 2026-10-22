@@ -50,17 +50,22 @@ final class AppSettings {
         allowedLowSpacePercents.contains(raw) ? raw : defaultLowSpacePercent
     }
 
-    /// SLEEP-IGNORE-APP codec, exposed for Checks. Missing or unreadable data is an empty
+    /// SLEEP-IGNORE-APP codec, exposed for tests. Missing or unreadable data is an empty
     /// list: failing toward "warn" is the safe direction for this setting. Duplicate keys
     /// (only a hand-edited defaults value can hold them) are dropped, first occurrence kept,
-    /// so Settings' `ForEach(id: \.self)` never sees a repeated ID.
-    static func decodeIgnoredWakeHolders(_ data: Data?) -> [WakeHolderKey] {
-        let stored = data.flatMap { try? JSONDecoder().decode([WakeHolderKey].self, from: $0) } ?? []
+    /// so no `ForEach` ever sees a repeated ID. A legacy entry `{owner, requester}` decodes
+    /// with `since == nil` (REDESIGN-SYSTEM): nothing is lost and no date is invented.
+    static func decodeIgnoredWakeHolders(_ data: Data?) -> [IgnoredWakeHolder] {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let stored = data.flatMap { try? decoder.decode([IgnoredWakeHolder].self, from: $0) } ?? []
         var seen = Set<WakeHolderKey>()
-        return stored.filter { seen.insert($0).inserted }
+        return stored.filter { seen.insert($0.key).inserted }
     }
-    static func encodeIgnoredWakeHolders(_ list: [WakeHolderKey]) -> Data? {
-        try? JSONEncoder().encode(list)
+    static func encodeIgnoredWakeHolders(_ list: [IgnoredWakeHolder]) -> Data? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return try? encoder.encode(list)
     }
 
     /// Sleep interval of DashboardModel's fast task (native CPU/RAM/disk/battery
@@ -71,11 +76,13 @@ final class AppSettings {
     }
 
     /// Wake holders the Sleep attention item no longer warns about (SLEEP-IGNORE-APP),
-    /// in the order the user added them. Mutate through `DashboardModel.setWakeHolderIgnored`
-    /// so the assessment updates at once.
-    var ignoredWakeHolders: [WakeHolderKey] {
-        didSet { UserDefaults.standard.set(Self.encodeIgnoredWakeHolders(ignoredWakeHolders), forKey: Self.ignoredWakeHoldersKey) }
+    /// in the order the user added them, each with the date it was added (nil for legacy entries).
+    /// Mutate through `DashboardModel.setWakeHolderIgnored` so the assessment updates at once.
+    var ignoredWakeHolderEntries: [IgnoredWakeHolder] {
+        didSet { UserDefaults.standard.set(Self.encodeIgnoredWakeHolders(ignoredWakeHolderEntries), forKey: Self.ignoredWakeHoldersKey) }
     }
+    /// Read-only keys of the entries, for the assessment and Home.
+    var ignoredWakeHolders: [WakeHolderKey] { ignoredWakeHolderEntries.map(\.key) }
 
     /// BACKUP-AGE: warn when the newest Claude backup is older than this many hours.
     /// Mutate through `DashboardModel.setBackupStaleHours` so the assessment updates at once.
@@ -91,7 +98,7 @@ final class AppSettings {
     private init() {
         Self.migrateLegacyValues(in: .standard)
         fastIntervalSeconds = Self.resolveFastInterval(raw: UserDefaults.standard.integer(forKey: Self.fastIntervalKey)) // 0 if unset
-        ignoredWakeHolders = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
+        ignoredWakeHolderEntries = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
         backupStaleHours = Self.resolveBackupStaleHours(raw: UserDefaults.standard.integer(forKey: Self.backupStaleHoursKey))
         lowSpacePercent = Self.resolveLowSpacePercent(raw: UserDefaults.standard.integer(forKey: Self.lowSpacePercentKey)) // 0 if unset
     }

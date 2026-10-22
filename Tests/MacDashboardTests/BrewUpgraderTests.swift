@@ -42,7 +42,7 @@ extension SerialTests {
             let inv = BrewUpgrader.invocation(brewPath: homebrew)
             let expectedEnv = ["PATH": "/opt/homebrew/bin:" + sysPATH, "LC_ALL": "C", "LANG": "C", "TZ": "UTC",
                                "HOME": NSHomeDirectory()]
-            #expect(inv == BrewUpgrader.Invocation(path: homebrew, args: ["upgrade"], timeout: 900, interruptGrace: 30,
+            #expect(inv == BrewUpgrader.Invocation(path: homebrew, args: ["upgrade"], timeout: 300, interruptGrace: 30,
                                                     environment: expectedEnv),
                   "BrewUpgrader: [invocation] BI1 full value")
             #expect(inv.interruptGrace == 30, "BrewUpgrader: [invocation] BI8 stop grace 30 s")
@@ -139,6 +139,21 @@ extension SerialTests {
                 let log = BUProgressLog()
                 #expect(await buRun(total: 3, brewPath: homebrew, fake, log) == fail, "BrewUpgrader: [progress] BU14 returns failure")
                 #expect(log.items.count == 1, "BrewUpgrader: [progress] BU14 progress still forwarded")
+            }
+            do {   // REDESIGN-SYSTEM: the last stderr line of a failed upgrade is the failure text
+                let fake = BUFakeRunner(lines: [("Warning: old", true), ("Error: node: checksum mismatch", true)],
+                                        outcome: buOutcome(.exited(1)))
+                let log = BUProgressLog()
+                #expect(await buRun(total: 3, brewPath: homebrew, fake, log) == L.sysBrewFailedLine("Error: node: checksum mismatch"),
+                      "BrewUpgrader: [flow] BU18 failed upgrade names the last stderr line")
+                let ok = BUFakeRunner(lines: [("Warning: something", true)], outcome: buOutcome(.exited(0)))
+                #expect(await buRun(total: 3, brewPath: homebrew, ok, BUProgressLog()) == nil,
+                      "BrewUpgrader: [flow] BU19 stderr line on exit 0 is ignored")
+                for t in [CommandOutcome.Termination.timedOut, .cancelled] {
+                    let cut = BUFakeRunner(lines: [("Error: partial", true)], outcome: buOutcome(t))
+                    #expect(await buRun(total: 3, brewPath: homebrew, cut, BUProgressLog()) == L.maintenanceBrewUpgradeFailed,
+                          "BrewUpgrader: [flow] BU20 timeout/kill uses the generic message, not the last stderr line")
+                }
             }
 
             // --- Stop notice (BREW-CANCEL) ---

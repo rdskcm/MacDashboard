@@ -41,6 +41,22 @@ extension WakeHolder {
     var key: WakeHolderKey { WakeHolderKey(owner: owner, requester: requester) }
 }
 
+/// REDESIGN-SYSTEM: an entry of the "don't warn" list. Flat fields so the legacy JSON
+/// `{owner, requester}` decodes with `since == nil` (no date is ever invented).
+struct IgnoredWakeHolder: Codable, Equatable {
+    var owner: String
+    var requester: String?
+    var since: Date?
+    var key: WakeHolderKey { WakeHolderKey(owner: owner, requester: requester) }
+
+    init(owner: String, requester: String?, since: Date?) {
+        self.owner = owner; self.requester = requester; self.since = since
+    }
+    init(key: WakeHolderKey, since: Date?) {
+        self.init(owner: key.owner, requester: key.requester, since: since)
+    }
+}
+
 enum WakeHolders {
     /// Assertion types that keep the system or the display from idle-sleeping (IOPMLib.h
     /// kIOPMAssertionType* plus the two legacy names). `UserIsActive` is the user's own input.
@@ -104,7 +120,16 @@ enum WakeHolders {
     static func holders(from assertions: [PowerAssertion],
                         lookup: (Int32) -> ProcRecord?,
                         minimumAge: Int = minimumAgeSeconds) -> [WakeHolder] {
+        classified(from: assertions, lookup: lookup, minimumAge: minimumAge).user
+    }
+
+    /// `user`: programs the app warns about. `system`: OS services holding an assertion (never warned,
+    /// shown without a button). An owner whose path is unreadable is in neither list.
+    static func classified(from assertions: [PowerAssertion],
+                           lookup: (Int32) -> ProcRecord?,
+                           minimumAge: Int = minimumAgeSeconds) -> (user: [WakeHolder], system: [WakeHolder]) {
         var best: [String: WakeHolder] = [:]
+        var bestSystem: [String: WakeHolder] = [:]
         for a in assertions where sleepPreventingTypes.contains(a.type) && a.ageSeconds >= minimumAge {
             let ownerPath = lookup(a.pid)?.path
             let ownerName = ownerPath.flatMap { Parsers.appBundleName(fromCommandPath: $0) } ?? a.processName
@@ -127,17 +152,26 @@ enum WakeHolders {
                                     ageSeconds: a.ageSeconds)
             } else if let op = ownerPath, isOrdinary(op) {
                 holder = WakeHolder(owner: ownerName, requester: nil, ageSeconds: a.ageSeconds)
+            } else if let op = ownerPath, isOSExecutable(op) {
+                let sysHolder = WakeHolder(owner: ownerName, requester: nil, ageSeconds: a.ageSeconds)
+                let key = sysHolder.owner
+                if let prev = bestSystem[key], prev.ageSeconds >= sysHolder.ageSeconds { continue }
+                bestSystem[key] = sysHolder
+                continue
             } else {
-                continue   // system, or unreadable: silent
+                continue   // unreadable owner: silent
             }
             let key = holder.owner + "\u{1}" + (holder.requester ?? "")
             if let prev = best[key], prev.ageSeconds >= holder.ageSeconds { continue }
             best[key] = holder
         }
-        return best.values.sorted {
-            $0.ageSeconds != $1.ageSeconds ? $0.ageSeconds > $1.ageSeconds
-                : label(for: $0) < label(for: $1)
+        func sorted(_ d: [String: WakeHolder]) -> [WakeHolder] {
+            d.values.sorted {
+                $0.ageSeconds != $1.ageSeconds ? $0.ageSeconds > $1.ageSeconds
+                    : label(for: $0) < label(for: $1)
+            }
         }
+        return (sorted(best), sorted(bestSystem))
     }
 
     /// "caffeinate (от claude)" / "Zoom" in the current language.
@@ -229,12 +263,13 @@ enum WakeHolders {
     }
 
     /// One `pmset -g assertions` run, parsed and classified. Total: a launch failure or a
-    /// timeout is `([], nil)`; unparsable output is `([], failure)`.
-    static func sample() async -> (holders: [WakeHolder], failure: ParseFailure?) {
-        guard let out = await ParsedCommand.pmsetAssertions.run().text else { return ([], nil) }
+    /// timeout is `([], [], nil)`; unparsable output is `([], [], failure)`.
+    static func sample() async -> (holders: [WakeHolder], system: [WakeHolder], failure: ParseFailure?) {
+        guard let out = await ParsedCommand.pmsetAssertions.run().text else { return ([], [], nil) }
         guard let assertions = parseAssertions(out) else {
-            return ([], ParseFailure(.pmsetAssertions, stdout: out))
+            return ([], [], ParseFailure(.pmsetAssertions, stdout: out))
         }
-        return (holders(from: assertions, lookup: processRecord(pid:)), nil)
+        let c = classified(from: assertions, lookup: processRecord(pid:))
+        return (c.user, c.system, nil)
     }
 }

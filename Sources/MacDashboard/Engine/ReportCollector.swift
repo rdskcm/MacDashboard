@@ -305,7 +305,7 @@ final class ReportCollector {
     }
 
     func collect(skipSlow: Bool = false,
-                 cachedBrew: (status: BrewStatus, outdated: [String]?)? = nil,
+                 cachedBrew: BrewSnapshot? = nil,
                  onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport {
         // Task cancellation of the caller propagates into the section task groups and
         // from there into every `CommandRunner.run`, which kills the group or skips the spawn.
@@ -313,7 +313,7 @@ final class ReportCollector {
     }
 
     private func collectBody(skipSlow: Bool,
-                             cachedBrew: (status: BrewStatus, outdated: [String]?)?,
+                             cachedBrew: BrewSnapshot?,
                              onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport {
         let clock = ContinuousClock()
         let passStart = clock.now
@@ -670,6 +670,12 @@ final class ReportCollector {
     // MARK: - autostart
 
     private func collectAutostart() async -> Outcome {
+        let a = await collectAutostartInfo()
+        return Outcome(section: .autostart) { $0.autostart = a }
+    }
+
+    /// The autostart section on its own (REDESIGN-SYSTEM «Check for stale» re-scans just this).
+    func collectAutostartInfo() async -> AutostartInfo {
         var a = AutostartInfo()
         if let li = await CommandRunner.run("/usr/bin/osascript",
             ["-e", "tell application \"System Events\" to get the name of every login item"], timeout: 15).text {
@@ -684,7 +690,7 @@ final class ReportCollector {
         if let ll = await CommandRunner.run("/bin/launchctl", ["list"], timeout: 15).text {
             a.background = Parsers.launchctlNonApple(ll)
         }
-        return Outcome(section: .autostart) { $0.autostart = a }
+        return a
     }
 
     /// Lists `.plist` files in `url` and inspects each one (label, resolved
@@ -1194,15 +1200,18 @@ final class ReportCollector {
 
     // MARK: - homebrew (slow)
 
-    private func collectBrew(cached: (status: BrewStatus, outdated: [String]?)?) async -> Outcome {
+    private func collectBrew(cached: BrewSnapshot?) async -> Outcome {
+        let info: BrewSnapshot
         if let cached {
             // Session cache hit (Block N5): skip re-running `brew update` + `brew outdated`.
-            return Outcome(section: .brew) {
-                $0.brewStatus = cached.status; $0.brewOutdated = cached.outdated
-            }
+            info = cached
+        } else {
+            info = await collectBrewInfo(refreshIndex: true)
         }
-        let info = await collectBrewInfo(refreshIndex: true)
-        return Outcome(section: .brew) { $0.brewStatus = info.status; $0.brewOutdated = info.outdated }
+        return Outcome(section: .brew) {
+            $0.brewStatus = info.status; $0.brewOutdated = info.outdated
+            $0.brewOutdatedDetail = info.outdatedDetail; $0.brewInstalledCount = info.installedCount
+        }
     }
 
     /// The actual Homebrew collection logic, factored out of `collectBrew()` so the
@@ -1211,9 +1220,9 @@ final class ReportCollector {
     /// `refreshIndex` (BREW-OUTDATED-TIMEOUT): run `brew update` first, under its own timeout.
     /// Its outcome is ignored — if it fails or times out, `outdated` reads the previous index.
     /// The upgrade flow passes false: `brew upgrade` has just run with auto-update on.
-    func collectBrewInfo(refreshIndex: Bool) async -> (status: BrewStatus, outdated: [String]?) {
+    func collectBrewInfo(refreshIndex: Bool) async -> BrewSnapshot {
         guard let brew = Self.findBrew() else {
-            return (.notInstalled, nil)
+            return BrewSnapshot(status: .notInstalled, outdated: nil, outdatedDetail: nil, installedCount: nil)
         }
         // brew is a Homebrew-prefix script that shells out to its own helper
         // binaries (ruby, git, curl, …) inside that prefix — unlike the rest of
@@ -1229,8 +1238,16 @@ final class ReportCollector {
         // its old 60 s timeout (2026-10-07). Local work only, so 30 s is ample.
         var outdatedEnv = brewEnv
         outdatedEnv["HOMEBREW_NO_AUTO_UPDATE"] = "1"
-        let outdatedRun = await CommandRunner.run(brew, ["outdated"], timeout: 30, environment: outdatedEnv)
-        return (.installed(version: version), Self.parseBrewOutdated(outdatedRun))
+        let outdatedRun = await CommandRunner.run(brew, ["outdated", "--verbose"], timeout: 30, environment: outdatedEnv)
+        // Installed count = formulae + casks, two local runs; either failing leaves the count unknown.
+        let formulae = Self.parseBrewInstalledCount(
+            await CommandRunner.run(brew, ["list", "--formula", "-1"], timeout: 30, environment: outdatedEnv))
+        let casks = Self.parseBrewInstalledCount(
+            await CommandRunner.run(brew, ["list", "--cask", "-1"], timeout: 30, environment: outdatedEnv))
+        return BrewSnapshot(status: .installed(version: version),
+                            outdated: Self.parseBrewOutdated(outdatedRun),
+                            outdatedDetail: Self.parseBrewOutdatedDetail(outdatedRun),
+                            installedCount: formulae.flatMap { f in casks.map { f + $0 } })
     }
 
     /// Pure (Checks-tested). `.exited(0)` => the first non-empty trimmed stdout line (brew prints
@@ -1248,10 +1265,46 @@ final class ReportCollector {
     /// anything else (non-zero exit, signal, timeout, cancellation, launch failure, truncated
     /// stdout) => nil = the check failed, never "all up to date". Same rule as BrewUpgrader
     /// (BREW-PARTIAL-FAIL): the exit status decides, not the presence of output.
+    /// With `--verbose` (REDESIGN-SYSTEM) a line is `name (old) < new`: the name is its first
+    /// whitespace-separated token.
     static func parseBrewOutdated(_ o: CommandOutcome) -> [String]? {
         guard o.termination == .exited(0), !o.stdoutTruncated else { return nil }
         return o.stdout.components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            .compactMap { $0.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init) }
+    }
+
+    /// Pure. Same exit rule as `parseBrewOutdated`. Line forms: `name (1.2.3) < 1.2.4`,
+    /// `name (1.2.3, 1.2.5) < 1.3.0` (the last version inside the parens is the current one),
+    /// `name (1.0) != 1.1` (casks); a line without parens gives `current`/`latest` nil.
+    static func parseBrewOutdatedDetail(_ o: CommandOutcome) -> [BrewOutdatedPackage]? {
+        guard o.termination == .exited(0), !o.stdoutTruncated else { return nil }
+        return o.stdout.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            .compactMap { line -> BrewOutdatedPackage? in
+                guard let name = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init)
+                else { return nil }
+                guard let open = line.firstIndex(of: "("), let close = line[open...].firstIndex(of: ")") else {
+                    return BrewOutdatedPackage(name: name, current: nil, latest: nil)
+                }
+                let current = line[line.index(after: open)..<close]
+                    .split(separator: ",").last.map { $0.trimmingCharacters(in: .whitespaces) }
+                var rest = line[line.index(after: close)...].trimmingCharacters(in: .whitespaces)
+                for op in ["!=", "<"] where rest.hasPrefix(op) {
+                    rest = String(rest.dropFirst(op.count)).trimmingCharacters(in: .whitespaces)
+                    break
+                }
+                let latest = rest.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init)
+                return BrewOutdatedPackage(name: name, current: current.flatMap { $0.isEmpty ? nil : $0 }, latest: latest)
+            }
+    }
+
+    /// Pure. `brew list --formula -1` / `--cask -1`: the count of non-empty lines on a complete
+    /// `.exited(0)`; anything else is nil (the caption then drops the total).
+    static func parseBrewInstalledCount(_ o: CommandOutcome) -> Int? {
+        guard o.termination == .exited(0), !o.stdoutTruncated else { return nil }
+        return o.stdout.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
     }
 
     /// Pure (Checks-tested). True iff brew is installed but one of its checks failed — `--version`
