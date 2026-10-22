@@ -22,13 +22,16 @@ func sectionRowTransition(reduceMotion: Bool) -> AnyTransition {
 // MARK: - List container and row (moved from SecurityPage.swift)
 
 /// The `BatteryHistoryCard.list` container: padding 6, radius 22, `DS3.row`, rows spaced 4.
+/// `ring` adds the mockup's .5 pt `line` inner stroke; the System page sets it, Security keeps its existing look.
 struct SectionList<Content: View>: View {
+    var ring = false
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(spacing: 4) { content() }
             .padding(6)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(DS3.row))
+            .ds3InsetRims(RoundedRectangle(cornerRadius: 22, style: .continuous), ring: ring ? DS3.line : nil)
     }
 }
 
@@ -37,6 +40,9 @@ struct SectionListRow: View {
     let name: String
     let sub: String
     let value: String
+    /// The mockup's row: the name takes the free width and the secondary text sits right of it, before the value
+    /// column. Default false keeps the Security rows (secondary text right after the name).
+    var subTrailing = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -46,6 +52,7 @@ struct SectionListRow: View {
                 .foregroundStyle(DS3.ink)
                 .lineLimit(1)
                 .help(name)
+            if subTrailing { Spacer(minLength: 8) }
             if !sub.isEmpty {
                 Text(sub)
                     .font(.system(size: 12.5))
@@ -53,7 +60,7 @@ struct SectionListRow: View {
                     .foregroundStyle(DS3.muted)
                     .lineLimit(1)
             }
-            Spacer(minLength: 8)
+            if !subTrailing { Spacer(minLength: 8) }
             Text(value)
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
@@ -73,11 +80,12 @@ struct SectionRows<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        SectionList(content: content)
+        SectionList(ring: true, content: content)
     }
 }
 
-/// One row of a Rows block: optional icon, name (optionally mono), wrapping sub line, trailing control.
+/// One row of a Rows block: optional icon, a name over a wrapping sub line (two lines, as in the mockup), trailing
+/// control.
 /// No hover — the rows are not buttons.
 struct SectionRowsRow<Trailing: View>: View {
     var icon: String? = nil
@@ -95,19 +103,20 @@ struct SectionRowsRow<Trailing: View>: View {
                     .foregroundStyle(tint)
                     .accessibilityHidden(true)
             }
-            Text(name)
-                .font(nameMono ? .system(size: 13, weight: .medium, design: .monospaced) : .system(size: 14))
-                .foregroundStyle(DS3.ink)
-                .lineLimit(1)
-                .layoutPriority(1)
-                .help(name)
-            if let sub, !sub.isEmpty {
-                Text(sub)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(DS3.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(nameMono ? .system(size: 13, weight: .medium, design: .monospaced) : .system(size: 14))
+                    .foregroundStyle(DS3.ink)
+                    .lineLimit(1)
+                    .help(name)
+                if let sub, !sub.isEmpty {
+                    Text(sub)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(DS3.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            Spacer(minLength: 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             trailing().fixedSize()
         }
         .padding(.vertical, 6)
@@ -133,23 +142,28 @@ struct SectionCollapsibleGroup<Content: View>: View {
     @Binding var isOpen: Bool
     var enabled: Bool
     var bodyInset: CGFloat
+    /// Pills: right 10 / bottom 8; Hidden rows: right 0 / bottom 4 (mockup `0 10px 8px 30px` / `0 0 4px 20px`).
+    var bodyTrailing: CGFloat
+    var bodyBottom: CGFloat
     @ViewBuilder var content: () -> Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
     @State private var openAmount: Double
     /// Natural (fully-open) height of the body, captured by `.onGeometryChange`. `nil` until the first callback:
     /// an already-open group imposes no height constraint for that frame, a closed one gets a hard 0.
     @State private var measuredHeight: CGFloat?
 
     init(title: String, count: Int?, warn: String? = nil, isOpen: Binding<Bool>, enabled: Bool = true,
-         bodyInset: CGFloat = 20, @ViewBuilder content: @escaping () -> Content) {
+         bodyInset: CGFloat = 20, bodyTrailing: CGFloat = 10, bodyBottom: CGFloat = 8,
+         @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.count = count
         self.warn = warn
         self._isOpen = isOpen
         self.enabled = enabled
         self.bodyInset = bodyInset
+        self.bodyTrailing = bodyTrailing
+        self.bodyBottom = bodyBottom
         self.content = content
         // Seed from the CURRENT binding so a group that starts open renders fully open on the first frame.
         self._openAmount = State(initialValue: isOpen.wrappedValue ? 1 : 0)
@@ -163,9 +177,10 @@ struct SectionCollapsibleGroup<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             content()
+                .padding(.top, 8)
                 .padding(.leading, bodyInset)
-                .padding(.trailing, 10)
-                .padding(.bottom, 8)
+                .padding(.trailing, bodyTrailing)
+                .padding(.bottom, bodyBottom)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { newHeight in
                     // Settled and open: track the body's own size changes (a row leaving) with the same curve.
                     if openAmount == 1 {
@@ -196,15 +211,16 @@ struct SectionCollapsibleGroup<Content: View>: View {
         Button {
             if enabled { isOpen.toggle() }
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(DS3.muted)
+            HStack(spacing: 9) {
+                GroupChevron()
+                    .stroke(DS3.muted, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+                    .frame(width: 11, height: 11)
                     .rotationEffect(.degrees(90 * openAmount))
                 Text(title)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(enabled ? DS3.ink : DS3.muted)
                     .lineLimit(1)
+                Spacer(minLength: 8)
                 if let warn {
                     Text(warn)
                         .font(.system(size: 12, weight: .semibold))
@@ -217,28 +233,27 @@ struct SectionCollapsibleGroup<Content: View>: View {
                         .foregroundStyle(DS3.muted)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 0)
             }
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34, alignment: .leading)
-            .background {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(DS3.row)
-                        .opacity(hovering && enabled ? 1 - openAmount : 0)
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(DS3.lens)
-                        .opacity(openAmount)
-                }
-                .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.14), value: hovering)
-            }
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .onHover { hovering = $0 }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(count.map { "\(title), \($0)" } ?? title)
         .accessibilityValue(isOpen ? L.sysGroupExpandedA11y : L.sysGroupCollapsedA11y)
         .accessibilityAddTraits(enabled ? .isButton : [])
+    }
+}
+
+/// The mockup's 11 x 11 group chevron (`M3.5 2l3.5 3.5L3.5 9`, stroke 1.6) — thinner than the SF Symbol.
+private struct GroupChevron: Shape {
+    func path(in rect: CGRect) -> Path {
+        let k = rect.width / 11
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX + 3.5 * k, y: rect.minY + 2 * k))
+        p.addLine(to: CGPoint(x: rect.minX + 7 * k, y: rect.minY + 5.5 * k))
+        p.addLine(to: CGPoint(x: rect.minX + 3.5 * k, y: rect.minY + 9 * k))
+        return p
     }
 }
 
@@ -292,11 +307,11 @@ struct SectionConfirmPanel: View {
     @FocusState private var cancelFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(DS3.ink)
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, text in
                     Text(text)
                         .font(.system(size: 13))

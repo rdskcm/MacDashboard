@@ -7,7 +7,7 @@ import SwiftUI
 // MARK: - Buttons
 
 struct DS3ButtonStyle: ButtonStyle {
-    enum Kind { case primary, secondary, danger, dangerSolid, text }
+    enum Kind { case primary, secondary, danger, dangerSolid, text, outline }
 
     var kind: Kind
     var height: CGFloat
@@ -66,6 +66,11 @@ private struct DS3ButtonBody: View {
                 .background(Capsule().fill(DS3.hot))
                 .ds3InsetRims(Capsule(), top: .white.opacity(0.35))
                 .contentShape(Capsule())
+        case .outline:
+            // Transparent capsule with a .5 pt strong hairline and accent text (System › «Reset to defaults»).
+            label(DS3.accentInk)
+                .ds3InsetRims(Capsule(), ring: DS3.lineStrong)
+                .contentShape(Capsule())
         case .text:
             label(DS3.accentInk)
                 .background(Capsule().fill(hover ? DS3.chip : Color.clear))
@@ -104,6 +109,50 @@ private struct DS3ButtonBody: View {
             .lineLimit(1)
             .padding(.horizontal, style.hPad)
             .frame(height: style.height)
+    }
+}
+
+/// 32 x 19 switch of the mockup (System › Energy table): `track` off, `accentSolid` on, a 15 pt white knob that
+/// springs between 2 and 15 pt. `dirty` (value differs from the saved one) fills amber and adds a 1.5 pt amber ring
+/// outside the capsule. Drawn rather than the system switch, whose on-colour follows window focus and the
+/// accessibility tint and cannot carry the dirty ring.
+struct DS3Switch: View {
+    @Binding var isOn: Bool
+    var dirty = false
+    var label: String
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button { isOn.toggle() } label: {
+            ZStack(alignment: .leading) {
+                Capsule(style: .circular).fill(isOn ? (dirty ? DS3.amber : DS3.accentSolid) : DS3.track)
+                // `.circular`: the default (continuous) capsule stroke leaves square nubs at both ends at this size.
+                Capsule(style: .circular).strokeBorder(DS3.lineStrong, lineWidth: 0.5).opacity(dirty ? 0 : 1)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 15, height: 15)
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
+                    .offset(x: isOn ? 15 : 2)
+                if dirty {
+                    // CSS `0 0 0 1.5px` outside the capsule: a 1.5 pt stroke on a capsule 3 pt larger each way.
+                    Capsule(style: .circular).stroke(DS3.amber, lineWidth: 1.5)
+                        .frame(width: 32 + 1.5, height: 19 + 1.5)
+                        .frame(width: 32, height: 19)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(width: 32, height: 19)
+            .contentShape(Capsule(style: .circular))
+            .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.3, dampingFraction: 0.62), value: isOn)
+            .animation(.easeOut(duration: reduceMotion ? 0.01 : 0.18), value: dirty)
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.45)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(isOn ? "1" : "0")
+        .accessibilityAddTraits(.isToggle)
     }
 }
 

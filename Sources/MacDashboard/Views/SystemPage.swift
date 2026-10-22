@@ -98,10 +98,11 @@ struct SystemPageBar: View {
 
     var body: some View {
         let m = SystemPageModel.make(systemInput(model, now: model.fixtureNow ?? Date()))
+        // The mockup bar has the title block flexible and the tag at the far right: it goes in the trailing slot.
         SectionPageBar(symbol: Page.system.symbol, title: Page.system.title, sub: m.sub, onBack: onBack) {
-            DS3Tag(tone: tagTone(m.tag), text: m.tagText).help(m.tagText)
-        } trailing: {
             EmptyView()
+        } trailing: {
+            DS3Tag(tone: tagTone(m.tag), text: m.tagText).help(m.tagText)
         }
     }
 }
@@ -134,14 +135,14 @@ struct SystemSleepCard: View {
             .accessibilityLabel(L.sysActivityMonitor)
             .accessibilityIdentifier("system-activity-monitor")
         } content: {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 16) {
                 switch m.sleepState {
                 case .wait:
                     SectionWait(text: L.commonCollectingData)
                 case .none:
                     SectionNote(tone: DS3.green, text: L.sysSleepNone)
                 case .blockers:
-                    SectionList {
+                    SectionList(ring: true) {
                         ForEach(m.sleepRows) { row in
                             SleepRowView(row: row) {
                                 withAnimation(rowCurve) { model.setWakeHolderIgnored(row.key, ignored: true) }
@@ -151,9 +152,9 @@ struct SystemSleepCard: View {
                     }
                 }
                 if m.hiddenCount > 0 {
-                    SectionList {
+                    SectionList(ring: true) {
                         SectionCollapsibleGroup(title: L.sysHidden, count: m.hiddenCount, isOpen: $hiddenOpen,
-                                                enabled: true, bodyInset: 20) {
+                                                enabled: true, bodyInset: 20, bodyTrailing: 0, bodyBottom: 4) {
                             VStack(spacing: 4) {
                                 ForEach(m.hiddenRows) { r in
                                     SectionRowsRow(name: r.name, sub: r.sub) {
@@ -162,7 +163,7 @@ struct SystemSleepCard: View {
                                         } label: {
                                             Text(L.sysWarnAgain)
                                         }
-                                        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12))
+                                        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5))
                                         .help(r.a11y)
                                         .accessibilityLabel(r.a11y)
                                         .accessibilityIdentifier("system-warn-again-\(r.id)")
@@ -194,15 +195,16 @@ private struct SleepRowView: View {
                 .layoutPriority(1)
                 .help(row.name)
             Spacer(minLength: 8)
+            // Mockup: the age is the 12.5 muted secondary text; the 64 pt value column after it stays empty.
             Text(row.age)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(.system(size: 12.5))
                 .monospacedDigit()
-                .foregroundStyle(DS3.ink)
+                .foregroundStyle(DS3.muted)
                 .lineLimit(1)
-                .frame(minWidth: 64, alignment: .trailing)
+            Color.clear.frame(width: 64, height: 1)
             if row.warnable {
                 Button(action: onDontWarn) { Text(L.sysDontWarn) }
-                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12))
+                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5))
                     .accessibilityLabel(L.sysDontWarnA11y(row.name))
                     .accessibilityIdentifier("system-dont-warn-\(row.id)")
             }
@@ -264,7 +266,8 @@ struct SystemStartupCard: View {
                     }
                 }
             }
-            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 13))
+            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14,
+                                        disabledOpacity: m.startupChecking ? 1 : 0.45))
             .disabled(m.startupChecking || m.startupBusy)
             .accessibilityLabel(L.sysCheckStale)
             .accessibilityIdentifier("system-check-stale")
@@ -272,8 +275,8 @@ struct SystemStartupCard: View {
             if m.startupWait {
                 SectionWait(text: L.commonCollectingData)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    SectionList {
+                VStack(alignment: .leading, spacing: 16) {
+                    SectionList(ring: true) {
                         ForEach(m.groups) { g in
                             SectionCollapsibleGroup(title: g.title, count: g.count,
                                                     warn: g.staleCount > 0 ? L.sysGroupStale(g.staleCount) : nil,
@@ -340,7 +343,9 @@ struct SystemStartupCard: View {
         } else {
             FlowLayout(spacing: 6) {
                 ForEach(g.pills, id: \.id) { p in
-                    SectionPill(text: p.text, stale: p.stale, help: p.help)
+                    // The mockup names the pills without the «.plist» extension (the stale rows below keep the file name).
+                    SectionPill(text: p.text.hasSuffix(".plist") ? String(p.text.dropLast(6)) : p.text,
+                                stale: p.stale, help: p.help)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -399,31 +404,27 @@ struct SystemStartupCard: View {
 
     // MARK: stale rows
 
+    /// One List container (as in the mockup): the stale rows, then «Delete all (n)» right-aligned inside the same
+    /// container; the whole container dims while a delete runs.
     private func rowsBlock(_ m: SystemPageModel) -> some View {
         let busy = m.startupBusy
         let bulk = bulkBusy(m)
-        return VStack(alignment: .leading, spacing: 8) {
-            if !rows.isEmpty {
-                SectionRows {
-                    ForEach(rows) { row in
-                        SectionRowsRow(icon: "exclamationmark.triangle", tint: DS3.amber, name: row.fileName,
-                                       nameMono: true, sub: row.folder) {
-                            Button {
-                                withAnimation(confirmCurve) { pendingDelete = .one(row) }
-                            } label: {
-                                Text(L.sysDelete).dsSwapInPlace(row.deleting) { ProgressView().controlSize(.small) }
-                            }
-                            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12,
-                                                        dangerOnHover: true))
-                            .disabled(busy || m.startupChecking)
-                            .accessibilityLabel(row.a11yDelete)
-                            .accessibilityIdentifier("system-delete-\(row.fileName)")
-                        }
-                        .transition(sectionRowTransition(reduceMotion: reduceMotion))
+        return SectionRows {
+            ForEach(rows) { row in
+                SectionRowsRow(icon: "exclamationmark.triangle", tint: DS3.amber, name: row.fileName,
+                               nameMono: true, sub: row.folder) {
+                    Button {
+                        withAnimation(confirmCurve) { pendingDelete = .one(row) }
+                    } label: {
+                        Text(L.sysDelete).dsSwapInPlace(row.deleting) { ProgressView().controlSize(.small) }
                     }
+                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5,
+                                                disabledOpacity: busy ? 1 : 0.45, dangerOnHover: true))
+                    .disabled(busy || m.startupChecking)
+                    .accessibilityLabel(row.a11yDelete)
+                    .accessibilityIdentifier("system-delete-\(row.fileName)")
                 }
-                .opacity(busy ? 0.55 : 1)
-                .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.14), value: busy)
+                .transition(sectionRowTransition(reduceMotion: reduceMotion))
             }
             if m.showDeleteAll || bulk {
                 HStack {
@@ -438,14 +439,18 @@ struct SystemStartupCard: View {
                             }
                         }
                     }
-                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12,
-                                                dangerOnHover: true))
+                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5,
+                                                disabledOpacity: busy ? 1 : 0.45, dangerOnHover: true))
                     .disabled(busy || m.startupChecking)
                     .accessibilityLabel(L.sysDeleteAll(m.staleRows.count))
                     .accessibilityIdentifier("system-delete-all")
                 }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
             }
         }
+        .opacity(busy ? 0.55 : 1)
+        .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.14), value: busy)
     }
 }
 
@@ -468,12 +473,12 @@ struct SystemBrewCard: View {
                 Button { showConfirm = true } label: {
                     Text(L.sysBrewUpdate).dsSwapInPlace(updating) {
                         HStack(spacing: 6) {
-                            ProgressView().controlSize(.small).tint(.white)
+                            ProgressView().controlSize(.small)
                             Text(m.brewUpdatingLabel)
                         }
                     }
                 }
-                .buttonStyle(DS3ButtonStyle(kind: .primary, height: 32, hPad: 13))
+                .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, disabledOpacity: 1))
                 .disabled(updating)
                 .accessibilityLabel(updating ? m.brewUpdatingLabel : L.sysBrewUpdate)
                 .accessibilityIdentifier("system-brew-update")
@@ -507,7 +512,7 @@ struct SystemBrewCard: View {
         case .outdated:
             list(m)
         case .updating:
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 16) {
                 updatingPanel(m)
                 list(m).opacity(0.55)
             }
@@ -518,14 +523,14 @@ struct SystemBrewCard: View {
                         button: (L.commonTryAgain, L.commonTryAgain, m.brewRefreshing, { model.refreshBrewNow() }),
                         buttonIdentifier: "system-brew-recheck")
         case .upgradeFailed(let msg):
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 16) {
                 SectionNote(tone: DS3.hot, text: msg,
                             button: (L.commonTryAgain, L.commonTryAgain, false, { showConfirm = true }),
                             buttonIdentifier: "system-brew-try-again")
                 if !m.brewRows.isEmpty { list(m) }
             }
         case .stopped(let notice):
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 16) {
                 SectionNote(tone: DS3.muted, text: notice)
                 if !m.brewRows.isEmpty { list(m) }
             }
@@ -533,9 +538,9 @@ struct SystemBrewCard: View {
     }
 
     private func list(_ m: SystemPageModel) -> some View {
-        SectionList {
+        SectionList(ring: true) {
             ForEach(m.brewRows) { r in
-                SectionListRow(dot: DS3.amber, name: r.name, sub: r.sub, value: "")
+                SectionListRow(dot: DS3.amber, name: r.name, sub: r.sub, value: "", subTrailing: true)
             }
         }
     }
@@ -549,17 +554,18 @@ struct SystemBrewCard: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 ProgressView().controlSize(.small)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(status)
-                        .font(.system(size: 13.5))
-                        .foregroundStyle(DS3.ink)
-                        .lineLimit(1)
-                    Text("brew upgrade")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(DS3.muted)
-                        .lineLimit(1)
-                }
+                Text(status)
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(DS3.accentInk)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
                 Spacer(minLength: 8)
+                Text("brew upgrade")
+                    .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(DS3.muted)
+                    .lineLimit(1)
+                // Not in the mockup: the app can stop a running upgrade, so Stop stays (kept from the earlier build).
                 Button { model.stopBrewUpgrade() } label: { Text(L.maintenanceBrewStopButton) }
                     .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
                     .disabled(!model.brewUpgradeStoppable || model.brewStopRequested)
@@ -641,7 +647,8 @@ struct SystemEnergyCard: View {
                         button: (L.commonTryAgain, L.commonTryAgain, model.energyRefreshing, { model.refreshEnergyNow() }),
                         buttonIdentifier: "system-energy-retry")
         } else {
-            VStack(alignment: .leading, spacing: 16) {
+            // One mockup block: bar, banner, confirm and table are 8 pt apart.
+            VStack(alignment: .leading, spacing: 8) {
                 if let banner = m.energyBanner { bannerView(banner) }
                 if m.showActionBar { actionBar(m) }
                 if showConfirm { confirmPanel(m) }
@@ -666,7 +673,7 @@ struct SystemEnergyCard: View {
                 .accessibilityLabel(L.sysOK)
                 .accessibilityIdentifier("system-energy-ok")
         }
-        .padding(EdgeInsets(top: 7, leading: 18, bottom: 7, trailing: 7))
+        .padding(EdgeInsets(top: 8, leading: 18, bottom: 8, trailing: 8))
         .background(Capsule().fill(DS3.hot.opacity(0.12)))
         .ds3InsetRims(Capsule(), ring: DS3.hot.opacity(0.40))
     }
@@ -678,7 +685,7 @@ struct SystemEnergyCard: View {
             } label: {
                 Text(L.sysEnergyApply(m.dirtyCount)).dsSwapInPlace(applying) { ProgressView().controlSize(.small).tint(.white) }
             }
-            .buttonStyle(DS3ButtonStyle(kind: .primary, height: 30, hPad: 13, fontSize: 12.5))
+            .buttonStyle(DS3ButtonStyle(kind: .primary, height: 30, hPad: 13, fontSize: 12.5, disabledOpacity: 0.5))
             .disabled(m.dirtyCount == 0 || applying)
             .accessibilityLabel(L.sysEnergyApply(m.dirtyCount))
             .accessibilityIdentifier("system-energy-apply")
@@ -688,8 +695,8 @@ struct SystemEnergyCard: View {
             } label: {
                 Text(L.sysEnergyCancel)
             }
-            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
-            .disabled(applying)
+            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5, disabledOpacity: 0.5))
+            .disabled(m.dirtyCount == 0 || applying)
             .accessibilityLabel(L.sysEnergyCancel)
             .accessibilityIdentifier("system-energy-cancel")
 
@@ -702,7 +709,7 @@ struct SystemEnergyCard: View {
             } label: {
                 Text(L.sysEnergyReset)
             }
-            .buttonStyle(DS3ButtonStyle(kind: .text, height: 30, hPad: 10, fontSize: 12.5))
+            .buttonStyle(DS3ButtonStyle(kind: .outline, height: 30, hPad: 13, fontSize: 12.5))
             .disabled(applying)
             .help(L.sysEnergyResetHelp)
             .accessibilityLabel(L.sysEnergyReset)
@@ -711,7 +718,7 @@ struct SystemEnergyCard: View {
             Spacer(minLength: 8)
             if m.showApplied {
                 Text(L.sysEnergyApplied)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(DS3.greenInk)
             }
         }
@@ -720,7 +727,7 @@ struct SystemEnergyCard: View {
     private func confirmPanel(_ m: SystemPageModel) -> some View {
         SectionConfirmPanel(
             title: m.confirmTitle,
-            paragraphs: Self.paragraphs(m.confirmLines),
+            paragraphs: m.confirmLines,   // one line per paragraph, as in the mockup
             note: L.sysEnergyConfirmAdmin,
             cancelTitle: L.sysEnergyCancel,
             confirmTitle: L.sysEnergyConfirmApply,
@@ -735,23 +742,12 @@ struct SystemEnergyCard: View {
         .transition(.opacity)
     }
 
-    /// One paragraph per power source: the header line plus its «• …» lines joined by newlines.
-    static func paragraphs(_ lines: [String]) -> [String] {
-        var out: [String] = []
-        for line in lines {
-            if line.hasPrefix("• "), !out.isEmpty {
-                out[out.count - 1] += "\n" + line
-            } else {
-                out.append(line)
-            }
-        }
-        return out
-    }
-
     // MARK: table
 
+    /// Mockup table: columns `[flex] 96 96 30`, no gaps; every cell has a 1 pt hairline on top and 6 pt vertical
+    /// padding around a 24 pt minimum (36 pt rows); the header cells carry 8 pt.
     private func table(_ m: SystemPageModel) -> some View {
-        Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 0) {
+        Grid(alignment: .trailing, horizontalSpacing: 0, verticalSpacing: 0) {
             GridRow {
                 Text(L.sysEnergyColSetting).frame(maxWidth: .infinity, alignment: .leading)
                 Text(L.sysEnergyColBattery).frame(width: 96, alignment: .trailing)
@@ -760,18 +756,17 @@ struct SystemEnergyCard: View {
             }
             .font(.system(size: 12))
             .foregroundStyle(DS3.muted)
-            .frame(minHeight: 28)
+            .padding(.vertical, 8)
             ForEach(m.energyRows) { row in
-                GridRow {
-                    Rectangle().fill(DS3.line).frame(height: 1).gridCellColumns(4)
-                }
                 GridRow {
                     Text(row.spec.label)
                         .font(.system(size: 13.5))
-                        .foregroundStyle(DS3.ink)
+                        .foregroundStyle(row.spec.kind == .readOnly ? DS3.muted : DS3.ink)
                         .lineLimit(1)
                         .help(row.spec.label)
-                        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                        .padding(.trailing, 8)
+                        .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                        .overlay(alignment: .top) { Rectangle().fill(DS3.line).frame(height: 1) }
                     valueCell(row, .battery, column: L.sysEnergyColBattery)
                     valueCell(row, .ac, column: L.sysEnergyColAC)
                     infoButton(row)
@@ -797,18 +792,28 @@ struct SystemEnergyCard: View {
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(DS3.row))
+        .ds3InsetRims(RoundedRectangle(cornerRadius: 22, style: .continuous), ring: DS3.line)
     }
 
+    /// 22 pt circle with an italic serif «i» (the mockup draws a glyph, not an SF Symbol); open = lens fill.
     private func infoButton(_ row: EnergyRow) -> some View {
-        Button {
-            withAnimation(curve) { infoKey = infoKey == row.id ? nil : row.id }
+        let open = infoKey == row.id
+        return Button {
+            withAnimation(curve) { infoKey = open ? nil : row.id }
         } label: {
-            Image(systemName: "info.circle")
-                .font(.system(size: 13))
+            Text("i")
+                .font(.custom("Georgia-BoldItalic", size: 11))
                 .foregroundStyle(DS3.muted)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(open ? DS3.lens : Color.clear))
+                .ds3InsetRims(Circle(), ring: DS3.lineStrong)
+                .contentShape(Circle())
         }
-        .buttonStyle(DS3CircleButtonStyle(diameter: 22))
-        .frame(width: 30)
+        .buttonStyle(.plain)
+        .padding(.vertical, 6)
+        .frame(width: 30, alignment: .trailing)
+        .frame(minHeight: 36)
+        .overlay(alignment: .top) { Rectangle().fill(DS3.line).frame(height: 1) }
         .accessibilityLabel(L.sysEnergyInfoA11y(row.spec.label))
         .accessibilityIdentifier("system-energy-info-\(row.id)")
     }
@@ -829,20 +834,10 @@ struct SystemEnergyCard: View {
                         edit(bucket: bucket, key: row.spec.key, value: text)
                     }
                 case .toggle:
-                    Toggle("", isOn: Binding(
+                    DS3Switch(isOn: Binding(
                         get: { cell.raw == "1" },
                         set: { edit(bucket: bucket, key: row.spec.key, value: $0 ? "1" : "0") }
-                    ))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .tint(cell.dirty ? DS3.amber : DS3.accent)
-                    .overlay {
-                        if cell.dirty {
-                            Capsule().strokeBorder(DS3.amber, lineWidth: 1.5).padding(-2).allowsHitTesting(false)
-                        }
-                    }
-                    .accessibilityLabel(label)
+                    ), dirty: cell.dirty, label: label)
                 case .text:
                     Text(cell.shown)
                         .font(.system(size: 13, design: .monospaced))
@@ -854,7 +849,10 @@ struct SystemEnergyCard: View {
                 }
             }
         }
+        .padding(.vertical, 6)
         .frame(width: 96, alignment: .trailing)
+        .frame(minHeight: 36)
+        .overlay(alignment: .top) { Rectangle().fill(DS3.line).frame(height: 1) }
     }
 
     /// Stages (or un-stages, when the value equals the saved one) one edit; a further edit after «Applied ✓»
@@ -890,8 +888,8 @@ private struct EnergyNumberField: View {
             .padding(.vertical, 5)
             .padding(.horizontal, 8)
             .frame(width: 56, height: 24)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(DS3.chip))
-            .ds3InsetRims(RoundedRectangle(cornerRadius: 8, style: .continuous), ring: DS3.lineStrong)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(DS3.field))
+            .ds3InsetRims(RoundedRectangle(cornerRadius: 8, style: .continuous), ring: DS3.line, ringWidth: 1)
             .overlay {
                 if isDirty {
                     RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(DS3.amber, lineWidth: 1.5)
