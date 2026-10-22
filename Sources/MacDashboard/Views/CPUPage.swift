@@ -1,6 +1,6 @@
 // Views/CPUPage.swift
 // REDESIGN-CPU: the CPU section page (handoff 03-cpu) on the shared §8 blocks (SectionPageBlocks.swift):
-// page bar (Back, icon, title, sub line, state tag, Refresh), «CPU · live snapshot» card (hero + three
+// page bar (Back, icon, title, sub line, state tag), «CPU · live snapshot» card (hero + three
 // tiles, loading / failed states) and the restyled Processes card. All texts and states come from the
 // pure `CPUPageModel`; this file only draws them.
 
@@ -64,7 +64,7 @@ struct CPUPageBar: View {
                        onBack: onBack) {
             DS3Tag(tone: tone(m.tag), text: m.tagText).help(m.tagText)
         } trailing: {
-            refresh
+            EmptyView()
         }
     }
 
@@ -75,21 +75,6 @@ struct CPUPageBar: View {
         case .loading: return .neutral
         case .failed: return .hot
         }
-    }
-
-    /// Opacity ZStack: «Refresh» ↔ «Refreshing…» without a width change (`swap-in-place`).
-    private var refresh: some View {
-        let busy = model.cpuRefreshing || model.processesRefreshing
-        return Button { model.refreshCPUNow() } label: {
-            ZStack {
-                Text(L.commonRefresh).opacity(busy ? 0 : 1)
-                Text(L.commonRefreshing).opacity(busy ? 1 : 0)
-            }
-        }
-        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14))
-        .disabled(busy)
-        .accessibilityLabel(L.cpuRefreshA11y)
-        .accessibilityIdentifier("cpu-refresh")
     }
 }
 

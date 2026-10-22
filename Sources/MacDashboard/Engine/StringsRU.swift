@@ -267,7 +267,6 @@ struct StringsRU: AppStrings {
     var cpuSubCollecting: String { "сбор данных…" }
     var cpuFailTimedOut: String { "Не удалось прочитать счётчики CPU: нет ответа за 5 с." }
     var cpuFailNoReading: String { "Не удалось прочитать счётчики CPU: система не вернула данных." }
-    var cpuRefreshA11y: String { "Обновить данные процессора" }
     var cpuTryAgainA11y: String { "Повторить чтение счётчиков CPU" }
     var procsTopByCPU: String { "топ по CPU" }
     var procsTopByMemory: String { "топ по памяти" }
