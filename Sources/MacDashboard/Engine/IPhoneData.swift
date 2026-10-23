@@ -165,6 +165,57 @@ enum IPhoneData {
         Double(mAh) * nominalVoltage / 1000
     }
 
+    // MARK: - Battery tile tones (IPHONE-BATTERY-THRESHOLDS)
+
+    /// Rated cycle life to 80 % capacity for iPhone 15 and later. Source: support.apple.com/en-us/106348.
+    static let ratedCyclesModern = 1000
+    /// Rated cycle life to 80 % capacity for iPhone 14 and earlier. Source: support.apple.com/en-us/101575.
+    static let ratedCyclesLegacy = 500
+    /// First `iPhoneM,m` major number that is iPhone 15 Pro or later. Source: api.ipsw.me /v4/devices (iPhone15,4/15,5 handled separately).
+    static let modernModelMajor = 16
+    /// Amber share of the rated cycle life. Source: Assessment.batteryEarlyWearCycles (80 % of rated life).
+    static let cyclesAmberShare = 0.8
+    /// Charge at or below which the tile turns amber. Source: iOS Low Power Mode prompt at 20 % (Apple Wiki, Low Power Mode).
+    static let chargeAmberPercent = 20
+    /// Charge at or below which the tile turns hot. Source: iOS Low Power Mode prompt at 10 % (Apple Wiki, Low Power Mode).
+    static let chargeHotPercent = 10
+    /// Battery-sensor temperature (°C) from which the tile turns amber. Source: sustained harm at 40 °C (Battery University BU-808 copies).
+    static let temperatureAmberC = 40.0
+    /// Battery-sensor temperature (°C) from which the tile turns hot. Source: JEITA warm band, charging reduced at 45 °C (TI BQ25616 datasheet).
+    static let temperatureHotC = 45.0
+
+    /// Rated cycle life to 80 % capacity (support.apple.com/en-us/101575): 1000 for iPhone 15 and later, 500 before.
+    static func ratedCycles(productType: String?) -> Int? {
+        guard let productType, productType.hasPrefix("iPhone") else { return nil }
+        let parts = productType.dropFirst("iPhone".count).split(separator: ",", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber } }),
+              let major = Int(parts[0]), let minor = Int(parts[1]) else { return nil }
+        if major == 15 { return (minor == 4 || minor == 5) ? ratedCyclesModern : ratedCyclesLegacy }
+        return major >= modernModelMajor ? ratedCyclesModern : ratedCyclesLegacy
+    }
+
+    static func cyclesTone(_ cycles: Int?, productType: String?) -> HomeTone? {
+        guard let cycles, let rated = ratedCycles(productType: productType) else { return nil }
+        if cycles >= rated { return .hot }
+        if Double(cycles) >= Double(rated) * cyclesAmberShare { return .amber }
+        return nil
+    }
+
+    static func chargeTone(percent: Int?, onExternalPower: Bool) -> HomeTone? {
+        guard let percent, !onExternalPower else { return nil }
+        if percent <= chargeHotPercent { return .hot }
+        if percent <= chargeAmberPercent { return .amber }
+        return nil
+    }
+
+    static func temperatureTone(_ celsius: Double?) -> HomeTone? {
+        guard let celsius else { return nil }
+        if celsius >= temperatureHotC { return .hot }
+        if celsius >= temperatureAmberC { return .amber }
+        return nil
+    }
+
     // MARK: - Battery history chart (IPHONE-DESIGN)
 
     struct HealthChartScale: Equatable {

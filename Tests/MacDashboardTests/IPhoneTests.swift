@@ -386,3 +386,51 @@ extension SerialTests {
         }
     }
 }
+
+// IPHONE-BATTERY-THRESHOLDS: pure tone functions, no process-wide state.
+@Suite struct IPhoneBatteryToneTests {
+    @Test func chargeBoundaries() {
+        #expect(IPhoneData.chargeTone(percent: 21, onExternalPower: false) == nil)
+        #expect(IPhoneData.chargeTone(percent: 20, onExternalPower: false) == .amber)
+        #expect(IPhoneData.chargeTone(percent: 11, onExternalPower: false) == .amber)
+        #expect(IPhoneData.chargeTone(percent: 10, onExternalPower: false) == .hot)
+        #expect(IPhoneData.chargeTone(percent: 19, onExternalPower: false) == .amber)
+        #expect(IPhoneData.chargeTone(percent: 5, onExternalPower: true) == nil)
+        #expect(IPhoneData.chargeTone(percent: nil, onExternalPower: false) == nil)
+    }
+
+    @Test func temperatureBoundaries() {
+        #expect(IPhoneData.temperatureTone(39.9) == nil)
+        #expect(IPhoneData.temperatureTone(40) == .amber)
+        #expect(IPhoneData.temperatureTone(44.9) == .amber)
+        #expect(IPhoneData.temperatureTone(45) == .hot)
+        #expect(IPhoneData.temperatureTone(nil) == nil)
+    }
+
+    @Test func cyclesBoundaries() {
+        let old = "iPhone14,7", modern = "iPhone17,1"
+        #expect(IPhoneData.cyclesTone(399, productType: old) == nil)
+        #expect(IPhoneData.cyclesTone(400, productType: old) == .amber)
+        #expect(IPhoneData.cyclesTone(499, productType: old) == .amber)
+        #expect(IPhoneData.cyclesTone(500, productType: old) == .hot)
+        #expect(IPhoneData.cyclesTone(799, productType: modern) == nil)
+        #expect(IPhoneData.cyclesTone(800, productType: modern) == .amber)
+        #expect(IPhoneData.cyclesTone(999, productType: modern) == .amber)
+        #expect(IPhoneData.cyclesTone(1000, productType: modern) == .hot)
+        #expect(IPhoneData.cyclesTone(nil, productType: modern) == nil)
+        #expect(IPhoneData.cyclesTone(900, productType: nil) == nil)
+        #expect(IPhoneData.cyclesTone(900, productType: "iPad14,1") == nil)
+    }
+
+    @Test func ratedCycles() {
+        #expect(IPhoneData.ratedCycles(productType: "iPhone15,3") == 500)
+        #expect(IPhoneData.ratedCycles(productType: "iPhone15,4") == 1000)
+        #expect(IPhoneData.ratedCycles(productType: "iPhone15,5") == 1000)
+        #expect(IPhoneData.ratedCycles(productType: "iPhone14,6") == 500)
+        #expect(IPhoneData.ratedCycles(productType: "iPhone16,2") == 1000)
+        #expect(IPhoneData.ratedCycles(productType: "iPhone18,2") == 1000)
+        #expect(IPhoneData.ratedCycles(productType: "iPad14,1") == nil)
+        #expect(IPhoneData.ratedCycles(productType: "iPhone") == nil)
+        #expect(IPhoneData.ratedCycles(productType: nil) == nil)
+    }
+}

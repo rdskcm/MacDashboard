@@ -1029,6 +1029,11 @@ struct StringsRU: AppStrings {
     var iphoneBatCharge: String { "Заряд" }
     var iphoneBatState: String { "Состояние" }
     var iphoneBatTemperature: String { "Температура" }
+    var iphoneTempNormal: String { "Норма" }
+    var iphoneTempWarm: String { "Тёплая" }
+    var iphoneTempHot: String { "Горячая" }
+    var iphoneCyclesAging: String { "Износ" }
+    var iphoneCyclesHigh: String { "Высокий" }
     var iphoneBatVoltage: String { "Напряжение" }
     var iphoneBatCapacity: String { "Ёмкость" }
     var iphoneChargeCharging: String { "Заряжается" }
