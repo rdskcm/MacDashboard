@@ -343,6 +343,8 @@ fi
 [ -z "$PRUNE_NOTE" ] || REP+=("$PRUNE_NOTE")
 if [ -f "$GOUT/summary.tsv" ]; then
   while IFS= read -r l; do REP+=("$l"); done < <(awk -F'\t' '$2=="cand" && $3=="agg" && ($7=="FAIL" || $7=="NOISY") {print "- " $7 " " $1 " " $4 ": " $5 " (" $6 ")"}' "$GOUT/summary.tsv" | head -15)
+  IDLE="$(awk -F'\t' '$4=="scrollable" && $3!="agg" && $5=="0" {print $1 " (" $2 ")"}' "$GOUT/summary.tsv" | sort -u | tr '\n' ' ')"
+  [ -z "$IDLE" ] || REP+=("idle page, nothing to scroll (measured as idle, not as a scroll): ${IDLE% }")
 fi
 [ "${LIST:-all}" = "all" ] || REP+=("partial run (scenarios: $LIST)")
 REP+=("report: $GOUT/report.md")
