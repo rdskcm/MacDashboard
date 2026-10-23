@@ -816,14 +816,55 @@ protocol AppStrings {
     var reportOff: String { get }
     func reportLocalSnapshots(_ n: Int) -> String
 
+    var reportSectionSystem: String { get }
+    var reportSectionDisk: String { get }
+    var reportSectionSnapshots: String { get }
+    var reportSectionHomeDirs: String { get }
+    var reportSectionServiceDirs: String { get }
+    var reportSectionMemory: String { get }
+    var reportSectionTopMem: String { get }
+    var reportSectionTopCPU: String { get }
+    var reportSectionLoginItems: String { get }
+    var reportSectionAgents: String { get }
+    var reportSectionBackground: String { get }
+    var reportSectionBattery: String { get }
+    var reportSectionEnergy: String { get }
+    var reportSectionSecurity: String { get }
+    var reportSectionTMDest: String { get }
+    var reportSectionCrashes: String { get }
+    var reportSectionUpdates: String { get }
+    var reportSectionSmart: String { get }
     var reportSectionUnparsed: String { get }
     var reportUnparsedHint: String { get }
     func reportUnparsedMoreLines(_ n: Int) -> String
+    var reportNone: String { get }
+    func reportUptime(_ v: String) -> String
+    var reportAgentsUserHeader: String { get }
+    var reportEmpty: String { get }
+    var reportAgentsSystemHeader: String { get }
     var reportNoBattery: String { get }
+    func reportBatterySource(_ v: String) -> String
+    func reportBatteryCharge(_ v: String) -> String
+    func reportBatteryState(_ v: String) -> String
+    var reportTMNotChecked: String { get }
+    var reportTMNotConfigured: String { get }
+    func reportTMLastBackup(_ v: String) -> String
+    var reportNotChecked: String { get }
+    var reportSectionTimings: String { get }
+    var reportTimingsNote: String { get }
+    func reportTimingsPass(_ v: String) -> String
+    func reportTimingsUpdates(_ v: String, _ at: String) -> String
+    func reportUpdatesCheckedAt(_ at: String) -> String
     var updatesCheckedJustNow: String { get }
     func updatesCheckedAgo(_ age: String) -> String
+    func reportTimingsFolderSizes(_ v: String, _ at: String) -> String
+    /// Short name of a report section for the COLLECTION TIMES list.
+    func reportTimingsSectionName(_ s: ReportSection) -> String
+    func reportFoldersCountedAt(_ at: String) -> String
     func foldersCountedAgo(_ age: String) -> String
     var foldersCountedJustNow: String { get }
+    var reportBrewOutdatedHeader: String { get }
+    func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String
     var reportSmartWarningNone: String { get }
     var reportSmartWarningLowSpareCapacity: String { get }
     var reportSmartWarningCriticalTemp: String { get }

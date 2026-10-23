@@ -313,7 +313,8 @@ enum VisualFixture {
             mem: mem, memPressure: .normal, swap: swap, disk: disk,
             hasBattery: true, battery: BatteryInfo.merged(live: battery, report: report.battery),
             security: report.security, claudeBackup: claudeBackup, snapshotCount: report.snapshots?.count,
-            now: referenceDate, parseFailures: []))
+            now: referenceDate, parseFailures: [],
+            details: ReportDetails(report: report, live: live)))
 
         return Dataset(
             load: load, cpu: cpu, mem: mem, swap: swap, disk: disk, battery: battery,

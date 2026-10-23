@@ -192,7 +192,8 @@ final class DashboardModel {
             mem: mem, memPressure: memPressure, swap: swap, disk: disk,
             hasBattery: merged != nil, battery: merged,
             security: report.security, claudeBackup: claudeBackup, snapshotCount: report.snapshots?.count,
-            now: fixtureNow ?? Date(), parseFailures: report.parseFailures + live.parseFailures)
+            now: fixtureNow ?? Date(), parseFailures: report.parseFailures + live.parseFailures,
+            details: ReportDetails(report: report, live: live))
     }
 
     /// Renders, writes `mac_report.txt` and publishes the text. `reportUpdatedAt` is the caller's business.

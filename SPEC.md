@@ -525,12 +525,15 @@ Assessment recomputed when report sections change AND lightly on live ticks
 
 ## 7. Report text (ReportWriter)
 
-Short summary, one format for the Report sheet and the file (REDESIGN-REPORT, 2026-10-23; replaces the
+Summary + details, one format for the Report sheet and the file (REDESIGN-REPORT, 2026-10-23; replaces the
 legacy mac_checkup.sh section dump): title line, `Generated <date> · macOS <version> (<build>)`, blank line,
 then rows with 16-char padded keys in the app's language — STATUS (+ task lines `!! ` critical / `!  ` warning),
 CPU, MEMORY, STORAGE, BATTERY, SECURITY, BACKUPS, UPTIME (RU: СОСТОЯНИЕ, ПРОЦЕССОР, ПАМЯТЬ, ХРАНИЛИЩЕ,
 БАТАРЕЯ, ЗАЩИТА, КОПИИ, АПТАЙМ). Missing value ⇒ `—`. SECURITY: a protection that is on is its bare name,
-off ⇒ `<name> off`, unknown ⇒ `<name> ?`. Only when a command's output could not be parsed, an
+off ⇒ `<name> off`, unknown ⇒ `<name> ?`. Below the summary follow the full diagnostic sections
+(`\n===== NAME =====\n`: SYSTEM, DISK, SNAPSHOTS, HOME DIRS, SERVICE DIRS, MEMORY, TOP MEM, TOP CPU, LOGIN ITEMS,
+AGENTS, BACKGROUND, BATTERY, ENERGY, SECURITY, TM DEST, SPOTLIGHT, CRASHES, HOMEBREW, UPDATES, SMART, TIMINGS;
+unavailable ⇒ `(недоступно)`/`(нет)`-style lines). Only when a command's output could not be parsed, an
 `===== UNRECOGNISED COMMAND OUTPUT (first lines) =====` section follows (masked excerpts, for parser fixes). A failed pass
 never overwrites the previous text or file. Rendered by `ReportWriter.render(_: ReportSummaryInput)`.
 Write: to temp file in same dir + atomic replace (`FileManager.replaceItemAt` or

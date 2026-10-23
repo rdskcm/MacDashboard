@@ -826,14 +826,73 @@ struct StringsEN: AppStrings {
     var reportOff: String { "off" }
     func reportLocalSnapshots(_ n: Int) -> String { n == 1 ? "1 local snapshot" : "\(n) local snapshots" }
 
+    var reportSectionSystem: String { "SYSTEM" }
+    var reportSectionDisk: String { "DISK" }
+    var reportSectionSnapshots: String { "LOCAL TIME MACHINE SNAPSHOTS" }
+    var reportSectionHomeDirs: String { "HOME FOLDER: what's taking up space (top 20)" }
+    var reportSectionServiceDirs: String { "LARGE SERVICE FOLDERS" }
+    var reportSectionMemory: String { "MEMORY" }
+    var reportSectionTopMem: String { "TOP 10 PROCESSES BY MEMORY" }
+    var reportSectionTopCPU: String { "TOP 10 PROCESSES BY CPU" }
+    var reportSectionLoginItems: String { "STARTUP: Login Items" }
+    var reportSectionAgents: String { "STARTUP: LaunchAgents / LaunchDaemons" }
+    var reportSectionBackground: String { "BACKGROUND TASKS (non-Apple)" }
+    var reportSectionBattery: String { "BATTERY" }
+    var reportSectionEnergy: String { "ENERGY SETTINGS" }
+    var reportSectionSecurity: String { "SECURITY" }
+    var reportSectionTMDest: String { "TIME MACHINE: backup destination" }
+    var reportSectionCrashes: String { "RECENT APP CRASHES" }
+    var reportSectionUpdates: String { "macOS UPDATES" }
+    var reportSectionSmart: String { "EXTERNAL AND INTERNAL DISKS: SMART" }
     var reportSectionUnparsed: String { "UNRECOGNISED COMMAND OUTPUT (first lines)" }
     var reportUnparsedHint: String { "MacDashboard could not read the output of these commands. Serial numbers and UUIDs are masked; attach this block to a bug report." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(+\(n) more lines not shown)" }
+    var reportNone: String { "(none)" }
+    func reportUptime(_ v: String) -> String { "Uptime: \(v)" }
+    var reportAgentsUserHeader: String { "--- User:" }
+    var reportEmpty: String { "(empty)" }
+    var reportAgentsSystemHeader: String { "--- System (third-party):" }
     var reportNoBattery: String { "no battery (desktop Mac)" }
+    func reportBatterySource(_ v: String) -> String { "Power source: \(v)" }
+    func reportBatteryCharge(_ v: String) -> String { "Charge: \(v)" }
+    func reportBatteryState(_ v: String) -> String { "State: \(v)" }
+    var reportTMNotChecked: String { "(not checked)" }
+    var reportTMNotConfigured: String { "(not configured)" }
+    func reportTMLastBackup(_ v: String) -> String { "Last backup: \(v)" }
+    var reportNotChecked: String { "(not checked)" }
+    var reportSectionTimings: String { "COLLECTION TIMES" }
+    var reportTimingsNote: String { "Sections are collected concurrently, so their times overlap." }
+    func reportTimingsPass(_ v: String) -> String { "Whole pass: \(v)" }
+    func reportTimingsUpdates(_ v: String, _ at: String) -> String { "macOS updates (background check at \(at)): \(v)" }
+    func reportUpdatesCheckedAt(_ at: String) -> String { "(checked \(at))" }
     var updatesCheckedJustNow: String { "checked just now" }
     func updatesCheckedAgo(_ age: String) -> String { "checked \(age) ago" }
+    func reportTimingsFolderSizes(_ v: String, _ at: String) -> String { "Folder sizes (background count at \(at)): \(v)" }
+    func reportTimingsSectionName(_ s: ReportSection) -> String {
+        switch s {
+        case .system: return "System"
+        case .snapshots: return "Local snapshots"
+        case .homeDirs: return "Home folder"
+        case .serviceDirs: return "Service folders"
+        case .security: return "Security"
+        case .tmDest: return "Time Machine"
+        case .spotlight: return "Spotlight"
+        case .crashes: return "Crashes"
+        case .brew: return "Homebrew"
+        case .updates: return "macOS updates"
+        case .autostart: return "Startup items"
+        case .smart: return "SMART"
+        case .energy: return "Energy settings"
+        case .battery: return "Battery"
+        }
+    }
+    func reportFoldersCountedAt(_ at: String) -> String { "(counted \(at))" }
     func foldersCountedAgo(_ age: String) -> String { "counted \(age) ago" }
     var foldersCountedJustNow: String { "counted just now" }
+    var reportBrewOutdatedHeader: String { "Outdated packages:" }
+    func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
+        "\(title) (\(device)) — status: \(status)"
+    }
     var reportSmartWarningNone: String { "None" }
     var reportSmartWarningLowSpareCapacity: String { "low spare capacity" }
     var reportSmartWarningCriticalTemp: String { "critical temperature" }
