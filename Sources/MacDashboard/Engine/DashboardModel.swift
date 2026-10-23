@@ -180,6 +180,30 @@ final class DashboardModel {
         return s
     }
 
+    /// Values for the short report (ReportWriter.render). `report` is the pass being committed; `assessment` must
+    /// already be the one computed from it.
+    private func reportSummaryInput(report: FullReport, generatedAt: Date) -> ReportSummaryInput {
+        let merged = BatteryInfo.merged(live: battery, report: report.battery)
+        let tasks = HomeModel.tasks(assessment, report: report, disk: disk, battery: battery)
+        return ReportSummaryInput(
+            generatedAt: generatedAt, system: report.system ?? lastKnownSystem,
+            status: HomeModel.status(scan: HomeModel.scan(scanBlock), tasks: tasks), tasks: tasks,
+            cpu: cpu, load: load, ncpu: ncpu, socTempC: socTempC,
+            mem: mem, memPressure: memPressure, swap: swap, disk: disk,
+            hasBattery: merged != nil, battery: merged,
+            security: report.security, claudeBackup: claudeBackup, snapshotCount: report.snapshots?.count,
+            now: fixtureNow ?? Date(), parseFailures: report.parseFailures + live.parseFailures,
+            details: ReportDetails(report: report, live: live))
+    }
+
+    /// Renders, writes `mac_report.txt` and publishes the text. `reportUpdatedAt` is the caller's business.
+    private func commitReportText(_ input: ReportSummaryInput) {
+        let text = ReportWriter.render(input)
+        do { try ReportWriter.write(text: text, to: reportURL) }
+        catch { lastError = L.errorReportWriteFailed(error.localizedDescription) }
+        reportText = text
+    }
+
     var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
     var report: FullReport            // sections fill in as collected
 
@@ -238,9 +262,9 @@ final class DashboardModel {
     /// REDESIGN-HISTORY: `refreshHistoryNow()` in flight (the read takes milliseconds; the flag exists for the
     /// button's swap-in-place label and the visual fixture).
     private(set) var historyRefreshing = false
-    var reportText: String?           // rendered text report (for Отчёт tab)
+    var reportText: String?           // rendered text report (for the Report sheet)
 
-    /// Timestamp of the report currently shown in the Отчёт tab: the on-disk file's
+    /// Timestamp of the report currently shown in the Report sheet: the on-disk file's
     /// mtime when a cached report was loaded at launch, or the completion time of the
     /// last successful collect(). Drives the «обновлено HH:MM» staleness caption.
     var reportUpdatedAt: Date? = nil
@@ -855,18 +879,16 @@ final class DashboardModel {
             self.history = self.historyStore.state
             self.historyUnreadable = self.historyStore.fileUnreadable
 
-            let text = ReportWriter.render(report: final, live: self.live, history: self.historyStore.state)
-            do {
-                try ReportWriter.write(text: text, to: self.reportURL)
-            } catch {
-                self.lastError = L.errorReportWriteFailed(error.localizedDescription)
-            }
-            self.reportText = text
-            self.reportUpdatedAt = Date()
-
             self.report = final
             if let sys = final.system { self.lastKnownSystem = sys }
             self.setAssessment(self.assessed(final))
+            // A pass whose system section came back empty (scan block failed, D7) keeps the previous report:
+            // the sheet shows «not updated · showing the HH:MM report» over the old text (02-home §4 failed).
+            if final.system?.modelName != nil {
+                let now = Date()
+                self.commitReportText(self.reportSummaryInput(report: final, generatedAt: final.createdAt ?? now))
+                self.reportUpdatedAt = now
+            }
             self.smartToolsState = Self.recomputeSmartToolsState()
         }
     }
@@ -967,11 +989,12 @@ final class DashboardModel {
             // The pass commit calls applyBackground on `final`, so it picks this result up too.
         } else {
             applyBackground(to: &report)
-            let text = ReportWriter.render(report: report, live: live, history: historyStore.state)
-            do { try ReportWriter.write(text: text, to: reportURL) }
-            catch { lastError = L.errorReportWriteFailed(error.localizedDescription) }
-            reportText = text                           // reportUpdatedAt unchanged: it is the pass time
             setAssessment(assessed(report))
+            // Re-render only when a report has been committed (a background result after a failed first pass
+            // must not produce a summary of a half-collected report). reportUpdatedAt unchanged: it is the pass time.
+            if reportText != nil {
+                commitReportText(reportSummaryInput(report: report, generatedAt: reportUpdatedAt ?? Date()))
+            }
         }
     }
 

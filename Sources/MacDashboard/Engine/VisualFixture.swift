@@ -305,63 +305,16 @@ enum VisualFixture {
         history.mac_history = entries
         history.last_run = entries.last?.date
 
-        let reportText = """
-        MacDashboard report (visual fixture)
-
-        System
-        ------
-        macOS 26.1 (25B78) on MacBook Air (Mac15,12)
-        Chip: Apple M3 — 8 (4 performance and 4 efficiency)
-        Memory: 16 GB
-        Uptime: 3 days 4 hours
-        Host: fixture-mac
-        SoC temperature: 48°C
-
-        CPU / Load
-        ----------
-        Load average: 2.10, 1.85, 1.60
-        User 18.5% · System 7.2% · Idle 74.3%
-        Top CPU: WindowServer 14.2%, Safari 9.8%, Xcode 7.5%, Mail 3.1%
-
-        Memory
-        ------
-        Total 16.0 GB, free 1.2 GB
-        Active 6.0 GB · Inactive 4.5 GB · Wired 2.5 GB
-        Compressor 1.0 GB · Purgeable 0.2 GB · File-backed 3.0 GB
-        Swap: 512 MB used of 2.0 GB
-
-        Disk
-        ----
-        Volume size 460 GB, 60 GB available
-        Home folders: Downloads 14 GB, Library 22 GB, Documents 9 GB, Pictures 6 GB
-        Service folders: Caches 4.2 GB, Application Support 7.5 GB, Containers 5.1 GB
-
-        Battery
-        -------
-        Source: AC Power (charging)
-        Charge: 82% · Cycles: 312 · Condition: Normal
-        Max capacity: 76%
-
-        Security
-        --------
-        FileVault: on · Gatekeeper: on · SIP: on
-        Firewall: off
-
-        Homebrew
-        --------
-        Homebrew 4.6.0 — outdated: git, node, python@3.13
-
-        Storage health
-        --------------
-        internal (APPLE SSD AP0512Z): VERIFIED
-
-        Wake holders
-        ------------
-        caffeinate holds the system awake for Terminal (1h 30m)
-
-        This is a fixed fixture report used only for the visual baseline; it does
-        not reflect this Mac's real state.
-        """
+        let fixtureTasks = HomeModel.tasks(assessment, report: report, disk: disk, battery: battery)
+        let reportText = ReportWriter.render(ReportSummaryInput(
+            generatedAt: referenceDate, system: report.system,
+            status: HomeModel.status(scan: .ok(at: referenceDate), tasks: fixtureTasks), tasks: fixtureTasks,
+            cpu: cpu, load: load, ncpu: 8, socTempC: socTempC,
+            mem: mem, memPressure: .normal, swap: swap, disk: disk,
+            hasBattery: true, battery: BatteryInfo.merged(live: battery, report: report.battery),
+            security: report.security, claudeBackup: claudeBackup, snapshotCount: report.snapshots?.count,
+            now: referenceDate, parseFailures: [],
+            details: ReportDetails(report: report, live: live)))
 
         return Dataset(
             load: load, cpu: cpu, mem: mem, swap: swap, disk: disk, battery: battery,

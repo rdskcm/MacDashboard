@@ -721,6 +721,27 @@ capture_state() {
   STATE_BOUNDS+=("$wb")
 }
 
+# Captures the window's screen rectangle instead of the window itself: a sheet is a separate NSWindow, so
+# `screencapture -l <main id>` would not include it. The region is opaque, so `vbtool alpha-check` reads "ok"
+# trivially for these states; the glass-alpha guard concerns the window's own surface, which every other
+# main-* state still checks.
+capture_region_state() {
+  local name="$1"
+  local wid="$2"
+  local wb x y w h
+  wb="$(window_bounds "$wid")"
+  [ -n "$wb" ] || runtime_error "capture_region_state: no bounds for window $wid ($name)"
+  read -r x y w h <<<"$wb"
+  if ! screencapture -x -o -R "$x,$y,$w,$h" "$OUT/raw/$name.png"; then
+    runtime_error "screencapture failed for $name"
+  fi
+  if [ ! -f "$OUT/raw/$name.png" ]; then
+    runtime_error "screencapture produced no file for $name"
+  fi
+  STATE_NAMES+=("$name")
+  STATE_BOUNDS+=("$wb")
+}
+
 # ---------------------------------------------------------------------------
 # Capture sequence
 # ---------------------------------------------------------------------------
@@ -749,16 +770,19 @@ for mode in dark light; do
   defaults delete "$BENCH_ID" visualReduceTransparency >/dev/null 2>&1 || true
   sleep 1.5
 
-  # Report: one press to open, verified; one press to close, verified (R6). Never a second blind press.
+  # Report: one press opens the sheet (its own window), verified by the sheet's identifier and by a second CGWindow
+  # for the pid; the capture is the main window's screen rect, which the sheet lies inside (R6). Never a second blind press.
   assert_key "$MAIN_ID" "main-report-$mode"
   press_main_tab main-report
-  wait_ax_id present report-page 5 || runtime_error "report did not open within 5 s of pressing main-report ($mode)"
+  wait_ax_id present report-sheet 5 || runtime_error "report sheet did not open within 5 s of pressing main-report ($mode)"
+  SHEET_COUNT="$("$VBTOOL" windows --pid "$PID" | grep -c . || true)"
+  [ "$SHEET_COUNT" -eq 2 ] || runtime_error "expected the main window and the report sheet (2 windows), got $SHEET_COUNT ($mode)"
   park_cursor
   sleep 1.5
   assert_key "$MAIN_ID" "main-report-$mode"
-  capture_state "main-report-$mode" "$MAIN_ID"
-  press_main_tab main-report
-  wait_ax_id absent report-page 5 || runtime_error "report still open 5 s after the closing press ($mode); not pressing again"
+  capture_region_state "main-report-$mode" "$MAIN_ID"
+  press_main_tab report-done
+  wait_ax_id absent report-sheet 5 || runtime_error "report sheet still open 5 s after pressing report-done ($mode); not pressing again"
   sleep 1
 
   # Settings window: General (the pane it opens on) and the titlebar hover.
@@ -916,7 +940,7 @@ RD_LINE="$("$VBTOOL" diff "$OUT/norm/main-report-dark.png" "$OUT/norm/main-dark.
 RD_PCT="$(printf '%s\n' "$RD_LINE" | sed -n 's/.*pct=\([0-9.]*\).*/\1/p')"
 rm -f "$OUT/diff/.sanity-tab.png"
 if [ -n "$RD_PCT" ] && awk -v p="$RD_PCT" 'BEGIN{exit !(p<=1.0)}'; then
-  runtime_error "sanity: tab switch had no visible effect (diff ${RD_PCT}%)"
+  runtime_error "sanity: report sheet had no visible effect (diff ${RD_PCT}%)"
 fi
 
 # ---------------------------------------------------------------------------

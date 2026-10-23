@@ -71,6 +71,11 @@ struct StringsEN: AppStrings {
     var reportCopy: String { "Copy" }
     var reportCollecting: String { "Generating report…" }
     func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · updated \(time)" }
+    var reportCopied: String { "Copied ✓" }
+    var reportNotUpdated: String { "not updated" }
+    func reportNotUpdatedShowing(_ time: String) -> String { "not updated · showing the \(time) report" }
+    var reportFailedTimedOut: String { "Couldn’t generate the report: system_profiler didn’t respond within 30 s." }
+    var reportFailedNoReading: String { "Couldn’t generate the report: system_profiler returned no data." }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Recommendations" }
@@ -801,8 +806,26 @@ struct StringsEN: AppStrings {
     func errorHistorySaveFailed(_ msg: String) -> String { "Failed to save history: \(msg)" }
     func errorReportWriteFailed(_ msg: String) -> String { "Failed to write report: \(msg)" }
 
-    // MARK: Report writer
-    func reportCreatedAt(_ time: String) -> String { "Report created: \(time)" }
+    // MARK: Report text
+    func reportTitle(_ model: String) -> String { "MacDashboard report — \(model)" }
+    func reportGenerated(_ dateTime: String, _ os: String) -> String { "Generated \(dateTime) · \(os)" }
+    func reportGeneratedNoOS(_ dateTime: String) -> String { "Generated \(dateTime)" }
+    var reportKeyStatus: String { "STATUS" }
+    var reportKeyCPU: String { "CPU" }
+    var reportKeyMemory: String { "MEMORY" }
+    var reportKeyStorage: String { "STORAGE" }
+    var reportKeyBattery: String { "BATTERY" }
+    var reportKeySecurity: String { "SECURITY" }
+    var reportKeyBackups: String { "BACKUPS" }
+    var reportKeyUptime: String { "UPTIME" }
+    func reportStorageFree(_ free: String, _ total: String) -> String { "\(free) of \(total) free" }
+    func reportPurgeable(_ v: String) -> String { "purgeable \(v)" }
+    func reportCapacity(_ v: String) -> String { "capacity \(v)" }
+    func reportCycles(_ n: Int) -> String { n == 1 ? "1 cycle" : "\(n) cycles" }
+    var reportFirewall: String { "Firewall" }
+    var reportOff: String { "off" }
+    func reportLocalSnapshots(_ n: Int) -> String { n == 1 ? "1 local snapshot" : "\(n) local snapshots" }
+
     var reportSectionSystem: String { "SYSTEM" }
     var reportSectionDisk: String { "DISK" }
     var reportSectionSnapshots: String { "LOCAL TIME MACHINE SNAPSHOTS" }
@@ -824,8 +847,6 @@ struct StringsEN: AppStrings {
     var reportSectionUnparsed: String { "UNRECOGNISED COMMAND OUTPUT (first lines)" }
     var reportUnparsedHint: String { "MacDashboard could not read the output of these commands. Serial numbers and UUIDs are masked; attach this block to a bug report." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(+\(n) more lines not shown)" }
-    var reportDoneBanner: String { "DONE" }
-    func reportSavedTo(_ path: String) -> String { "Report saved: \(path)" }
     var reportNone: String { "(none)" }
     func reportUptime(_ v: String) -> String { "Uptime: \(v)" }
     var reportAgentsUserHeader: String { "--- User:" }
@@ -1222,6 +1243,7 @@ struct StringsEN: AppStrings {
     var commonDisk: String { "Disk" }
     var commonSetUp: String { "Set up…" }
     var commonShow: String { "Show" }
+    var commonDone: String { "Done" }
     var commonMacCantSleep: String { "Mac can’t sleep" }
     var commonBattery: String { "Battery" }
     var commonInstall: String { "Install…" }

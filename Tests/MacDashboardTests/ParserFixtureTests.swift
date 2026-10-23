@@ -17,6 +17,15 @@ func fixtureNameIsVersioned(_ fname: String, command: String) -> Bool {
     return fname.range(of: pattern, options: .regularExpression) != nil
 }
 
+/// Minimal report input: all optionals nil, no tasks; only the parse-failure tail varies.
+private func summary(_ failures: [ParseFailure]) -> ReportSummaryInput {
+    let at = Date(timeIntervalSince1970: 1_760_000_000)
+    return ReportSummaryInput(
+        generatedAt: at, system: nil, status: .good, tasks: [], cpu: nil, load: nil, ncpu: 8, socTempC: nil,
+        mem: nil, memPressure: nil, swap: nil, disk: nil, hasBattery: false, battery: nil, security: nil,
+        claudeBackup: nil, snapshotCount: nil, now: at, parseFailures: failures)
+}
+
 extension SerialTests {
     struct ParserFixtureTests {
         @Test func parserFixtures() async {
@@ -152,21 +161,17 @@ extension SerialTests {
 
             // writer
             do {
-                var r = FullReport()
-                r.parseFailures = [ParseFailure(.spHardware, stdout: "{\n\"SPHardwareDataType\" : 5\n}")!]
-                let out = ReportWriter.render(report: r, live: LiveSnapshot(), history: HistoryState())
+                let out = ReportWriter.render(summary([ParseFailure(.spHardware, stdout: "{\n\"SPHardwareDataType\" : 5\n}")!]))
                 #expect(out.contains("===== \(L.reportSectionUnparsed) ====="), "writer: unparsed section header present")
                 #expect(out.contains("$ system_profiler -json SPHardwareDataType"), "writer: command line present")
                 #expect(out.contains("\n  \"SPHardwareDataType\" : 5\n"), "writer: excerpt line present")
             }
             do {
-                let out = ReportWriter.render(report: FullReport(), live: LiveSnapshot(), history: HistoryState())
+                let out = ReportWriter.render(summary([]))
                 #expect(!out.contains(L.reportSectionUnparsed), "writer: no failures ⇒ no unparsed section")
             }
             do {
-                var live = LiveSnapshot()
-                live.parseFailures = [ParseFailure(.ps, stdout: "garbage")!]
-                let out = ReportWriter.render(report: FullReport(), live: live, history: HistoryState())
+                let out = ReportWriter.render(summary([ParseFailure(.ps, stdout: "garbage")!]))
                 #expect(out.contains("$ ps -axww -o pid=,rss=,time=,comm="), "writer: live-only parse failure rendered")
             }
         }

@@ -799,6 +799,29 @@ extension SerialTests {
                         }
                     }
                 }
+                run.snap("content-report-sheet", mode, width: 740) {
+                    let ref = VisualFixture.referenceDate
+                    let text = m.reportText
+                    VStack(alignment: .leading, spacing: 24) {
+                        HarnessSection(label: "Report sheet: ready") {
+                            ReportSheetContent(state: ReportSheetState(phase: .ready, text: text, updatedAt: ref, now: ref),
+                                               reportURL: m.reportURL, onRetry: {}, onDone: {})
+                        }
+                        HarnessSection(label: "Report sheet: generating") {
+                            ReportSheetContent(state: ReportSheetState(phase: .generating, text: text, updatedAt: ref, now: ref),
+                                               reportURL: m.reportURL, onRetry: {}, onDone: {})
+                        }
+                        HarnessSection(label: "Report sheet: failed, previous report kept") {
+                            ReportSheetContent(state: ReportSheetState(phase: .failed(.timedOut), text: text,
+                                                                       updatedAt: ref.addingTimeInterval(-78 * 60), now: ref),
+                                               reportURL: m.reportURL, onRetry: {}, onDone: {})
+                        }
+                        HarnessSection(label: "Report sheet: failed, no report yet") {
+                            ReportSheetContent(state: ReportSheetState(phase: .failed(.noReading), text: nil, updatedAt: nil, now: ref),
+                                               reportURL: m.reportURL, onRetry: {}, onDone: {})
+                        }
+                    }
+                }
                 run.snap("content-home-now", mode, width: 1300) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "Now, 1150") {

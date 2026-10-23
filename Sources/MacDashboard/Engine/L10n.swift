@@ -88,6 +88,11 @@ protocol AppStrings {
     var reportCopy: String { get }
     var reportCollecting: String { get }
     func reportFileUpdatedCaption(_ time: String) -> String
+    var reportCopied: String { get }
+    var reportNotUpdated: String { get }
+    func reportNotUpdatedShowing(_ time: String) -> String
+    var reportFailedTimedOut: String { get }
+    var reportFailedNoReading: String { get }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { get }
@@ -791,8 +796,26 @@ protocol AppStrings {
     func errorHistorySaveFailed(_ msg: String) -> String
     func errorReportWriteFailed(_ msg: String) -> String
 
-    // MARK: Report writer
-    func reportCreatedAt(_ time: String) -> String
+    // MARK: Report text
+    func reportTitle(_ model: String) -> String
+    func reportGenerated(_ dateTime: String, _ os: String) -> String
+    func reportGeneratedNoOS(_ dateTime: String) -> String
+    var reportKeyStatus: String { get }
+    var reportKeyCPU: String { get }
+    var reportKeyMemory: String { get }
+    var reportKeyStorage: String { get }
+    var reportKeyBattery: String { get }
+    var reportKeySecurity: String { get }
+    var reportKeyBackups: String { get }
+    var reportKeyUptime: String { get }
+    func reportStorageFree(_ free: String, _ total: String) -> String
+    func reportPurgeable(_ v: String) -> String
+    func reportCapacity(_ v: String) -> String
+    func reportCycles(_ n: Int) -> String
+    var reportFirewall: String { get }
+    var reportOff: String { get }
+    func reportLocalSnapshots(_ n: Int) -> String
+
     var reportSectionSystem: String { get }
     var reportSectionDisk: String { get }
     var reportSectionSnapshots: String { get }
@@ -814,8 +837,6 @@ protocol AppStrings {
     var reportSectionUnparsed: String { get }
     var reportUnparsedHint: String { get }
     func reportUnparsedMoreLines(_ n: Int) -> String
-    var reportDoneBanner: String { get }
-    func reportSavedTo(_ path: String) -> String
     var reportNone: String { get }
     func reportUptime(_ v: String) -> String
     var reportAgentsUserHeader: String { get }
@@ -1119,6 +1140,7 @@ protocol AppStrings {
     var commonDisk: String { get }
     var commonSetUp: String { get }
     var commonShow: String { get }
+    var commonDone: String { get }
     var commonMacCantSleep: String { get }
     var commonBattery: String { get }
     var commonInstall: String { get }

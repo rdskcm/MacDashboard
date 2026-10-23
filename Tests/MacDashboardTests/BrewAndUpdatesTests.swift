@@ -294,9 +294,17 @@ extension SerialTests {
                 #expect(ReportWriter.fmtSeconds(5.63) == "5\(L.decimalSeparator)6 \(L.uptimeUnitSecond)", "fmtSeconds: 5.63")
                 #expect(ReportWriter.fmtSeconds(-1).hasPrefix("0"), "fmtSeconds: negative clamps to 0")
 
+                // The restored sections reach render(_:) through ReportSummaryInput.details.
+                func renderDetails(_ r: FullReport) -> String {
+                    ReportWriter.render(ReportSummaryInput(
+                        generatedAt: now, system: nil, status: .good, tasks: [], cpu: nil, load: nil, ncpu: 8, socTempC: nil,
+                        mem: nil, memPressure: nil, swap: nil, disk: nil, hasBattery: false, battery: nil, security: nil,
+                        claudeBackup: nil, snapshotCount: nil, now: now, parseFailures: [],
+                        details: ReportDetails(report: r, live: LiveSnapshot())))
+                }
                 var unchecked = FullReport()
                 unchecked.updates = nil
-                let t1 = ReportWriter.render(report: unchecked, live: LiveSnapshot(), history: HistoryState())
+                let t1 = renderDetails(unchecked)
                 #expect(t1.contains(L.reportNotChecked) && !t1.contains("No new software available."),
                       "ReportWriter: updates nil -> not checked, never 'no updates'")
 
@@ -308,7 +316,7 @@ extension SerialTests {
                 timed.folderSizesCountedAt = now
                 timed.folderSizesCountDuration = 6.4
                 timed.homeDirs = [DirSize(path: "/Users/u/Documents", bytes: 1024)]
-                let t2 = ReportWriter.render(report: timed, live: LiveSnapshot(), history: HistoryState())
+                let t2 = renderDetails(timed)
                 #expect(t2.contains(L.reportSectionTimings), "ReportWriter: timings header present")
                 #expect(t2.contains(L.reportTimingsPass(ReportWriter.fmtSeconds(7.0))), "ReportWriter: whole-pass line present")
                 #expect(t2.contains(L.reportTimingsFolderSizes(ReportWriter.fmtSeconds(6.4), reportUpdatedTimeString(now))),

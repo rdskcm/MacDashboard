@@ -1,29 +1,102 @@
 // Engine/ReportWriter.swift
-// Report agent owns this file (SPEC §3, §7).
 //
-// Renders the text report (mirroring the legacy mac_checkup.sh / mac_report.txt layout)
-// from structured data, and writes it atomically to disk. The report is BILINGUAL: every
-// string goes through `L` / `L.reportSection*` (StringsEN/StringsRU via
-// `L10nStore.shared.language`), so it renders in whichever language the app is set to.
+// Renders the short text report (title, generated line, eight aligned rows, optional
+// parse-failure tail) from `ReportSummaryInput` values and writes it atomically to disk.
+// The same string is shown in the Report sheet, copied by Copy and stored in
+// mac_report.txt. BILINGUAL: every string goes through `L` (StringsEN/StringsRU).
 // Pure rendering only — NO command execution / subprocess calls happen in this file.
 
 import Foundation
 
+/// Everything the short report needs, as values. Built by DashboardModel (live pass) and VisualFixture.
+struct ReportSummaryInput {
+    var generatedAt: Date
+    var system: SystemInfo?
+    var status: HomeStatus
+    var tasks: [HomeTask]
+    var cpu: CPUUsage?
+    var load: [Double]?
+    var ncpu: Int
+    var socTempC: Int?
+    var mem: MemSnapshot?
+    var memPressure: MemoryPressureLevel?
+    var swap: SwapInfo?
+    var disk: DiskInfo?
+    var hasBattery: Bool
+    var battery: BatteryInfo?          // already BatteryInfo.merged(live:report:)
+    var security: SecurityState?
+    var claudeBackup: ClaudeBackupStatus?
+    var snapshotCount: Int?            // report.snapshots?.count; nil = not collected
+    var now: Date                      // for the Claude backup age
+    var parseFailures: [ParseFailure]  // report.parseFailures + live.parseFailures
+    var details: ReportDetails?        // non-nil: the full diagnostic sections follow the summary
+}
+
+/// The data behind the full diagnostic sections appended under the summary.
+struct ReportDetails {
+    var report: FullReport
+    var live: LiveSnapshot
+}
+
+/// The free `fmtBytes(_: Int64?)` (Formatting.swift); inside `ReportWriter` the name resolves to its own helper.
+private func reportFmtBytes(_ n: Int64) -> String { fmtBytes(n as Int64?) }
+
 enum ReportWriter {
 
-    // MARK: - Public API (verbatim per SPEC §7 / integration contract)
+    // MARK: - Public API
 
-    /// Renders the full text report from structured data, in the app's current language.
-    static func render(report: FullReport, live: LiveSnapshot, history: HistoryState) -> String {
-        // `history` is accepted for interface parity (integration phase depends on this
-        // exact signature) but is intentionally NOT rendered into the text report: the
-        // legacy mac_checkup.sh section list (mirrored below) has no history section —
-        // history only ever lived in the separate mac_check_state.json file. The
-        // History card (chart + table) is a UI-only feature per SPEC §8.
-        _ = history
+    /// The short report, in the app's current language. Ends with exactly one "\n".
+    static func render(_ i: ReportSummaryInput) -> String {
+        let key: (String) -> String = { padRight($0, 16) }
+        let dash = "—"
+        var lines: [String] = []
 
-        var out = "\(L.reportCreatedAt(formatCreatedAt(report.createdAt ?? Date())))\n"
+        var model = i.system?.modelName ?? "Mac"
+        if let chip = i.system?.chip { model += " (\(chip))" }
+        lines.append(L.reportTitle(model))
+        let dateTime = formatDateTime(i.generatedAt)
+        if let v = i.system?.osVersion {
+            let os = "macOS \(v)" + (i.system?.osBuild.map { " (\($0))" } ?? "")
+            lines.append(L.reportGenerated(dateTime, os))
+        } else {
+            lines.append(L.reportGeneratedNoOS(dateTime))
+        }
+        lines.append("")
 
+        let statusText: String
+        switch i.status {
+        case .checking: statusText = L.commonChecking
+        case .good: statusText = L.commonAllGood
+        case .attention: statusText = L.commonNeedsAttention
+        case .critical: statusText = L.commonCritical
+        }
+        var statusLine = key(L.reportKeyStatus) + statusText
+        if !i.tasks.isEmpty { statusLine += " · " + L.homeTaskCount(i.tasks.count) }
+        lines.append(statusLine)
+        for t in i.tasks {
+            let mark = t.tone == .hot ? "!!" : "! "
+            let obj = t.object.count >= 14 ? t.object + " " : padRight(t.object, 14)
+            lines.append("  \(mark) \(obj)\(t.state)")
+        }
+        lines.append("")
+
+        lines.append(key(L.reportKeyCPU) + cpuRow(i, dash))
+        lines.append(key(L.reportKeyMemory) + memoryRow(i, dash))
+        lines.append(key(L.reportKeyStorage) + storageRow(i, dash))
+        lines.append(key(L.reportKeyBattery) + batteryRow(i, dash))
+        lines.append(key(L.reportKeySecurity) + securityRow(i, dash))
+        lines.append(key(L.reportKeyBackups) + backupsRow(i, dash))
+        lines.append(key(L.reportKeyUptime) + (i.system?.uptime ?? dash))
+
+        var out = lines.joined(separator: "\n") + "\n"
+        if let d = i.details { appendDetails(&out, report: d.report, live: d.live) }
+        let unparsed = i.parseFailures.sorted { $0.commandLine < $1.commandLine }
+        if !unparsed.isEmpty { addSection(&out, L.reportSectionUnparsed, renderParseFailures(unparsed)) }
+        return out
+    }
+
+    /// The full diagnostic sections (the pre-redesign report body), appended under the summary.
+    private static func appendDetails(_ out: inout String, report: FullReport, live: LiveSnapshot) {
         addSection(&out, L.reportSectionSystem, renderSystem(report.system))
         addSection(&out, L.reportSectionDisk, renderDisk(live.disk))
         addSection(&out, L.reportSectionSnapshots, renderSnapshots(report.snapshots))
@@ -45,13 +118,6 @@ enum ReportWriter {
         addSection(&out, L.reportSectionUpdates, renderUpdates(report.updates, checkedAt: report.updatesCheckedAt))
         addSection(&out, L.reportSectionSmart, renderSmart(report.smart))
         addSection(&out, L.reportSectionTimings, renderTimings(report))
-
-        let unparsed = (report.parseFailures + live.parseFailures).sorted { $0.commandLine < $1.commandLine }
-        if !unparsed.isEmpty { addSection(&out, L.reportSectionUnparsed, renderParseFailures(unparsed)) }
-
-        out += "\n===== \(L.reportDoneBanner) =====\n"
-        out += "\(L.reportSavedTo(defaultReportPathForFooter()))\n"
-        return out
     }
 
     /// Atomic overwrite (temp file + replace or Data.write(.atomic)). Creates parent dir.
@@ -80,39 +146,81 @@ enum ReportWriter {
         out += "\n"
     }
 
-    // MARK: - Footer path (§2/§7: ALWAYS the same fixed App Support path)
+    // MARK: - Rows
 
-    /// Same fixed location as SPEC §2 (`~/Library/Application Support/MacDashboard/
-    /// mac_report.txt`), recomputed here purely for display in the footer line —
-    /// render() has no URL parameter, and this path is a spec-level constant derivable
-    /// from standard APIs only (NSHomeDirectory(), explicitly allowed by SPEC §1.2),
-    /// so there is no risk of drifting from the real write destination.
-    private static func defaultReportPathForFooter() -> String {
-        NSHomeDirectory() + "/Library/Application Support/MacDashboard/mac_report.txt"
+    private static func cpuRow(_ i: ReportSummaryInput, _ dash: String) -> String {
+        guard let cpu = i.cpu else { return dash }
+        var parts = [L.homePercent(fmtFixed(cpu.user + cpu.sys, decimals: 1))]
+        parts.append(i.load?.first.map { L.homeLoadCores(fmtFixed($0, decimals: 2), i.ncpu) } ?? L.homeCoresOnly(i.ncpu))
+        if let t = i.socTempC { parts.append("SoC \(t) °C") }
+        return parts.joined(separator: " · ")
     }
 
-    // MARK: - Date formatting
+    private static func memoryRow(_ i: ReportSummaryInput, _ dash: String) -> String {
+        guard let mem = i.mem, mem.total > 0 else { return dash }
+        let gib = 1_073_741_824.0
+        let totalGB = "\(Int((Double(mem.total) / gib).rounded())) \(L.byteUnitGB)"
+        var parts = ["\(fmtNum(Double(mem.usedBytes) / gib, decimals: 1)) \(L.homeOf(totalGB))"]
+        switch MemoryLoad.pressureTone(i.memPressure) {
+        case .low?: parts.append(L.homePressureLow)
+        case .medium?: parts.append(L.homePressureMedium)
+        case .high?: parts.append(L.homePressureHigh)
+        case nil: break
+        }
+        if let s = i.swap { parts.append("swap \(reportFmtBytes(s.used))") }
+        return parts.joined(separator: " · ")
+    }
 
-    /// "Fri Jul  3 18:37:03 MSK 2026" — en_US_POSIX weekday/month, local TZ abbreviation,
-    /// day-of-month space-padded to width 2 (matches legacy `date` output where a
-    /// single-digit day produces a double space, e.g. "Jul  3").
-    private static func formatCreatedAt(_ date: Date) -> String {
+    private static func storageRow(_ i: ReportSummaryInput, _ dash: String) -> String {
+        guard let d = i.disk, d.size > 0 else { return dash }
+        var parts = [L.reportStorageFree(fmtCapacityParts(d.avail).value, fmtCapacity(d.size))]
+        if let p = d.purgeable { parts.append(L.reportPurgeable(fmtCapacity(p))) }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func batteryRow(_ i: ReportSummaryInput, _ dash: String) -> String {
+        guard i.hasBattery else { return L.reportNoBattery }
+        guard let b = i.battery else { return dash }
+        var parts: [String] = []
+        if let c = b.charge { parts.append(L.homePercent("\(c)") + (b.state.map { ", \($0)" } ?? "")) }
+        if let m = b.maxCapacity { parts.append(L.reportCapacity(L.homePercent("\(m)"))) }
+        if let n = b.cycles { parts.append(L.reportCycles(n)) }
+        return parts.isEmpty ? dash : parts.joined(separator: " · ")
+    }
+
+    private static func securityRow(_ i: ReportSummaryInput, _ dash: String) -> String {
+        guard let s = i.security else { return dash }
+        // D6: ON = bare name, OFF = «<name> off», unknown = «<name> ?».
+        func item(_ name: String, _ v: Bool?) -> String {
+            guard let v else { return "\(name) ?" }
+            return v ? name : "\(name) \(L.reportOff)"
+        }
+        return [item("FileVault", s.fileVault), item("Gatekeeper", s.gatekeeper), item("SIP", s.sip),
+                item(L.reportFirewall, s.firewall)].joined(separator: " · ")
+    }
+
+    private static func backupsRow(_ i: ReportSummaryInput, _ dash: String) -> String {
+        var parts: [String] = []
+        switch i.claudeBackup {
+        case .lastSuccess(let d)?:
+            let age = BackupLog.durationText(seconds: Int(i.now.timeIntervalSince(d)))
+            parts.append("\(L.commonClaudeBackup) \(L.claudeBackupAgo(age))")
+        case .noSuccessFound?:
+            parts.append("\(L.commonClaudeBackup) \(L.attnDetailClaudeBackupNone)")
+        case .unreadable?, nil: break
+        }
+        if let n = i.snapshotCount { parts.append(L.reportLocalSnapshots(n)) }
+        return parts.isEmpty ? dash : parts.joined(separator: " · ")
+    }
+
+    /// "Oct 17, 2026, 10:30" / "17 окт. 2026, 10:30" in the app language and the local time zone.
+    private static func formatDateTime(_ date: Date) -> String {
+        let ru = L10nStore.shared.language == .ru
         let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.locale = Locale(identifier: ru ? "ru_RU" : "en_US")
         fmt.timeZone = .current
-
-        fmt.dateFormat = "EEE MMM"
-        let head = fmt.string(from: date)
-
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = .current
-        let day = cal.component(.day, from: date)
-        let dayStr = day < 10 ? " \(day)" : "\(day)"
-
-        fmt.dateFormat = "HH:mm:ss zzz yyyy"
-        let tail = fmt.string(from: date)
-
-        return "\(head) \(dayStr) \(tail)"
+        fmt.dateFormat = ru ? "d MMM yyyy, HH:mm" : "MMM d, yyyy, HH:mm"
+        return fmt.string(from: date)
     }
 
     // MARK: - СИСТЕМА
@@ -459,15 +567,15 @@ enum ReportWriter {
 
     // MARK: - Formatting helpers
 
-    /// Human byte size, "96,4 ГБ" style: comma decimal, КБ/МБ/ГБ/ТБ, base 1024, one
-    /// fixed decimal once above the smallest unit. Deterministic regardless of the
-    /// user's system locale — String(format:) without an explicit locale always uses
-    /// "." internally, which is then replaced with ",".
     static func fmtSeconds(_ s: TimeInterval) -> String {
         String(format: "%.1f", max(0, s)).replacingOccurrences(of: ".", with: L.decimalSeparator)
             + " " + L.uptimeUnitSecond
     }
 
+    /// Human byte size, "96,4 ГБ" style: comma decimal, КБ/МБ/ГБ/ТБ, base 1024, one
+    /// fixed decimal once above the smallest unit. Deterministic regardless of the
+    /// user's system locale — String(format:) without an explicit locale always uses
+    /// "." internally, which is then replaced with ",".
     static func fmtBytes(_ bytes: Int64) -> String {
         let units = [L.byteUnitB, L.byteUnitKB, L.byteUnitMB, L.byteUnitGB, L.byteUnitTB]
         let sign = bytes < 0 ? "-" : ""

@@ -1,12 +1,19 @@
 // Tests/MacDashboardTests/ReportWriterTests.swift
-// Port of Checks/ReportWriterChecks.swift (CHECKS-SWIFT-TESTING).
-// COVERAGE-REPORT: behaviour checks for Engine/ReportWriter.swift — every section
-// renderer's populated and variant output, section order, footer, helpers, and the
-// data-integrity / error paths of ReportWriter.write. All writes go to a fresh temp
-// directory that is removed afterwards; nothing here touches the user's App Support.
+// Behaviour checks for Engine/ReportWriter.swift (REDESIGN-REPORT): the short report format in EN and RU,
+// missing sections, task lines, key padding, parse-failure tail, helpers, and the data-integrity / error
+// paths of ReportWriter.write. All writes go to a fresh temp directory that is removed afterwards;
+// nothing here touches the user's App Support.
 import Foundation
 import Testing
 @testable import MacDashboard
+
+private func rwMode(_ path: String) -> UInt16? {
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+          let mode = attrs[.posixPermissions] as? NSNumber else { return nil }
+    return mode.uint16Value & 0o777
+}
+
+private func pad(_ s: String, _ w: Int) -> String { s + String(repeating: " ", count: max(0, w - s.count)) }
 
 /// Body lines of one "===== name =====" section of a rendered report: the lines after
 /// the header up to (not including) the blank line addSection() leaves before the next
@@ -34,12 +41,6 @@ private func rwVM(_ label: String, _ pages: Int64) -> String {
     return rwCol(label + ":", 32) + String(repeating: " ", count: max(0, 10 - n.count)) + n
 }
 
-private func rwMode(_ path: String) -> UInt16? {
-    guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-          let mode = attrs[.posixPermissions] as? NSNumber else { return nil }
-    return mode.uint16Value & 0o777
-}
-
 private func rwNames() -> [String] {
     [L.reportSectionSystem, L.reportSectionDisk, L.reportSectionSnapshots, L.reportSectionHomeDirs,
      L.reportSectionServiceDirs, L.reportSectionMemory, L.reportSectionTopMem, L.reportSectionTopCPU,
@@ -59,12 +60,184 @@ private func rwCheckOrder(_ out: String, _ tag: String) {
     let increasing = zip(ints, ints.dropFirst()).allSatisfy { $0 < $1 }
     #expect(allPresent && increasing, "ReportWriter: \(tag) section headers in fixed order")
     let headerCount = lines.filter { $0.hasPrefix("===== ") }.count
-    #expect(headerCount == names.count + 1, "ReportWriter: \(tag) each header exactly once + done banner (got \(headerCount))")
+    #expect(headerCount == names.count, "ReportWriter: \(tag) each header exactly once (got \(headerCount))")
+}
+
+
+/// The short report with the full diagnostic sections appended (REDESIGN-REPORT fix wave 2).
+private func renderDetails(_ r: FullReport, _ l: LiveSnapshot) -> String {
+    var i = emptyInput()
+    i.parseFailures = r.parseFailures + l.parseFailures
+    i.details = ReportDetails(report: r, live: l)
+    return ReportWriter.render(i)
+}
+
+private func upd(_ label: String) -> SoftwareUpdate {
+    SoftwareUpdate(label: label, title: label, version: nil, sizeBytes: nil, restartRequired: false)
+}
+
+private let rwGiB: Int64 = 1 << 30
+
+private func rwDate() -> Date {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = .current
+    return cal.date(from: DateComponents(year: 2026, month: 7, day: 3, hour: 18, minute: 37, second: 3))!
+}
+
+/// Two tasks (one hot, one amber) built through the real task builder.
+private func rwTasks() -> [HomeTask] {
+    var a = Assessment()
+    a.items = [
+        AttentionItem(kind: .smartErrors, sev: .crit, label: "", detail: "", fullText: "", verb: ""),
+        AttentionItem(kind: .firewallOff, sev: .warn, label: "", detail: "", fullText: "", verb: ""),
+    ]
+    return HomeModel.tasks(a, report: FullReport(), disk: nil, battery: nil)
+}
+
+private func fullInput() -> ReportSummaryInput {
+    let at = rwDate()
+    let tasks = rwTasks()
+    return ReportSummaryInput(
+        generatedAt: at,
+        system: SystemInfo(osName: "macOS", osVersion: "26.1", osBuild: "25B78", modelName: "MacBook Air",
+                           modelId: "Mac15,12", chip: "Apple M3", cores: nil, memBytes: nil, uptime: "3 d 4 h", hostName: nil),
+        status: .critical, tasks: tasks,
+        cpu: CPUUsage(user: 18.5, sys: 7.2, idle: 74.3), load: [2.10, 1.85, 1.60], ncpu: 8, socTempC: 48,
+        mem: MemSnapshot(total: 16 * rwGiB, pageSize: 16384, free: 0, active: 7 * rwGiB, inactive: 0, speculative: 0,
+                         wired: 2 * rwGiB, compressor: rwGiB / 2, purgeable: 0, fileBacked: 0),
+        memPressure: .normal, swap: SwapInfo(total: 2 * rwGiB, used: 512 << 20, free: 0),
+        disk: DiskInfo(size: 494_400_000_000, avail: 187_600_000_000, purgeable: 19_700_000_000),
+        hasBattery: true, battery: BatteryInfo(source: nil, charge: 82, state: "charging", cycles: 412, condition: nil, maxCapacity: 88),
+        security: SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false),
+        claudeBackup: .lastSuccess(at.addingTimeInterval(-5 * 3600)), snapshotCount: 3, now: at, parseFailures: [])
+}
+
+private func emptyInput() -> ReportSummaryInput {
+    let at = rwDate()
+    return ReportSummaryInput(
+        generatedAt: at, system: nil, status: .good, tasks: [], cpu: nil, load: nil, ncpu: 8, socTempC: nil,
+        mem: nil, memPressure: nil, swap: nil, disk: nil, hasBattery: false, battery: nil, security: nil,
+        claudeBackup: nil, snapshotCount: nil, now: at, parseFailures: [])
 }
 
 extension SerialTests {
     struct ReportWriterTests {
-        @Test func reportWriter() async {
+        @Test func renderEN() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .en
+            let tasks = rwTasks()
+            let k = { (s: String) in pad(s, 16) }
+            let lines = [
+                "MacDashboard report — MacBook Air (Apple M3)",
+                "Generated Jul 3, 2026, 18:37 · macOS 26.1 (25B78)",
+                "",
+                k("STATUS") + "Critical · 2 tasks",
+                "  !! " + pad(tasks[0].object, 14) + tasks[0].state,
+                "  !  " + pad(tasks[1].object, 14) + tasks[1].state,
+                "",
+                k("CPU") + "25.7% · load 2.10 · 8 cores · SoC 48 °C",
+                k("MEMORY") + "9.5 of 16 GB · pressure low · swap 512 MB",
+                k("STORAGE") + "187.6 of 494.4 GB free · purgeable 19.7 GB",
+                k("BATTERY") + "82%, charging · capacity 88% · 412 cycles",
+                k("SECURITY") + "FileVault · Gatekeeper · SIP · Firewall off",
+                k("BACKUPS") + "Claude backup 5 h ago · 3 local snapshots",
+                k("UPTIME") + "3 d 4 h",
+            ]
+            let want = lines.joined(separator: "\n") + "\n"
+            let got = ReportWriter.render(fullInput())
+            #expect(got == want, "renderEN: \(got)")
+            #expect(tasks[0].tone == .hot && tasks[1].tone == .amber, "renderEN: task tones")
+        }
+
+        @Test func renderRU() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .ru
+            let out = ReportWriter.render(fullInput())
+            let rows = out.components(separatedBy: "\n")
+            let k = { (s: String) in pad(s, 16) }
+            #expect(rows[0] == "Отчёт MacDashboard — MacBook Air (Apple M3)", "renderRU title (got \(rows[0]))")
+            // The month word comes from the system CLDR data: «июл.» or «июля» depending on the macOS version.
+            #expect(rows[1].hasPrefix("Создан 3 июл") && rows[1].contains(" 2026, 18:37 · macOS 26.1 (25B78)"),
+                    "renderRU generated line (got \(rows[1]))")
+            for key in ["СОСТОЯНИЕ", "ПРОЦЕССОР", "ПАМЯТЬ", "ХРАНИЛИЩЕ", "БАТАРЕЯ", "ЗАЩИТА", "КОПИИ", "АПТАЙМ"] {
+                #expect(rows.contains { $0.hasPrefix(k(key)) && $0.count > 16 }, "renderRU key \(key) padded to 16")
+            }
+            #expect(rows.contains(k("ПРОЦЕССОР") + "25,7 % · нагрузка 2,10 · 8 ядер · SoC 48 °C"), "renderRU CPU")
+            #expect(rows.contains(k("ПАМЯТЬ") + "9,5 из 16 ГБ · давление низкое · swap 512 МБ"), "renderRU MEMORY")
+            #expect(rows.contains(k("ХРАНИЛИЩЕ") + "свободно 187,6 из 494,4 ГБ · очищаемое 19,7 ГБ"), "renderRU STORAGE")
+            #expect(rows.contains(k("БАТАРЕЯ") + "82 %, charging · ёмкость 88 % · 412 циклов"), "renderRU BATTERY")
+            #expect(rows.contains(k("ЗАЩИТА") + "FileVault · Gatekeeper · SIP · брандмауэр выкл."), "renderRU SECURITY")
+            #expect(rows.contains(k("КОПИИ") + "Бэкап Claude 5 ч назад · 3 локальных снимка"), "renderRU BACKUPS")
+        }
+
+        @Test func renderSecurityOffAndUnknown() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            var input = fullInput()
+            input.security = SecurityState(fileVault: false, gatekeeper: true, sip: nil, firewall: true)
+            let k = { (s: String) in pad(s, 16) }
+            L10nStore.shared.language = .en
+            #expect(ReportWriter.render(input).components(separatedBy: "\n")
+                .contains(k("SECURITY") + "FileVault off · Gatekeeper · SIP ? · Firewall"), "security EN off/unknown")
+            L10nStore.shared.language = .ru
+            #expect(ReportWriter.render(input).components(separatedBy: "\n")
+                .contains(k("ЗАЩИТА") + "FileVault выкл. · Gatekeeper · SIP ? · брандмауэр"), "security RU off/unknown")
+        }
+
+        @Test func renderMissing() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .en
+            let out = ReportWriter.render(emptyInput())
+            let rows = out.components(separatedBy: "\n")
+            let k = { (s: String) in pad(s, 16) }
+            #expect(rows[0] == "MacDashboard report — Mac", "renderMissing title")
+            #expect(rows[1] == "Generated Jul 3, 2026, 18:37", "renderMissing generated line has no macOS part (got \(rows[1]))")
+            #expect(rows[3] == k("STATUS") + "All good", "renderMissing status has no task count (got \(rows[3]))")
+            #expect(rows[4] == "", "renderMissing blank after status without task lines")
+            #expect(rows[5] == k("CPU") + "—" && rows[6] == k("MEMORY") + "—" && rows[7] == k("STORAGE") + "—", "renderMissing dashes")
+            #expect(rows[8] == k("BATTERY") + L.reportNoBattery, "renderMissing no battery")
+            #expect(rows[9] == k("SECURITY") + "—" && rows[10] == k("BACKUPS") + "—" && rows[11] == k("UPTIME") + "—", "renderMissing dashes 2")
+            #expect(out.hasSuffix("—\n") && !out.hasSuffix("\n\n"), "renderMissing ends with exactly one newline")
+        }
+
+        @Test func renderNoBatteryValues() {
+            var i = emptyInput()
+            i.hasBattery = true
+            i.battery = BatteryInfo()
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .en
+            #expect(ReportWriter.render(i).contains(pad("BATTERY", 16) + "—\n"), "renderNoBatteryValues: all-nil battery is a dash")
+        }
+
+        @Test func renderLongObject() {
+            var i = emptyInput()
+            var task = rwTasks()[0]
+            task = HomeTask(id: task.id, kind: task.kind, tone: .hot, object: "0123456789abcdef", state: "bad", section: task.section,
+                            destination: task.destination, verb: nil, help: "", tileTag: "", legacyAction: nil, wakeHolderKeys: [])
+            i.tasks = [task]
+            i.status = .critical
+            #expect(ReportWriter.render(i).contains("  !! 0123456789abcdef bad\n"), "renderLongObject: exactly one space before the state")
+        }
+
+        @Test func renderParseFailures() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .en
+            var i = emptyInput()
+            i.parseFailures = [ParseFailure(.spHardware, stdout: "{\n\"SPHardwareDataType\" : 5\n}")!]
+            let out = ReportWriter.render(i)
+            let tail = "UPTIME          —\n\n===== \(L.reportSectionUnparsed) =====\n"
+            #expect(out.contains(tail), "renderParseFailures: tail after the UPTIME row")
+            #expect(out.contains("$ system_profiler -json SPHardwareDataType"), "renderParseFailures: command line")
+            i.parseFailures = []
+            #expect(!ReportWriter.render(i).contains(L.reportSectionUnparsed), "renderParseFailures: absent without failures")
+        }
+
+        @Test func detailsAppended() async {
             let originalLang = L10nStore.shared.language
             defer { L10nStore.shared.language = originalLang }
             L10nStore.shared.language = .ru
@@ -75,7 +248,6 @@ extension SerialTests {
             var cal = Calendar(identifier: .gregorian)
             cal.timeZone = .current
             let t = cal.date(from: DateComponents(year: 2026, month: 7, day: 3, hour: 18, minute: 37, second: 3))!
-            let hist = HistoryState()
 
             func fullFixture() -> (FullReport, LiveSnapshot) {
                 var r = FullReport()
@@ -125,7 +297,7 @@ extension SerialTests {
 
             // ---- §B: full fixture ----
             let (fr, flive) = fullFixture()
-            let out = ReportWriter.render(report: fr, live: flive, history: hist)
+            let out = renderDetails(fr, flive)
             let u = reportUpdatedTimeString(t)
             do {
                 func sec(_ name: String, _ body: [String], _ label: String) {
@@ -173,21 +345,20 @@ extension SerialTests {
                 sec(L.reportSectionTimings, [L.reportTimingsNote, L.reportTimingsPass("7,0 с"), "  Homebrew: 1,5 с", "  disk:     1,5 с", "  Система:  0,2 с", L.reportTimingsUpdates("30,0 с", u), L.reportTimingsFolderSizes("6,4 с", u)], "TIMINGS")
                 sec(L.reportSectionUnparsed, [L.reportUnparsedHint, "$ ps -axww -o pid=,rss=,time=,comm=", "  garbage", "$ system_profiler -json SPHardwareDataType", "  l1", "  l2", "  l3", "  l4", "  l5", "  l6", "  l7", "  l8", "  " + L.reportUnparsedMoreLines(2)], "UNPARSED")
 
-                // R3: order, uniqueness, footer, history, created-at, EN pass
+                // R3: order, uniqueness, tail rows, EN pass
                 rwCheckOrder(out, "RU")
-                let footer = "\n===== \(L.reportDoneBanner) =====\n" + L.reportSavedTo(NSHomeDirectory() + "/Library/Application Support/MacDashboard/mac_report.txt") + "\n"
-                #expect(out.hasSuffix(footer), "ReportWriter: done banner and saved-to footer")
-                let histOut = ReportWriter.render(report: fr, live: flive, history: HistoryState(last_run: "2026-07-01", mac_history: [MacHistoryEntry(date: "2026-07-01", macos: "HIST-SENTINEL")]))
-                #expect(histOut == out, "ReportWriter: history argument has no effect")
-                let first = out.components(separatedBy: "\n")[0]
-                #expect(first.hasPrefix(L.reportCreatedAt("Fri Jul  3 18:37:03 ")) && first.hasSuffix(" 2026"), "ReportWriter: created-at line format (got \(first))")
-                var r13 = fr
-                r13.createdAt = cal.date(from: DateComponents(year: 2026, month: 7, day: 13, hour: 18, minute: 37, second: 3))!
-                let first13 = ReportWriter.render(report: r13, live: flive, history: hist).components(separatedBy: "\n")[0]
-                #expect(first13.hasPrefix(L.reportCreatedAt("Mon Jul 13 18:37:03 ")), "ReportWriter: created-at two-digit day (got \(first13))")
+                let tailRows = out.components(separatedBy: "\n")
+                let uptimeAt = tailRows.firstIndex { $0.hasPrefix(pad(L.reportKeyUptime, 16)) }
+                let systemAt = tailRows.firstIndex(of: "===== \(L.reportSectionSystem) =====")
+                let timingsAt = tailRows.firstIndex(of: "===== \(L.reportSectionTimings) =====")
+                let unparsedAt = tailRows.firstIndex(of: "===== \(L.reportSectionUnparsed) =====")
+                #expect(uptimeAt != nil && systemAt != nil && uptimeAt! < systemAt!, "ReportWriter: details start after the UPTIME row")
+                #expect(timingsAt != nil && unparsedAt != nil && timingsAt! < unparsedAt!, "ReportWriter: parse-failure tail after the details")
+                #expect(out.hasSuffix("\n") && !out.hasSuffix("\n\n"), "ReportWriter: ends with exactly one newline")
+                #expect(!out.contains("===== ГОТОВО") && !out.contains("===== DONE") && !out.contains("Отчёт сохранён"), "ReportWriter: no DONE banner or saved-to footer")
 
                 L10nStore.shared.language = .en
-                let outEN = ReportWriter.render(report: fr, live: flive, history: hist)
+                let outEN = renderDetails(fr, flive)
                 rwCheckOrder(outEN, "EN")
                 #expect(rwSection(outEN, L.reportSectionSystem)?.contains("      Memory: 16.0 GB") == true, "ReportWriter: EN memory uses dot decimal and GB")
                 L10nStore.shared.language = .ru
@@ -200,7 +371,7 @@ extension SerialTests {
                     var l = LiveSnapshot()
                     r.createdAt = t
                     f(&r, &l)
-                    return ReportWriter.render(report: r, live: l, history: hist)
+                    return renderDetails(r, l)
                 }
                 func eq(_ o: String, _ name: String, _ body: [String], _ label: String) {
                     let got = rwSection(o, name)
@@ -268,8 +439,13 @@ extension SerialTests {
                    [L.reportTimingsNote, L.reportTimingsPass("1,0 с")], "C22 duration without timestamp")
                 eq(render { r, _ in r.smart = [] }, L.reportSectionSmart, [L.reportNone], "C23 no smart disks")
             }
+        }
 
-            // ---- §D: helpers ----
+        @Test func padHelpers() {
+            let tib: Int64 = 1 << 40
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .ru
             do {
                 let fb: [(Int64, String)] = [(0, "0 Б"), (1023, "1023 Б"), (1024, "1,0 КБ"), (1536, "1,5 КБ"), (-2048, "-2,0 КБ"),
                                              (5 * tib, "5,0 ТБ"), (1024 * tib, "1024,0 ТБ"), (Int64.min, "-8388608,0 ТБ")]
@@ -281,7 +457,14 @@ extension SerialTests {
                 #expect(ReportWriter.padRight("abcdef", 3) == "abcdef", "ReportWriter: padRight never truncates")
                 #expect(ReportWriter.padLeft("7", 3) == "  7", "ReportWriter: padLeft pads")
                 #expect(ReportWriter.padLeft("abcd", 2) == "abcd", "ReportWriter: padLeft never truncates")
+            }
+        }
 
+        @Test func smartHelpers() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .ru
+            do {
                 let sw: [(String, String)] = [
                     ("0x00", L.reportSmartWarningNone),
                     ("0x01", L.reportSmartWarningLowSpareCapacity),
@@ -303,7 +486,9 @@ extension SerialTests {
                 #expect(folderSizesAgeString(countedAt: now.addingTimeInterval(-2 * 3600), now: now) == L.foldersCountedAgo("2 \(L.uptimeUnitHour)"), "ReportWriter: folderSizesAgeString 2 hours")
                 #expect(folderSizesAgeString(countedAt: now.addingTimeInterval(-3 * 86_400), now: now) == L.foldersCountedAgo("3 \(L.uptimeUnitDay)"), "ReportWriter: folderSizesAgeString 3 days")
             }
+        }
 
+        @Test func writeIntegrity() {
             // ---- §E: write() integrity and error paths ----
             do {
                 let root = FileManager.default.temporaryDirectory
@@ -329,10 +514,12 @@ extension SerialTests {
                 #expect((try? Data(contentsOf: file)) == Data("again".utf8), "ReportWriter: E2 content after rewrite")
 
                 // E3 round-trip
-                let (rr, rl) = fullFixture()
-                let text = ReportWriter.render(report: rr, live: rl, history: hist)
+                let originalLang = L10nStore.shared.language
+                defer { L10nStore.shared.language = originalLang }
+                L10nStore.shared.language = .ru
+                let text = ReportWriter.render(fullInput())
                 do { try ReportWriter.write(text: text, to: file) } catch { Issue.record("ReportWriter: E3 round-trip threw \(error)") }
-                #expect((try? Data(contentsOf: file)) == Data(text.utf8), "ReportWriter: E3 full Cyrillic report round-trips byte-exact")
+                #expect((try? Data(contentsOf: file)) == Data(text.utf8), "ReportWriter: E3 short Cyrillic report round-trips byte-exact")
 
                 // E4 no leftovers
                 #expect((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) == ["mac_report.txt"], "ReportWriter: E4 no temp files left next to the report")
@@ -358,8 +545,4 @@ extension SerialTests {
             }
         }
     }
-}
-
-private func upd(_ label: String) -> SoftwareUpdate {
-    SoftwareUpdate(label: label, title: label, version: nil, sizeBytes: nil, restartRequired: false)
 }

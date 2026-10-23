@@ -71,8 +71,13 @@ struct StringsRU: AppStrings {
     var reportPlaceholder: String { "Отчёт ещё не собран. Нажмите «Обновить отчёт»." }
     var reportShowInFinder: String { "Показать в Finder" }
     var reportCopy: String { "Скопировать" }
-    var reportCollecting: String { "Собираем отчёт…" }
-    func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · обновлено \(time)" }
+    var reportCollecting: String { "Создание отчёта…" }
+    func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · обновлён в \(time)" }
+    var reportCopied: String { "Скопировано ✓" }
+    var reportNotUpdated: String { "не обновлён" }
+    func reportNotUpdatedShowing(_ time: String) -> String { "не обновлён · показан отчёт от \(time)" }
+    var reportFailedTimedOut: String { "Не удалось создать отчёт: system_profiler не ответил за 30 с." }
+    var reportFailedNoReading: String { "Не удалось создать отчёт: system_profiler не вернул данных." }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Рекомендации" }
@@ -815,8 +820,26 @@ struct StringsRU: AppStrings {
     func errorHistorySaveFailed(_ msg: String) -> String { "Не удалось сохранить историю: \(msg)" }
     func errorReportWriteFailed(_ msg: String) -> String { "Не удалось записать отчёт: \(msg)" }
 
-    // MARK: Report writer
-    func reportCreatedAt(_ time: String) -> String { "Отчёт создан: \(time)" }
+    // MARK: Report text
+    func reportTitle(_ model: String) -> String { "Отчёт MacDashboard — \(model)" }
+    func reportGenerated(_ dateTime: String, _ os: String) -> String { "Создан \(dateTime) · \(os)" }
+    func reportGeneratedNoOS(_ dateTime: String) -> String { "Создан \(dateTime)" }
+    var reportKeyStatus: String { "СОСТОЯНИЕ" }
+    var reportKeyCPU: String { "ПРОЦЕССОР" }
+    var reportKeyMemory: String { "ПАМЯТЬ" }
+    var reportKeyStorage: String { "ХРАНИЛИЩЕ" }
+    var reportKeyBattery: String { "БАТАРЕЯ" }
+    var reportKeySecurity: String { "ЗАЩИТА" }
+    var reportKeyBackups: String { "КОПИИ" }
+    var reportKeyUptime: String { "АПТАЙМ" }
+    func reportStorageFree(_ free: String, _ total: String) -> String { "свободно \(free) из \(total)" }
+    func reportPurgeable(_ v: String) -> String { "очищаемое \(v)" }
+    func reportCapacity(_ v: String) -> String { "ёмкость \(v)" }
+    func reportCycles(_ n: Int) -> String { "\(n) " + ruPlural(n, "цикл", "цикла", "циклов") }
+    var reportFirewall: String { "брандмауэр" }
+    var reportOff: String { "выкл." }
+    func reportLocalSnapshots(_ n: Int) -> String { "\(n) " + ruPlural(n, "локальный снимок", "локальных снимка", "локальных снимков") }
+
     var reportSectionSystem: String { "СИСТЕМА" }
     var reportSectionDisk: String { "ДИСК" }
     var reportSectionSnapshots: String { "ЛОКАЛЬНЫЕ СНАПШОТЫ TIME MACHINE" }
@@ -838,8 +861,6 @@ struct StringsRU: AppStrings {
     var reportSectionUnparsed: String { "НЕРАСПОЗНАННЫЙ ВЫВОД КОМАНД (первые строки)" }
     var reportUnparsedHint: String { "MacDashboard не смог разобрать вывод этих команд. Серийные номера и UUID скрыты; приложите этот блок к сообщению об ошибке." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(ещё не показано строк: \(n))" }
-    var reportDoneBanner: String { "ГОТОВО" }
-    func reportSavedTo(_ path: String) -> String { "Отчёт сохранён: \(path)" }
     var reportNone: String { "(нет)" }
     func reportUptime(_ v: String) -> String { "Аптайм: \(v)" }
     var reportAgentsUserHeader: String { "--- Пользовательские:" }
@@ -1236,6 +1257,7 @@ struct StringsRU: AppStrings {
     var commonDisk: String { "Диск" }
     var commonSetUp: String { "Настроить…" }
     var commonShow: String { "Показать" }
+    var commonDone: String { "Готово" }
     var commonMacCantSleep: String { "Mac не засыпает" }
     var commonBattery: String { "Батарея" }
     var commonInstall: String { "Установить…" }

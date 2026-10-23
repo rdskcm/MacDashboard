@@ -205,3 +205,5 @@ content-history-table-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-narrow-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-states-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-bars-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
+content-report-sheet-dark	2026-10-23	27.0.1	Xcode 27.1	62eeac1-dirty
+content-report-sheet-light	2026-10-23	27.0.1	Xcode 27.1	62eeac1-dirty
