@@ -997,6 +997,11 @@ protocol AppStrings {
     var iphoneBatCharge: String { get }
     var iphoneBatState: String { get }
     var iphoneBatTemperature: String { get }
+    var iphoneTempNormal: String { get }
+    var iphoneTempWarm: String { get }
+    var iphoneTempHot: String { get }
+    var iphoneCyclesAging: String { get }
+    var iphoneCyclesHigh: String { get }
     var iphoneBatVoltage: String { get }
     var iphoneBatCapacity: String { get }
     var iphoneChargeCharging: String { get }
