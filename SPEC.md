@@ -525,15 +525,14 @@ Assessment recomputed when report sections change AND lightly on live ticks
 
 ## 7. Report text (ReportWriter)
 
-Mirror legacy layout so the file stays familiar:
-first line `Отчёт создан: <date>`, sections `\n===== NAME =====\n` in the same order
-as mac_checkup.sh (СИСТЕМА, ДИСК, ЛОКАЛЬНЫЕ СНАПШОТЫ TIME MACHINE, ДОМАШНЯЯ ПАПКА…,
-ТЯЖЁЛЫЕ СЛУЖЕБНЫЕ ПАПКИ, ПАМЯТЬ, ТОП-10 ПО ПАМЯТИ, ТОП-10 ПО CPU, АВТОЗАГРУЗКА…,
-ФОНОВЫЕ ЗАДАЧИ, БАТАРЕЯ, НАСТРОЙКИ ЭНЕРГИИ, БЕЗОПАСНОСТЬ, TIME MACHINE, SPOTLIGHT,
-НЕДАВНИЕ КРАШИ, HOMEBREW, ОБНОВЛЕНИЯ macOS, ВНЕШНИЕ ДИСКИ: SMART, ГОТОВО).
-Unavailable section ⇒ `(недоступно)` / `(нет)` lines, as legacy did.
-Values rendered from structured data (not raw command dumps) is fine, but keep df-like
-disk line and vm_stat-like memory block human-readable.
+Short summary, one format for the Report sheet and the file (REDESIGN-REPORT, 2026-10-23; replaces the
+legacy mac_checkup.sh section dump): title line, `Generated <date> · macOS <version> (<build>)`, blank line,
+then rows with 16-char padded keys in the app's language — STATUS (+ task lines `!! ` critical / `!  ` warning),
+CPU, MEMORY, STORAGE, BATTERY, SECURITY, BACKUPS, UPTIME (RU: СОСТОЯНИЕ, ПРОЦЕССОР, ПАМЯТЬ, ХРАНИЛИЩЕ,
+БАТАРЕЯ, ЗАЩИТА, КОПИИ, АПТАЙМ). Missing value ⇒ `—`. SECURITY: a protection that is on is its bare name,
+off ⇒ `<name> off`, unknown ⇒ `<name> ?`. Only when a command's output could not be parsed, an
+`===== UNRECOGNISED COMMAND OUTPUT (first lines) =====` section follows (masked excerpts, for parser fixes). A failed pass
+never overwrites the previous text or file. Rendered by `ReportWriter.render(_: ReportSummaryInput)`.
 Write: to temp file in same dir + atomic replace (`FileManager.replaceItemAt` or
 Data.write(.atomic)). Path: App Support/mac_report.txt. ALWAYS the same path ⇒ no
 accumulation. Menu/button «Показать в Finder» ("Show in Finder")

@@ -64,7 +64,7 @@ struct Destination: Equatable, Sendable {
 @Observable
 final class NavigationRouter {
     var mode: AppMode = .mac
-    /// The «Отчёт» tab today; REDESIGN-REPORT presents the same flag as a sheet.
+    /// REDESIGN-REPORT: the Report sheet is presented while this is true (`MainDashboardView` `.sheet(isPresented:)`).
     var isReportShown = false
     private(set) var destination: Destination = .home
     /// +1 on every navigation, a repeat of the current destination included, so a page can
@@ -84,7 +84,7 @@ final class NavigationRouter {
         navigationSerial += 1
     }
 
-    /// Back chip, Esc, ⌘[: the report closes (the page underneath stays); a section page returns to Home;
+    /// Back chip, Esc, ⌘[: the sheet closes (the page underneath stays); a section page returns to Home;
     /// on Home it does nothing.
     @discardableResult
     func back() -> Bool {

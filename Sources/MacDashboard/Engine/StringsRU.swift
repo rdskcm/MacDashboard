@@ -71,8 +71,13 @@ struct StringsRU: AppStrings {
     var reportPlaceholder: String { "Отчёт ещё не собран. Нажмите «Обновить отчёт»." }
     var reportShowInFinder: String { "Показать в Finder" }
     var reportCopy: String { "Скопировать" }
-    var reportCollecting: String { "Собираем отчёт…" }
-    func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · обновлено \(time)" }
+    var reportCollecting: String { "Создание отчёта…" }
+    func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · обновлён в \(time)" }
+    var reportCopied: String { "Скопировано ✓" }
+    var reportNotUpdated: String { "не обновлён" }
+    func reportNotUpdatedShowing(_ time: String) -> String { "не обновлён · показан отчёт от \(time)" }
+    var reportFailedTimedOut: String { "Не удалось создать отчёт: system_profiler не ответил за 30 с." }
+    var reportFailedNoReading: String { "Не удалось создать отчёт: system_profiler не вернул данных." }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Рекомендации" }
@@ -815,77 +820,34 @@ struct StringsRU: AppStrings {
     func errorHistorySaveFailed(_ msg: String) -> String { "Не удалось сохранить историю: \(msg)" }
     func errorReportWriteFailed(_ msg: String) -> String { "Не удалось записать отчёт: \(msg)" }
 
-    // MARK: Report writer
-    func reportCreatedAt(_ time: String) -> String { "Отчёт создан: \(time)" }
-    var reportSectionSystem: String { "СИСТЕМА" }
-    var reportSectionDisk: String { "ДИСК" }
-    var reportSectionSnapshots: String { "ЛОКАЛЬНЫЕ СНАПШОТЫ TIME MACHINE" }
-    var reportSectionHomeDirs: String { "ДОМАШНЯЯ ПАПКА: что занимает место (топ-20)" }
-    var reportSectionServiceDirs: String { "ТЯЖЁЛЫЕ СЛУЖЕБНЫЕ ПАПКИ" }
-    var reportSectionMemory: String { "ПАМЯТЬ" }
-    var reportSectionTopMem: String { "ТОП-10 ПРОЦЕССОВ ПО ПАМЯТИ" }
-    var reportSectionTopCPU: String { "ТОП-10 ПРОЦЕССОВ ПО CPU" }
-    var reportSectionLoginItems: String { "АВТОЗАГРУЗКА: Login Items" }
-    var reportSectionAgents: String { "АВТОЗАГРУЗКА: LaunchAgents / LaunchDaemons" }
-    var reportSectionBackground: String { "ФОНОВЫЕ ЗАДАЧИ (не Apple)" }
-    var reportSectionBattery: String { "БАТАРЕЯ" }
-    var reportSectionEnergy: String { "НАСТРОЙКИ ЭНЕРГИИ" }
-    var reportSectionSecurity: String { "БЕЗОПАСНОСТЬ" }
-    var reportSectionTMDest: String { "TIME MACHINE: куда бэкапится" }
-    var reportSectionCrashes: String { "НЕДАВНИЕ КРАШИ ПРОГРАММ" }
-    var reportSectionUpdates: String { "ОБНОВЛЕНИЯ macOS" }
-    var reportSectionSmart: String { "ВНЕШНИЕ И ВСТРОЕННЫЕ ДИСКИ: SMART" }
+    // MARK: Report text
+    func reportTitle(_ model: String) -> String { "Отчёт MacDashboard — \(model)" }
+    func reportGenerated(_ dateTime: String, _ os: String) -> String { "Создан \(dateTime) · \(os)" }
+    func reportGeneratedNoOS(_ dateTime: String) -> String { "Создан \(dateTime)" }
+    var reportKeyStatus: String { "СОСТОЯНИЕ" }
+    var reportKeyCPU: String { "ПРОЦЕССОР" }
+    var reportKeyMemory: String { "ПАМЯТЬ" }
+    var reportKeyStorage: String { "ХРАНИЛИЩЕ" }
+    var reportKeyBattery: String { "БАТАРЕЯ" }
+    var reportKeySecurity: String { "ЗАЩИТА" }
+    var reportKeyBackups: String { "КОПИИ" }
+    var reportKeyUptime: String { "АПТАЙМ" }
+    func reportStorageFree(_ free: String, _ total: String) -> String { "свободно \(free) из \(total)" }
+    func reportPurgeable(_ v: String) -> String { "очищаемое \(v)" }
+    func reportCapacity(_ v: String) -> String { "ёмкость \(v)" }
+    func reportCycles(_ n: Int) -> String { "\(n) " + ruPlural(n, "цикл", "цикла", "циклов") }
+    var reportFirewall: String { "брандмауэр" }
+    var reportOff: String { "выкл." }
+    func reportLocalSnapshots(_ n: Int) -> String { "\(n) " + ruPlural(n, "локальный снимок", "локальных снимка", "локальных снимков") }
+
     var reportSectionUnparsed: String { "НЕРАСПОЗНАННЫЙ ВЫВОД КОМАНД (первые строки)" }
     var reportUnparsedHint: String { "MacDashboard не смог разобрать вывод этих команд. Серийные номера и UUID скрыты; приложите этот блок к сообщению об ошибке." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(ещё не показано строк: \(n))" }
-    var reportDoneBanner: String { "ГОТОВО" }
-    func reportSavedTo(_ path: String) -> String { "Отчёт сохранён: \(path)" }
-    var reportNone: String { "(нет)" }
-    func reportUptime(_ v: String) -> String { "Аптайм: \(v)" }
-    var reportAgentsUserHeader: String { "--- Пользовательские:" }
-    var reportEmpty: String { "(пусто)" }
-    var reportAgentsSystemHeader: String { "--- Системные (сторонние программы):" }
     var reportNoBattery: String { "нет батареи (настольный Mac)" }
-    func reportBatterySource(_ v: String) -> String { "Источник питания: \(v)" }
-    func reportBatteryCharge(_ v: String) -> String { "Заряд: \(v)" }
-    func reportBatteryState(_ v: String) -> String { "Состояние: \(v)" }
-    var reportTMNotChecked: String { "(не проверялось)" }
-    var reportTMNotConfigured: String { "(не настроен)" }
-    func reportTMLastBackup(_ v: String) -> String { "Последний бэкап: \(v)" }
-    var reportNotChecked: String { "(не проверено)" }
-    var reportSectionTimings: String { "ВРЕМЯ СБОРА" }
-    var reportTimingsNote: String { "Разделы собираются параллельно, поэтому их время перекрывается." }
-    func reportTimingsPass(_ v: String) -> String { "Весь проход: \(v)" }
-    func reportTimingsUpdates(_ v: String, _ at: String) -> String { "Обновления macOS (фоновая проверка в \(at)): \(v)" }
-    func reportUpdatesCheckedAt(_ at: String) -> String { "(проверено \(at))" }
     var updatesCheckedJustNow: String { "проверено только что" }
     func updatesCheckedAgo(_ age: String) -> String { "проверено \(age) назад" }
-    func reportTimingsFolderSizes(_ v: String, _ at: String) -> String { "Размеры папок (фоновый подсчёт в \(at)): \(v)" }
-    func reportTimingsSectionName(_ s: ReportSection) -> String {
-        switch s {
-        case .system: return "Система"
-        case .snapshots: return "Локальные снапшоты"
-        case .homeDirs: return "Домашняя папка"
-        case .serviceDirs: return "Служебные папки"
-        case .security: return "Безопасность"
-        case .tmDest: return "Time Machine"
-        case .spotlight: return "Spotlight"
-        case .crashes: return "Краши"
-        case .brew: return "Homebrew"
-        case .updates: return "Обновления macOS"
-        case .autostart: return "Автозагрузка"
-        case .smart: return "SMART"
-        case .energy: return "Настройки энергии"
-        case .battery: return "Батарея"
-        }
-    }
-    func reportFoldersCountedAt(_ at: String) -> String { "(подсчитано \(at))" }
     func foldersCountedAgo(_ age: String) -> String { "подсчитано \(age) назад" }
     var foldersCountedJustNow: String { "подсчитано только что" }
-    var reportBrewOutdatedHeader: String { "Устаревшие пакеты:" }
-    func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
-        "\(title) (\(device)) — статус: \(status)"
-    }
     var reportSmartWarningNone: String { "Нет" }
     var reportSmartWarningLowSpareCapacity: String { "мало резервной ёмкости" }
     var reportSmartWarningCriticalTemp: String { "критическая температура" }
@@ -1236,6 +1198,7 @@ struct StringsRU: AppStrings {
     var commonDisk: String { "Диск" }
     var commonSetUp: String { "Настроить…" }
     var commonShow: String { "Показать" }
+    var commonDone: String { "Готово" }
     var commonMacCantSleep: String { "Mac не засыпает" }
     var commonBattery: String { "Батарея" }
     var commonInstall: String { "Установить…" }

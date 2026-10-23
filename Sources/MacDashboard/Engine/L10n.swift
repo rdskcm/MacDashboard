@@ -88,6 +88,11 @@ protocol AppStrings {
     var reportCopy: String { get }
     var reportCollecting: String { get }
     func reportFileUpdatedCaption(_ time: String) -> String
+    var reportCopied: String { get }
+    var reportNotUpdated: String { get }
+    func reportNotUpdatedShowing(_ time: String) -> String
+    var reportFailedTimedOut: String { get }
+    var reportFailedNoReading: String { get }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { get }
@@ -791,59 +796,34 @@ protocol AppStrings {
     func errorHistorySaveFailed(_ msg: String) -> String
     func errorReportWriteFailed(_ msg: String) -> String
 
-    // MARK: Report writer
-    func reportCreatedAt(_ time: String) -> String
-    var reportSectionSystem: String { get }
-    var reportSectionDisk: String { get }
-    var reportSectionSnapshots: String { get }
-    var reportSectionHomeDirs: String { get }
-    var reportSectionServiceDirs: String { get }
-    var reportSectionMemory: String { get }
-    var reportSectionTopMem: String { get }
-    var reportSectionTopCPU: String { get }
-    var reportSectionLoginItems: String { get }
-    var reportSectionAgents: String { get }
-    var reportSectionBackground: String { get }
-    var reportSectionBattery: String { get }
-    var reportSectionEnergy: String { get }
-    var reportSectionSecurity: String { get }
-    var reportSectionTMDest: String { get }
-    var reportSectionCrashes: String { get }
-    var reportSectionUpdates: String { get }
-    var reportSectionSmart: String { get }
+    // MARK: Report text
+    func reportTitle(_ model: String) -> String
+    func reportGenerated(_ dateTime: String, _ os: String) -> String
+    func reportGeneratedNoOS(_ dateTime: String) -> String
+    var reportKeyStatus: String { get }
+    var reportKeyCPU: String { get }
+    var reportKeyMemory: String { get }
+    var reportKeyStorage: String { get }
+    var reportKeyBattery: String { get }
+    var reportKeySecurity: String { get }
+    var reportKeyBackups: String { get }
+    var reportKeyUptime: String { get }
+    func reportStorageFree(_ free: String, _ total: String) -> String
+    func reportPurgeable(_ v: String) -> String
+    func reportCapacity(_ v: String) -> String
+    func reportCycles(_ n: Int) -> String
+    var reportFirewall: String { get }
+    var reportOff: String { get }
+    func reportLocalSnapshots(_ n: Int) -> String
+
     var reportSectionUnparsed: String { get }
     var reportUnparsedHint: String { get }
     func reportUnparsedMoreLines(_ n: Int) -> String
-    var reportDoneBanner: String { get }
-    func reportSavedTo(_ path: String) -> String
-    var reportNone: String { get }
-    func reportUptime(_ v: String) -> String
-    var reportAgentsUserHeader: String { get }
-    var reportEmpty: String { get }
-    var reportAgentsSystemHeader: String { get }
     var reportNoBattery: String { get }
-    func reportBatterySource(_ v: String) -> String
-    func reportBatteryCharge(_ v: String) -> String
-    func reportBatteryState(_ v: String) -> String
-    var reportTMNotChecked: String { get }
-    var reportTMNotConfigured: String { get }
-    func reportTMLastBackup(_ v: String) -> String
-    var reportNotChecked: String { get }
-    var reportSectionTimings: String { get }
-    var reportTimingsNote: String { get }
-    func reportTimingsPass(_ v: String) -> String
-    func reportTimingsUpdates(_ v: String, _ at: String) -> String
-    func reportUpdatesCheckedAt(_ at: String) -> String
     var updatesCheckedJustNow: String { get }
     func updatesCheckedAgo(_ age: String) -> String
-    func reportTimingsFolderSizes(_ v: String, _ at: String) -> String
-    /// Short name of a report section for the COLLECTION TIMES list.
-    func reportTimingsSectionName(_ s: ReportSection) -> String
-    func reportFoldersCountedAt(_ at: String) -> String
     func foldersCountedAgo(_ age: String) -> String
     var foldersCountedJustNow: String { get }
-    var reportBrewOutdatedHeader: String { get }
-    func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String
     var reportSmartWarningNone: String { get }
     var reportSmartWarningLowSpareCapacity: String { get }
     var reportSmartWarningCriticalTemp: String { get }
@@ -1119,6 +1099,7 @@ protocol AppStrings {
     var commonDisk: String { get }
     var commonSetUp: String { get }
     var commonShow: String { get }
+    var commonDone: String { get }
     var commonMacCantSleep: String { get }
     var commonBattery: String { get }
     var commonInstall: String { get }

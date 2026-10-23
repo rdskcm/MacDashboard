@@ -71,6 +71,11 @@ struct StringsEN: AppStrings {
     var reportCopy: String { "Copy" }
     var reportCollecting: String { "Generating report…" }
     func reportFileUpdatedCaption(_ time: String) -> String { "mac_report.txt · updated \(time)" }
+    var reportCopied: String { "Copied ✓" }
+    var reportNotUpdated: String { "not updated" }
+    func reportNotUpdatedShowing(_ time: String) -> String { "not updated · showing the \(time) report" }
+    var reportFailedTimedOut: String { "Couldn’t generate the report: system_profiler didn’t respond within 30 s." }
+    var reportFailedNoReading: String { "Couldn’t generate the report: system_profiler returned no data." }
 
     // MARK: Recommendations card
     var recommendationsTitle: String { "Recommendations" }
@@ -801,77 +806,34 @@ struct StringsEN: AppStrings {
     func errorHistorySaveFailed(_ msg: String) -> String { "Failed to save history: \(msg)" }
     func errorReportWriteFailed(_ msg: String) -> String { "Failed to write report: \(msg)" }
 
-    // MARK: Report writer
-    func reportCreatedAt(_ time: String) -> String { "Report created: \(time)" }
-    var reportSectionSystem: String { "SYSTEM" }
-    var reportSectionDisk: String { "DISK" }
-    var reportSectionSnapshots: String { "LOCAL TIME MACHINE SNAPSHOTS" }
-    var reportSectionHomeDirs: String { "HOME FOLDER: what's taking up space (top 20)" }
-    var reportSectionServiceDirs: String { "LARGE SERVICE FOLDERS" }
-    var reportSectionMemory: String { "MEMORY" }
-    var reportSectionTopMem: String { "TOP 10 PROCESSES BY MEMORY" }
-    var reportSectionTopCPU: String { "TOP 10 PROCESSES BY CPU" }
-    var reportSectionLoginItems: String { "STARTUP: Login Items" }
-    var reportSectionAgents: String { "STARTUP: LaunchAgents / LaunchDaemons" }
-    var reportSectionBackground: String { "BACKGROUND TASKS (non-Apple)" }
-    var reportSectionBattery: String { "BATTERY" }
-    var reportSectionEnergy: String { "ENERGY SETTINGS" }
-    var reportSectionSecurity: String { "SECURITY" }
-    var reportSectionTMDest: String { "TIME MACHINE: backup destination" }
-    var reportSectionCrashes: String { "RECENT APP CRASHES" }
-    var reportSectionUpdates: String { "macOS UPDATES" }
-    var reportSectionSmart: String { "EXTERNAL AND INTERNAL DISKS: SMART" }
+    // MARK: Report text
+    func reportTitle(_ model: String) -> String { "MacDashboard report — \(model)" }
+    func reportGenerated(_ dateTime: String, _ os: String) -> String { "Generated \(dateTime) · \(os)" }
+    func reportGeneratedNoOS(_ dateTime: String) -> String { "Generated \(dateTime)" }
+    var reportKeyStatus: String { "STATUS" }
+    var reportKeyCPU: String { "CPU" }
+    var reportKeyMemory: String { "MEMORY" }
+    var reportKeyStorage: String { "STORAGE" }
+    var reportKeyBattery: String { "BATTERY" }
+    var reportKeySecurity: String { "SECURITY" }
+    var reportKeyBackups: String { "BACKUPS" }
+    var reportKeyUptime: String { "UPTIME" }
+    func reportStorageFree(_ free: String, _ total: String) -> String { "\(free) of \(total) free" }
+    func reportPurgeable(_ v: String) -> String { "purgeable \(v)" }
+    func reportCapacity(_ v: String) -> String { "capacity \(v)" }
+    func reportCycles(_ n: Int) -> String { n == 1 ? "1 cycle" : "\(n) cycles" }
+    var reportFirewall: String { "Firewall" }
+    var reportOff: String { "off" }
+    func reportLocalSnapshots(_ n: Int) -> String { n == 1 ? "1 local snapshot" : "\(n) local snapshots" }
+
     var reportSectionUnparsed: String { "UNRECOGNISED COMMAND OUTPUT (first lines)" }
     var reportUnparsedHint: String { "MacDashboard could not read the output of these commands. Serial numbers and UUIDs are masked; attach this block to a bug report." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(+\(n) more lines not shown)" }
-    var reportDoneBanner: String { "DONE" }
-    func reportSavedTo(_ path: String) -> String { "Report saved: \(path)" }
-    var reportNone: String { "(none)" }
-    func reportUptime(_ v: String) -> String { "Uptime: \(v)" }
-    var reportAgentsUserHeader: String { "--- User:" }
-    var reportEmpty: String { "(empty)" }
-    var reportAgentsSystemHeader: String { "--- System (third-party):" }
     var reportNoBattery: String { "no battery (desktop Mac)" }
-    func reportBatterySource(_ v: String) -> String { "Power source: \(v)" }
-    func reportBatteryCharge(_ v: String) -> String { "Charge: \(v)" }
-    func reportBatteryState(_ v: String) -> String { "State: \(v)" }
-    var reportTMNotChecked: String { "(not checked)" }
-    var reportTMNotConfigured: String { "(not configured)" }
-    func reportTMLastBackup(_ v: String) -> String { "Last backup: \(v)" }
-    var reportNotChecked: String { "(not checked)" }
-    var reportSectionTimings: String { "COLLECTION TIMES" }
-    var reportTimingsNote: String { "Sections are collected concurrently, so their times overlap." }
-    func reportTimingsPass(_ v: String) -> String { "Whole pass: \(v)" }
-    func reportTimingsUpdates(_ v: String, _ at: String) -> String { "macOS updates (background check at \(at)): \(v)" }
-    func reportUpdatesCheckedAt(_ at: String) -> String { "(checked \(at))" }
     var updatesCheckedJustNow: String { "checked just now" }
     func updatesCheckedAgo(_ age: String) -> String { "checked \(age) ago" }
-    func reportTimingsFolderSizes(_ v: String, _ at: String) -> String { "Folder sizes (background count at \(at)): \(v)" }
-    func reportTimingsSectionName(_ s: ReportSection) -> String {
-        switch s {
-        case .system: return "System"
-        case .snapshots: return "Local snapshots"
-        case .homeDirs: return "Home folder"
-        case .serviceDirs: return "Service folders"
-        case .security: return "Security"
-        case .tmDest: return "Time Machine"
-        case .spotlight: return "Spotlight"
-        case .crashes: return "Crashes"
-        case .brew: return "Homebrew"
-        case .updates: return "macOS updates"
-        case .autostart: return "Startup items"
-        case .smart: return "SMART"
-        case .energy: return "Energy settings"
-        case .battery: return "Battery"
-        }
-    }
-    func reportFoldersCountedAt(_ at: String) -> String { "(counted \(at))" }
     func foldersCountedAgo(_ age: String) -> String { "counted \(age) ago" }
     var foldersCountedJustNow: String { "counted just now" }
-    var reportBrewOutdatedHeader: String { "Outdated packages:" }
-    func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
-        "\(title) (\(device)) — status: \(status)"
-    }
     var reportSmartWarningNone: String { "None" }
     var reportSmartWarningLowSpareCapacity: String { "low spare capacity" }
     var reportSmartWarningCriticalTemp: String { "critical temperature" }
@@ -1222,6 +1184,7 @@ struct StringsEN: AppStrings {
     var commonDisk: String { "Disk" }
     var commonSetUp: String { "Set up…" }
     var commonShow: String { "Show" }
+    var commonDone: String { "Done" }
     var commonMacCantSleep: String { "Mac can’t sleep" }
     var commonBattery: String { "Battery" }
     var commonInstall: String { "Install…" }

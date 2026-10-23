@@ -35,9 +35,11 @@ feedback and comments. Hope you like it!
 
 ## What it does
 
-- On launch it automatically collects a full system report (disk, memory,
+- On launch it automatically checks the whole system (disk, memory,
   security, Time Machine, login items/autostart, disk SMART data, battery,
-  Homebrew, macOS updates) and saves it to
+  Homebrew, macOS updates) and saves a short summary — status and open tasks,
+  CPU, memory, storage, battery, security, backups, uptime; the same text the
+  Report sheet shows — to
   `~/Library/Application Support/MacDashboard/mac_report.txt` — always a
   single file, each run overwrites the previous one.
 - Live metrics (CPU, memory, swap, disk, battery) refresh every 2 seconds by

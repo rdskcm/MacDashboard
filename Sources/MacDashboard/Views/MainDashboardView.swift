@@ -3,7 +3,7 @@
 // per-mode actions) and the single background (`DS3.ground` + `DS3OrbField`). Under the header the This Mac
 // content is the Home page (HomeView.swift) with section pages shown in place over it (the real CPU, Memory,
 // Storage, Battery, Security, Backups, System and History pages); the Report
-// view replaces both while `router.isReportShown`.
+// sheet is presented over both while `router.isReportShown`.
 
 import SwiftUI
 import Charts
@@ -56,6 +56,7 @@ struct MainDashboardView: View {
         }
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
         .ignoresSafeArea()
+        .sheet(isPresented: $router.isReportShown) { ReportSheet(model: model) { router.isReportShown = false } }
         .ds3PointerTracking(pointer)
     }
 
@@ -69,9 +70,7 @@ struct MainDashboardView: View {
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: homeVisible)   // opacity only — no size depends on it
                 .allowsHitTesting(homeVisible)
                 .accessibilityHidden(!homeVisible)
-            if router.isReportShown {
-                ReportTab(model: model)
-            } else if router.destination.page == .cpu {
+            if router.destination.page == .cpu {
                 CPUPage(model: model, router: router) { _ = router.back() }
                     .id(router.destination.page)
             } else if router.destination.page == .memory {
@@ -99,7 +98,7 @@ struct MainDashboardView: View {
         }
     }
 
-    private var homeVisible: Bool { !router.isReportShown && router.destination.page == .home }
+    private var homeVisible: Bool { router.destination.page == .home }
 
     // MARK: Toolbar (single row: title block · mode switch · flexible gap · per-mode actions)
 
@@ -119,7 +118,7 @@ struct MainDashboardView: View {
             DSSlidingSegmented(options: [AppMode.mac, .iphone], selection: $router.mode, size: .header, identifier: { m in
                 m == .mac ? "main-mode-mac" : "main-mode-iphone"
             }, onReselect: { m in
-                // «This Mac» clicked again on a section page or over the report: back to Home.
+                // «This Mac» clicked again on a section page: back to Home.
                 if m == .mac && router.canGoBack { router.navigate(to: .home) }
             }) { m in
                 m == .mac ? L.mainModeMac : L.mainModeIPhone
@@ -260,20 +259,20 @@ struct MacHeaderActions: View {
     /// Narrow (< 1000 pt): a 34 pt circle with the icon only; otherwise the labelled secondary button.
     @ViewBuilder private var reportButton: some View {
         if narrow {
-            Button { router.isReportShown.toggle() } label: {
+            Button { router.isReportShown = true } label: {
                 Image(systemName: "doc.text").font(.system(size: 13))
             }
             .buttonStyle(DS3CircleButtonStyle(diameter: 34, disabledOpacity: 0.5))
-            .reportActionTraits(busy: model.isCollectingReport, shown: router.isReportShown)
+            .reportActionTraits(busy: model.isCollectingReport)
         } else {
-            Button { router.isReportShown.toggle() } label: {
+            Button { router.isReportShown = true } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "doc.text").font(.system(size: 13))
                     Text(L.commonReport)
                 }
             }
             .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1, disabledOpacity: 0.5))
-            .reportActionTraits(busy: model.isCollectingReport, shown: router.isReportShown)
+            .reportActionTraits(busy: model.isCollectingReport)
         }
     }
 
@@ -323,13 +322,12 @@ private struct HeaderStatusPill: View {
 }
 
 private extension View {
-    /// What both Report button forms share: tooltip, busy-disabled, label, the shown state (selected trait while
-    /// the report is open — the button is a toggle) and identifier.
-    func reportActionTraits(busy: Bool, shown: Bool) -> some View {
+    /// What both Report button forms share: tooltip, busy-disabled, label and identifier (the button opens a
+    /// modal sheet, so it has no selected state).
+    func reportActionTraits(busy: Bool) -> some View {
         self.help(L.commonReport)
             .disabled(busy)
             .accessibilityLabel(L.commonReport)
-            .accessibilityAddTraits(shown ? .isSelected : [])
             .accessibilityIdentifier("main-report")
             .layoutPriority(1)
     }
