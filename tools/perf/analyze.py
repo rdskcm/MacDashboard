@@ -386,15 +386,15 @@ ABS = {
     ("G3", "main_busy_median_ms_s"): ("<=", 25.0),
     ("G4", "hitches_per_s"): ("<=", 3.0),
     ("G4", "main_busy_median_ms_s"): ("<=", 400.0),
-    ("G5", "details.commits_per_s_median"): ("<=", 60.0),
-    ("G5-top", "details.app_pct_minus_ctrl"): ("<=", 3.0),
+    ("G5", "capsule.commits_per_s_median"): ("<=", 60.0),
+    ("G5-top", "capsule.app_pct_minus_ctrl"): ("<=", 3.0),
     ("G6-page", "sub.rgba64_shade_conic.all"): ("<=", 0.0),
     ("G6-table", "sub.rgba64_shade_conic.all"): ("<=", 0.0),
     ("G6-hover", "sub.rgba64_shade_conic.all"): ("<=", 0.0),
 }
 # (scenario, metric) -> (kind, k): candidate must be <= base + k  or  <= base * k  (D15)
 REG = {}
-for _s in ("G3", "G4", "G6-page", "G6-table", "G6-hover", "G7", "G8"):
+for _s in ("G3", "G4", "G6-page", "G6-table", "G6-hover", "G7"):
     REG[(_s, "hitches_total")] = ("add", 3.0)
 for _s in ("G4", "G6-page", "G6-table", "G6-hover", "G7"):
     REG[(_s, "main_busy_total")] = ("mul", 1.15)
@@ -402,14 +402,13 @@ REG[("GP", "hitches_total")] = ("add", 3.0)
 REG[("GP", "main_busy_total")] = ("mul", 1.15)
 REG[("G1", "app_pct")] = ("add", 0.5)
 REG[("G3", "app_pct")] = ("add", 0.5)
-REG[("G8", "app_pct")] = ("add", 0.5)
 REG[("G9", "app_pct")] = ("add", 0.5)
 
-ORDER = ["G1", "G2", "G3", "G4", "G5", "G5-top", "G6-page", "G6-table", "G6-hover", "G7", "G8", "G9"]
+ORDER = ["G1", "G2", "G3", "G4", "G5", "G5-top", "G6-page", "G6-table", "G6-hover", "G7", "G9"]
 TITLES = {
     "G1": "G1 idle-home", "G2": "G2 ca-idle", "G3": "G3 post-scroll-bottom", "G4": "G4 hist-all",
     "G5": "G5 rainbow (traced)", "G5-top": "G5 rainbow (untraced, top)", "G6-page": "G6 iphone page",
-    "G6-table": "G6 iphone table", "G6-hover": "G6 iphone hover", "G7": "G7 mac-scroll", "G8": "G8 orphan-bottom",
+    "G6-table": "G6 iphone table", "G6-hover": "G6 iphone hover", "G7": "G7 mac-scroll",
     "G9": "G9 idle-cpu-page",
 }
 
@@ -456,7 +455,7 @@ def cmd_verdict(argv):
 
     # derived: <label>.app_pct_minus_ctrl for G5-top, per arm and per run
     for arm in sorted(arms):
-        for label in ("details",):
+        for label in ("capsule",):
             ctrl = dict(data.get(("G5-top", arm, "ctrl.app_pct"), []))
             for run, v in data.get(("G5-top", arm, label + ".app_pct"), []):
                 if run in ctrl:
@@ -478,11 +477,26 @@ def cmd_verdict(argv):
             return "-"
         return "%s (%s-%s)" % (fmt(median(vs)), fmt(min(vs)), fmt(max(vs)))
 
+    def scroll_runs(scen, arm):
+        """-> (runs with scrollable 0, runs with a scrollable value) for one arm (PERF-GATE-RETARGET)."""
+        vs = vals(scen, arm, "scrollable")
+        return sum(1 for v in vs if v == 0), len(vs)
+
     tsv = ["scenario\tarm\trun\tmetric\tvalue\tthreshold\tverdict"]
     rep = []
     npass = nfail = nnoisy = 0
     for scen in [s for s in ORDER if s in metric_order] + [s for s in metric_order if s not in ORDER]:
-        rep.append("### %s" % TITLES.get(scen, scen + " page scroll" if scen.startswith("GP-") else scen))
+        title = TITLES.get(scen, scen + " page scroll" if scen.startswith("GP-") else scen)
+        c0, cn = scroll_runs(scen, "cand")
+        b0, bn = scroll_runs(scen, "base")
+        if c0 or b0:
+            parts = ["candidate %d of %d runs" % (c0, cn)]
+            if have_base:
+                parts.append("baseline %d of %d runs" % (b0, bn))
+            title += " — IDLE PAGE: nothing to scroll (%s); measured as an idle page, not as a scroll" % ", ".join(parts)
+        # the regression rule compares like with like: both arms scrolled in every run, or neither arm did in any run
+        same_scroll = (cn == 0 and bn == 0) or (cn > 0 and bn > 0 and c0 in (0, cn) and b0 in (0, bn) and (c0 == 0) == (b0 == 0))
+        rep.append("### %s" % title)
         rep.append("")
         if have_base:
             rep.append("| metric | candidate | baseline | threshold | verdict |")
@@ -504,7 +518,9 @@ def cmd_verdict(argv):
                 verdicts.append("PASS" if ok else "FAIL")
                 thr_txt.append("%s %s" % (rule[0], fmt(rule[1])))
             reg = REG.get((scen, name)) or (REG.get(("GP", name)) if scen.startswith("GP-") else None)
-            if cand is not None and base is not None and reg:
+            if cand is not None and base is not None and reg and not same_scroll:
+                thr_txt.append("no regression check: candidate and baseline differ in scrollable")
+            elif cand is not None and base is not None and reg:
                 margin = reg[1] if reg[0] == "add" else base * (reg[1] - 1.0)
                 if cand - base <= margin:
                     verdicts.append("PASS")

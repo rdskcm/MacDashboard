@@ -1,24 +1,23 @@
 #!/bin/bash
-# tools/perf/gate.sh — the perf gate (GPU-RENDER-AUDIT): scenarios G1-G9 against an app bundle,
+# tools/perf/gate.sh — the perf gate (GPU-RENDER-AUDIT): scenarios G1-G7, G9 and GP:<page> against an app bundle,
 # optionally against a baseline bundle too. Moves the real pointer and sends AX actions: do not use
 # the Mac while it runs. See tools/perf/README.md.
 #
 # Usage: gate.sh [--app PATH] [--baseline PATH] [--scenarios G1,G2,...] [--runs N] [--out DIR]
-#                [--orphan] [--keep-traces] [--g1-max PCT]
+#                [--keep-traces] [--g1-max PCT]
 #   --app        bundle under test (default dist.noindex/MacDashboard.app)
-#   --baseline   pre-block bundle; candidate and baseline runs alternate A,B,A,B,...
-#   --scenarios  G1..G9, GP:<page> (pages: cpu memory storage battery security backups system history), or
-#                all (= every G item incl. G8, plus GP for all pages; implies --orphan);
-#                default G1,G2,G3,G4,G5,G6,G7,G9. G8 needs --orphan.
+#   --baseline   pre-block bundle, built from the PERF-GATE-RETARGET merge or later (README §2); candidate and baseline runs alternate A,B,A,B,...
+#   --scenarios  G1..G7, G9, GP:<page> (pages: cpu memory storage battery security backups system history), or
+#                all (= every G item plus GP for all pages); default G1,G2,G3,G4,G5,G6,G7,G9.
 #   --runs       runs per scenario and arm, 1-7 (default 3)
 #   --out        run directory, must be inside tools/perf/out/ (default tools/perf/out/<stamp>)
-#   --orphan     G8 builds its bench home with an orphan launchd plist
 #   --keep-traces  keep .trace bundles and exported XML (10-60 MB each)
 #   --g1-max     absolute G1 app CPU limit in % (default 5.6, the level before C7; 2.5 after Step 7)
 #   -h, --help   this text
 # Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed
 #       during the run | 5 ERROR: at least one scenario not measured (an AX element was still missing after one
-#       retry; the other scenarios ran and are reported) | 64 usage | 65 precondition refused | 70 runtime error.
+#       retry, or a trace or analysis step of one run failed; the other scenarios ran and are reported) | 64 usage |
+#       65 precondition refused | 70 runtime error (setup, app launch or window pin, fixture, final verdict).
 #       When several apply: 3 over 4 over 5 over 1.
 #       Last line: GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1> error=<e>
 # Data safety: runs bench copies (bundle id com.rdskcm.mac-dashboard.bench); synthetic fixtures only; never touches ~/Library/Application Support/MacDashboard;
@@ -36,7 +35,6 @@ BASELINE=""
 SCENARIOS=""
 RUNS=""
 OUT=""
-ORPHAN=0
 KEEP=0
 G1_MAX="5.6"
 
@@ -102,7 +100,6 @@ while [ $# -gt 0 ]; do
     --runs)       need "$@"; RUNS="$2"; shift 2 ;;
     --out)        need "$@"; OUT="$2"; shift 2 ;;
     --g1-max)     need "$@"; G1_MAX="$2"; shift 2 ;;
-    --orphan)     ORPHAN=1; shift ;;
     --keep-traces) KEEP=1; shift ;;
     -h|--help)    QUIET_EXIT=1; usage; exit 0 ;;
     *)            usage >&2; fatal 64 "unknown argument: $1" ;;
@@ -126,13 +123,10 @@ case "$G1_MAX" in *[!0-9.]*|"") fatal 64 "--g1-max must be a number" ;; esac
 [ -n "$SCENARIOS" ] || SCENARIOS="G1,G2,G3,G4,G5,G6,G7,G9"
 ITEMS=""
 add_item() { case " $ITEMS " in *" $1 "*) ;; *) ITEMS="$ITEMS $1" ;; esac; }
-for t in $(echo "$SCENARIOS" | tr ',' ' '); do   # "all" implies --orphan, whatever its position in the list
-  case "$t" in all|ALL) ORPHAN=1 ;; esac
-done
 for t in $(echo "$SCENARIOS" | tr ',' ' '); do
   case "$t" in
     all|ALL)
-      for s in G1 G2 G3 G4 G5 G5-top G6-page G6-table G6-hover G7 G8 G9; do add_item "$s"; done
+      for s in G1 G2 G3 G4 G5 G5-top G6-page G6-table G6-hover G7 G9; do add_item "$s"; done
       for p in $GP_PAGES; do add_item "GP-$p"; done ;;
     [Gg][Pp]:*)
       p="$(echo "${t#*:}" | tr 'A-Z' 'a-z')"
@@ -143,8 +137,7 @@ for t in $(echo "$SCENARIOS" | tr ',' ' '); do
         G1|G2|G3|G4|G7|G9) add_item "$s" ;;
         G5) add_item G5; add_item G5-top ;;
         G6) add_item G6-page; add_item G6-table; add_item G6-hover ;;
-        G8) [ "$ORPHAN" = 1 ] || fatal 64 "G8 needs --orphan"; add_item G8 ;;
-        *) fatal 64 "unknown scenario: $t (G1..G9, GP:<page>, all)" ;;
+        *) fatal 64 "unknown scenario: $t (G1..G7, G9, GP:<page>, all)" ;;
       esac ;;
   esac
 done
@@ -185,14 +178,6 @@ done
 
 mkdir -p "$OUT" || fatal 70 "cannot create $OUT"
 STARTED=1
-G5_NOTE=""
-# REDESIGN-BATTERY: G5 hovered the battery popover's rainbow «Details» capsule (`battery-details`), which no longer
-# exists; the scenario is parked (definitions kept) until HARNESS-REDESIGN-RETARGET retargets it.
-case " $ITEMS " in *" G5 "*|*" G5-top "*)
-  ITEMS="$(for i in $ITEMS; do case "$i" in (G5|G5-top) ;; (*) echo -n " $i" ;; esac; done)"
-  G5_NOTE="G5 parked: its target (battery-details) was removed in REDESIGN-BATTERY; retarget in HARNESS-REDESIGN-RETARGET"
-  log "$G5_NOTE" ;;
-esac
 # Bench copies: own bundle id, so the gate never touches the real defaults domain (R11); removed on exit.
 CAND_APP="$("$ROOT/tools/bench-app.sh" "$APP" "$OUT/apps/cand")" || fatal 70 "bench copy of --app failed"
 [ -n "$BASELINE" ] && { BASE_APP="$("$ROOT/tools/bench-app.sh" "$BASELINE" "$OUT/apps/base")" || fatal 70 "bench copy of --baseline failed"; }
@@ -287,15 +272,36 @@ print(" ".join(t.split())); sys.exit(1)')" || fatal 70 "window frame is not 1000
 }
 
 is_frame() { [[ "$1" =~ ^-?[0-9]+\ -?[0-9]+\ [0-9]+\ [0-9]+$ ]]; }
-ax_frame() {   # AXIdentifier -> "x y w h" (global points, top-left origin) | 1 after a miss and one retry (diagnostics written)
-  local out; out="$(ax frame "$1")"
+ax_frame() {   # kind value -> "x y w h" (global points, top-left origin) | 1 after a miss and one retry (diagnostics written)
+  # kind: frame = element by AXIdentifier (ui.applescript)
+  local out; out="$(ax "$1" "$2")"
   if ! is_frame "$out"; then
-    log "AX frame missed for '$1' (got: $out); re-activating, one retry" >&2
-    ax_reactivate frame "$1"
-    out="$(ax frame "$1")"
-    is_frame "$out" || { ax_miss "AX frame failed for '$1' after one retry (got: $out)"; return 1; }
+    log "AX $1 missed for '$2' (got: $out); re-activating, one retry" >&2
+    ax_reactivate "$1" "$2"
+    out="$(ax "$1" "$2")"
+    is_frame "$out" || { ax_miss "AX $1 failed for '$2' after one retry (got: $out)"; return 1; }
   fi
   echo "$out"
+}
+
+# Honest scroll (PERF-GATE-RETARGET): the scroll scenarios scroll at (500,450) (and at (800,450), same scroll area).
+# A scroll area there without a vertical scroll bar means the content fits the window and the scroll moves nothing:
+# the run is then recorded as an idle-page measurement (scrollable 0), never as a scroll. AX read only, before xctrace
+# attaches. No scroll area under the point is retried once, then the run is ERROR (diagnostics written).
+probe_scroll() {   # buf tag -> 0 (for S_SCROLL items "scrollable 1|0" appended to buf) | 1 missed twice
+  [ "$S_SCROLL" = 1 ] || return 0
+  local out; out="$(ax vscroll 500,450)"
+  if [ "$out" != bar ] && [ "$out" != nobar ]; then
+    log "AX vscroll missed (got: $out); re-activating, one retry" >&2
+    ax_reactivate vscroll 500,450
+    out="$(ax vscroll 500,450)"
+  fi
+  case "$out" in
+    bar)   echo "scrollable 1" >> "$1" ;;
+    nobar) echo "scrollable 0" >> "$1"
+           log "$2: nothing to scroll under (500,450): recorded as an idle-page measurement (scrollable 0)" ;;
+    *)     ax_miss "AX vscroll found no scroll area under (500,450) after one retry (got: $out)"; return 1 ;;
+  esac
 }
 
 park_pointer() { "$BIN/hold" 1100 500 0.4 >/dev/null 2>&1; }   # drv move with 0 s is a no-op
@@ -326,25 +332,36 @@ stop_app() {
 route_mac()    { ax_press id main-mode-mac || return 1; sleep 2; }
 route_iphone() { ax_press id main-mode-iphone || return 1; sleep 2; ax_press id iphone-tile-0 || return 1; sleep 3; }
 route_table()  { route_iphone || return 1; ax_press title 'Таблица|Table' || return 1; sleep 2; }
-# History page (Home -> History tile), range All; the G4 sweep is centred on the chart's AX frame (D16).
+# History page (Home -> History tile), range All; the G4 sweep is centred on the chart's AX frame (D16). The redesigned
+# page (c557d89) fits the pinned window, so there is no scroll step.
 route_hist() {
   route_mac || return 1; ax_press id home-tile-history || return 1; sleep 2
-  "$BIN/drv" scroll 500 450 3 -15 >/dev/null 2>&1; sleep 1; ax_press id history-range-all || return 1; sleep 3
-  local fr fx fy fw fh; fr="$(ax_frame history-chart)" || return 1; read -r fx fy fw fh <<< "$fr"
+  ax_press id history-range-all || return 1; sleep 3
+  local fr fx fy fw fh; fr="$(ax_frame frame history-chart)" || return 1; read -r fx fy fw fh <<< "$fr"
   HIST_SWEEP_X=$((fx + fw / 2)); HIST_SWEEP_Y=$((fy + fh / 2))
   { [ "$HIST_SWEEP_X" -ge 150 ] && [ "$HIST_SWEEP_X" -le 850 ] && [ "$HIST_SWEEP_Y" -ge 29 ] && [ "$HIST_SWEEP_Y" -le 762 ]; } \
-    || fatal 70 "G4: history chart centre ($HIST_SWEEP_X,$HIST_SWEEP_Y) is outside the pinned window"
+    || { ax_miss "G4: history chart centre ($HIST_SWEEP_X,$HIST_SWEEP_Y) is outside the pinned window"; return 1; }
   export HIST_SWEEP_X HIST_SWEEP_Y
 }
-# Battery page; G5 holds on the rainbow "Details" capsule and on the same tile 300 pt to its left (D17).
-route_battery() {
-  route_mac || return 1; ax_press id home-tile-battery || return 1; sleep 2
-  local fr fx fy fw fh; fr="$(ax_frame battery-details)" || return 1; read -r fx fy fw fh <<< "$fr"
+# Report screen (header «Report» -> report text); G5 holds on the rainbow «Show in Finder» capsule (RainbowCapsuleButton,
+# ReportTab.swift) and on the same toolbar row 300 pt to its left (D17). «Report» is disabled while the launch report
+# pass runs and the toolbar shows a spinner then, so wait (<= 90 s) until the button is enabled before pressing it.
+route_report() {
+  route_mac || return 1
+  local waited=0 st=""
+  until st="$(ax enabled main-report)"; [ "$st" = enabled ]; do
+    waited=$((waited + 2))
+    [ "$waited" -le 90 ] || { ax_miss "G5: main-report not enabled within 90 s (last answer: $st)"; return 1; }
+    sleep 2
+  done
+  ax_press id main-report || return 1; sleep 2
+  [ "$(ax exists report-page)" = present ] || { ax_miss "G5: report-page absent after pressing main-report"; return 1; }
+  local fr fx fy fw fh; fr="$(ax_frame frame report-show-in-finder)" || return 1; read -r fx fy fw fh <<< "$fr"
   local dx=$((fx + fw / 2)) dy=$((fy + fh / 2)) cx=$((fx - 300))
-  [ "$cx" -ge 40 ] || fatal 70 "G5: control spot x=$cx is outside the window"
-  G5_SPOTS="ctrl:$cx:$dy details:$dx:$dy"; export G5_SPOTS
+  { [ "$cx" -ge 40 ] && [ "$dx" -le 990 ] && [ "$dy" -ge 29 ] && [ "$dy" -le 762 ]; } \
+    || { ax_miss "G5: hold spots (ctrl x=$cx, capsule $dx,$dy) are outside the pinned window"; return 1; }
+  G5_SPOTS="ctrl:$cx:$dy capsule:$dx:$dy"; export G5_SPOTS
 }
-route_system() { route_mac || return 1; ax_press id home-tile-system || return 1; sleep 2; }
 route_page()   { route_mac || return 1; ax_press id "home-tile-$1" || return 1; sleep 2; }
 
 topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" for the app and WindowServer
@@ -366,39 +383,47 @@ topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" f
 route_cpu() { route_mac || return 1; ax_press id home-tile-cpu || return 1; sleep 2; }
 
 # Sets S_ROUTE S_PRE (extra wait after the route, s) S_SECS (record length) S_SCEN S_ARGS S_TABLES S_INSTR.
+# S_SCROLL (1 = scroll scenario, probe_scroll records scrollable).
 TP_INSTR=(--instrument 'Time Profiler' --instrument Hitches)
 CA_INSTR=(--instrument 'Core Animation Commits' --instrument 'Core Animation Server' --instrument 'Time Profiler')
 define_item() {
-  S_ROUTE=mac; S_PRE=3; S_ARGS=""; S_TABLES="time-profile hitches"; S_INSTR=("${TP_INSTR[@]}"); S_ORPHAN=0
+  S_ROUTE=mac; S_PRE=3; S_ARGS=""; S_TABLES="time-profile hitches"; S_INSTR=("${TP_INSTR[@]}"); S_SCROLL=0
   case "$1" in
     G1) S_PRE=22 ;;
     G9) S_ROUTE=cpu; S_PRE=22 ;;
-    G5-top) S_ROUTE=battery; S_PRE=22 ;;
+    G5-top) S_ROUTE=report; S_PRE=22 ;;
     G2) S_PRE=30; S_SECS=20; S_SCEN=scen-idle.sh; S_ARGS=15
         S_TABLES="coreanimation-commit-interval coreanimation-server-interval"; S_INSTR=("${CA_INSTR[@]}") ;;
-    G3) S_PRE=5; S_SECS=22; S_SCEN=scen-idle-bottom.sh ;;
-    G8) S_ROUTE=system; S_PRE=5; S_SECS=22; S_SCEN=scen-idle-bottom.sh; S_ORPHAN=1 ;;
+    G3) S_PRE=5; S_SECS=22; S_SCEN=scen-idle-bottom.sh; S_SCROLL=1 ;;
     G4) S_ROUTE=hist; S_PRE=0; S_SECS=22; S_SCEN=scen-hist-all.sh ;;
-    G5) S_ROUTE=battery; S_PRE=22; S_SECS=22; S_SCEN=scen-rainbow.sh
+    G5) S_ROUTE=report; S_PRE=22; S_SECS=22; S_SCEN=scen-rainbow.sh
         S_TABLES="coreanimation-commit-interval coreanimation-server-interval"
         S_INSTR=(--instrument 'Time Profiler' --instrument Hitches --instrument 'Core Animation Commits' --instrument 'Core Animation Server') ;;
     G6-page)  S_ROUTE=iphone; S_PRE=2; S_SECS=17; S_SCEN=scen-page.sh ;;
     G6-table) S_ROUTE=table;  S_PRE=2; S_SECS=24; S_SCEN=scen-table.sh ;;
     G6-hover) S_ROUTE=iphone; S_PRE=2; S_SECS=20; S_SCEN=scen-hover.sh ;;
-    G7) S_SECS=21; S_SCEN=scen-mac-scroll.sh ;;
-    GP-*) S_ROUTE="page:${1#GP-}"; S_SECS=21; S_SCEN=scen-mac-scroll.sh ;;
+    G7) S_SECS=21; S_SCEN=scen-mac-scroll.sh; S_SCROLL=1 ;;
+    GP-*) S_ROUTE="page:${1#GP-}"; S_SECS=21; S_SCEN=scen-mac-scroll.sh; S_SCROLL=1 ;;
   esac
 }
 
 do_route() {
   case "$S_ROUTE" in
     mac) route_mac ;; hist) route_hist ;; iphone) route_iphone ;; table) route_table ;; cpu) route_cpu ;;
-    battery) route_battery ;; system) route_system ;; page:*) route_page "${S_ROUTE#page:}" ;;
+    report) route_report ;; page:*) route_page "${S_ROUTE#page:}" ;;
   esac
 }
 
 # ---------------------------------------------------------------- one measured run
-# attempt ITEM ARM RUN APP -> 0 valid (metrics appended to runs.tsv) | 1 invalid (power changed; nothing recorded) | 2 ERROR (AX miss after one retry; nothing recorded, line in errors.tsv)
+# One run could not be measured (S6): one errors.tsv line (scenario, tag, reason, diagnostics path), run files cleaned.
+run_error() {   # item tag prefix reason diagnostics-path
+  printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$(tr '\t\n' '  ' <<< "$4")" "$5" >> "$OUT/errors.tsv"
+  log "$2: ERROR ($4)"
+  rm -f "$3-metrics.tmp"; cleanup_run "$3"
+}
+
+# attempt ITEM ARM RUN APP -> 0 valid (metrics appended to runs.tsv) | 1 invalid (power changed; nothing recorded) |
+#   2 ERROR (an AX element still missing after one retry, or a trace / analysis step failed; nothing recorded, line in errors.tsv)
 attempt() {
   local item=$1 arm=$2 run=$3 app=$4
   local tag="$item-$arm$run" prefix="$OUT/$item-$arm$run"
@@ -410,27 +435,15 @@ attempt() {
   if ! "$PERF/power.sh" before "$OUT/power.log" "$tag before"; then
     echo "$tag: power check failed before the run" >> "$OUT/invalid.log"; rm -f "$buf"; return 1
   fi
-  local fixture_args=("$HOMEDIR"); [ "$item" = "G8" ] && fixture_args+=(--orphan)
-  python3 -I "$PERF/mkfixture.py" "${fixture_args[@]}" >"$prefix-fixture.log" 2>&1 \
+  python3 -I "$PERF/mkfixture.py" "$HOMEDIR" >"$prefix-fixture.log" 2>&1 \
     || fatal 70 "mkfixture failed (see $prefix-fixture.log)"
 
   define_item "$item"
   launch_app "$app" "$tag"
-  if ! do_route; then   # S6: an AX element still missing after one retry -> this scenario is ERROR, the gate goes on
+  if ! do_route || ! probe_scroll "$buf" "$tag"; then   # S6: an AX element still missing after one retry -> this scenario is ERROR, the gate goes on
     stop_app
     local why; why="$(head -1 "$prefix-axdiag/miss.txt" 2>/dev/null)"
-    printf '%s\t%s\t%s\t%s\n' "$item" "$tag" "${why:-route failed}" "$prefix-axdiag" >> "$OUT/errors.tsv"
-    log "$tag: ERROR (${why:-route failed})"
-    rm -f "$buf"; cleanup_run "$prefix"; return 2
-  fi
-  if [ "$S_ORPHAN" = 1 ]; then   # D18: the Autostart card exists only after the report pass
-    local waited=0
-    until [ "$(ax exists autostart-outdated)" = present ]; do
-      waited=$((waited + 2))
-      [ "$waited" -ge 60 ] && fatal 70 "G8: autostart-outdated did not appear on the System page within 60 s (bench orphan not shown)"
-      sleep 2
-    done
-    echo "orphan_visible 1" >> "$buf"
+    run_error "$item" "$tag" "$prefix" "${why:-route failed}" "$prefix-axdiag"; return 2
   fi
   park_pointer
   sleep "$S_PRE"
@@ -470,7 +483,10 @@ attempt() {
     rm -f "$buf"; cleanup_run "$prefix"; return 1
   fi
 
-  analyze_item "$item" "$prefix" "$buf"
+  ERR_WHY=""; ERR_DIAG=""
+  if ! analyze_item "$item" "$prefix" "$buf"; then   # a trace or analysis step failed: this run is ERROR, the gate goes on
+    run_error "$item" "$tag" "$prefix" "${ERR_WHY:-analysis failed}" "${ERR_DIAG:-$prefix-analysis.txt}"; return 2
+  fi
   awk -v s="$item" -v a="$arm" -v r="$run" '{print s "\t" a "\t" r "\t" $1 "\t" $2}' "$buf" >> "$OUT/runs.tsv"
   rm -f "$buf"
   cleanup_run "$prefix"
@@ -485,65 +501,69 @@ cleanup_run() {
          "$prefix-coreanimation-commit-interval.xml" "$prefix-coreanimation-server-interval.xml"
 }
 
-export_tables() {
+export_tables() {   # prefix -> 0 | 1 with ERR_WHY / ERR_DIAG set (the run becomes ERROR)
   local prefix=$1 t
-  [ -d "$prefix.trace" ] || fatal 70 "xctrace produced no trace (see $prefix-rec.txt: $(head -c 300 "$prefix-rec.txt" | tr '\n' ' '))"
-  xcrun xctrace export --input "$prefix.trace" --toc > "$prefix-toc.xml" 2>"$prefix-export.err" || fatal 70 "xctrace export --toc failed (see $prefix-export.err)"
+  if [ ! -d "$prefix.trace" ]; then
+    ERR_WHY="xctrace produced no trace ($(head -c 300 "$prefix-rec.txt" | tr '\t\n' '  '))"; ERR_DIAG="$prefix-rec.txt"; return 1
+  fi
+  xcrun xctrace export --input "$prefix.trace" --toc > "$prefix-toc.xml" 2>"$prefix-export.err" \
+    || { ERR_WHY="xctrace export --toc failed"; ERR_DIAG="$prefix-export.err"; return 1; }
   for t in $S_TABLES; do
     xcrun xctrace export --input "$prefix.trace" --xpath "/trace-toc/run/data/table[@schema=\"$t\"]" > "$prefix-$t.xml" 2>>"$prefix-export.err" \
-      || fatal 70 "xctrace export $t failed (see $prefix-export.err)"
+      || { ERR_WHY="xctrace export $t failed"; ERR_DIAG="$prefix-export.err"; return 1; }
   done
 }
 
 # run an analyze.py command: output to the analysis file, METRIC lines (with optional name prefix) to the buffer
-az() {   # buf prefix-for-names analysis-file -- args...
+az() {   # buf prefix-for-names analysis-file -- args... -> 0 | 1 with ERR_WHY / ERR_DIAG set
   local buf=$1 pre=$2 an=$3; shift 4
-  local out; out="$(python3 -I "$PERF/analyze.py" "$@" 2>&1)" || fatal 70 "analyze.py $* failed: $out"
+  local out; out="$(python3 -I "$PERF/analyze.py" "$@" 2>&1)" \
+    || { echo "$out" >> "$an"; ERR_WHY="analyze.py $1 failed: $(head -c 300 <<< "$out" | tr '\t\n' '  ')"; ERR_DIAG="$an"; return 1; }
   echo "$out" >> "$an"
   echo "$out" | sed -n "s/^METRIC /$pre/p" >> "$buf"
 }
 
-analyze_item() {
+analyze_item() {   # item prefix buf -> 0 | 1 with ERR_WHY / ERR_DIAG set (export, analysis or a missing mark)
   local item=$1 prefix=$2 buf=$3 an="$prefix-analysis.txt"
   local t0 t1
   case "$item" in
-    G1|G9) az "$buf" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" ;;
+    G1|G9) az "$buf" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" || return 1 ;;
     G5-top)
       local label l0 l1
       while read -r label l0; do
         l1="$(awk -v L="$label" '$1=="t1" && $2==L && NF==3 {print $3; exit}' "$prefix-drv.txt")"
-        [ -n "$l1" ] || fatal 70 "G5-top: no t1 mark for $label"
-        az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$l0" "$l1"
+        [ -n "$l1" ] || { ERR_WHY="G5-top: no t1 mark for $label"; ERR_DIAG="$prefix-drv.txt"; return 1; }
+        az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$l0" "$l1" || { rm -f "$buf.top"; return 1; }
         grep -E '^(app_pct|ws_pct) ' "$buf.top" | sed "s/^/$label./" >> "$buf"; rm -f "$buf.top"
-      done < <(awk '$1=="t0" && NF==3 {print $2, $3}' "$prefix-drv.txt") ;;
-    G2)
-      export_tables "$prefix"
-      az "$buf" "" "$an" -- ca "$prefix" ;;
-    G5)
-      export_tables "$prefix"
-      az "$buf" "" "$an" -- ca "$prefix" ;;
-    G3|G8)
-      export_tables "$prefix"
+      done < <(awk '$1=="t0" && NF==3 {print $2, $3}' "$prefix-drv.txt")
+      grep -q '^capsule\.app_pct ' "$buf" || { ERR_WHY="G5-top: no capsule hold window in the marks"; ERR_DIAG="$prefix-drv.txt"; return 1; } ;;
+    G2|G5)
+      export_tables "$prefix" || return 1
+      az "$buf" "" "$an" -- ca "$prefix" || return 1 ;;
+    G3)
+      export_tables "$prefix" || return 1
       t0="$(mark_val t0 "$prefix-drv.txt")"
-      [ -n "$t0" ] || fatal 70 "$item: no t0 mark in $prefix-drv.txt"
-      az "$buf" "" "$an" -- tp "$prefix" --win $G3_WIN_LO $G3_WIN_HI
-      az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$(awk -v a="$t0" -v o="$G3_WIN_LO" 'BEGIN{printf "%.3f", a+o}')" "$(awk -v a="$t0" -v o="$G3_WIN_HI" 'BEGIN{printf "%.3f", a+o}')"
+      [ -n "$t0" ] || { ERR_WHY="G3: no t0 mark (the scenario script did not finish)"; ERR_DIAG="$prefix-drv.txt"; return 1; }
+      az "$buf" "" "$an" -- tp "$prefix" --win $G3_WIN_LO $G3_WIN_HI || return 1
+      az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$(awk -v a="$t0" -v o="$G3_WIN_LO" 'BEGIN{printf "%.3f", a+o}')" "$(awk -v a="$t0" -v o="$G3_WIN_HI" 'BEGIN{printf "%.3f", a+o}')" \
+        || { rm -f "$buf.top"; return 1; }
       grep -E '^(app_pct|ws_pct) ' "$buf.top" >> "$buf"; rm -f "$buf.top" ;;
     G4)
-      export_tables "$prefix"
-      az "$buf" "" "$an" -- tp "$prefix"
+      export_tables "$prefix" || return 1
+      az "$buf" "" "$an" -- tp "$prefix" || return 1
       t0="$(mark_val t0 "$prefix-drv.txt")"; t1="$(mark_val t1 "$prefix-drv.txt")"
-      az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$t0" "$t1"
+      { [ -n "$t0" ] && [ -n "$t1" ]; } || { ERR_WHY="G4: no t0/t1 mark (the scenario script did not finish)"; ERR_DIAG="$prefix-drv.txt"; return 1; }
+      az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$t0" "$t1" || { rm -f "$buf.top"; return 1; }
       grep -E '^(app_pct|ws_pct) ' "$buf.top" >> "$buf"; rm -f "$buf.top" ;;
     G6-*)
-      export_tables "$prefix"
-      az "$buf" "" "$an" -- tp "$prefix" rgba64_shade_conic ;;
+      export_tables "$prefix" || return 1
+      az "$buf" "" "$an" -- tp "$prefix" rgba64_shade_conic || return 1 ;;
     G7|GP-*)
-      export_tables "$prefix"
-      az "$buf" "" "$an" -- tp "$prefix" ;;
+      export_tables "$prefix" || return 1
+      az "$buf" "" "$an" -- tp "$prefix" || return 1 ;;
   esac
 }
-# G3/G8 post-scroll window, seconds after t0. t0 is written 2 s after the scroll ends, so [0, 7) is the
+# G3 post-scroll window, seconds after t0. t0 is written 2 s after the scroll ends, so [0, 7) is the
 # "2-9 s after the scroll ends" of R5 (see README: the table's [t0+2, t0+9) would be 4-11 s after it).
 G3_WIN_LO=0; G3_WIN_HI=7
 
@@ -621,12 +641,11 @@ fi
     echo
   fi
   if [ -s "$OUT/errors.tsv" ]; then
-    echo "ERROR scenarios (an AX element was still missing after one retry; not measured, no verdict; their earlier runs are in error-runs.tsv):"
+    echo "ERROR scenarios (not measured, no verdict: an AX element was still missing after one retry, or a trace or analysis step failed; their earlier runs are in error-runs.tsv):"
     echo
-    awk -F'\t' '{print "- " $1 " (" $2 "): " $3 " — diagnostics: `" $4 "`"}' "$OUT/errors.tsv"
+    awk -F'\t' '{h = ($2 ~ /-base[0-9]+$/ && $4 ~ /-axdiag$/) ? " — baseline arm: a baseline built before the PERF-GATE-RETARGET merge can lack this element (README §2)" : ""; print "- " $1 " (" $2 "): " $3 " — diagnostics: `" $4 "`" h}' "$OUT/errors.tsv"
     echo
   fi
-  if [ -n "$G5_NOTE" ]; then echo "$G5_NOTE"; echo; fi
   echo "## Defaults domain \`$BUNDLE_ID\`"
   echo
   if [ "$DEFAULTS_CHANGED" = 1 ]; then

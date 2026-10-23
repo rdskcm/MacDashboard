@@ -53,6 +53,7 @@ struct ReportTab: View {
                 AdviceActionRunner.reveal(model.reportURL.path)
             }
             .accessibilityLabel(L.reportShowInFinder)
+            .accessibilityIdentifier("report-show-in-finder")
 
             RainbowCapsuleButton(title: L.reportCopy, recipe: .overview, size: .toolbar) {
                 let pb = NSPasteboard.general

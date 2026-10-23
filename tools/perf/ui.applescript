@@ -7,10 +7,14 @@
 --   frame <AXIdentifier>         do not press; "x y w h" (integers, global top-left points) of the first element
 --                                of any class with that identifier, else "NOT FOUND"
 --   exists <AXIdentifier>        do not press; "present" | "absent" for an element of any class with that identifier
+--   enabled <AXIdentifier>       do not press; "enabled" | "disabled" for the first element with that identifier, else "absent"
+--   vscroll <x>,<y>              do not press; for the first scroll area of window 1 whose frame contains the global point
+--                                (x, y): "bar" if it has a vertical scroll bar (its content overflows), else "nobar";
+--                                "NOT FOUND" when no scroll area contains the point
 --   settings                     press the app-menu item "Settings…" / "Настройки…"
 --   pin                          set window 1 to position {0, 29}, size {1000, 733} (D13)
 --   dump                         do not press; "windows: <n>", "window 1 @ x,y wxh", then one line "<id> <class> @ x,y wxh" per element of window 1 with a non-empty AXIdentifier
--- Prints "pressed" | "present" | "absent" | "x y w h" | "pinned" | "OK" | "NOT FOUND".
+-- Prints "pressed" | "present" | "absent" | "enabled" | "disabled" | "bar" | "nobar" | "x y w h" | "pinned" | "OK" | "NOT FOUND".
 on splitAlts(theVal)
 	set AppleScript's text item delimiters to "|"
 	set alts to text items of theVal
@@ -77,7 +81,36 @@ on run argv
 				end try
 				return out
 			end if
-			if theKind is "frame" or theKind is "exists" then
+			if theKind is "vscroll" then
+				set AppleScript's text item delimiters to ","
+				set xy to text items of theVal
+				set AppleScript's text item delimiters to ""
+				set px to (item 1 of xy) as integer
+				set py to (item 2 of xy) as integer
+				set allElements to entire contents of window 1
+				repeat with el in allElements
+					try
+						if (class of el) is scroll area then
+							set p to position of el
+							set s to size of el
+							if px >= (item 1 of p) and px < (item 1 of p) + (item 1 of s) and py >= (item 2 of p) and py < (item 2 of p) + (item 2 of s) then
+								set hasBar to false
+								try
+									repeat with sb in scroll bars of el
+										try
+											if ((value of attribute "AXOrientation" of sb) as text) is "AXVerticalOrientation" then set hasBar to true
+										end try
+									end repeat
+								end try
+								if hasBar then return "bar"
+								return "nobar"
+							end if
+						end if
+					end try
+				end repeat
+				return "NOT FOUND"
+			end if
+			if theKind is "frame" or theKind is "exists" or theKind is "enabled" then
 				set allElements to entire contents of window 1
 				repeat with el in allElements
 					try
@@ -87,6 +120,10 @@ on run argv
 						end try
 						if alts contains elID then
 							if theKind is "exists" then return "present"
+							if theKind is "enabled" then
+								if (enabled of el) then return "enabled"
+								return "disabled"
+							end if
 							set p to position of el
 							set s to size of el
 							return ((item 1 of p) as integer as text) & " " & ((item 2 of p) as integer as text) & " " & ((item 1 of s) as integer as text) & " " & ((item 2 of s) as integer as text)
@@ -94,6 +131,7 @@ on run argv
 					end try
 				end repeat
 				if theKind is "exists" then return "absent"
+				if theKind is "enabled" then return "absent"
 				return "NOT FOUND"
 			end if
 			set allElements to entire contents of window 1

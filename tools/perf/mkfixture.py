@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """mkfixture.py — synthetic bench home for the perf gate (R2). No byte of the user's real data is used.
 
-usage: python3 -I mkfixture.py <bench-home-dir> [--orphan]
+usage: python3 -I mkfixture.py <bench-home-dir>
 
 Builds <home>/Library/Application Support/MacDashboard/ (mode 0700) with
   mac_check_state.json  500 daily rows ending today (port of the hunt's mkstate.sh)
   iphones.json          3 devices; device 0 (newest, so tile 0) has 1026 daily battery rows
-With --orphan it also writes <home>/Library/LaunchAgents/com.gate.orphan.plist (a plist whose
-program does not exist), never in the real ~/Library/LaunchAgents.
 
 Safety: refuses (exit 2) when the target resolves to, or inside, the real ~/Library or contains the
 real home, and when <home> exists, is not empty and lacks the marker file this script writes. An
@@ -16,7 +14,6 @@ Exit: 0 ok, 2 refused or failed, 64 usage.
 """
 import json
 import os
-import plistlib
 import shutil
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -36,10 +33,9 @@ def inside(path, root):
 def main(argv):
     args = [a for a in argv if not a.startswith("--")]
     flags = [a for a in argv if a.startswith("--")]
-    if len(args) != 1 or any(f != "--orphan" for f in flags):
+    if len(args) != 1 or flags:
         print(__doc__, file=sys.stderr)
         sys.exit(64)
-    orphan = "--orphan" in flags
     home = os.path.realpath(args[0])
 
     real_home = os.path.realpath(os.path.expanduser("~"))
@@ -117,15 +113,8 @@ def main(argv):
         })
     write_json(os.path.join(data_dir, "iphones.json"), {"devices": devices})
 
-    if orphan:
-        agents = os.path.join(home, "Library", "LaunchAgents")
-        os.makedirs(agents, mode=0o755)
-        with open(os.path.join(agents, "com.gate.orphan.plist"), "wb") as f:
-            plistlib.dump({"Label": "com.gate.orphan",
-                           "ProgramArguments": ["/nonexistent/gate-orphan-binary"]}, f)
-
-    print("fixture ok: %s (mac rows %d, devices %d, device0 rows %d%s)" %
-          (home, len(rows), len(devices), len(devices[0]["battery"]), ", orphan plist" if orphan else ""))
+    print("fixture ok: %s (mac rows %d, devices %d, device0 rows %d)" %
+          (home, len(rows), len(devices), len(devices[0]["battery"])))
 
 
 def write_json(path, obj):
