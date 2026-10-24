@@ -94,12 +94,13 @@ extension EnvironmentValues {
 extension View {
     /// Hand-drawn layered shadow (D5): each layer is a blurred copy of `shape` inset by the CSS spread,
     /// and the shape itself is punched out so nothing shows through a translucent fill.
-    func ds3Elevation<S: InsettableShape>(_ s: DS3Shadow, in shape: S) -> some View {
+    /// HISTORY-HOVER-COST: `resolve` maps each shadow colour before use (ImageRenderer needs appearance-resolved colours, D5).
+    func ds3Elevation<S: InsettableShape>(_ s: DS3Shadow, in shape: S, resolve: ((Color) -> Color)? = nil) -> some View {
         let layers = s.layers
         return background {
             ZStack {
                 ForEach(Array(layers.enumerated()), id: \.offset) { _, l in
-                    shape.inset(by: l.inset).fill(l.color).blur(radius: l.radius).offset(y: l.y)
+                    shape.inset(by: l.inset).fill(resolve?(l.color) ?? l.color).blur(radius: l.radius).offset(y: l.y)
                 }
                 shape.fill(Color.black).blendMode(.destinationOut)
             }

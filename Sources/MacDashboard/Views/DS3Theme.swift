@@ -148,6 +148,8 @@ enum DS3Motion {
     /// Kept under Reduce Motion.
     static let chartTracking: Animation = .easeOut(duration: 0.12)
     static let popIn: Animation = .spring(response: 0.42, dampingFraction: 0.6)
+    /// `popIn` for Core Animation (`HistoryHoverView`): the same curve as mass/stiffness/damping. Keep the two equal.
+    static let popInSpring = Spring(response: 0.42, dampingRatio: 0.6)
 
     /// Pulse: 2.8 s cycle = 1.68 s rise (scale 1 -> 2.6, opacity 0.55 -> 0) + 1.12 s hold.
     static let pulseRise: Double = 1.68

@@ -195,12 +195,12 @@ content-system-energy-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
 content-system-energy-result-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
 content-system-narrow-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
 content-system-bars-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
-content-history-tooltip-dark	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
+content-history-tooltip-dark	2026-10-24	27.0.1	Xcode 27.1	64c9b67-dirty
 content-history-table-dark	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-narrow-dark	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-states-dark	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-bars-dark	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
-content-history-tooltip-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
+content-history-tooltip-light	2026-10-24	27.0.1	Xcode 27.1	64c9b67-dirty
 content-history-table-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-narrow-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-states-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty

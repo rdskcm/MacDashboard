@@ -384,7 +384,7 @@ private struct HistoryBlockEnter: ViewModifier {
 
 // MARK: - Chart
 
-/// Time-based x over the range window, DS3 axes, hover rule/point/tooltip (shape of `IPhoneHealthChart`).
+/// Time-based x over the range window, DS3 axes, hover rule/point/tooltip as CA layers (`HistoryHoverLayer`).
 private struct HistoryChart: View {
     let data: HistoryChartData
     let initialHover: Int?
@@ -445,117 +445,33 @@ private struct HistoryChart: View {
 
     private var labelledTicks: [HistoryXTick] { data.ticks.filter { $0.label != nil } }
 
-    /// Owns the hover state so the Chart's marks are never rebuilt on hover. Draws the rule, the point and the tooltip.
+    /// Owns no state: converts the proxy into pixel positions once per layout and hands them to the Core Animation
+    /// overlay (`HistoryHoverLayer`), so neither the Chart's marks nor any SwiftUI view update on hover (HISTORY-HOVER-COST).
     private struct Hover: View {
         let proxy: ChartProxy
         let points: [HistoryChartPoint]
-        let dates: [Date]
         let metric: HistoryMetric
-        @State private var hovered: Int?
+        let initialHover: Int?
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-        init(proxy: ChartProxy, points: [HistoryChartPoint], metric: HistoryMetric, initialHover: Int?) {
-            self.proxy = proxy
-            self.points = points
-            self.dates = points.map(\.date)
-            self.metric = metric
-            _hovered = State(initialValue: initialHover)
-        }
 
         var body: some View {
             GeometryReader { geo in
-                ZStack(alignment: .topLeading) {
-                    hitArea(geo)
-                    marker(geo)
-                    tooltipLayer(geo)
-                }
+                HistoryHoverLayer(frame: frame(geo), points: points, metric: metric,
+                                  reduceMotion: reduceMotion, initialHover: initialHover)
             }
         }
 
-        private func hitArea(_ geo: GeometryProxy) -> some View {
-            Rectangle()
-                .fill(Color.clear)
-                .contentShape(Rectangle())
-                .onContinuousHover(coordinateSpace: .local) { phase in
-                    switch phase {
-                    case .active(let loc):
-                        guard let a = proxy.plotFrame else {
-                            if hovered != nil { hovered = nil }
-                            return
-                        }
-                        let plot = geo[a]
-                        let x = min(max(loc.x, plot.minX), plot.maxX) - plot.minX
-                        if let d: Date = proxy.value(atX: x) {
-                            let n = IPhoneData.nearestIndex(dates, to: d)
-                            if n != hovered { hovered = n }
-                        }
-                    case .ended:
-                        if hovered != nil { hovered = nil }
-                    }
-                }
-        }
-
-        /// No animation modifier on this view or any ancestor inside `Hover`: the rule and the point jump.
-        @ViewBuilder private func marker(_ geo: GeometryProxy) -> some View {
-            if let i = hovered, i < points.count, let a = proxy.plotFrame,
-               let px = proxy.position(forX: points[i].date), let py = proxy.position(forY: points[i].value) {
-                let plot = geo[a]
-                Rectangle()
-                    .fill(DS3.accent.opacity(0.45))
-                    .frame(width: 1, height: plot.height)
-                    .position(x: plot.minX + px, y: plot.midY)
-                    .allowsHitTesting(false)
-                // 9 pt point + 2 pt overlay ring + 6 pt accent .22 halo (History.dc.html:97)
-                ZStack {
-                    Circle().fill(DS3.accent.opacity(0.22)).frame(width: 21, height: 21)
-                    Circle().fill(DS3.overlay).frame(width: 13, height: 13)
-                    Circle().fill(DS3.accent).frame(width: 9, height: 9)
-                }
-                .position(x: plot.minX + px, y: plot.minY + py)
-                .allowsHitTesting(false)
+        /// nil when the plot frame or any sample position is unknown; then nothing is shown and hover ends.
+        private func frame(_ geo: GeometryProxy) -> HistoryHoverFrame? {
+            guard let a = proxy.plotFrame else { return nil }
+            let plot = geo[a]
+            var xs: [CGFloat] = []; var ys: [CGFloat] = []
+            xs.reserveCapacity(points.count); ys.reserveCapacity(points.count)
+            for p in points {
+                guard let px = proxy.position(forX: p.date), let py = proxy.position(forY: p.value) else { return nil }
+                xs.append(plot.minX + px); ys.append(plot.minY + py)
             }
-        }
-
-        private func tooltipLayer(_ geo: GeometryProxy) -> some View {
-            ZStack(alignment: .topLeading) {
-                if let i = hovered, i < points.count, let a = proxy.plotFrame,
-                   let px = proxy.position(forX: points[i].date), let py = proxy.position(forY: points[i].value) {
-                    let plot = geo[a]
-                    let o = IPhoneData.tooltipOrigin(point: CGPoint(x: px, y: py), plot: plot.size,
-                                                     size: CGSize(width: 168, height: 62), gap: 14)
-                    tooltip(points[i])
-                        // Same mechanism as HOVER-TEXT-JITTER (`DSHoverLift`): the texts change in the same transaction
-                        // as the animated offset, so without a geometry group they cross-fade at the in-flight
-                        // position and leave ghost glyphs outside the box. Must stay BEFORE `.offset`.
-                        .geometryGroup()
-                        .offset(x: plot.minX + o.x, y: plot.minY + o.y)
-                        .allowsHitTesting(false)
-                        .transition(reduceMotion ? .opacity : .scale(scale: 0.9).combined(with: .opacity))
-                }
-            }
-            // Reduce Motion: the tooltip fades in and out and does not slide between samples.
-            .animation(reduceMotion ? .easeOut(duration: 0.12) : DS3Motion.popIn, value: hovered == nil)
-            .animation(reduceMotion ? nil : DS3Motion.chartTracking, value: hovered)
-        }
-
-        private func tooltip(_ p: HistoryChartPoint) -> some View {
-            let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-            return VStack(alignment: .leading, spacing: 2) {
-                Text(HistoryPageModel.tooltipDate(p.date, calendar: .current))
-                    .font(.system(size: 12)).monospacedDigit().foregroundStyle(DS3.muted).lineLimit(1)
-                Text(HistoryPageModel.tooltipValue(p.value, metric: metric))
-                    .font(.system(size: 17, weight: .bold))
-                    .tracking(-0.17)
-                    .monospacedDigit()
-                    .foregroundStyle(DS3.ink)
-                    .lineLimit(1)
-            }
-            .padding(.vertical, 9)
-            .padding(.horizontal, 14)
-            .frame(width: 168, height: 62, alignment: .leading)
-            .background(shape.fill(DS3.overlay))
-            .ds3InsetRims(shape, top: DS3.rimMid, ring: DS3.lineStrong)
-            .ds3Elevation(.pop, in: shape)
+            return HistoryHoverFrame(plot: plot, xs: xs, ys: ys)
         }
     }
 }
