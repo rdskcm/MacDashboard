@@ -99,6 +99,51 @@ extension SerialTests {
             d.removeObject(forKey: key)
             AppSettings.migrateLegacyValues(in: d)
             #expect(d.object(forKey: key) == nil, "migration: nothing written when unset")
+
+            // (f) hours -> days
+            let hKey = AppSettings.legacyBackupStaleHoursKey, dKey = AppSettings.backupStaleDaysKey
+            for (h, days) in [(24, 1), (48, 2), (72, 3), (168, 7)] {
+                d.removeObject(forKey: dKey); d.set(h, forKey: hKey)
+                AppSettings.migrateLegacyValues(in: d)
+                #expect(d.integer(forKey: dKey) == days, "migration: \(h) h -> \(days) d")
+                #expect(d.object(forKey: hKey) == nil, "migration: hours key removed")
+                AppSettings.migrateLegacyValues(in: d)
+                #expect(d.integer(forKey: dKey) == days, "migration idempotent: days stay \(days)")
+            }
+            // existing days key wins
+            d.set(168, forKey: hKey); d.set(5, forKey: dKey)
+            AppSettings.migrateLegacyValues(in: d)
+            #expect(d.integer(forKey: dKey) == 5, "migration: existing days key wins")
+            #expect(d.object(forKey: hKey) == nil, "migration: hours key removed when days exists")
+            // nothing stored -> nothing written
+            d.removeObject(forKey: dKey); d.removeObject(forKey: hKey)
+            AppSettings.migrateLegacyValues(in: d)
+            #expect(d.object(forKey: dKey) == nil, "migration: no days written when nothing stored")
+        }
+
+        @Test func backupStaleDaysResolve() {
+            for (raw, want) in [(0, 2), (1, 1), (30, 30), (31, 2), (-1, 2)] {
+                #expect(AppSettings.resolveBackupStaleDays(raw: raw) == want, "resolveBackupStaleDays(\(raw)) == \(want)")
+            }
+            for (h, want) in [(30, 1), (36, 2), (1000, 30)] {
+                #expect(AppSettings.daysFromLegacyHours(h) == want, "daysFromLegacyHours(\(h)) == \(want)")
+            }
+        }
+
+        @Test func snapshotMinutesResolve() {
+            for (raw, want) in [(nil, 180), (0, 0), (1439, 1439), (1440, 180)] as [(Int?, Int)] {
+                #expect(AppSettings.resolveSnapshotMinutes(raw: raw) == want, "resolveSnapshotMinutes(\(String(describing: raw))) == \(want)")
+            }
+        }
+
+        @Test func appearanceResolve() {
+            #expect(AppSettings.resolveAppearance(raw: nil) == .system)
+            #expect(AppSettings.resolveAppearance(raw: "x") == .system)
+            #expect(AppSettings.resolveAppearance(raw: "dark") == .dark)
+        }
+
+        @Test func keepImportedArchivesDefault() {
+            #expect(AppSettings.shared.keepImportedArchives, "keepImportedArchives defaults to true")
         }
 
         @Test func lowSpacePercentResolve() async {

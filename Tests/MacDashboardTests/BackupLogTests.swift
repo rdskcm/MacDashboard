@@ -159,10 +159,22 @@ extension SerialTests {
             }
 
             // 8. Setting resolution.
-            #expect(AppSettings.resolveBackupStaleHours(raw: 0) == 48, "backupStaleHours: 0 -> 48")
-            #expect(AppSettings.resolveBackupStaleHours(raw: 24) == 24, "backupStaleHours: 24 -> 24")
-            #expect(AppSettings.resolveBackupStaleHours(raw: 168) == 168, "backupStaleHours: 168 -> 168")
-            #expect(AppSettings.resolveBackupStaleHours(raw: 50) == 48, "backupStaleHours: 50 -> 48")
+            #expect(AppSettings.resolveBackupStaleDays(raw: 0) == 2, "backupStaleDays: 0 -> 2")
+            #expect(AppSettings.resolveBackupStaleDays(raw: 1) == 1, "backupStaleDays: 1 -> 1")
+            #expect(AppSettings.resolveBackupStaleDays(raw: 7) == 7, "backupStaleDays: 7 -> 7")
+            #expect(AppSettings.resolveBackupStaleDays(raw: 31) == 2, "backupStaleDays: 31 -> 2")
+
+            // 8b. Log path resolution.
+            do {
+                let def = BackupLog.resolvedURLs(custom: nil)
+                #expect(def.log == BackupLog.logURL && def.rotated == BackupLog.rotatedURL, "resolvedURLs(nil) == defaults")
+                let empty = BackupLog.resolvedURLs(custom: "")
+                #expect(empty.log == BackupLog.logURL && empty.rotated == BackupLog.rotatedURL, "resolvedURLs(\"\") == defaults")
+                let home = FileManager.default.homeDirectoryForCurrentUser.path
+                let c = BackupLog.resolvedURLs(custom: "~/x/y.log")
+                #expect(c.log.path == home + "/x/y.log", "resolvedURLs: ~ expanded (got \(c.log.path))")
+                #expect(c.rotated.path == home + "/x/y.log.1", "resolvedURLs: rotated is .log.1")
+            }
 
             // 9. Assess branch.
             for lang in AppLanguage.allCases {

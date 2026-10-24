@@ -22,12 +22,16 @@ extension SerialTests {
             defer { VisualFixture.forced = false }
             // D8: Settings panes render with AppSettings at their unset defaults.
             let settings = AppSettings.shared
-            let saved = (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleHours, settings.lowSpacePercent)
+            let saved = (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleDays, settings.lowSpacePercent, settings.appearance, settings.orbsEnabled, settings.snapshotMinutes, settings.claudeLogPath)
             settings.fastIntervalSeconds = AppSettings.resolveFastInterval(raw: 0)
             settings.ignoredWakeHolderEntries = []
-            settings.backupStaleHours = AppSettings.resolveBackupStaleHours(raw: 0)
+            settings.backupStaleDays = AppSettings.defaultBackupStaleDays
             settings.lowSpacePercent = AppSettings.defaultLowSpacePercent
-            defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleHours, settings.lowSpacePercent) = saved }
+            settings.appearance = .system
+            settings.orbsEnabled = true
+            settings.snapshotMinutes = AppSettings.defaultSnapshotMinutes
+            settings.claudeLogPath = nil
+            defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleDays, settings.lowSpacePercent, settings.appearance, settings.orbsEnabled, settings.snapshotMinutes, settings.claudeLogPath) = saved }
             L10nStore.shared.language = .en
             let run = try SnapshotRun(out: outDir)
             let m = DashboardModel()
@@ -1021,12 +1025,22 @@ extension SerialTests {
                         }
                     }
                 }
-                run.snap("content-settings-monitoring", mode, width: 720) {
-                    SettingsView(model: m, startSection: .monitoring)
+                // Settings states: the window frame (680 x 420) is owned by the test, not by SettingsView.
+                func settingsState(_ name: String, _ section: SettingsSection, _ model: DashboardModel, launch: AppLanguage = .en) {
+                    run.snap(name, mode, width: 680) {
+                        SettingsView(model: model, startSection: section, launchLanguage: launch).frame(width: 680, height: 420)
+                    }
                 }
-                run.snap("content-settings-backup", mode, width: 720) {
-                    SettingsView(model: m, startSection: .backup)
-                }
+                let mMissing = DashboardModel(); mMissing.applyVisualFixture(); mMissing.claudeBackup = nil
+                let mPerm = DashboardModel(); mPerm.applyVisualFixture(); mPerm.claudeBackup = .unreadable
+                settingsState("content-settings-general", .general, m)
+                settingsState("content-settings-general-relaunch", .general, m, launch: .ru)
+                settingsState("content-settings-monitoring", .monitoring, m)
+                settingsState("content-settings-backup", .backup, m)
+                settingsState("content-settings-backup-missing", .backup, mMissing)
+                settingsState("content-settings-backup-permission", .backup, mPerm)
+                settingsState("content-settings-iphone", .iphone, m)
+                settingsState("content-settings-about", .about, m)
             }
             try run.finish()
         }

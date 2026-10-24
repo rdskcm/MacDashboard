@@ -1,7 +1,10 @@
 // Engine/AppSettings.swift
-// Non-language app settings. Foundation + Observation only — covered by Tests/MacDashboardTests.
+// Non-language app settings (interval, wake-holder ignore list, backup-stale days, low-space %, appearance, orbs,
+// keep-archives, snapshot time, claude log path). Foundation + Observation only — covered by Tests/MacDashboardTests.
 import Foundation
 import Observation
+
+enum AppAppearance: String, CaseIterable { case system, light, dark }
 
 /// User-tunable settings backed by UserDefaults. Mirrors L10nStore's pattern.
 @Observable
@@ -29,18 +32,37 @@ final class AppSettings {
         if let raw = defaults.object(forKey: fastIntervalKey) as? Int, raw == 1 || raw == 3 {
             defaults.set(defaultInterval, forKey: fastIntervalKey)
         }
+        if let h = defaults.object(forKey: legacyBackupStaleHoursKey) as? Int {
+            if defaults.object(forKey: backupStaleDaysKey) == nil { defaults.set(daysFromLegacyHours(h), forKey: backupStaleDaysKey) }
+            defaults.removeObject(forKey: legacyBackupStaleHoursKey)
+        }
         defaults.removeObject(forKey: legacyProcessLimitKey)
     }
 
     static let ignoredWakeHoldersKey = "ignoredWakeHolders"
 
-    /// BACKUP-AGE: stale limit (hours) for the Claude backup age; any other stored value resolves to the default.
-    static let backupStaleHoursKey = "backupStaleHours"
-    static let allowedBackupStaleHours = [24, 48, 72, 168]
-    static let defaultBackupStaleHours = 48
-    static func resolveBackupStaleHours(raw: Int) -> Int {
-        allowedBackupStaleHours.contains(raw) ? raw : defaultBackupStaleHours
-    }
+    /// REDESIGN-SETTINGS: stale limit (days) for the Claude backup age; out-of-range values resolve to the default.
+    static let backupStaleDaysKey = "backupStaleDays"
+    static let legacyBackupStaleHoursKey = "backupStaleHours"
+    static let backupStaleDaysRange = 1...30
+    static let defaultBackupStaleDays = 2
+    static func resolveBackupStaleDays(raw: Int) -> Int { backupStaleDaysRange.contains(raw) ? raw : defaultBackupStaleDays }
+    /// Hours → days for the one-time migration: round(h / 24) clamped to the range (24→1, 48→2, 72→3, 168→7, 30→1, 1000→30).
+    static func daysFromLegacyHours(_ hours: Int) -> Int { min(max(Int((Double(hours) / 24).rounded()), backupStaleDaysRange.lowerBound), backupStaleDaysRange.upperBound) }
+
+    /// REDESIGN-SETTINGS: theme choice, applied app-wide through `NSApp.appearance`.
+    static let appearanceKey = "appearance"
+    static func resolveAppearance(raw: String?) -> AppAppearance { raw.flatMap(AppAppearance.init(rawValue:)) ?? .system }
+
+    static let orbsEnabledKey = "backgroundOrbs"
+    static let keepImportedArchivesKey = "keepImportedArchives"
+
+    /// Daily snapshot time, minutes since midnight (default 03:00). 0 = 00:00 is valid, so raw is optional.
+    static let snapshotMinutesKey = "snapshotMinutes"
+    static let defaultSnapshotMinutes = 180
+    static func resolveSnapshotMinutes(raw: Int?) -> Int { raw.map { (0..<1440).contains($0) ? $0 : defaultSnapshotMinutes } ?? defaultSnapshotMinutes }
+    static let lastSnapshotAtKey = "lastSnapshotAt"
+    static let claudeLogPathKey = "claudeLogPath"
 
     /// REDESIGN-STORAGE: amber low-space line (% free); any other stored value resolves to the default.
     static let lowSpacePercentKey = "lowSpacePercent"
@@ -84,10 +106,39 @@ final class AppSettings {
     /// Read-only keys of the entries, for the assessment and Home.
     var ignoredWakeHolders: [WakeHolderKey] { ignoredWakeHolderEntries.map(\.key) }
 
-    /// BACKUP-AGE: warn when the newest Claude backup is older than this many hours.
-    /// Mutate through `DashboardModel.setBackupStaleHours` so the assessment updates at once.
-    var backupStaleHours: Int {
-        didSet { UserDefaults.standard.set(backupStaleHours, forKey: Self.backupStaleHoursKey) }
+    /// BACKUP-AGE: warn when the newest Claude backup is older than this many days.
+    /// Mutate through `DashboardModel.setBackupStaleDays` so the assessment updates at once.
+    var backupStaleDays: Int {
+        didSet { UserDefaults.standard.set(backupStaleDays, forKey: Self.backupStaleDaysKey) }
+    }
+    /// Read-only bridge for the hour-based consumers (assessment, Backups page model).
+    var backupStaleHours: Int { backupStaleDays * 24 }
+
+    var appearance: AppAppearance {
+        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: Self.appearanceKey) }
+    }
+    var orbsEnabled: Bool {
+        didSet { UserDefaults.standard.set(orbsEnabled, forKey: Self.orbsEnabledKey) }
+    }
+    /// No reader until REDESIGN-IPHONE.
+    var keepImportedArchives: Bool {
+        didSet { UserDefaults.standard.set(keepImportedArchives, forKey: Self.keepImportedArchivesKey) }
+    }
+    var snapshotMinutes: Int {
+        didSet { UserDefaults.standard.set(snapshotMinutes, forKey: Self.snapshotMinutesKey) }
+    }
+    var lastSnapshotAt: Date? {
+        didSet {
+            if let d = lastSnapshotAt { UserDefaults.standard.set(d, forKey: Self.lastSnapshotAtKey) }
+            else { UserDefaults.standard.removeObject(forKey: Self.lastSnapshotAtKey) }
+        }
+    }
+    /// nil = the default `~/Library/Logs/claude-backup.log`; an empty string is stored as nil.
+    var claudeLogPath: String? {
+        didSet {
+            if let p = claudeLogPath, !p.isEmpty { UserDefaults.standard.set(p, forKey: Self.claudeLogPathKey) }
+            else { UserDefaults.standard.removeObject(forKey: Self.claudeLogPathKey); if claudeLogPath == "" { claudeLogPath = nil } }
+        }
     }
 
     /// REDESIGN-STORAGE: amber low-space line, % free. The Settings control arrives in REDESIGN-SETTINGS.
@@ -99,7 +150,15 @@ final class AppSettings {
         Self.migrateLegacyValues(in: .standard)
         fastIntervalSeconds = Self.resolveFastInterval(raw: UserDefaults.standard.integer(forKey: Self.fastIntervalKey)) // 0 if unset
         ignoredWakeHolderEntries = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
-        backupStaleHours = Self.resolveBackupStaleHours(raw: UserDefaults.standard.integer(forKey: Self.backupStaleHoursKey))
+        let d = UserDefaults.standard
+        backupStaleDays = Self.resolveBackupStaleDays(raw: d.integer(forKey: Self.backupStaleDaysKey))
+        appearance = Self.resolveAppearance(raw: d.string(forKey: Self.appearanceKey))
+        orbsEnabled = d.object(forKey: Self.orbsEnabledKey) as? Bool ?? true
+        keepImportedArchives = d.object(forKey: Self.keepImportedArchivesKey) as? Bool ?? true
+        snapshotMinutes = Self.resolveSnapshotMinutes(raw: d.object(forKey: Self.snapshotMinutesKey) as? Int)
+        lastSnapshotAt = d.object(forKey: Self.lastSnapshotAtKey) as? Date
+        let storedPath = d.string(forKey: Self.claudeLogPathKey)
+        claudeLogPath = (storedPath?.isEmpty ?? true) ? nil : storedPath
         lowSpacePercent = Self.resolveLowSpacePercent(raw: UserDefaults.standard.integer(forKey: Self.lowSpacePercentKey)) // 0 if unset
     }
 }

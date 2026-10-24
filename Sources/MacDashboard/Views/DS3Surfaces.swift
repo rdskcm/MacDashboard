@@ -157,6 +157,11 @@ extension View {
         modifier(DS3GlassCard(cornerRadius: r))
     }
 
+    /// Settings group (`Settings.dc.html:74`): `DS3GlassCard`'s fill with an inset 1 pt `DS3.line` border and no rim or shadow.
+    func ds3GlassGroup(cornerRadius r: CGFloat) -> some View {
+        modifier(DS3GlassGroup(cornerRadius: r))
+    }
+
     /// One `.onContinuousHover` on the window root feeds the tracker; rims reach it through the environment.
     /// The tracker also owns the app-local scroll monitor, started and stopped with this view.
     func ds3PointerTracking(_ t: DS3PointerTracker) -> some View {
@@ -225,6 +230,26 @@ private struct DS3GlassCard: ViewModifier {
             }
             .overlay(DS3Rim(cornerRadius: cornerRadius))
             .ds3Elevation(.card, in: shape)
+    }
+}
+
+/// REDESIGN-SETTINGS: the Settings window's grouped-rows surface. Same fill as `DS3GlassCard` (material + tint through
+/// `GlassSettings`), 1 pt inset `DS3.line` border, no rim and no shadow.
+private struct DS3GlassGroup: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(GlassSettings.self) private var glass: GlassSettings?
+
+    func body(content: Content) -> some View {
+        let fill = glass?.fill ?? .standard
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return content
+            .background {
+                ZStack {
+                    if fill.usesMaterial { shape.fill(.regularMaterial) }
+                    shape.fill(DS3.glassTint(fill))
+                }
+            }
+            .overlay(shape.strokeBorder(DS3.line, lineWidth: 1))
     }
 }
 
@@ -313,10 +338,16 @@ extension DS3 {
 
 /// Three soft static colour glows (`DS3OrbLayer`). Static by decision in HOME-D: the 12 Hz drift kept
 /// WindowServer at ~10% CPU at idle (static: ~2.7%); motion returns only with the v2 orbs and their own perf A/B.
+/// Hidden when Settings › Background orbs is off or Reduce Motion is on (REDESIGN-SETTINGS).
 struct DS3OrbField: View {
+    var orbs: [DS3OrbSpec] = DS3OrbSpec.window
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        DS3OrbLayer()
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        if AppSettings.shared.orbsEnabled && !reduceMotion {
+            DS3OrbLayer(orbs: orbs)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 }

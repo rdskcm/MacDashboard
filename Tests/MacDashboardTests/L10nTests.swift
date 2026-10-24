@@ -6,6 +6,20 @@ import Testing
 
 extension SerialTests {
     struct L10nTests {
+        @Test func languageChoiceResolve() {
+            #expect(LanguageChoice.resolve(.system, preferredLanguages: ["ru-RU"]) == .ru)
+            #expect(LanguageChoice.resolve(.system, preferredLanguages: ["en-US", "ru"]) == .en)
+            #expect(LanguageChoice.resolve(.system, preferredLanguages: []) == .en)
+            #expect(LanguageChoice.resolve(.ru, preferredLanguages: ["en-US"]) == .ru)
+            #expect(LanguageChoice.resolve(.en, preferredLanguages: ["ru-RU"]) == .en)
+            #expect(StringsEN().settingsWarnAfterDays(1) == "1 day")
+            #expect(StringsEN().settingsWarnAfterDays(2) == "2 days")
+            #expect(StringsRU().settingsWarnAfterDays(1) == "1 день")
+            #expect(StringsRU().settingsWarnAfterDays(2) == "2 дня")
+            #expect(StringsRU().settingsWarnAfterDays(5) == "5 дней")
+            #expect(StringsRU().settingsWarnAfterDays(21) == "21 день")
+        }
+
         @Test func ruPluralAndStrings() async {
             // =====================================================================
             // MARK: - L10n (ruPlural + StringsRU smoke)

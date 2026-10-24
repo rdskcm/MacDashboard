@@ -9,6 +9,20 @@ enum AppLanguage: String, CaseIterable {
     case ru, en
 }
 
+/// REDESIGN-SETTINGS: the persisted language choice; `system` follows the macOS preferred language.
+enum LanguageChoice: String, CaseIterable { case system, en, ru }
+
+extension LanguageChoice {
+    /// Effective language for a choice; `system` follows the first preferred language (`ru…` → RU, anything else → EN).
+    static func resolve(_ c: LanguageChoice, preferredLanguages: [String]) -> AppLanguage {
+        switch c {
+        case .en: return .en
+        case .ru: return .ru
+        case .system: return (preferredLanguages.first ?? "").hasPrefix("ru") ? .ru : .en
+        }
+    }
+}
+
 /// The full UI string table. Grouped with MARKs by card/screen; later migration
 /// waves append members. Parameterized strings are funcs returning plain String
 /// (never LocalizedStringKey — avoids SwiftUI's interpolation-localization trap).
@@ -25,18 +39,41 @@ protocol AppStrings {
     func settingsIntervalOption(_ seconds: Int) -> String
     /// Per-value note below the interval segmented control (§7.3, SW:96-99),
     /// switching with the current `fastIntervalSeconds` selection.
-    var settingsIntervalNoteBalanced: String { get }
-    var settingsIntervalNoteEconomy: String { get }
     var settingsSectionBackup: String { get }
-    var settingsBackupStaleLabel: String { get }
-    func settingsBackupStaleOption(_ hours: Int) -> String
-    var settingsBackupStaleNote: String { get }
     var settingsMenuLanguageHint: String { get }
     var settingsRelaunchNow: String { get }
     var settingsSectionGeneral: String { get }
     var settingsSectionMonitoring: String { get }
     var settingsVersionLabel: String { get }
     var settingsWindowTitle: String { get }
+    var settingsSectionIPhone: String { get }
+    var settingsKeepArchivesLabel: String { get }
+    var settingsSectionAbout: String { get }
+    var settingsInstantNote: String { get }
+    var settingsOptionSystem: String { get }
+    var settingsThemeLabel: String { get }
+    var settingsThemeLight: String { get }
+    var settingsThemeDark: String { get }
+    var settingsOrbsLabel: String { get }
+    var settingsOrbsSub: String { get }
+    var settingsLaunchAtLoginLabel: String { get }
+    var settingsLaunchAtLoginApproval: String { get }
+    var settingsSnapshotLabel: String { get }
+    var settingsSnapshotSub: String { get }
+    var settingsLowSpaceLabel: String { get }
+    var settingsClaudeLogLabel: String { get }
+    var settingsChoose: String { get }
+    var settingsPathMissing: String { get }
+    var settingsWarnAfterLabel: String { get }
+    var settingsWarnAfterSub: String { get }
+    var settingsWarnAfterFewer: String { get }
+    var settingsWarnAfterMore: String { get }
+    var settingsPermTitle: String { get }
+    var settingsPermBody: String { get }
+    var settingsReportFolderLabel: String { get }
+    var settingsMenuItem: String { get }
+    func settingsLowSpaceOption(_ percent: Int) -> String
+    func settingsWarnAfterDays(_ days: Int) -> String
 
     // MARK: Main dashboard (header + tab picker)
     var mainCollectingInfo: String { get }
@@ -1356,19 +1393,38 @@ final class L10nStore {
     /// the current choice differs (menus/system chrome are fixed at launch).
     static let launchLanguage: AppLanguage = shared.language
     static let defaultsKey = "appLanguage"
+    static let choiceKey = "appLanguageChoice"
+
+    var choice: LanguageChoice {
+        didSet {
+            UserDefaults.standard.set(choice.rawValue, forKey: Self.choiceKey)
+            language = LanguageChoice.resolve(choice, preferredLanguages: Locale.preferredLanguages)
+        }
+    }
 
     var language: AppLanguage {
         didSet { UserDefaults.standard.set(language.rawValue, forKey: Self.defaultsKey) }
     }
 
+    private var localeObserver: NSObjectProtocol?
+
     private init() {
-        if let raw = UserDefaults.standard.string(forKey: Self.defaultsKey),
-           let lang = AppLanguage(rawValue: raw) {
-            language = lang
+        let d = UserDefaults.standard
+        let initial: LanguageChoice
+        if let raw = d.string(forKey: Self.choiceKey), let c = LanguageChoice(rawValue: raw) {
+            initial = c
+        } else if let raw = d.string(forKey: Self.defaultsKey), let lang = AppLanguage(rawValue: raw) {
+            // An existing install: the stored language stays an explicit choice (D9).
+            initial = lang == .ru ? .ru : .en
         } else {
-            // First launch: follow the system language (Russian systems get RU,
-            // everything else EN).
-            language = (Locale.preferredLanguages.first ?? "").hasPrefix("ru") ? .ru : .en
+            initial = .system
+        }
+        choice = initial
+        language = LanguageChoice.resolve(initial, preferredLanguages: Locale.preferredLanguages)
+        localeObserver = NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self, self.choice == .system else { return }
+            let l = LanguageChoice.resolve(.system, preferredLanguages: Locale.preferredLanguages)
+            if l != self.language { self.language = l }
         }
     }
 }

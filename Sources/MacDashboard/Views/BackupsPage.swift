@@ -59,7 +59,7 @@ struct BackupsPage: View {
 private func backupsInput(_ model: DashboardModel, now: Date) -> BackupsPageModel.Input {
     .init(tmDest: model.report.tmDest, snapshots: model.report.snapshots, backup: model.tmBackup,
           action: model.tmAction, updatedAt: model.tmUpdatedAt, claudeBackup: model.claudeBackup,
-          claudeLogPath: BackupLog.logURL.path, warnAfterHours: AppSettings.shared.backupStaleHours, now: now)
+          claudeLogPath: model.claudeLogPath, warnAfterHours: AppSettings.shared.backupStaleHours, now: now)
 }
 
 private func toneColor(_ t: BackupsTone) -> Color {
@@ -240,7 +240,6 @@ private struct BackupsPurgeableTile: View {
 @MainActor
 struct BackupsClaudeCard: View {
     let model: DashboardModel
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
@@ -267,8 +266,7 @@ struct BackupsClaudeCard: View {
         case .openSettingsBackups?:
             SectionNote(tone: toneColor(n.tone), text: n.text,
                         button: (L.bkOpenSettingsBackups, L.bkOpenSettingsBackupsA11y, false, {
-                            model.settingsSectionRequest = .backup
-                            openSettings()
+                            SettingsWindowController.shared.show(section: .backup)
                         }),
                         buttonIdentifier: "backups-claude-settings")
         case .openFullDiskAccess?:

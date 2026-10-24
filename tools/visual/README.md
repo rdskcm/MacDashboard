@@ -7,7 +7,7 @@ Two tools, run in this order for a GUI block:
 | tool | what it covers | Mac usable meanwhile |
 |---|---|---|
 | `snapshots.sh` | every screen part that renders offscreen, dark and light, inside `swift test` | yes |
-| `smoke.sh` | the three things only a real window shows: Home with the glass looks, the Report, the Settings window title bar | no (about 2 min) |
+| `smoke.sh` | the three things only a real window shows: Home with the glass looks, the Report, the Settings window | no (about 2 min) |
 
 `tools/harness/` stays the ad-hoc scenario tool; it is not a verification stage.
 
@@ -36,11 +36,11 @@ Typical run: `./build_app.sh && tools/visual/smoke.sh`, about 2 minutes. It move
 
 **Dark / light** is switched inside the app: under `-visualFixture` the app follows the fixture-only key `visualAppearance` (`dark` / `light`) in its own defaults domain, observed by KVO (`FixtureAppearance.swift`). The system setting is never touched.
 
-**States (16, `STATE_ORDER` in the script):** `main`, `main-glass-clear`, `main-glass-tinted`, `main-glass-rt`, `main-report`, `settings-general`, `settings-glass-rt`, `settings-titlebar-hover`, each `-dark` and `-light`. Window id via `vbtool windows --pid P`; the Settings window must be 680 +/- 2 pt wide. The script aborts if the number of captured states differs from `STATE_ORDER`.
+**States (14, `STATE_ORDER` in the script):** `main`, `main-glass-clear`, `main-glass-tinted`, `main-glass-rt`, `main-report`, `settings-general`, `settings-glass-rt`, each `-dark` and `-light`. Window id via `vbtool windows --pid P`; the Settings window must be 680 +/- 2 pt wide. The script aborts if the number of captured states differs from `STATE_ORDER`.
 
 **Glass looks.** `main-glass-clear` / `main-glass-tinted` set the fixture-only key `visualGlassTintAmount` (0 / 1) and `main-glass-rt` / `settings-glass-rt` set `visualReduceTransparency` in the bench domain before the capture; the app follows them live by KVO (`Engine/GlassTint.swift`) and the keys are deleted after each group. The cards, the header bar and the Settings cards follow these keys; the system Liquid Glass slider and Reduce Transparency are never touched.
 
-**Routes.** All by accessibility identifier, never a coordinate click: `press_main_tab main-report` (the header Report button), `press_main_tab report-done` (the sheet's Done button), `open_settings` (app-menu item whose name starts with "Settings"), `close_settings` (the `AXCloseButton`). The hover state moves the cursor to the Settings title bar.
+**Routes.** All by accessibility identifier, never a coordinate click: `press_main_tab main-report` (the header Report button), `press_main_tab report-done` (the sheet's Done button), `open_settings` (app-menu item whose name starts with "Settings"), `close_settings` (the `AXCloseButton`).
 
 **Report open / close.** The Report is a sheet, opened with one press of `main-report`; the run waits up to 5 s for the identifier `report-sheet` and for a second window of the pid. It is captured as the main window's screen region (the sheet is a separate window, so a window-id capture would miss it) and closed with one press of `report-done`; the run waits up to 5 s for `report-sheet` to be gone. On a timeout the run stops with a runtime error naming the state; it never presses a second time.
 
