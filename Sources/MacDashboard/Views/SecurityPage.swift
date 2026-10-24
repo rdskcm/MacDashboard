@@ -29,7 +29,7 @@ struct SecurityPage: View {
                         .id(CardID.updates)
                         .sectionFocusPulse(pulse == .updates)
                         .ds3Appear(delay: 0.14)
-                    SecurityCrashesCard(model: model)
+                    SecurityCrashesCard(model: model, onConfirmShown: { router.isInlineConfirmOpen = $0 })
                         .id(CardID.crashes)
                         .sectionFocusPulse(pulse == .crashes)
                         .ds3Appear(delay: 0.20)
@@ -51,6 +51,7 @@ struct SecurityPage: View {
             }
         }
         .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
+        .onDisappear { router.isInlineConfirmOpen = false }
     }
 }
 
@@ -62,7 +63,7 @@ private func securityInput(_ model: DashboardModel, fileVaultOpened: Bool = fals
     .init(security: model.report.security, action: model.securityAction, fileVaultOpened: fileVaultOpened,
           updates: model.report.updates, updatesCheckedAt: model.report.updatesCheckedAt,
           checkingUpdates: model.isCheckingUpdates, crashes: model.report.crashes,
-          openedReportPath: openedReportPath, now: model.fixtureNow ?? Date())
+          openedReportPath: openedReportPath, now: model.fixtureNow ?? Date(), hiddenCrashes: model.report.crashesHidden, crashAction: model.crashAction)
 }
 
 private func toneColor(_ t: SecurityTone) -> Color {
@@ -320,76 +321,188 @@ struct SecurityUpdatesCard: View {
 
 // MARK: - Crashes card
 
+/// Internal: the visual fixture renders it (`initialOpenedReport` / `initialConfirm` / `initialHiddenOpen` exist for
+/// the snapshots only).
 @MainActor
 struct SecurityCrashesCard: View {
     let model: DashboardModel
+    /// Reports the delete confirm's visibility to the page (`router.isInlineConfirmOpen`); nil in snapshots.
+    let onConfirmShown: ((Bool) -> Void)?
     @State private var openedReportPath: String?
+    /// The row whose «Delete» awaits the inline confirm.
+    @State private var pendingDelete: String?
+    @State private var hiddenOpen: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(model: DashboardModel, initialOpenedReport: String? = nil) {
+    init(model: DashboardModel, initialOpenedReport: String? = nil, initialConfirm: String? = nil,
+         initialHiddenOpen: Bool = false, onConfirmShown: ((Bool) -> Void)? = nil) {
         self.model = model
+        self.onConfirmShown = onConfirmShown
         _openedReportPath = State(initialValue: initialOpenedReport)
+        _pendingDelete = State(initialValue: initialConfirm)
+        _hiddenOpen = State(initialValue: initialHiddenOpen)
     }
+
+    private var confirmCurve: Animation { reduceMotion ? .easeOut(duration: 0.12) : DS3Motion.popIn }
 
     var body: some View {
         let m = SecurityPageModel.make(securityInput(model, openedReportPath: openedReportPath))
         DS3Card(title: L.secCrashesTitle, caption: m.crashesCaption) {
             if m.crashesWait {
                 SectionWait(text: L.commonCollectingData)
-            } else if m.crashesNone {
-                SectionList {
-                    SectionListRow(dot: DS3.green, name: L.secNoCrashes, sub: "", value: "✓")
-                }
             } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    SectionList {
-                        ForEach(m.crashRows, id: \.id) { r in
-                            CrashRow(row: r, opened: r.path != nil && r.path == openedReportPath) {
-                                guard let p = r.path else { return }
-                                AdviceActionRunner.openInConsole(p)
-                                openedReportPath = p
+                VStack(alignment: .leading, spacing: 16) {
+                    if m.crashesNone {
+                        SectionList {
+                            SectionListRow(dot: DS3.green, name: L.secNoCrashes, sub: "", value: "✓")
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            SectionList {
+                                ForEach(m.crashRows, id: \.id) { r in
+                                    CrashRow(row: r, opened: r.path != nil && r.path == openedReportPath,
+                                             disabled: m.crashActionsDisabled,
+                                             open: {
+                                                 guard let p = r.path else { return }
+                                                 AdviceActionRunner.openInConsole(p)
+                                                 openedReportPath = p
+                                             },
+                                             hide: { model.hideCrashGroup(r.id) },
+                                             delete: { withAnimation(confirmCurve) { pendingDelete = r.id } })
+                                }
                             }
+                            Text(m.crashFoot)
+                                .font(.system(size: 12.5))
+                                .foregroundStyle(DS3.muted)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .padding(.leading, 6)
                         }
                     }
-                    Text(m.crashFoot)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(DS3.muted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .padding(.leading, 6)
+                    if let id = pendingDelete, let r = m.crashRows.first(where: { $0.id == id }), r.actionable {
+                        confirm(r)
+                    }
+                    if let note = m.crashNote {
+                        SectionNote(tone: DS3.hot, text: note)
+                    }
+                    if !m.crashHiddenRows.isEmpty {
+                        hiddenGroup(m)
+                    }
+                }
+            }
+        }
+        // A pending delete whose row left (hidden, deleted, aged out) is void; so is a foot naming a vanished report.
+        .onChange(of: m.crashRows.map(\.id)) { _, ids in
+            if let p = pendingDelete, !ids.contains(p) { pendingDelete = nil }
+        }
+        .onChange(of: m.crashRows.compactMap(\.path)) { _, paths in
+            if let o = openedReportPath, !paths.contains(o) { openedReportPath = nil }
+        }
+        .onChange(of: pendingDelete != nil) { _, shown in onConfirmShown?(shown) }
+        .onAppear { if pendingDelete != nil { onConfirmShown?(true) } }
+        .onDisappear { onConfirmShown?(false) }
+    }
+
+    private func confirm(_ r: SecurityCrashRow) -> some View {
+        SectionConfirmPanel(
+            title: r.confirmTitle,
+            paragraphs: r.confirmParagraphs,
+            cancelTitle: L.commonCancel,
+            confirmTitle: L.secCrashDelete,
+            confirmKind: .dangerSolid,
+            busy: false,
+            onCancel: { withAnimation(confirmCurve) { pendingDelete = nil } },
+            onConfirm: {
+                model.deleteCrashGroup(r.id)
+                withAnimation(confirmCurve) { pendingDelete = nil }
+            })
+        .transition(.opacity)
+    }
+
+    /// The System Sleep card's Hidden group (SystemPage.swift `SystemSleepCard`), on this card's ring-less list.
+    private func hiddenGroup(_ m: SecurityPageModel) -> some View {
+        SectionList {
+            SectionCollapsibleGroup(title: L.sysHidden, count: m.crashHiddenRows.count, isOpen: $hiddenOpen,
+                                    enabled: true, bodyInset: 20, bodyTrailing: 0, bodyBottom: 4) {
+                VStack(spacing: 4) {
+                    ForEach(m.crashHiddenRows, id: \.id) { r in
+                        SectionRowsRow(name: r.name, sub: r.sub) {
+                            Button { model.unhideCrashGroup(r.id) } label: {
+                                Text(L.secCrashUnhide).dsSwapInPlace(r.working) { ProgressView().controlSize(.small) }
+                            }
+                            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5,
+                                                        disabledOpacity: r.working ? 1 : 0.45))
+                            .disabled(m.crashActionsDisabled)
+                            .help(r.a11y)
+                            .accessibilityLabel(r.a11y)
+                            .accessibilityIdentifier("security-crash-unhide-\(r.id)")
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-/// A crash row that opens its newest report in Console; without a path it is plain (no hover, no focus).
+/// A crash row: the left part opens the newest report in Console (as before, its own combined accessibility
+/// element); «Hide» and «Delete» sit after the value column as separate buttons.
 private struct CrashRow: View {
     let row: SecurityCrashRow
     let opened: Bool
+    let disabled: Bool
     let open: () -> Void
+    let hide: () -> Void
+    let delete: () -> Void
 
     @State private var hover = false
 
     private var clickable: Bool { row.path != nil }
 
     var body: some View {
-        SectionListRow(dot: toneColor(row.tone), name: row.name, sub: row.sub, value: row.value)
-            .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(hover || opened ? DS3.lens : Color.clear)
-                    .animation(.easeOut(duration: 0.16), value: hover)
+        HStack(spacing: 6) {
+            SectionListRow(dot: toneColor(row.tone), name: row.name, sub: row.sub, value: row.value)
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .pointingHandOnHover(isEnabled: clickable, hovering: $hover)
+                .onTapGesture { if clickable { open() } }
+                .help(clickable ? L.secOpenInConsole : "")
+                .focusable(clickable)
+                .onKeyPress(.return) { if clickable { open(); return .handled }; return .ignored }
+                .onKeyPress(.space) { if clickable { open(); return .handled }; return .ignored }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(clickable ? .isButton : [])
+                .accessibilityLabel(L.secCrashRowA11y(row.name, row.value))
+                .accessibilityIdentifier("security-crash-\(row.id)")
+                .accessibilityAction { if clickable { open() } }
+            if row.actionable {
+                HStack(spacing: 6) {
+                    actionButton(L.secCrashHide, kind: .hide, a11y: L.secCrashHideA11y(row.name),
+                                 identifier: "security-crash-hide-\(row.id)", danger: false, action: hide)
+                    actionButton(L.secCrashDelete, kind: .delete, a11y: L.secCrashDeleteA11y(row.name),
+                                 identifier: "security-crash-delete-\(row.id)", danger: true, action: delete)
+                }
+                .fixedSize()
+                .padding(.trailing, 6)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .pointingHandOnHover(isEnabled: clickable, hovering: $hover)
-            .onTapGesture { if clickable { open() } }
-            .help(clickable ? L.secOpenInConsole : "")
-            .focusable(clickable)
-            .onKeyPress(.return) { if clickable { open(); return .handled }; return .ignored }
-            .onKeyPress(.space) { if clickable { open(); return .handled }; return .ignored }
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(clickable ? .isButton : [])
-            .accessibilityLabel(L.secCrashRowA11y(row.name, row.value))
-            .accessibilityIdentifier("security-crash-\(row.id)")
-            .accessibilityAction { if clickable { open() } }
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(hover || opened ? DS3.lens : Color.clear)
+                .animation(.easeOut(duration: 0.16), value: hover)
+        }
+    }
+
+    /// The System page's row-button recipe (secondary, 28 high, 12 padding, 12.5 pt; «Delete» turns red on hover).
+    private func actionButton(_ title: String, kind: CrashActionKind, a11y: String, identifier: String, danger: Bool,
+                              action: @escaping () -> Void) -> some View {
+        let busy = row.working == kind
+        return Button(action: action) {
+            Text(title).dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
+        }
+        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5,
+                                    disabledOpacity: busy ? 1 : 0.45, dangerOnHover: danger))
+        .disabled(disabled)
+        .help(a11y)
+        .accessibilityLabel(a11y)
+        .accessibilityIdentifier(identifier)
     }
 }

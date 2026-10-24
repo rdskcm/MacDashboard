@@ -93,6 +93,11 @@ enum ReportSection: String, CaseIterable {
 }
 
 final class ReportCollector {
+    /// Report file names the user hid on the Security page (CRASH-REPORT-DISMISS); the crash scan lists them
+    /// apart. Captured once per collector — DashboardModel builds one per pass.
+    let hiddenCrashReports: Set<String>
+
+    init(hiddenCrashReports: Set<String> = []) { self.hiddenCrashReports = hiddenCrashReports }
 
     /// A section's result: which section, and how to fold it into the report.
     private struct Outcome {
@@ -266,30 +271,41 @@ final class ReportCollector {
     /// before grouping (item 3), and a group's `directory` is the directory of its
     /// FIRST surviving report — same "first occurrence wins" law as `crashDedup`, so a
     /// process with reports in both directories reveals the per-user one, which does
-    /// contain at least one of them.
+    /// contain at least one of them. `reportPaths` = every copy of every counted report (CRASH-REPORT-DISMISS).
     static func crashGroups(byDirectory: [CrashDirectoryListing], now: Date,
                             window: TimeInterval = crashAgeWindow,
                             maxGroups: Int = crashMaxGroups) -> [CrashGroup] {
-        var acc: [String: (count: Int, isPanic: Bool, directory: String, latest: (mtime: Date, path: String))] = [:]
+        var acc: [String: (count: Int, isPanic: Bool, directory: String, latest: (mtime: Date, path: String), paths: [String])] = [:]
+        // Every folder that lists a given file name, in priority order (CRASH-REPORT-DISMISS): the dedup keeps
+        // one copy for counting, but a delete must remove every copy or the group would come back.
+        var copies: [String: [String]] = [:]
+        for listing in byDirectory {
+            for file in listing.files {
+                copies[file.name, default: []].append((listing.directory as NSString).appendingPathComponent(file.name))
+            }
+        }
         for f in crashDedup(byDirectory: byDirectory)
             where crashIsProcessCrash(from: f.name)
                   && isCrashRecent(mtime: f.mtime, now: now, window: window) {
             let name = crashProcessName(from: f.name)
             let path = (f.directory as NSString).appendingPathComponent(f.name)
+            let all = copies[f.name] ?? [path]
             if var prev = acc[name] {
                 prev.count += 1
+                prev.paths += all
                 prev.isPanic = prev.isPanic || crashIsPanic(from: f.name)
                 if f.mtime > prev.latest.mtime { prev.latest = (mtime: f.mtime, path: path) }
                 acc[name] = prev                      // directory: first surviving report wins
             } else {
                 acc[name] = (count: 1, isPanic: crashIsPanic(from: f.name), directory: f.directory,
-                             latest: (mtime: f.mtime, path: path))
+                             latest: (mtime: f.mtime, path: path), paths: all)
             }
         }
         let sorted = acc
             .map { CrashGroup(process: $0.key, count: $0.value.count,
                               isPanic: $0.value.isPanic, directory: $0.value.directory,
-                              lastReportAt: $0.value.latest.mtime, newestReportPath: $0.value.latest.path) }
+                              lastReportAt: $0.value.latest.mtime, newestReportPath: $0.value.latest.path,
+                              reportPaths: $0.value.paths) }
             .sorted {
                 if $0.count != $1.count { return $0.count > $1.count }
                 return $0.process < $1.process
@@ -302,6 +318,18 @@ final class ReportCollector {
         let notable = sorted.filter(crashRaisesAttention)
         let rest = sorted.filter { !crashRaisesAttention($0) }
         return Array((notable + rest).prefix(maxGroups))
+    }
+
+    /// Pure (tested): the crash section with the user's hidden reports split off (CRASH-REPORT-DISMISS). A report
+    /// is hidden by FILE NAME, so a new crash of the same process (a new file) is visible again. The 15-group cap
+    /// applies to the visible groups after the hidden reports are gone; hidden groups are not capped (they are
+    /// listed only in the card's Hidden group).
+    static func crashScan(byDirectory: [CrashDirectoryListing], now: Date, hidden: Set<String>) -> CrashScan {
+        func only(_ keep: (String) -> Bool) -> [CrashDirectoryListing] {
+            byDirectory.map { listing in (directory: listing.directory, files: listing.files.filter { keep($0.name) }) }
+        }
+        return CrashScan(visible: crashGroups(byDirectory: only { !hidden.contains($0) }, now: now),
+                         hidden: crashGroups(byDirectory: only { hidden.contains($0) }, now: now, maxGroups: Int.max))
     }
 
     func collect(skipSlow: Bool = false,
@@ -636,16 +664,16 @@ final class ReportCollector {
 
     // MARK: - crashes (FileManager, no shell)
 
-    func collectCrashGroups() -> [CrashGroup] {
+    func collectCrashScan() -> CrashScan {
         let byDirectory = Self.crashReportDirectories.map {
             (directory: $0.path, files: Self.crashFiles(in: $0))
         }
-        return Self.crashGroups(byDirectory: byDirectory, now: Date())
+        return Self.crashScan(byDirectory: byDirectory, now: Date(), hidden: hiddenCrashReports)
     }
 
     private func collectCrashes() -> Outcome {
-        let groups = collectCrashGroups()
-        return Outcome(section: .crashes) { $0.crashes = groups }
+        let scan = collectCrashScan()
+        return Outcome(section: .crashes) { $0.crashes = scan.visible; $0.crashesHidden = scan.hidden }
     }
 
     /// One directory's crash reports as (name, mtime). Impure and deliberately not

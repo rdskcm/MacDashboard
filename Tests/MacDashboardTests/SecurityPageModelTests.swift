@@ -21,15 +21,18 @@ private func upd(_ title: String, size: Int64? = nil, restart: Bool = false) -> 
 
 private func input(security: SecurityState? = allOn, action: SecurityActionState = .idle, fvOpened: Bool = false,
                    updates: [SoftwareUpdate]? = [], checkedAt: Date? = nil, checking: Bool = false,
-                   crashes: [CrashGroup]? = [], opened: String? = nil) -> SecurityPageModel.Input {
+                   crashes: [CrashGroup]? = [], opened: String? = nil,
+                   hidden: [CrashGroup]? = nil, crashAction: CrashActionState = .idle) -> SecurityPageModel.Input {
     SecurityPageModel.Input(security: security, action: action, fileVaultOpened: fvOpened, updates: updates,
                             updatesCheckedAt: checkedAt, checkingUpdates: checking, crashes: crashes,
-                            openedReportPath: opened, now: now)
+                            openedReportPath: opened, now: now, hiddenCrashes: hidden, crashAction: crashAction)
 }
 private func make(_ i: SecurityPageModel.Input) -> SecurityPageModel { SecurityPageModel.make(i) }
 
-private func crash(_ name: String, _ count: Int = 1, panic: Bool = false, last: Date? = nil, path: String? = nil) -> CrashGroup {
-    CrashGroup(process: name, count: count, isPanic: panic, directory: "/d", lastReportAt: last, newestReportPath: path)
+private func crash(_ name: String, _ count: Int = 1, panic: Bool = false, last: Date? = nil, path: String? = nil,
+                   paths: [String] = []) -> CrashGroup {
+    CrashGroup(process: name, count: count, isPanic: panic, directory: "/d", lastReportAt: last, newestReportPath: path,
+               reportPaths: paths)
 }
 
 private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
@@ -235,6 +238,46 @@ extension SerialTests {
                 #expect(L.shortDateTime(at(5, 3, 8, 5)) == "3 мая, 08:05")
                 #expect(make(input(crashes: [crash("a", 5)])).tagText == "5 сбоев за 7 дней")
                 #expect(make(input(crashes: [crash("a")])).tagText == "1 сбой за 7 дней")
+            }
+        }
+
+        @Test func crashActions() {
+            withLanguage(.en) {
+                let a = crash("a", 2, paths: ["/u/a1.ips", "/u/a2.ips"])
+                let b = crash("b", 1, paths: ["/u/b1.ips"])
+                let m = make(input(crashes: [a, b]))
+                #expect(m.crashRows[0].actionable && m.crashRows[0].confirmTitle == "Delete 2 crash reports?")
+                #expect(m.crashRows[0].confirmParagraphs == ["Reports from your user folder will be moved to the Trash."])
+                #expect(SecurityPageModel.crashDeleteParagraphs(["/u/x.ips"], systemDirectory: "/s") == [L.secCrashDeleteParagraphUser])
+                #expect(SecurityPageModel.crashDeleteParagraphs(["/s/k.panic"], systemDirectory: "/s") == [L.secCrashDeleteParagraphSystem])
+                #expect(SecurityPageModel.crashDeleteParagraphs(["/u/x.ips", "/s/k.panic"], systemDirectory: "/s")
+                        == [L.secCrashDeleteParagraphUser, L.secCrashDeleteParagraphSystem])
+
+                let w = make(input(crashes: [a, b], crashAction: .working(.delete, groupID: "a")))
+                #expect(w.crashRows[0].working == .delete && w.crashRows[1].working == nil && w.crashActionsDisabled)
+                let both = make(input(crashes: [a], hidden: [a], crashAction: .working(.unhide, groupID: "a")))
+                #expect(both.crashRows[0].working == nil && both.crashHiddenRows[0].working && both.crashActionsDisabled)
+
+                let h = make(input(crashes: [], hidden: [crash("diffscore", 3, last: at(1, 14, 14, 2)),
+                                                          crash("kernel", 1, panic: true)]))
+                #expect(h.crashHiddenRows[0].sub == "Jan 14, 14:02 · ×3")
+                #expect(h.crashHiddenRows[0].a11y == "Show crashes again: diffscore")
+                #expect(h.crashHiddenRows[1].name == "Kernel panic")
+
+                let allHidden = make(input(crashes: [], hidden: [crash("MacDashboard", 2)]))
+                #expect(allHidden.crashesNone && allHidden.crashesCaption == "own app and kernel panics")
+                #expect(allHidden.tag == .green && allHidden.tagText == "All on")
+
+                #expect(make(input(crashAction: .failed(.cancelled))).crashNote == "Authorization cancelled. Nothing was deleted.")
+                #expect(make(input(crashAction: .failed(.timedOut))).crashNote == L.sysDeleteTimedOut)
+                #expect(make(input(crashAction: .failed(.error("x")))).crashNote == "Couldn’t delete: x")
+                #expect(make(input(crashAction: .failed(.refused("a.ips")))).crashNote == L.secCrashDeleteRefused("a.ips"))
+                #expect(make(input(crashAction: .idle)).crashNote == nil)
+            }
+            withLanguage(.ru) {
+                #expect(L.secCrashDeleteConfirmTitle(1) == "Удалить 1 отчёт о сбое?")
+                #expect(L.secCrashDeleteConfirmTitle(3) == "Удалить 3 отчёта о сбоях?")
+                #expect(L.secCrashDeleteConfirmTitle(5) == "Удалить 5 отчётов о сбоях?")
             }
         }
 

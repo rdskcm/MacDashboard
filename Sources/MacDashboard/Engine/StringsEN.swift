@@ -581,6 +581,16 @@ struct StringsEN: AppStrings {
     func secCrashFootOpened(_ file: String) -> String { "Opened in Console: \(file)" }
     var secOpenInConsole: String { "Open in Console" }
     func secCrashRowA11y(_ name: String, _ count: String) -> String { "\(name), \(count) — open the report in Console" }
+    var secCrashHide: String { "Hide" }
+    var secCrashDelete: String { "Delete" }
+    var secCrashUnhide: String { "Show again" }
+    func secCrashHideA11y(_ name: String) -> String { "Hide crashes: \(name)" }
+    func secCrashDeleteA11y(_ name: String) -> String { "Delete crash reports: \(name)" }
+    func secCrashUnhideA11y(_ name: String) -> String { "Show crashes again: \(name)" }
+    func secCrashDeleteConfirmTitle(_ n: Int) -> String { n == 1 ? "Delete 1 crash report?" : "Delete \(n) crash reports?" }
+    var secCrashDeleteParagraphUser: String { "Reports from your user folder will be moved to the Trash." }
+    var secCrashDeleteParagraphSystem: String { "Reports in the system folder will be deleted permanently. Touch ID or an administrator password is required." }
+    func secCrashDeleteRefused(_ name: String) -> String { "Nothing was deleted: \(name) is not a crash report file in a DiagnosticReports folder." }
     // MARK: Backups page (REDESIGN-BACKUPS)
     var bkSub: String { "Time Machine and Claude backup" }
     var bkTagTMNotSet: String { "Time Machine not set up" }

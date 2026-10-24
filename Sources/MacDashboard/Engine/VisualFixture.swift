@@ -124,12 +124,35 @@ enum VisualFixture {
         let user = home + "/Library/Logs/DiagnosticReports"
         return [
             CrashGroup(process: "MacDashboard", count: 2, directory: user, lastReportAt: at(0, 9, 41),
-                       newestReportPath: user + "/MacDashboard-2026-01-15-094112.ips"),
+                       newestReportPath: user + "/MacDashboard-2026-01-15-094112.ips",
+                       reportPaths: [user + "/MacDashboard-2026-01-15-094112.ips", user + "/MacDashboard-2026-01-14-181530.ips"]),
             CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: "/Library/Logs/DiagnosticReports",
                        lastReportAt: at(3, 22, 17),
-                       newestReportPath: "/Library/Logs/DiagnosticReports/panic-full-2026-01-12-221704.panic"),
+                       newestReportPath: "/Library/Logs/DiagnosticReports/panic-full-2026-01-12-221704.panic",
+                       reportPaths: ["/Library/Logs/DiagnosticReports/panic-full-2026-01-12-221704.panic"]),
             CrashGroup(process: "Xcode", count: 1, directory: user, lastReportAt: at(5, 16, 5),
-                       newestReportPath: user + "/Xcode-2026-01-10-160512.ips"),
+                       newestReportPath: user + "/Xcode-2026-01-10-160512.ips",
+                       reportPaths: [user + "/Xcode-2026-01-10-160512.ips"]),
+        ]
+    }
+
+    /// CRASH-REPORT-DISMISS: reports the user hid — one per-user group, one from the system folder.
+    static func securityHiddenCrashes(home: String, now: Date) -> [CrashGroup] {
+        let cal = Calendar.current
+        func at(_ daysAgo: Int, _ hour: Int, _ minute: Int) -> Date {
+            let day = cal.date(byAdding: .day, value: -daysAgo, to: now) ?? now
+            return cal.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+        }
+        let user = home + "/Library/Logs/DiagnosticReports"
+        let system = "/Library/Logs/DiagnosticReports"
+        return [
+            CrashGroup(process: "diffscore", count: 3, directory: user, lastReportAt: at(1, 14, 2),
+                       newestReportPath: user + "/diffscore-2026-01-14-140210.ips",
+                       reportPaths: [user + "/diffscore-2026-01-14-140210.ips", user + "/diffscore-2026-01-13-101500.ips",
+                                     user + "/diffscore-2026-01-12-083000.ips"]),
+            CrashGroup(process: "activatehelper", count: 1, directory: system, lastReportAt: at(4, 7, 50),
+                       newestReportPath: system + "/activatehelper-2026-01-11-075012.ips",
+                       reportPaths: [system + "/activatehelper-2026-01-11-075012.ips"]),
         ]
     }
 
@@ -244,12 +267,14 @@ enum VisualFixture {
         report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
         report.tmDest = .some(nil)
         report.updates = []
-        // REDESIGN-SECURITY: Security page — «checked 5 min ago» and one third-party crash row (no attention, not on the Home tile).
+        // REDESIGN-SECURITY: Security page — «checked 5 min ago», one third-party crash row and a Hidden group of two (no attention, not on the Home tile).
         report.updatesCheckedAt = referenceDate.addingTimeInterval(-5 * 60)
         report.folderSizesCountedAt = nil
         report.crashes = [CrashGroup(process: "Xcode", count: 1, directory: home + "/Library/Logs/DiagnosticReports",
                                      lastReportAt: referenceDate.addingTimeInterval(-3 * 86_400 - 2 * 3600),
-                                     newestReportPath: home + "/Library/Logs/DiagnosticReports/Xcode-2026-01-12-083000.ips")]
+                                     newestReportPath: home + "/Library/Logs/DiagnosticReports/Xcode-2026-01-12-083000.ips",
+                                     reportPaths: [home + "/Library/Logs/DiagnosticReports/Xcode-2026-01-12-083000.ips"])]
+        report.crashesHidden = securityHiddenCrashes(home: home, now: referenceDate)
         report.brewStatus = .installed(version: "Homebrew 4.6.0")
         report.brewOutdated = ["git", "node", "python@3.13"]
         // REDESIGN-SYSTEM: versions and the installed count for the System page's Homebrew card.

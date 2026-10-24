@@ -1,5 +1,5 @@
 // Engine/AppSettings.swift
-// Non-language app settings (interval, wake-holder ignore list, backup-stale days, low-space %, appearance, orbs,
+// Non-language app settings (interval, wake-holder ignore list, hidden crash reports, backup-stale days, low-space %, appearance, orbs,
 // keep-archives, snapshot time, claude log path). Foundation + Observation only — covered by Tests/MacDashboardTests.
 import Foundation
 import Observation
@@ -40,6 +40,7 @@ final class AppSettings {
     }
 
     static let ignoredWakeHoldersKey = "ignoredWakeHolders"
+    static let hiddenCrashReportsKey = "hiddenCrashReports"
 
     /// REDESIGN-SETTINGS: stale limit (days) for the Claude backup age; out-of-range values resolve to the default.
     static let backupStaleDaysKey = "backupStaleDays"
@@ -106,6 +107,12 @@ final class AppSettings {
     /// Read-only keys of the entries, for the assessment and Home.
     var ignoredWakeHolders: [WakeHolderKey] { ignoredWakeHolderEntries.map(\.key) }
 
+    /// CRASH-REPORT-DISMISS: crash report files hidden on the Security page. Mutate through
+    /// `DashboardModel.hideCrashGroup` / `unhideCrashGroup` so the list and the assessment update.
+    var hiddenCrashReports: [HiddenCrashReport] {
+        didSet { UserDefaults.standard.set(CrashDismiss.encode(hiddenCrashReports), forKey: Self.hiddenCrashReportsKey) }
+    }
+
     /// BACKUP-AGE: warn when the newest Claude backup is older than this many days.
     /// Mutate through `DashboardModel.setBackupStaleDays` so the assessment updates at once.
     var backupStaleDays: Int {
@@ -150,6 +157,7 @@ final class AppSettings {
         Self.migrateLegacyValues(in: .standard)
         fastIntervalSeconds = Self.resolveFastInterval(raw: UserDefaults.standard.integer(forKey: Self.fastIntervalKey)) // 0 if unset
         ignoredWakeHolderEntries = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
+        hiddenCrashReports = CrashDismiss.decode(UserDefaults.standard.data(forKey: Self.hiddenCrashReportsKey))
         let d = UserDefaults.standard
         backupStaleDays = Self.resolveBackupStaleDays(raw: d.integer(forKey: Self.backupStaleDaysKey))
         appearance = Self.resolveAppearance(raw: d.string(forKey: Self.appearanceKey))
