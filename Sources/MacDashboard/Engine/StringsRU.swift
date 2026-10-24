@@ -588,6 +588,16 @@ struct StringsRU: AppStrings {
     func secCrashFootOpened(_ file: String) -> String { "Открыто в Console: \(file)" }
     var secOpenInConsole: String { "Открыть в Console" }
     func secCrashRowA11y(_ name: String, _ count: String) -> String { "\(name), \(count) — открыть отчёт в Console" }
+    var secCrashHide: String { "Скрыть" }
+    var secCrashDelete: String { "Удалить" }
+    var secCrashUnhide: String { "Показать снова" }
+    func secCrashHideA11y(_ name: String) -> String { "Скрыть сбои: \(name)" }
+    func secCrashDeleteA11y(_ name: String) -> String { "Удалить отчёты о сбоях: \(name)" }
+    func secCrashUnhideA11y(_ name: String) -> String { "Снова показывать сбои: \(name)" }
+    func secCrashDeleteConfirmTitle(_ n: Int) -> String { "Удалить \(n) \(ruPlural(n, "отчёт о сбое", "отчёта о сбоях", "отчётов о сбоях"))?" }
+    var secCrashDeleteParagraphUser: String { "Отчёты из папки пользователя будут перемещены в Корзину." }
+    var secCrashDeleteParagraphSystem: String { "Отчёты из системной папки будут удалены безвозвратно. Нужен Touch ID или пароль администратора." }
+    func secCrashDeleteRefused(_ name: String) -> String { "Ничего не удалено: \(name) — не файл отчёта о сбое в папке DiagnosticReports." }
     // MARK: Backups page (REDESIGN-BACKUPS)
     var bkSub: String { "Time Machine и бэкап Claude" }
     var bkTagTMNotSet: String { "Time Machine не настроена" }

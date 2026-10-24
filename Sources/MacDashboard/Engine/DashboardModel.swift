@@ -135,6 +135,11 @@ final class DashboardModel {
     var gatekeeperApplying: Bool { if case .enabling(.gatekeeper) = securityAction { return true }; return false }
     /// REDESIGN-SECURITY: true while the page's Refresh re-collects security + crashes.
     private(set) var securityRefreshing = false
+    /// CRASH-REPORT-DISMISS: the crash action in flight, or the last delete that did not fully succeed.
+    private(set) var crashAction: CrashActionState = .idle
+    /// CRASH-REPORT-DISMISS fix wave 2: orders every crash re-scan outside a pass (see `CrashScanSequencer`,
+    /// `requestCrashScan`). Replaces the pending flag, the generation and the shared outcome slot.
+    @ObservationIgnored private var crashScans = CrashScanSequencer()
 
     /// Set when the last advice-card action (currently only `enableFirewallNow()`)
     /// failed; cleared at the start of the next run. Shown as an inline error on
@@ -522,6 +527,8 @@ final class DashboardModel {
     func applyFixtureSecurity(action: SecurityActionState, refreshing: Bool = false, checkingUpdates: Bool = false) {
         securityAction = action; securityRefreshing = refreshing; isCheckingUpdates = checkingUpdates
     }
+    /// CRASH-REPORT-DISMISS: snapshot states (spinner, failure note).
+    func applyFixtureCrashAction(_ action: CrashActionState) { crashAction = action }
 
     /// REDESIGN-BACKUPS: snapshot states (backing, stopping, failed start).
     func applyFixtureTimeMachine(backup: TMBackupProgress?, action: TMActionState) { tmBackup = backup; tmAction = action }
@@ -825,6 +832,10 @@ final class DashboardModel {
             guard let self else { return }
             defer {
                 self.isCollectingReport = false   // always clear, incl. cancellation
+                // CRASH-REPORT-DISMISS: a hide / unhide / delete / Refresh parked during this pass re-scans now, so this
+                // pass's crash section (taken with the hidden list it started with) does not stand. Deliberately NOT
+                // guarded by `!Task.isCancelled` (fix wave 2, C3): a cancelled pass must not leave `crashAction` working.
+                if self.crashScans.passEnded() { self.requestCrashScan() }
                 if let pending = self.reportRefreshPending {
                     self.reportRefreshPending = nil
                     // Don't relaunch from a cancelled task (stop() during shutdown). beginPass, not
@@ -836,8 +847,9 @@ final class DashboardModel {
             let cachedBrew: BrewSnapshot? =
                 ReportCollector.isBrewCacheFresh(collectedAt: self.brewCheckedAt, now: Date())
                     ? self.lastBrewInfo : nil
+            let hiddenCrashes = self.hiddenCrashNames
             let collected = await CommandRunner.$qos.withValue(trigger.commandQoS) {
-                await ReportCollector().collect(skipSlow: false, cachedBrew: cachedBrew) { partial in
+                await ReportCollector(hiddenCrashReports: hiddenCrashes).collect(skipSlow: false, cachedBrew: cachedBrew) { partial in
                     // onSection is @MainActor; we're already isolated here. Detect the
                     // .smart section's arrival by its progress-flag transition (false/absent
                     // -> true) BEFORE overwriting self.report, so smartUpdatedAt reflects the
@@ -1249,12 +1261,73 @@ final class DashboardModel {
             defer { self.securityRefreshing = false }
             let box = UncheckedSendableBox(ReportCollector())
             let sec = await box.value.collectSecurityInfo()
-            let crashes = await Task.detached(priority: .utility) { box.value.collectCrashGroups() }.value
             guard !Task.isCancelled else { return }
             await self.waitForReportRefreshToFinish()
             self.report.security = sec
-            self.report.crashes = crashes
             self.setAssessment(self.assessed(self.report))
+            // CRASH-REPORT-DISMISS fix wave 2: the crash folders go through the one crash-scan owner, so this Refresh
+            // can never write a list older than a hide / unhide / delete that finished meanwhile.
+            self.requestCrashScan()
+        }
+    }
+
+    // MARK: - Crash reports (CRASH-REPORT-DISMISS)
+
+    private var hiddenCrashNames: Set<String> { Set(AppSettings.shared.hiddenCrashReports.map(\.name)) }
+
+    /// «Hide» on a crash row: every report of the group joins the hidden list, then the folders are re-scanned.
+    func hideCrashGroup(_ id: String) {
+        guard !crashAction.isWorking, let g = report.crashes?.first(where: { $0.id == id }), !g.reportPaths.isEmpty
+        else { return }
+        AppSettings.shared.hiddenCrashReports = CrashDismiss.hiding(g, in: AppSettings.shared.hiddenCrashReports, now: Date())
+        crashAction = .working(.hide, groupID: id)
+        requestCrashScan(completing: .idle)
+    }
+
+    /// «Show again» on a hidden row.
+    func unhideCrashGroup(_ id: String) {
+        guard !crashAction.isWorking, let g = report.crashesHidden?.first(where: { $0.id == id }) else { return }
+        AppSettings.shared.hiddenCrashReports = CrashDismiss.unhiding(g, in: AppSettings.shared.hiddenCrashReports, now: Date())
+        crashAction = .working(.unhide, groupID: id)
+        requestCrashScan(completing: .idle)
+    }
+
+    /// «Delete» confirmed on a crash row. The delete blocks on Touch ID, so it runs on a GCD thread, never on the
+    /// cooperative pool (same as `deleteOrphanPlist`).
+    func deleteCrashGroup(_ id: String) {
+        guard !crashAction.isWorking, let g = report.crashes?.first(where: { $0.id == id }), !g.reportPaths.isEmpty
+        else { return }
+        crashAction = .working(.delete, groupID: id)
+        let paths = g.reportPaths
+        Task { [weak self] in
+            let result: CrashDeleteResult = await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    continuation.resume(returning: CrashDismiss.delete(paths: paths))
+                }
+            }
+            guard let self else { return }
+            self.requestCrashScan(completing: result.failure.map { .failed($0) } ?? .idle)
+        }
+    }
+
+    /// The single owner of crash re-scans outside a pass (fix wave 2). Call it AFTER the input changed (hidden list
+    /// written, delete returned). `outcome` = what `crashAction` becomes once the newest scan lands; nil (Refresh,
+    /// pass-end rerun) keeps an outcome already waiting. Only the newest request's scan writes. While a pass is
+    /// collecting, the request (or the landing) is parked and the pass's end requests again
+    /// (`assessment-complete-collect`; the pass would otherwise overwrite it with its old hidden list).
+    private func requestCrashScan(completing outcome: CrashActionState? = nil) {
+        guard let ticket = crashScans.request(completing: outcome, collecting: isCollectingReport) else { return }
+        let hidden = hiddenCrashNames   // read now: after the change this request follows
+        Task { [weak self] in
+            let box = UncheckedSendableBox(ReportCollector(hiddenCrashReports: hidden))
+            let scan = await Task.detached(priority: .userInitiated) { box.value.collectCrashScan() }.value
+            guard let self else { return }
+            let landing = self.crashScans.landed(ticket: ticket, collecting: self.isCollectingReport)
+            guard landing.write else { return }
+            self.report.crashes = scan.visible
+            self.report.crashesHidden = scan.hidden
+            self.setAssessment(self.assessed(self.report))
+            if let outcome = landing.outcome { self.crashAction = outcome }
         }
     }
 

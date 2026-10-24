@@ -251,6 +251,17 @@ extension SerialTests {
                       "assess crashes: kernel panic -> warn problem with the panic sentence")
             }
             do {
+                // CRASH-REPORT-DISMISS: hidden groups never reach the assessment.
+                var report = FullReport()
+                report.crashes = []
+                report.crashesHidden = [CrashGroup(process: AppInfo.name, count: 2, directory: userCrashDir),
+                                        CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: systemCrashDir)]
+                let a = Assess.assess(report: report, live: LiveSnapshot())
+                #expect(!a.items.contains { $0.kind == .crashes }, "assess crashes: hidden-only -> no AttentionItem")
+                #expect(!a.problems.contains { $0.text == L.assessOwnCrashesRecent(AppInfo.name, 2) || $0.text == L.assessKernelPanicsRecent(1) },
+                      "assess crashes: hidden-only -> no crash problem")
+            }
+            do {
                 var report = FullReport()
                 report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
                                   CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir)]

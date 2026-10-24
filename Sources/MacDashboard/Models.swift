@@ -210,7 +210,16 @@ struct CrashGroup: Identifiable, Equatable {
     var directory: String       // "/Library/Logs/DiagnosticReports" — where its first report was found
     var lastReportAt: Date? = nil       // mtime of the newest surviving report of the group
     var newestReportPath: String? = nil // absolute path of that report
+    /// Every report file the group counts, absolute, including a same-name copy listed in the other
+    /// DiagnosticReports folder (CRASH-REPORT-DISMISS: a delete must remove every copy).
+    var reportPaths: [String] = []
     var id: String { process }
+}
+
+/// One crash scan (CRASH-REPORT-DISMISS): the groups the card lists and the groups of reports the user hid.
+struct CrashScan: Equatable, Sendable {
+    var visible: [CrashGroup]
+    var hidden: [CrashGroup]
 }
 
 /// Homebrew presence as the collector saw it (BREW-VERSION-FAIL). `version == nil` = brew was
@@ -258,6 +267,7 @@ struct FullReport {
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
     var spotlight: String?
     var crashes: [CrashGroup]?          // grouped, ≤7 days old (V2-CRASH-SIGNAL)
+    var crashesHidden: [CrashGroup]?    // groups of reports the user hid (CRASH-REPORT-DISMISS); only the Security page reads it
     var brewStatus: BrewStatus?          // nil = not checked yet
     var brewOutdatedDetail: [BrewOutdatedPackage]?   // REDESIGN-SYSTEM: versions for the System page rows
     var brewInstalledCount: Int?                      // REDESIGN-SYSTEM: formulae + casks

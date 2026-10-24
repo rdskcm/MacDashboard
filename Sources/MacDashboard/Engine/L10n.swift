@@ -602,6 +602,16 @@ protocol AppStrings {
     func secCrashFootOpened(_ file: String) -> String
     var secOpenInConsole: String { get }
     func secCrashRowA11y(_ name: String, _ count: String) -> String
+    var secCrashHide: String { get }
+    var secCrashDelete: String { get }
+    var secCrashUnhide: String { get }
+    func secCrashHideA11y(_ name: String) -> String
+    func secCrashDeleteA11y(_ name: String) -> String
+    func secCrashUnhideA11y(_ name: String) -> String
+    func secCrashDeleteConfirmTitle(_ n: Int) -> String
+    var secCrashDeleteParagraphUser: String { get }
+    var secCrashDeleteParagraphSystem: String { get }
+    func secCrashDeleteRefused(_ name: String) -> String
     // MARK: Backups page (REDESIGN-BACKUPS)
     var bkSub: String { get }
     var bkTagTMNotSet: String { get }

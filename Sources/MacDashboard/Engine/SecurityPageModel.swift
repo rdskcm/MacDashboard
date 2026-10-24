@@ -33,7 +33,16 @@ struct SecurityUpdateRow: Equatable { var id: String; var name: String; var sub:
 struct SecurityCrashRow: Equatable {
     var id: String; var name: String; var sub: String; var value: String
     var tone: SecurityTone; var path: String?
+    /// CRASH-REPORT-DISMISS: the group carries report paths, so «Hide» / «Delete» are offered.
+    var actionable = false
+    /// The action running on this row (`.hide` / `.delete`), nil otherwise.
+    var working: CrashActionKind? = nil
+    /// Inline confirm texts; empty when not actionable.
+    var confirmTitle = ""
+    var confirmParagraphs: [String] = []
 }
+/// One row of the Crashes card's Hidden group.
+struct SecurityHiddenCrashRow: Equatable { var id: String; var name: String; var sub: String; var a11y: String; var working: Bool }
 struct SecurityUpdatesNote: Equatable { var tone: SecurityTone; var text: String; var showsInstall: Bool }
 
 struct SecurityPageModel: Equatable {
@@ -47,6 +56,8 @@ struct SecurityPageModel: Equatable {
         var crashes: [CrashGroup]?
         var openedReportPath: String?
         var now: Date
+        var hiddenCrashes: [CrashGroup]? = nil
+        var crashAction: CrashActionState = .idle
     }
     var tag: SecurityTone = .neutral; var tagText = ""; var sub = ""
     var protectionWait = false; var protectionCaption: String? = nil
@@ -57,6 +68,7 @@ struct SecurityPageModel: Equatable {
     var updateRows: [SecurityUpdateRow] = []
     var crashesCaption = ""; var crashesWait = false
     var crashRows: [SecurityCrashRow] = []; var crashesNone = false; var crashFoot = ""
+    var crashHiddenRows: [SecurityHiddenCrashRow] = []; var crashActionsDisabled = false; var crashNote: String? = nil
 
     static let dash = "—"
 
@@ -69,6 +81,24 @@ struct SecurityPageModel: Equatable {
     }
 
     // MARK: Helpers
+
+    /// One paragraph per folder kind present: per-user reports go to the Trash, system ones are deleted for good.
+    static func crashDeleteParagraphs(_ paths: [String], systemDirectory: String = CrashDismiss.systemDirectory) -> [String] {
+        let inSystem = { (p: String) in (p as NSString).deletingLastPathComponent == systemDirectory }
+        var out: [String] = []
+        if paths.contains(where: { !inSystem($0) }) { out.append(L.secCrashDeleteParagraphUser) }
+        if paths.contains(where: inSystem) { out.append(L.secCrashDeleteParagraphSystem) }
+        return out
+    }
+
+    static func crashNoteText(_ f: CrashDeleteFailure) -> String {
+        switch f {
+        case .cancelled: return L.sysDeleteCancelled
+        case .timedOut: return L.sysDeleteTimedOut
+        case .error(let msg): return L.sysDeleteFailed(String(msg.prefix(120)))
+        case .refused(let name): return L.secCrashDeleteRefused(name)
+        }
+    }
 
     static func value(_ p: SecurityProtection, _ s: SecurityState) -> Bool? {
         switch p {
@@ -183,16 +213,33 @@ struct SecurityPageModel: Equatable {
         }
 
         // Crashes card.
+        var working: (kind: CrashActionKind, id: String)? = nil
+        if case .working(let k, let id) = i.crashAction { working = (k, id) }
+        m.crashActionsDisabled = working != nil
+        if case .failed(let f) = i.crashAction { m.crashNote = crashNoteText(f) }
         if let crashes = i.crashes {
             m.crashesCaption = crashTotal > 0 ? L.secCrashesCaptionCount(crashTotal) : L.secCrashesCaption
             m.crashesNone = crashes.isEmpty
             m.crashRows = crashes.map { g in
-                SecurityCrashRow(id: g.process,
-                                 name: g.isPanic ? L.secKernelPanic : g.process,
-                                 sub: g.lastReportAt.map { crashDateText($0, now: i.now) } ?? "",
-                                 value: "×\(g.count)",
-                                 tone: g.isPanic ? .hot : .amber,
-                                 path: g.newestReportPath)
+                let actionable = !g.reportPaths.isEmpty
+                return SecurityCrashRow(id: g.process,
+                                        name: g.isPanic ? L.secKernelPanic : g.process,
+                                        sub: g.lastReportAt.map { crashDateText($0, now: i.now) } ?? "",
+                                        value: "×\(g.count)",
+                                        tone: g.isPanic ? .hot : .amber,
+                                        path: g.newestReportPath,
+                                        actionable: actionable,
+                                        working: working?.id == g.id && working?.kind != .unhide ? working?.kind : nil,
+                                        confirmTitle: actionable ? L.secCrashDeleteConfirmTitle(g.count) : "",
+                                        confirmParagraphs: actionable ? crashDeleteParagraphs(g.reportPaths) : [])
+            }
+            m.crashHiddenRows = (i.hiddenCrashes ?? []).map { g in
+                let name = g.isPanic ? L.secKernelPanic : g.process
+                let date = g.lastReportAt.map { crashDateText($0, now: i.now) }
+                return SecurityHiddenCrashRow(id: g.process, name: name,
+                                              sub: [date, "×\(g.count)"].compactMap { $0 }.joined(separator: " · "),
+                                              a11y: L.secCrashUnhideA11y(name),
+                                              working: working?.kind == .unhide && working?.id == g.id)
             }
         } else {
             m.crashesWait = true

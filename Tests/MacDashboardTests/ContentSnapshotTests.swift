@@ -259,6 +259,9 @@ extension SerialTests {
             let secChecking = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil; $0.applyFixtureSecurity(action: .idle, checkingUpdates: true) }
             let secCheckFailed = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil }
             let secCrashes = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef) }
+            let secCrashActions = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.report.crashesHidden = VisualFixture.securityHiddenCrashes(home: secHome, now: homeRef) }
+            let secCrashFailed = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.applyFixtureCrashAction(.failed(.cancelled)) }
+            let secCrashWorking = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.applyFixtureCrashAction(.working(.delete, groupID: "Kernel")) }
             let secRefreshing = security { $0.applyFixtureSecurity(action: .idle, refreshing: true) }
             // REDESIGN-BACKUPS: Backups page states. Reference instants are relative to the fixture clock (2026-01-15 10:30).
             @MainActor func backups(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
@@ -598,6 +601,16 @@ extension SerialTests {
                         SecurityCrashesCard(model: secCrashes)
                         SecurityCrashesCard(model: secCrashes, initialOpenedReport: secHome + "/Library/Logs/DiagnosticReports/MacDashboard-2026-01-15-094112.ips")
                     }
+                }
+                run.snap("content-security-crash-actions", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SecurityCrashesCard(model: secCrashActions, initialConfirm: "MacDashboard", initialHiddenOpen: true)
+                        SecurityCrashesCard(model: secCrashFailed)
+                        SecurityCrashesCard(model: secCrashWorking)
+                    }
+                }
+                run.snap("content-security-crash-actions-narrow", mode, width: 904) {
+                    SecurityCrashesCard(model: secCrashActions, initialHiddenOpen: true)
                 }
                 run.snap("content-security-narrow", mode, width: 904) {
                     SecurityProtectionCard(model: secFirewallOff, narrow: true)
