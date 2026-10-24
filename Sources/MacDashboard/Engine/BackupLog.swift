@@ -16,6 +16,12 @@ enum BackupLog {
         .appendingPathComponent("Library/Logs/claude-backup.log")
     static let rotatedURL: URL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Logs/claude-backup.log.1")
+    /// The log pair for a user override (`AppSettings.claudeLogPath`, `~` expanded); nil or empty → the defaults.
+    static func resolvedURLs(custom: String?) -> (log: URL, rotated: URL) {
+        guard let custom, !custom.isEmpty else { return (logURL, rotatedURL) }
+        let log = URL(fileURLWithPath: (custom as NSString).expandingTildeInPath)
+        return (log, URL(fileURLWithPath: log.path + ".1"))
+    }
     /// Tail windows tried in order: 64 KiB, then 2 MiB (twice the rotation threshold).
     static let windows = [64 * 1024, 2 * 1024 * 1024]
 
@@ -99,7 +105,7 @@ enum BackupLog {
         return unreadableCount == existing.count ? .unreadable : .noSuccessFound
     }
 
-    static func readStatus() async -> ClaudeBackupStatus? { status() }
+    static func readStatus(logURL: URL = BackupLog.logURL, rotatedURL: URL = BackupLog.rotatedURL) async -> ClaudeBackupStatus? { status(logURL: logURL, rotatedURL: rotatedURL) }
 
     static func isStale(_ s: ClaudeBackupStatus, thresholdHours: Int, now: Date) -> Bool {
         switch s {

@@ -117,9 +117,20 @@ private struct DS3ButtonBody: View {
 /// outside the capsule. Drawn rather than the system switch, whose on-colour follows window focus and the
 /// accessibility tint and cannot carry the dirty ring.
 struct DS3Switch: View {
+    /// Geometry: `energy` is the System › Energy table switch (32 × 19), `settings` the Settings window rows
+    /// (`Settings.dc.html:95-96`: 34 × 21, knob 17 at left 2, translateX 13).
+    enum Metrics {
+        case energy, settings
+        var width: CGFloat { self == .energy ? 32 : 34 }
+        var height: CGFloat { self == .energy ? 19 : 21 }
+        var knob: CGFloat { self == .energy ? 15 : 17 }
+        var onX: CGFloat { 15 }
+    }
+
     @Binding var isOn: Bool
     var dirty = false
     var label: String
+    var metrics: Metrics = .energy
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -131,18 +142,18 @@ struct DS3Switch: View {
                 Capsule(style: .circular).strokeBorder(DS3.lineStrong, lineWidth: 0.5).opacity(dirty ? 0 : 1)
                 Circle()
                     .fill(Color.white)
-                    .frame(width: 15, height: 15)
+                    .frame(width: metrics.knob, height: metrics.knob)
                     .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
-                    .offset(x: isOn ? 15 : 2)
+                    .offset(x: isOn ? metrics.onX : 2)
                 if dirty {
                     // CSS `0 0 0 1.5px` outside the capsule: a 1.5 pt stroke on a capsule 3 pt larger each way.
                     Capsule(style: .circular).stroke(DS3.amber, lineWidth: 1.5)
-                        .frame(width: 32 + 1.5, height: 19 + 1.5)
-                        .frame(width: 32, height: 19)
+                        .frame(width: metrics.width + 1.5, height: metrics.height + 1.5)
+                        .frame(width: metrics.width, height: metrics.height)
                         .allowsHitTesting(false)
                 }
             }
-            .frame(width: 32, height: 19)
+            .frame(width: metrics.width, height: metrics.height)
             .contentShape(Capsule(style: .circular))
             .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.3, dampingFraction: 0.62), value: isOn)
             .animation(.easeOut(duration: reduceMotion ? 0.01 : 0.18), value: dirty)
@@ -159,6 +170,8 @@ struct DS3Switch: View {
 struct DS3CircleButtonStyle: ButtonStyle {
     var diameter: CGFloat
     var disabledOpacity: Double = 0.45
+    var ring: Color = DS3.line
+    var topRim: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
         DS3CircleButtonBody(configuration: configuration, style: self)
@@ -175,7 +188,7 @@ private struct DS3CircleButtonBody: View {
         configuration.label
             .frame(width: style.diameter, height: style.diameter)
             .background(Circle().fill(DS3.chip))
-            .ds3InsetRims(Circle(), ring: DS3.line)
+            .ds3InsetRims(Circle(), top: style.topRim, ring: style.ring)
             .contentShape(Circle())
             .scaleEffect(configuration.isPressed && !reduceMotion ? DS3Motion.pressScale : 1)
             .animation(reduceMotion ? nil : DS3Motion.press, value: configuration.isPressed)

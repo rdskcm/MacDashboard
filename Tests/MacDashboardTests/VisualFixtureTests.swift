@@ -45,7 +45,7 @@ extension SerialTests {
             let expectedBackup = ClaudeBackupStatus.lastSuccess(VisualFixture.referenceDate.addingTimeInterval(-2 * 3600))
             #expect(d1.claudeBackup == expectedBackup, "VisualFixture: claudeBackup == lastSuccess(referenceDate - 2 h) (got \(d1.claudeBackup))")
             #expect(d1.claudeBackup == d2.claudeBackup, "VisualFixture: two make() calls -> equal claudeBackup")
-            #expect(!BackupLog.isStale(d1.claudeBackup, thresholdHours: AppSettings.defaultBackupStaleHours, now: VisualFixture.referenceDate),
+            #expect(!BackupLog.isStale(d1.claudeBackup, thresholdHours: AppSettings.defaultBackupStaleDays * 24, now: VisualFixture.referenceDate),
                   "VisualFixture: claudeBackup is fresh at referenceDate under the default limit")
             #expect(!d1.assessment.items.contains { $0.kind == .claudeBackup },
                   "VisualFixture: no claudeBackup attention item (assessment must use now: referenceDate)")

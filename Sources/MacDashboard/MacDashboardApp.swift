@@ -11,6 +11,8 @@ struct MacDashboardApp: App {
     init() {
         _model = State(wrappedValue: DashboardModel())
         _glass = State(wrappedValue: GlassSettings())
+        SettingsWindowController.shared.configure(model: _model.wrappedValue, glass: _glass.wrappedValue)
+        AppSettings.shared.appearance.apply()
         // Forces the launch-language capture now, before any UI can switch it.
         _ = L10nStore.launchLanguage
         syncAppleLanguages()
@@ -34,16 +36,11 @@ struct MacDashboardApp: App {
         }
         .defaultSize(width: 1150, height: 780)
         .windowStyle(.hiddenTitleBar)
-
-        // The Settings window intentionally keeps its system titlebar (V2-SETTINGS-CHROME,
-        // user decision at acceptance) — only its background is made translucent, by
-        // `VisualEffectBackground`. Note for anyone tempted to hide it again:
-        // `.windowStyle(.hiddenTitleBar)` does nothing for a `Settings` scene on this
-        // SDK/OS (macOS 26, screenshot-verified), and the NSWindow route
-        // (`.fullSizeContentView`) breaks the fixed-size 680×420 layout — see the
-        // comment in `VisualEffectBackground.swift`.
-        Settings {
-            SettingsView(model: model).environment(glass)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button(L.settingsMenuItem) { SettingsWindowController.shared.show() }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }
@@ -53,8 +50,15 @@ struct MacDashboardApp: App {
 /// handled by L10n — system chrome (menu bar, standard dialogs) catches up on
 /// relaunch only.
 private func syncAppleLanguages() {
-    let want = [L10nStore.shared.language == .en ? "en" : "ru"]
-    if UserDefaults.standard.stringArray(forKey: "AppleLanguages") != want {
-        UserDefaults.standard.set(want, forKey: "AppleLanguages")
+    switch L10nStore.shared.choice {
+    case .system:
+        if UserDefaults.standard.object(forKey: "AppleLanguages") != nil {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        }
+    case .en, .ru:
+        let want = [L10nStore.shared.choice.rawValue]
+        if UserDefaults.standard.stringArray(forKey: "AppleLanguages") != want {
+            UserDefaults.standard.set(want, forKey: "AppleLanguages")
+        }
     }
 }

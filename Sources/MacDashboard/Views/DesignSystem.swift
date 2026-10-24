@@ -324,9 +324,8 @@ enum DSSegmentedSize {
     case header
     /// In-card controls (metric pickers, folder tabs): the default, tighter fit.
     case card
-    /// Settings ▸ Monitoring interval switch (spec §2.3/§7.3, SW:92): monospaced
-    /// tabular digits, since the segments are all-numeric.
-    case settingsInterval
+    /// Settings row segment (REDESIGN-SETTINGS, `Settings.dc.html:87-90`): 12.5 / 600, segment height 24 (padding 4.5 × 12), gap 2.
+    case settingsRow
     /// Section page card trailing control (REDESIGN-CPU, 00-shared §8): 12.5 / 600, segment padding 6 × 12.
     case section
 
@@ -335,7 +334,7 @@ enum DSSegmentedSize {
         case .tabs: return .system(size: 12.5, weight: .semibold)
         case .header: return .system(size: 13, weight: .semibold)
         case .card: return .system(size: 11, weight: .semibold)
-        case .settingsInterval: return .system(size: 12, weight: .semibold, design: .monospaced)
+        case .settingsRow: return .system(size: 12.5, weight: .semibold)
         case .section: return .system(size: 12.5, weight: .semibold)
         }
     }
@@ -344,7 +343,7 @@ enum DSSegmentedSize {
         case .tabs: return 16
         case .header: return 16
         case .card: return 11
-        case .settingsInterval: return 11
+        case .settingsRow: return 12
         case .section: return 12
         }
     }
@@ -353,18 +352,18 @@ enum DSSegmentedSize {
         case .tabs: return 6
         case .header: return 8
         case .card: return 5
-        case .settingsInterval: return 6
+        case .settingsRow: return 4.5
         case .section: return 6
         }
     }
     /// Gap between segments, matching the prototype track's `gap` (2px for
-    /// tabs/card, 3px for the monospaced Settings interval switch).
+    /// tabs/card/settings row).
     var gap: CGFloat {
         switch self {
         case .tabs: return 2
         case .header: return 2
         case .card: return 2
-        case .settingsInterval: return 3
+        case .settingsRow: return 2
         case .section: return 2
         }
     }

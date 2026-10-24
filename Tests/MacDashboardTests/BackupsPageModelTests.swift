@@ -287,10 +287,10 @@ extension SerialTests {
                 #expect(ok.claudeTiles.map(\.id) == ["age", "lastSnap", "warn"])
                 #expect(ok.claudeTiles[0].value == "5 h ago"); #expect(ok.claudeTiles[0].dot == .green)
                 #expect(ok.claudeTiles[0].note == "OK")
-                #expect(ok.claudeTiles[2].value == "2 d"); #expect(ok.claudeTiles[2].note == "change in Settings")
+                #expect(ok.claudeTiles[2].value == "2 days"); #expect(ok.claudeTiles[2].note == "change in Settings")
                 let stale = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 4 * dy)))
                 #expect(stale.claudeState == .stale); #expect(stale.claudeNote?.tone == .amber)
-                #expect(stale.claudeNote?.text.contains("2 d") == true)
+                #expect(stale.claudeNote?.text.contains("2 days") == true)
                 #expect(stale.claudeTiles[0].valueTone == .amber); #expect(stale.claudeTiles[0].note == "over the limit")
             }
         }

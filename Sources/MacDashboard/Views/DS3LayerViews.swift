@@ -182,8 +182,31 @@ final class DS3RimView: NSView {
 
 // MARK: - Orbs
 
+/// One soft colour glow: colour, diameter and a centre function of the layer size.
+struct DS3OrbSpec {
+    let color: Color
+    let d: CGFloat
+    let centre: (CGSize) -> CGPoint
+
+    /// The main window's three orbs.
+    static let window: [DS3OrbSpec] = [
+        DS3OrbSpec(color: DS3.orbA, d: 640, centre: { CGPoint(x: $0.width - 180, y: 100) }),
+        DS3OrbSpec(color: DS3.orbB, d: 560, centre: { _ in CGPoint(x: 40, y: 640) }),
+        DS3OrbSpec(color: DS3.orbC, d: 520, centre: { CGPoint(x: $0.width * 0.82 - 260, y: $0.height) }),
+    ]
+
+    /// The Settings window's smaller set (`Settings.dc.html:28-30`).
+    static let settings: [DS3OrbSpec] = [
+        DS3OrbSpec(color: DS3.orbA, d: 520, centre: { _ in CGPoint(x: 80, y: 40) }),
+        DS3OrbSpec(color: DS3.orbB, d: 460, centre: { CGPoint(x: $0.width - 70, y: $0.height + 10) }),
+        DS3OrbSpec(color: DS3.orbC, d: 380, centre: { CGPoint(x: $0.width - 250, y: -70) }),
+    ]
+}
+
 struct DS3OrbLayer: NSViewRepresentable {
-    func makeNSView(context: Context) -> DS3OrbView { DS3OrbView() }
+    var orbs: [DS3OrbSpec] = DS3OrbSpec.window
+
+    func makeNSView(context: Context) -> DS3OrbView { DS3OrbView(orbs: orbs) }
 
     func updateNSView(_ nsView: DS3OrbView, context: Context) {}
 
@@ -200,25 +223,16 @@ final class DS3OrbView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    private struct Orb {
-        let color: Color
-        let d: CGFloat
-        let centre: (CGSize) -> CGPoint
-    }
-
-    private static let orbs: [Orb] = [
-        Orb(color: DS3.orbA, d: 640, centre: { CGPoint(x: $0.width - 180, y: 100) }),
-        Orb(color: DS3.orbB, d: 560, centre: { _ in CGPoint(x: 40, y: 640) }),
-        Orb(color: DS3.orbC, d: 520, centre: { CGPoint(x: $0.width * 0.82 - 260, y: $0.height) }),
-    ]
-
+    private let orbs: [DS3OrbSpec]
     private let container = CALayer()
-    private let orbLayers: [CALayer] = (0..<3).map { _ in CALayer() }
+    private let orbLayers: [CALayer]
     private var renderedAppearance: NSAppearance.Name?
     private var renderedScale: CGFloat?
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
+    init(orbs: [DS3OrbSpec]) {
+        self.orbs = orbs
+        self.orbLayers = orbs.map { _ in CALayer() }
+        super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         let off = NSNull()
@@ -238,7 +252,7 @@ final class DS3OrbView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         container.frame = bounds
-        for (l, o) in zip(orbLayers, Self.orbs) {
+        for (l, o) in zip(orbLayers, orbs) {
             l.bounds = CGRect(x: 0, y: 0, width: o.d, height: o.d)
             l.position = o.centre(bounds.size)
         }
@@ -270,7 +284,7 @@ final class DS3OrbView: NSView {
         renderedScale = scale
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (l, o) in zip(orbLayers, Self.orbs) {
+        for (l, o) in zip(orbLayers, orbs) {
             let c = Color(cgColor: ds3Resolve(o.color, in: effectiveAppearance))
             let renderer = ImageRenderer(
                 content: Circle()

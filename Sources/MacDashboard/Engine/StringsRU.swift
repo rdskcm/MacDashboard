@@ -8,20 +8,43 @@ struct StringsRU: AppStrings {
     var decimalSeparator: String { "," }
 
     // MARK: Settings
-    var settingsLanguageLabel: String { "Язык интерфейса" }
-    var settingsIntervalLabel: String { "Интервал обновления (процессор/память)" }
+    var settingsLanguageLabel: String { "Язык" }
+    var settingsIntervalLabel: String { "Интервал обновления" }
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) с" }
-    var settingsIntervalNoteBalanced: String { "Рабочий диапазон: живые графики без заметной нагрузки." }
-    var settingsIntervalNoteEconomy: String { "Экономный режим: значения обновляются реже, батарея живёт дольше." }
-    var settingsSectionBackup: String { "Бэкап" }
-    var settingsBackupStaleLabel: String { "Бэкап Claude: предупреждать, если старше" }
-    func settingsBackupStaleOption(_ hours: Int) -> String { "\(hours / 24) дн" }
-    var settingsBackupStaleNote: String { "Возраст берётся из журнала ~/Library/Logs/claude-backup.log, поэтому он известен и при отключённом или заблокированном диске." }
-    var settingsMenuLanguageHint: String { "Язык меню и системных диалогов применится после перезапуска приложения" }
+    var settingsSectionBackup: String { "Резервные копии" }
+    var settingsMenuLanguageHint: String { "Меню и системные окна сменят язык после перезапуска." }
     var settingsRelaunchNow: String { "Перезапустить сейчас" }
-    var settingsSectionGeneral: String { "Общие" }
+    var settingsSectionGeneral: String { "Основные" }
     var settingsSectionMonitoring: String { "Мониторинг" }
     var settingsVersionLabel: String { "Версия" }
+    var settingsSectionIPhone: String { "iPhone" }
+    var settingsKeepArchivesLabel: String { "Хранить импортированные архивы" }
+    var settingsSectionAbout: String { "О программе" }
+    var settingsInstantNote: String { "Изменения применяются сразу." }
+    var settingsOptionSystem: String { "Системный" }
+    var settingsThemeLabel: String { "Тема" }
+    var settingsThemeLight: String { "Светлая" }
+    var settingsThemeDark: String { "Тёмная" }
+    var settingsOrbsLabel: String { "Фоновые сферы" }
+    var settingsOrbsSub: String { "Выключены при «Уменьшении движения»" }
+    var settingsLaunchAtLoginLabel: String { "Открывать при входе" }
+    var settingsLaunchAtLoginApproval: String { "Разрешите в Системных настройках › Основные › Объекты входа" }
+    var settingsSnapshotLabel: String { "Ежедневный снимок" }
+    var settingsSnapshotSub: String { "Данные для графиков «История»" }
+    var settingsLowSpaceLabel: String { "Мало места, если свободно <" }
+    var settingsClaudeLogLabel: String { "Журнал бэкапа Claude" }
+    var settingsChoose: String { "Выбрать…" }
+    var settingsPathMissing: String { "Файл по этому пути не найден" }
+    var settingsWarnAfterLabel: String { "Предупреждать через" }
+    var settingsWarnAfterSub: String { "После этого срок копии подсвечивается" }
+    var settingsWarnAfterFewer: String { "Меньше дней" }
+    var settingsWarnAfterMore: String { "Больше дней" }
+    var settingsPermTitle: String { "Нужен полный доступ к диску" }
+    var settingsPermBody: String { "Без него MacDashboard не может прочитать журнал резервных копий Claude." }
+    var settingsReportFolderLabel: String { "Папка отчёта" }
+    var settingsMenuItem: String { "Настройки…" }
+    func settingsLowSpaceOption(_ percent: Int) -> String { "\(percent) %" }
+    func settingsWarnAfterDays(_ days: Int) -> String { "\(days) " + ruPlural(days, "день", "дня", "дней") }
     var settingsWindowTitle: String { "Настройки" }
 
     // MARK: Main dashboard (header + tab picker)

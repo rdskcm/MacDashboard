@@ -8,20 +8,43 @@ struct StringsEN: AppStrings {
     var decimalSeparator: String { "." }
 
     // MARK: Settings
-    var settingsLanguageLabel: String { "Interface language" }
-    var settingsIntervalLabel: String { "Refresh interval (CPU/RAM)" }
+    var settingsLanguageLabel: String { "Language" }
+    var settingsIntervalLabel: String { "Refresh interval" }
     func settingsIntervalOption(_ seconds: Int) -> String { "\(seconds) s" }
-    var settingsIntervalNoteBalanced: String { "The working range: live charts with no noticeable load." }
-    var settingsIntervalNoteEconomy: String { "Economy: values update less often, the battery lasts longer." }
-    var settingsSectionBackup: String { "Backup" }
-    var settingsBackupStaleLabel: String { "Claude backup: warn when older than" }
-    func settingsBackupStaleOption(_ hours: Int) -> String { "\(hours / 24) d" }
-    var settingsBackupStaleNote: String { "The age is read from ~/Library/Logs/claude-backup.log, so it is known even when the disk is unplugged or locked." }
-    var settingsMenuLanguageHint: String { "The menu bar and system dialogs follow the app language after a relaunch" }
-    var settingsRelaunchNow: String { "Relaunch Now" }
+    var settingsSectionBackup: String { "Backups" }
+    var settingsMenuLanguageHint: String { "Menus and system windows switch language after a relaunch." }
+    var settingsRelaunchNow: String { "Relaunch now" }
     var settingsSectionGeneral: String { "General" }
     var settingsSectionMonitoring: String { "Monitoring" }
     var settingsVersionLabel: String { "Version" }
+    var settingsSectionIPhone: String { "iPhone" }
+    var settingsKeepArchivesLabel: String { "Keep imported archives" }
+    var settingsSectionAbout: String { "About" }
+    var settingsInstantNote: String { "Changes apply instantly." }
+    var settingsOptionSystem: String { "System" }
+    var settingsThemeLabel: String { "Theme" }
+    var settingsThemeLight: String { "Light" }
+    var settingsThemeDark: String { "Dark" }
+    var settingsOrbsLabel: String { "Background orbs" }
+    var settingsOrbsSub: String { "Off when Reduce Motion is on" }
+    var settingsLaunchAtLoginLabel: String { "Launch at login" }
+    var settingsLaunchAtLoginApproval: String { "Allow it in System Settings › General › Login Items" }
+    var settingsSnapshotLabel: String { "Daily snapshot" }
+    var settingsSnapshotSub: String { "Data for History charts" }
+    var settingsLowSpaceLabel: String { "Low-space warning" }
+    var settingsClaudeLogLabel: String { "Claude backup log" }
+    var settingsChoose: String { "Choose…" }
+    var settingsPathMissing: String { "File not found at this path" }
+    var settingsWarnAfterLabel: String { "Warn after" }
+    var settingsWarnAfterSub: String { "Backup age shown amber after this" }
+    var settingsWarnAfterFewer: String { "Fewer days" }
+    var settingsWarnAfterMore: String { "More days" }
+    var settingsPermTitle: String { "Full Disk Access needed" }
+    var settingsPermBody: String { "MacDashboard can’t read the Claude backup log without it." }
+    var settingsReportFolderLabel: String { "Report folder" }
+    var settingsMenuItem: String { "Settings…" }
+    func settingsLowSpaceOption(_ percent: Int) -> String { "\(percent)%" }
+    func settingsWarnAfterDays(_ days: Int) -> String { "\(days) " + (days == 1 ? "day" : "days") }
     var settingsWindowTitle: String { "Settings" }
 
     // MARK: Main dashboard (header + tab picker)

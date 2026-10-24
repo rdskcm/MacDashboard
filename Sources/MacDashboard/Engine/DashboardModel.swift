@@ -69,8 +69,6 @@ final class DashboardModel {
     private(set) var tmAction: TMActionState = .idle
     /// REDESIGN-BACKUPS: when the Time Machine destination was last (re)collected — the card's «updated HH:MM».
     var tmUpdatedAt: Date? = nil
-    /// REDESIGN-BACKUPS: a page asks the Settings window to open on this section; SettingsView consumes and clears it.
-    var settingsSectionRequest: SettingsSection? = nil
     private var tmRefreshing = false
 
     /// Re-entrancy guard for `refreshSmartNow()` (SPEC Block H follow-up): true while a
@@ -428,16 +426,34 @@ final class DashboardModel {
 
     /// BACKUP-AGE: re-read the backup log off the main actor; guarded so an unchanged status notifies nobody.
     func refreshClaudeBackup() async {
-        let s = await BackupLog.readStatus()
+        let urls = BackupLog.resolvedURLs(custom: AppSettings.shared.claudeLogPath)
+        let s = await BackupLog.readStatus(logURL: urls.log, rotatedURL: urls.rotated)
         if claudeBackup != s { claudeBackup = s }
     }
 
+    /// The Claude backup log currently read (the user's override or the default).
+    var claudeLogPath: String { BackupLog.resolvedURLs(custom: AppSettings.shared.claudeLogPath).log.path }
+
     /// BACKUP-AGE: change the stale limit and re-assess now (same report choice as the fast tick).
-    func setBackupStaleHours(_ hours: Int) {
-        guard AppSettings.allowedBackupStaleHours.contains(hours),
-              AppSettings.shared.backupStaleHours != hours else { return }
-        AppSettings.shared.backupStaleHours = hours
+    func setBackupStaleDays(_ days: Int) {
+        guard AppSettings.backupStaleDaysRange.contains(days),
+              AppSettings.shared.backupStaleDays != days else { return }
+        AppSettings.shared.backupStaleDays = days
         setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
+    }
+
+    /// REDESIGN-SETTINGS: change the low-space line and re-assess now.
+    func setLowSpacePercent(_ pct: Int) {
+        guard AppSettings.allowedLowSpacePercents.contains(pct),
+              AppSettings.shared.lowSpacePercent != pct else { return }
+        AppSettings.shared.lowSpacePercent = pct
+        setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
+    }
+
+    /// REDESIGN-SETTINGS: choose the Claude backup log (nil = default); re-read and re-assess.
+    func setClaudeLogPath(_ path: String?) {
+        AppSettings.shared.claudeLogPath = path
+        Task { await refreshClaudeBackup(); setAssessment(assessed(isCollectingReport ? lastCommittedReport : report)) }
     }
 
     /// SLEEP-IGNORE-APP: add (`ignored: true`) or remove a holder from the Sleep item's
@@ -870,11 +886,12 @@ final class DashboardModel {
                 }
             }
 
-            self.historyStore.upsertToday(from: final, live: self.live)
-            do {
-                try self.historyStore.save()
-            } catch {
-                self.lastError = L.errorHistorySaveFailed(error.localizedDescription)
+            let snapshotNow = Date()
+            if SnapshotSchedule.isDue(now: snapshotNow, last: AppSettings.shared.lastSnapshotAt,
+                                      minutesAfterMidnight: AppSettings.shared.snapshotMinutes) {
+                self.historyStore.upsertToday(from: final, live: self.live)
+                do { try self.historyStore.save() } catch { self.lastError = L.errorHistorySaveFailed(error.localizedDescription) }
+                AppSettings.shared.lastSnapshotAt = snapshotNow
             }
             self.history = self.historyStore.state
             self.historyUnreadable = self.historyStore.fileUnreadable
@@ -1892,6 +1909,7 @@ final class DashboardModel {
                       wakeHolders: wakeHolders, ignoredWakeHolders: AppSettings.shared.ignoredWakeHolders,
                       claudeBackup: claudeBackup, backupStaleHours: AppSettings.shared.backupStaleHours,
                       lowSpacePercent: AppSettings.shared.lowSpacePercent,
+                      claudeLogPath: claudeLogPath,
                       now: fixtureNow ?? Date())
     }
 

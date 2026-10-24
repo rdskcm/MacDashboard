@@ -291,7 +291,7 @@ struct BackupsPageModel: Equatable {
         switch state {
         case .ok: return nil
         case .stale:
-            return BackupsNote(tone: .amber, text: L.bkNoteClaudeStale(L.settingsBackupStaleOption(warnAfterHours)), button: nil)
+            return BackupsNote(tone: .amber, text: L.bkNoteClaudeStale(L.settingsWarnAfterDays(warnAfterHours / 24)), button: nil)
         case .noneFound:
             return BackupsNote(tone: .amber, text: L.bkNoteClaudeNone, button: nil)
         case .missing:
@@ -305,7 +305,7 @@ struct BackupsPageModel: Equatable {
         var age = BackupsTile(id: "age", label: L.claudeBackupAgeLabel, value: dash, valueTone: .neutral)
         var last = BackupsTile(id: "lastSnap", label: L.claudeBackupLastLabel, value: dash, valueTone: .neutral)
         let warn = BackupsTile(id: "warn", label: L.claudeBackupLimitLabel,
-                               value: L.settingsBackupStaleOption(warnAfterHours), note: L.bkChangeInSettings)
+                               value: L.settingsWarnAfterDays(warnAfterHours / 24), note: L.bkChangeInSettings)
         switch state {
         case .ok, .stale:
             if case .lastSuccess(let d)? = status {
