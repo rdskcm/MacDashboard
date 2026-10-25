@@ -51,6 +51,14 @@ extension SerialTests {
             }
         }
 
+        @Test func notifyEnabledPersistence() {
+            let saved = AppSettings.shared.notifyEnabled
+            defer { AppSettings.shared.notifyEnabled = saved }
+            AppSettings.shared.notifyEnabled = [.disk]
+            #expect(UserDefaults.standard.bool(forKey: NotifyCategory.disk.defaultsKey) == true)
+            #expect(UserDefaults.standard.object(forKey: NotifyCategory.crashes.defaultsKey) as? Bool == false)
+        }
+
         @Test func fastIntervalResolution() {
             for v in [2, 5, 10] {
                 #expect(AppSettings.resolveFastInterval(raw: v) == v, "resolveFastInterval keeps \(v)")

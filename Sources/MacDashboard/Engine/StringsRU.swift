@@ -45,6 +45,16 @@ struct StringsRU: AppStrings {
     var settingsMenuItem: String { "Настройки…" }
     func settingsLowSpaceOption(_ percent: Int) -> String { "\(percent) %" }
     func settingsWarnAfterDays(_ days: Int) -> String { "\(days) " + ruPlural(days, "день", "дня", "дней") }
+    var settingsNotifyCaption: String { "Уведомлять о проблемах" }
+    var settingsNotifyProtection: String { "Защита выключена" }
+    var settingsNotifyDisk: String { "Мало места на диске" }
+    var settingsNotifyBattery: String { "Состояние батареи" }
+    var settingsNotifyBackup: String { "Резервная копия устарела" }
+    var settingsNotifyUpdates: String { "Доступны обновления" }
+    var settingsNotifyCrashes: String { "Новые отчёты о сбоях" }
+    var settingsNotifyDenied: String { "Уведомления MacDashboard выключены в Системных настройках." }
+    var settingsNotifyOpen: String { "Открыть «Уведомления»…" }
+    var settingsNotifyOpenA11y: String { "Открыть Системные настройки › Уведомления" }
     var settingsWindowTitle: String { "Настройки" }
 
     // MARK: Main dashboard (header + tab picker)

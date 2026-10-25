@@ -50,6 +50,9 @@ struct MainDashboardView: View {
                 }
             }
             .onChange(of: L10nStore.shared.language) { model.refreshReport(trigger: .automatic) }
+            // REDESIGN-NOTIFY: a notification click navigates through the view-owned router (R5, D15).
+            .onChange(of: model.externalDestinationSerial) { if let d = model.consumeExternalDestination() { router.navigate(to: d) } }
+            .onAppear { if let d = model.consumeExternalDestination() { router.navigate(to: d) } }
             .background {
                 if router.canGoBack && router.mode == .mac && !router.isInlineConfirmOpen { BackShortcuts { _ = router.back() } }
             }

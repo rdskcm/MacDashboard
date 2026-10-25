@@ -74,6 +74,17 @@ protocol AppStrings {
     var settingsMenuItem: String { get }
     func settingsLowSpaceOption(_ percent: Int) -> String
     func settingsWarnAfterDays(_ days: Int) -> String
+    // REDESIGN-NOTIFY (handoff 11-settings.md :26, Settings.dc.html :188-195)
+    var settingsNotifyCaption: String { get }
+    var settingsNotifyProtection: String { get }
+    var settingsNotifyDisk: String { get }
+    var settingsNotifyBattery: String { get }
+    var settingsNotifyBackup: String { get }
+    var settingsNotifyUpdates: String { get }
+    var settingsNotifyCrashes: String { get }
+    var settingsNotifyDenied: String { get }
+    var settingsNotifyOpen: String { get }
+    var settingsNotifyOpenA11y: String { get }
 
     // MARK: Main dashboard (header + tab picker)
     var mainCollectingInfo: String { get }
@@ -1435,6 +1446,20 @@ final class L10nStore {
             guard let self, self.choice == .system else { return }
             let l = LanguageChoice.resolve(.system, preferredLanguages: Locale.preferredLanguages)
             if l != self.language { self.language = l }
+        }
+    }
+}
+
+extension AppStrings {
+    /// Toggle label of a notify category — also the notification title (D5).
+    func settingsNotifyLabel(_ c: NotifyCategory) -> String {
+        switch c {
+        case .protection: return settingsNotifyProtection
+        case .disk: return settingsNotifyDisk
+        case .battery: return settingsNotifyBattery
+        case .backup: return settingsNotifyBackup
+        case .updates: return settingsNotifyUpdates
+        case .crashes: return settingsNotifyCrashes
         }
     }
 }
