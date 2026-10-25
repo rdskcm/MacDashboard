@@ -124,7 +124,8 @@ extension View {
                 // Top-edge-only highlight, same technique as `DSCardSurface`.
                 shape.strokeBorder(
                     LinearGradient(
-                        stops: [.init(color: top, location: 0), .init(color: .clear, location: 0.18)],
+                        stops: RimAmbient.ramp(alpha: 0.55, ground: DS3.rimGroundDark)
+                            .map { .init(color: top.opacity($0.multiplier), location: 0.18 * $0.location) },
                         startPoint: .top,
                         endPoint: .bottom
                     ),
@@ -293,7 +294,7 @@ struct DS3Rim: View {
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(DS3.windowSpace)) }) { model.rect = $0 }
                     .onAppear { tracker.register(model) }
                     .onDisappear { tracker.unregister(model) }
-            } else if colorScheme == .dark {   // Stage 3b: or RimLight light mode != .none
+            } else if colorScheme == .dark || RimDebugDefaults.shared.lightMode != .none {
                 DS3RimStroke(cornerRadius: cornerRadius)
             }
         }

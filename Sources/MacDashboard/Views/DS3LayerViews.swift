@@ -65,6 +65,8 @@ final class DS3RimView: NSView {
     private let ringMask = CAShapeLayer()
     private let ambient = CALayer()
     private let spot = CALayer()
+    private var shadeRing: CALayer?
+    private var shadeMask: CAShapeLayer?
     private var h: Double
     private var lightMode: RimLight.LightMode
     private var spotVisible = false
@@ -116,6 +118,11 @@ final class DS3RimView: NSView {
         ring.frame = bounds
         ringMask.frame = ring.bounds
         ringMask.path = Self.ringPath(bounds.size, cornerRadius)
+        if let shadeRing, let shadeMask {
+            shadeRing.frame = bounds
+            shadeMask.frame = shadeRing.bounds
+            shadeMask.path = ringMask.path
+        }
         ambient.frame = CGRect(x: 0, y: 0, width: bounds.width, height: cornerRadius)
         let r = CGFloat(RimLight.range(h: h))
         spot.bounds = CGRect(x: 0, y: 0, width: 2 * r, height: 2 * r)
@@ -168,6 +175,7 @@ final class DS3RimView: NSView {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             ring.isHidden = true
+            shadeRing?.isHidden = true
             CATransaction.commit()
             renderedKey = nil
             return
@@ -175,7 +183,11 @@ final class DS3RimView: NSView {
         let depthPx = Int((cornerRadius * scale).rounded(.up))
         let key = RenderKey(appearance: effectiveAppearance.name, scale: scale, h: h, lightMode: lightMode, depthPx: depthPx)
         guard key != renderedKey else { return }
-        let ground = isDark ? DS3.rimGroundDark : DS3.rimGroundLight
+        var ground = isDark ? DS3.rimGroundDark : DS3.rimGroundLight
+        let shaded = !isDark && lightMode == .shade
+        if shaded {
+            ground = RimLight.shadedGround(ground, shade: SIMD3<Double>(60, 40, 20) / 255, alpha: 0.12)
+        }
         let sprite = RimSpriteCache.shared.sprite(h: h, scale: scale, ground: ground)
         let amb = depthPx > 0 ? RimSpriteCache.shared.ambient(depthPx: depthPx, ground: ground, alpha: isDark ? 0.2 : 0.5) : nil
         if sprite == nil || (depthPx > 0 && amb == nil) {
@@ -187,6 +199,25 @@ final class DS3RimView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         ring.isHidden = false
+        if shaded {
+            if shadeRing == nil, let host = layer {
+                let sr = CALayer()
+                let sm = CAShapeLayer()
+                let off = NSNull()
+                let keys = ["bounds", "position", "frame", "path", "hidden", "backgroundColor"]
+                for l in [sr, sm] as [CALayer] { l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) }) }
+                sm.fillColor = CGColor(gray: 0, alpha: 1)
+                sr.mask = sm
+                host.insertSublayer(sr, below: ring)
+                shadeRing = sr
+                shadeMask = sm
+                needsLayout = true
+            }
+            shadeRing?.isHidden = false
+            shadeRing?.backgroundColor = ds3Resolve(DS3.rimShade, in: effectiveAppearance)
+        } else {
+            shadeRing?.isHidden = true
+        }
         if let sprite { spot.contents = sprite }
         if let amb { ambient.contents = amb }
         spot.contentsScale = scale
@@ -282,7 +313,6 @@ final class RimSpriteCache {
 
 /// Stage 3a/3b only (deleted in Stage 4): the hidden defaults `rimProfile` ("1" | "2" | "3", default "2") and
 /// `rimLight` ("none" | "white" | "shade", default "none") in the app's own domain, switched live by KVO.
-/// Stage 3a reads `rimProfile` only; the light appearance stays `.none` until Stage 3b.
 @MainActor
 final class RimDebugDefaults {
     static let shared = RimDebugDefaults()
@@ -299,7 +329,7 @@ final class RimDebugDefaults {
     private init() {
         read()
         // KVO reports changes made by other processes (`defaults write`); the callback may come on any thread.
-        observer = DefaultsKeyObserver(keys: ["rimProfile"]) { [weak self] in
+        observer = DefaultsKeyObserver(keys: ["rimProfile", "rimLight"]) { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.changed() } }
         }
     }
@@ -309,6 +339,11 @@ final class RimDebugDefaults {
     private func read() {
         let k = UserDefaults.standard.string(forKey: "rimProfile") ?? RimLight.defaultProfileKey
         profileKey = RimLight.heights[k] != nil ? k : RimLight.defaultProfileKey
+        switch UserDefaults.standard.string(forKey: "rimLight") {
+        case "white": lightMode = .white
+        case "shade": lightMode = .shade
+        default: lightMode = .none
+        }
     }
 
     private func changed() {

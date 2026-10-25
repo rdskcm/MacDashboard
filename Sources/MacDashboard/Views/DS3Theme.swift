@@ -72,6 +72,8 @@ enum DS3 {
     /// RIM-GLOW-OPTICS: encoded sRGB of a glass card's surface with no orb under it (measured in Stage 1, 2026-10-26).
     static let rimGroundDark = SIMD3<Double>(27, 27, 29) / 255
     static let rimGroundLight = SIMD3<Double>(250, 250, 249) / 255
+    /// Light `shade` variant: warm dark ink of the light-mode card shadow (`DS3Shadow.card`), under the additive ring.
+    static let rimShade = ds3RGB(60, 40, 20, 0.12)
 
     static let orbA = Color(light: ds3RGB(62, 123, 239, 0.55), dark: ds3RGB(70, 130, 240, 0.45))
     static let orbB = Color(light: ds3RGB(244, 166, 59, 0.45), dark: ds3RGB(230, 140, 50, 0.30))
