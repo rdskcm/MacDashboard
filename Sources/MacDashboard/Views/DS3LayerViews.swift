@@ -188,14 +188,16 @@ struct DS3OrbSpec {
     let d: CGFloat
     let centre: (CGSize) -> CGPoint
 
-    /// The main window's three orbs.
+    /// The main window's three v2 orbs (`This Mac Home v2.dc.html:33-35`): A back 780 `top -300 right -220`,
+    /// B mid 580 `top 330 left -250`, C front 420 `bottom -190 right 20%`. REDESIGN-ORBS.
     static let window: [DS3OrbSpec] = [
-        DS3OrbSpec(color: DS3.orbA, d: 640, centre: { CGPoint(x: $0.width - 180, y: 100) }),
-        DS3OrbSpec(color: DS3.orbB, d: 560, centre: { _ in CGPoint(x: 40, y: 640) }),
-        DS3OrbSpec(color: DS3.orbC, d: 520, centre: { CGPoint(x: $0.width * 0.82 - 260, y: $0.height) }),
+        DS3OrbSpec(color: DS3.orbA, d: 780, centre: { OrbGeometry.centre(left: OrbGeometry.leftFromRight(-220, d: 780, width: $0.width), top: -300, d: 780) }),
+        DS3OrbSpec(color: DS3.orbB, d: 580, centre: { _ in OrbGeometry.centre(left: -250, top: 330, d: 580) }),
+        DS3OrbSpec(color: DS3.orbC, d: 420, centre: { OrbGeometry.centre(left: OrbGeometry.leftFromRight(0.2 * $0.width, d: 420, width: $0.width), top: OrbGeometry.topFromBottom(-190, d: 420, height: $0.height), d: 420) }),
     ]
 
-    /// The Settings window's smaller set (`Settings.dc.html:28-30`).
+    /// The Settings window's smaller set (`Settings.dc.html:28-30`); values unchanged by REDESIGN-ORBS
+    /// (D1: colour/blend/grain follow the window set).
     static let settings: [DS3OrbSpec] = [
         DS3OrbSpec(color: DS3.orbA, d: 520, centre: { _ in CGPoint(x: 80, y: 40) }),
         DS3OrbSpec(color: DS3.orbB, d: 460, centre: { CGPoint(x: $0.width - 70, y: $0.height + 10) }),
@@ -236,7 +238,7 @@ final class DS3OrbView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         let off = NSNull()
-        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden"]
+        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden", "compositingFilter", "opacity"]
         for l in [container] + orbLayers {
             l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
         }
@@ -288,12 +290,13 @@ final class DS3OrbView: NSView {
             let c = Color(cgColor: ds3Resolve(o.color, in: effectiveAppearance))
             let renderer = ImageRenderer(
                 content: Circle()
-                    .fill(RadialGradient(colors: [c, c.opacity(0)], center: .center, startRadius: 0, endRadius: 0.495 * o.d))
+                    .fill(RadialGradient(colors: [c, c.opacity(0)], center: .center, startRadius: 0, endRadius: OrbGeometry.gradientEndFactor * o.d))
                     .frame(width: o.d, height: o.d)
             )
             renderer.scale = scale
             l.contents = renderer.cgImage
             l.contentsScale = scale
+            l.compositingFilter = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? "plusL" : nil
         }
         CATransaction.commit()
     }

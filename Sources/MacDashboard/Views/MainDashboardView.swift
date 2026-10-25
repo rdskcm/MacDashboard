@@ -35,9 +35,6 @@ struct MainDashboardView: View {
 
     var body: some View {
         ZStack {
-            // One background owner for both modes (REDESIGN-HOME D13): nothing here depends on `router.mode`.
-            DS3.ground
-            DS3OrbField()
             VStack(spacing: 0) {
                 toolbar
 
@@ -61,6 +58,8 @@ struct MainDashboardView: View {
                 }
             }
         }
+        // One background owner for both modes (REDESIGN-HOME D13): nothing here depends on `router.mode`.
+        .ds3Backdrop(orbs: DS3OrbSpec.window)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
         .ignoresSafeArea()
         .sheet(isPresented: $router.isReportShown) { ReportSheet(model: model) { router.isReportShown = false } }

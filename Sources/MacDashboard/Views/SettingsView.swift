@@ -239,14 +239,13 @@ struct SettingsView: View {
 
     var body: some View {
         ZStack {
-            DS3.ground
-            DS3OrbField(orbs: DS3OrbSpec.settings)
             HStack(spacing: 0) {
                 sidebar
                 detail
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ds3Backdrop(orbs: DS3OrbSpec.settings)
         .onChange(of: store.language) { _, l in
             withAnimation(rowAnim) { relaunchRowShown = l != launchLanguage }
         }
