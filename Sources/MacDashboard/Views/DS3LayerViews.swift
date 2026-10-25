@@ -187,13 +187,14 @@ struct DS3OrbSpec {
     let color: Color
     let d: CGFloat
     let centre: (CGSize) -> CGPoint
+    var drift: OrbDrift.Params? = nil
 
     /// The main window's three v2 orbs (`This Mac Home v2.dc.html:33-35`): A back 780 `top -300 right -220`,
     /// B mid 580 `top 330 left -250`, C front 420 `bottom -190 right 20%`. REDESIGN-ORBS.
     static let window: [DS3OrbSpec] = [
-        DS3OrbSpec(color: DS3.orbA, d: 780, centre: { OrbGeometry.centre(left: OrbGeometry.leftFromRight(-220, d: 780, width: $0.width), top: -300, d: 780) }),
-        DS3OrbSpec(color: DS3.orbB, d: 580, centre: { _ in OrbGeometry.centre(left: -250, top: 330, d: 580) }),
-        DS3OrbSpec(color: DS3.orbC, d: 420, centre: { OrbGeometry.centre(left: OrbGeometry.leftFromRight(0.2 * $0.width, d: 420, width: $0.width), top: OrbGeometry.topFromBottom(-190, d: 420, height: $0.height), d: 420) }),
+        DS3OrbSpec(color: DS3.orbA, d: 780, centre: { OrbGeometry.centre(left: OrbGeometry.leftFromRight(-220, d: 780, width: $0.width), top: -300, d: 780) }, drift: OrbDrift.a),
+        DS3OrbSpec(color: DS3.orbB, d: 580, centre: { _ in OrbGeometry.centre(left: -250, top: 330, d: 580) }, drift: OrbDrift.b),
+        DS3OrbSpec(color: DS3.orbC, d: 420, centre: { OrbGeometry.centre(left: OrbGeometry.leftFromRight(0.2 * $0.width, d: 420, width: $0.width), top: OrbGeometry.topFromBottom(-190, d: 420, height: $0.height), d: 420) }, drift: OrbDrift.c),
     ]
 
     /// The Settings window's smaller set (`Settings.dc.html:28-30`); values unchanged by REDESIGN-ORBS
@@ -207,10 +208,15 @@ struct DS3OrbSpec {
 
 struct DS3OrbLayer: NSViewRepresentable {
     var orbs: [DS3OrbSpec] = DS3OrbSpec.window
+    var drifting = false
 
-    func makeNSView(context: Context) -> DS3OrbView { DS3OrbView(orbs: orbs) }
+    func makeNSView(context: Context) -> DS3OrbView {
+        let v = DS3OrbView(orbs: orbs)
+        v.setDrifting(drifting)
+        return v
+    }
 
-    func updateNSView(_ nsView: DS3OrbView, context: Context) {}
+    func updateNSView(_ nsView: DS3OrbView, context: Context) { nsView.setDrifting(drifting) }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: DS3OrbView, context: Context) -> CGSize? {
         func finite(_ v: CGFloat?) -> CGFloat {
@@ -231,6 +237,8 @@ final class DS3OrbView: NSView {
     private var renderedAppearance: NSAppearance.Name?
     private var renderedScale: CGFloat?
     private var loggedRenderFailure = false
+    private(set) var isDrifting = false
+    private var occlusionObserver: NSObjectProtocol?
 
     init(orbs: [DS3OrbSpec]) {
         self.orbs = orbs
@@ -263,9 +271,14 @@ final class DS3OrbView: NSView {
         CATransaction.commit()
     }
 
+    deinit {
+        if let o = occlusionObserver { NotificationCenter.default.removeObserver(o) }
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         renderImagesIfNeeded()
+        if isDrifting { removeDriftAnimations(); addDriftAnimations() }    // re-binds the occlusion observer to the new window
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -276,6 +289,62 @@ final class DS3OrbView: NSView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         renderImagesIfNeeded()
+    }
+
+    func setDrifting(_ on: Bool) {
+        guard on != isDrifting else { return }
+        isDrifting = on
+        on ? addDriftAnimations() : removeDriftAnimations()
+    }
+
+    /// One additive keyframe animation per term, all started in one transaction at the same begin time so the
+    /// three orbs keep the mockup's relative phases. The render server evaluates them; the app commits nothing per frame.
+    private func addDriftAnimations() {
+        let t0 = container.convertTime(CACurrentMediaTime(), from: nil)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (l, o) in zip(orbLayers, orbs) {
+            guard let p = o.drift else { continue }
+            for (i, term) in OrbDrift.terms(p).enumerated() {
+                let a = CAKeyframeAnimation(keyPath: term.keyPath)
+                a.values = OrbDrift.samples(term)
+                a.calculationMode = .linear
+                a.duration = term.period
+                a.isAdditive = true
+                a.repeatCount = .greatestFiniteMagnitude
+                a.isRemovedOnCompletion = false
+                a.beginTime = t0
+                a.preferredFrameRateRange = CAFrameRateRange(minimum: OrbDrift.frameRate.minimum, maximum: OrbDrift.frameRate.maximum, preferred: OrbDrift.frameRate.preferred)
+                l.add(a, forKey: "drift.\(i)")
+            }
+        }
+        CATransaction.commit()
+        if occlusionObserver == nil, let window {
+            occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.syncPause() }
+            }
+        }
+        syncPause()
+    }
+
+    private func removeDriftAnimations() {
+        for l in orbLayers { for k in l.animationKeys() ?? [] where k.hasPrefix("drift.") { l.removeAnimation(forKey: k) } }
+        if let o = occlusionObserver { NotificationCenter.default.removeObserver(o); occlusionObserver = nil }
+        container.speed = 1; container.timeOffset = 0; container.beginTime = 0
+    }
+
+    /// Occluded or hidden window: freeze the layer clock so the render server stops producing frames (the orbs
+    /// keep their last position; resume continues from it, no jump).
+    private func syncPause() {
+        let visible = window?.occlusionState.contains(.visible) ?? false
+        if visible, container.speed == 0 {
+            let paused = container.timeOffset
+            container.speed = 1; container.timeOffset = 0; container.beginTime = 0
+            container.beginTime = container.convertTime(CACurrentMediaTime(), from: nil) - paused
+        } else if !visible, container.speed != 0 {
+            container.timeOffset = container.convertTime(CACurrentMediaTime(), from: nil)
+            container.speed = 0
+        }
     }
 
     /// H1 orb bitmaps (spec §3.3) at the window's backing scale, colours and ground resolved for this view's

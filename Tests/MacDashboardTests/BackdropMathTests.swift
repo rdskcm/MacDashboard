@@ -197,4 +197,61 @@ struct BackdropMathTests {
         print("orb render 2x: A \(ms(times[0])) B \(ms(times[1])) C \(ms(times[2])) total \(ms(total)) ms")
         #expect(total < .seconds(5))
     }
+
+    // MARK: - Stage 3: drift (spec §3.4, §4.3)
+
+    private static let driftOrbs: [OrbDrift.Params] = [OrbDrift.a, OrbDrift.b, OrbDrift.c]
+
+    @Test func driftWeights() {
+        let oracle: [(Double, Double, Double)] = [(46, 63, 0.7178), (31, 43, 0.7204), (21, 29, 0.7195),
+                                                   (52, 71, 0.7172), (37, 53, 0.7268), (25, 34, 0.7164)]
+        for (t1, t2, c1) in oracle {
+            let w = OrbDrift.weights(t1: t1, t2: t2)
+            #expect(abs(w.c1 - c1) <= 0.0005, "T \(t1)/\(t2): \(w.c1)")
+            #expect(w.c1 + w.c2 == 1)
+        }
+    }
+
+    @Test func driftTermLayout() {
+        let paths = ["transform.translation.x", "transform.translation.x", "transform.translation.y", "transform.translation.y",
+                     "transform.scale.x", "transform.scale.y",
+                     "transform.scale.x", "transform.scale.x", "transform.scale.x", "transform.scale.x",
+                     "transform.scale.y", "transform.scale.y", "transform.scale.y", "transform.scale.y"]
+        let translation: [[Double]] = [[58.5, 31.5, 45.5, 24.5], [71.5, 38.5, 52, 28], [84.5, 45.5, 58.5, 31.5]]
+        for (p, want) in zip(Self.driftOrbs, translation) {
+            let terms = OrbDrift.terms(p)
+            #expect(terms.count == 14)
+            #expect(terms.map(\.keyPath) == paths)
+            for (t, w) in zip(terms.prefix(4), want) { #expect(abs(t.amplitude - w) <= 1e-9) }
+            for t in terms where t.keyPath.hasPrefix("transform.scale") { #expect(abs(t.amplitude) <= 0.12) }
+        }
+    }
+
+    @Test func driftSamplesCloseTheLoop() {
+        for p in Self.driftOrbs {
+            for term in OrbDrift.terms(p) {
+                let s = OrbDrift.samples(term)
+                #expect(s.count == OrbDrift.keyframes)
+                #expect(abs(s[0] - s[s.count - 1]) <= 1e-9, "\(term)")
+                #expect(s.allSatisfy { abs($0) <= abs(term.amplitude) + 1e-12 })
+            }
+        }
+    }
+
+    @Test func driftTranslationMatchesMockup() {
+        let w = 2 * Double.pi, p = OrbDrift.a
+        let terms = OrbDrift.terms(p)
+        for t in [0, 7.3, 100.0] {
+            let x = terms[0].value(at: t) + terms[1].value(at: t)
+            let y = terms[2].value(at: t) + terms[3].value(at: t)
+            let wantX = 90 * (0.65 * sin(w * t / 46) + 0.35 * sin(w * t / 63))
+            let wantY = 70 * (0.65 * sin(w * t / 52 + 1.3) + 0.35 * sin(w * t / 71 + 1.7 * 1.3))
+            #expect(abs(x - wantX) <= 1e-9, "x at \(t)")
+            #expect(abs(y - wantY) <= 1e-9, "y at \(t)")
+        }
+    }
+
+    @Test func driftShipsEnabled() {
+        #expect(OrbDrift.isEnabled)
+    }
 }

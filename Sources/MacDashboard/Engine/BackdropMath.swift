@@ -148,3 +148,64 @@ struct OrbBitmap {
         return OrbBitmap(sidePx: side, surface: surface)
     }
 }
+
+/// REDESIGN-ORBS Stage 3: the v2 drift (`This Mac Home v2.dc.html:239-250`) as periodic terms for additive
+/// Core Animation keyframe animations. One `Term` = one animation on one transform sub-key path.
+enum OrbDrift {
+    /// Flipped at the A/B decision (spec §6.5). false = static orbs.
+    static let isEnabled = true
+    static let keyframes = 96
+    static let frameRate = (minimum: Float(15), maximum: Float(30), preferred: Float(24))
+
+    struct Params { let ax, ay, tx1, tx2, ty1, ty2, tb, stretch, phase: Double }
+    static let a = Params(ax: 90, ay: 70, tx1: 46, tx2: 63, ty1: 52, ty2: 71, tb: 38, stretch: 0.05, phase: 0)
+    static let b = Params(ax: 110, ay: 80, tx1: 31, tx2: 43, ty1: 37, ty2: 53, tb: 27, stretch: 0.08, phase: 2.1)
+    static let c = Params(ax: 130, ay: 90, tx1: 21, tx2: 29, ty1: 25, ty2: 34, tb: 19, stretch: 0.12, phase: 4.3)
+
+    enum Shape { case sine, absCosine }
+    struct Term: Equatable {
+        let keyPath: String        // "transform.translation.x" | "transform.translation.y" | "transform.scale.x" | "transform.scale.y"
+        let amplitude: Double      // signed; the value added to the model value
+        let period: Double         // seconds; the animation's duration
+        let phase: Double          // radians
+        let shape: Shape
+        func value(at t: Double) -> Double {
+            let w = 2 * Double.pi * t / period + phase
+            return amplitude * (shape == .sine ? sin(w) : abs(cos(w)))
+        }
+    }
+
+    /// c1 of the velocity split, c2 = 1 − c1 (spec §3.4).
+    static func weights(t1: Double, t2: Double) -> (c1: Double, c2: Double) {
+        let c1 = (0.65 / t1) / (0.65 / t1 + 0.35 / t2)
+        return (c1, 1 - c1)
+    }
+
+    /// The 14 terms of one orb, in a fixed order (tests pin it).
+    static func terms(_ p: Params) -> [Term] {
+        let px2 = 1.7 * p.phase, py1 = p.phase + 1.3, py2 = 1.7 * (p.phase + 1.3)
+        let (c1x, c2x) = weights(t1: p.tx1, t2: p.tx2), (c1y, c2y) = weights(t1: p.ty1, t2: p.ty2)
+        let s = p.stretch
+        return [
+            Term(keyPath: "transform.translation.x", amplitude: 0.65 * p.ax, period: p.tx1, phase: p.phase, shape: .sine),
+            Term(keyPath: "transform.translation.x", amplitude: 0.35 * p.ax, period: p.tx2, phase: px2, shape: .sine),
+            Term(keyPath: "transform.translation.y", amplitude: 0.65 * p.ay, period: p.ty1, phase: py1, shape: .sine),
+            Term(keyPath: "transform.translation.y", amplitude: 0.35 * p.ay, period: p.ty2, phase: py2, shape: .sine),
+            Term(keyPath: "transform.scale.x", amplitude: 0.04, period: p.tb, phase: p.phase, shape: .sine),
+            Term(keyPath: "transform.scale.y", amplitude: 0.04, period: p.tb, phase: p.phase, shape: .sine),
+            Term(keyPath: "transform.scale.x", amplitude: s * c1x, period: p.tx1, phase: p.phase, shape: .absCosine),
+            Term(keyPath: "transform.scale.x", amplitude: s * c2x, period: p.tx2, phase: px2, shape: .absCosine),
+            Term(keyPath: "transform.scale.x", amplitude: -0.5 * s * c1y, period: p.ty1, phase: py1, shape: .absCosine),
+            Term(keyPath: "transform.scale.x", amplitude: -0.5 * s * c2y, period: p.ty2, phase: py2, shape: .absCosine),
+            Term(keyPath: "transform.scale.y", amplitude: s * c1y, period: p.ty1, phase: py1, shape: .absCosine),
+            Term(keyPath: "transform.scale.y", amplitude: s * c2y, period: p.ty2, phase: py2, shape: .absCosine),
+            Term(keyPath: "transform.scale.y", amplitude: -0.5 * s * c1x, period: p.tx1, phase: p.phase, shape: .absCosine),
+            Term(keyPath: "transform.scale.y", amplitude: -0.5 * s * c2x, period: p.tx2, phase: px2, shape: .absCosine),
+        ]
+    }
+
+    /// `keyframes` samples of one period, closed (first == last): CA repeats it seamlessly.
+    static func samples(_ term: Term, count: Int = keyframes) -> [Double] {
+        (0..<count).map { term.value(at: term.period * Double($0) / Double(count - 1)) }
+    }
+}

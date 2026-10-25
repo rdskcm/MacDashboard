@@ -336,8 +336,8 @@ extension DS3 {
 
 // MARK: - Orbs
 
-/// Three soft static colour glows (`DS3OrbLayer`). Static since HOME-D; REDESIGN-ORBS Stage 3 decides the drift
-/// by A/B (spec §6).
+/// Three soft colour glows (`DS3OrbLayer`) drifting on the render server (REDESIGN-ORBS Stage 3, `OrbDrift`);
+/// static under `-visualFixture` and when `OrbDrift.isEnabled` is off.
 /// Hidden when Settings › Background orbs is off or Reduce Motion is on (REDESIGN-SETTINGS).
 struct DS3OrbField: View {
     var orbs: [DS3OrbSpec] = DS3OrbSpec.window
@@ -345,7 +345,7 @@ struct DS3OrbField: View {
 
     var body: some View {
         if AppSettings.shared.orbsEnabled && !reduceMotion {
-            DS3OrbLayer(orbs: orbs)
+            DS3OrbLayer(orbs: orbs, drifting: OrbDrift.isEnabled && !reduceMotion && !DS3Motion.isFrozen)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
