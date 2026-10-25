@@ -254,6 +254,12 @@ final class DashboardModel {
     private var wakeParseFailures: [ParseFailure] = []
 
     var assessment: Assessment
+    /// REDESIGN-NOTIFY: edge detector over committed assessments; armed by the first completed pass (R2, D11).
+    @ObservationIgnored private var notifyEdges = NotificationEdgeDetector()
+    @ObservationIgnored private var hasCompletedPass = false
+    /// REDESIGN-NOTIFY: a destination requested from outside the view tree (a notification click); MainDashboardView consumes it.
+    private(set) var externalDestination: Destination? = nil
+    private(set) var externalDestinationSerial = 0
     var history: HistoryState {
         didSet { homeHistoryDigest = HomeModel.historyDigest(history.mac_history) }
     }
@@ -594,6 +600,10 @@ final class DashboardModel {
     func start() {
         guard fastTask == nil else { return }
         observeActivity()
+        // REDESIGN-NOTIFY: banners only while the app is not frontmost (D13); a click parks a destination for the view (R5).
+        NotificationCenterClient.shared.shouldPresentBanner = { [weak self] in self?.isPaused ?? true }
+        NotificationCenterClient.shared.onOpen = { [weak self] page in self?.requestNavigation(to: Destination(page)) }
+        NotificationCenterClient.shared.install()
 
         // Each task drives its OWN LiveCollector instance. LiveCollector isn't Sendable
         // (per its own doc comment: "NOT thread-safe — keep ONE instance and call
@@ -910,6 +920,7 @@ final class DashboardModel {
 
             self.report = final
             if let sys = final.system { self.lastKnownSystem = sys }
+            self.hasCompletedPass = true
             self.setAssessment(self.assessed(final))
             // A pass whose system section came back empty (scan block failed, D7) keeps the previous report:
             // the sheet shows «not updated · showing the HH:MM report» over the old text (02-home §4 failed).
@@ -1972,7 +1983,40 @@ final class DashboardModel {
     /// Suppresses redundant @Observable notifications when the new assessment
     /// is value-equal to the current one (e.g. repeated live ticks with no
     /// change in severity/tips/problems).
-    private func setAssessment(_ n: Assessment) { if assessment != n { assessment = n } }
+    private func setAssessment(_ n: Assessment) {
+        if assessment != n { assessment = n }
+        guard hasCompletedPass else { return }
+        let fresh = notifyEdges.update(items: n.items, enabled: AppSettings.shared.notifyEnabled)
+        if !fresh.isEmpty { notify(fresh) }
+    }
+
+    /// REDESIGN-NOTIFY: posts one notification per freshly appeared item; asks for authorization lazily (R6, D3).
+    private func notify(_ items: [AttentionItem]) {
+        let client = NotificationCenterClient.shared
+        func post() {
+            for item in items {
+                guard let cat = NotifyCategory.category(for: item.kind) else { continue }
+                client.deliver(identifier: "attention.\(item.kind.rawValue)", title: L.settingsNotifyLabel(cat),
+                               body: item.fullText, page: cat.page)
+            }
+        }
+        client.status { status in
+            switch status {
+            case .authorized: post()
+            case .notDetermined: client.requestAuthorization { granted in if granted { post() } }
+            case .denied: break
+            }
+        }
+    }
+
+    /// REDESIGN-NOTIFY: called by the notification client on a click (R5); the view navigates and consumes it.
+    func requestNavigation(to destination: Destination) {
+        externalDestination = destination
+        externalDestinationSerial += 1
+        let hasWindow = NSApp.windows.contains { !($0 is NSPanel) && $0.isVisible }
+        if !hasWindow { NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: .init()) }
+    }
+    func consumeExternalDestination() -> Destination? { defer { externalDestination = nil }; return externalDestination }
 
     /// The model's only way to build an `Assessment` (SLEEP-IGNORE-APP): every path passes
     /// the current ignore list, so an ignored wake holder cannot re-warn through a path that

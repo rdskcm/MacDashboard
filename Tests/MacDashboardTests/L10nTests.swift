@@ -153,5 +153,19 @@ extension SerialTests {
                 L10nStore.shared.language = .ru
             }
         }
+
+        @Test func notifyStrings() {
+            for c in NotifyCategory.allCases {
+                let en = StringsEN().settingsNotifyLabel(c), ru = StringsRU().settingsNotifyLabel(c)
+                #expect(!en.isEmpty && !ru.isEmpty && en != ru)
+            }
+            let pairs: [(String, String)] = [
+                (StringsEN().settingsNotifyDenied, StringsRU().settingsNotifyDenied),
+                (StringsEN().settingsNotifyOpen, StringsRU().settingsNotifyOpen),
+                (StringsEN().settingsNotifyOpenA11y, StringsRU().settingsNotifyOpenA11y),
+                (StringsEN().settingsNotifyCaption, StringsRU().settingsNotifyCaption),
+            ]
+            for (en, ru) in pairs { #expect(!en.isEmpty && !ru.isEmpty && en != ru) }
+        }
     }
 }

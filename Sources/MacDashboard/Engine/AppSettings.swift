@@ -1,5 +1,5 @@
 // Engine/AppSettings.swift
-// Non-language app settings (interval, wake-holder ignore list, hidden crash reports, backup-stale days, low-space %, appearance, orbs,
+// Non-language app settings (interval, wake-holder ignore list, hidden crash reports, backup-stale days, low-space %, notify categories, appearance, orbs,
 // keep-archives, snapshot time, claude log path). Foundation + Observation only — covered by Tests/MacDashboardTests.
 import Foundation
 import Observation
@@ -71,6 +71,11 @@ final class AppSettings {
     static let defaultLowSpacePercent = 20
     static func resolveLowSpacePercent(raw: Int) -> Int {
         allowedLowSpacePercents.contains(raw) ? raw : defaultLowSpacePercent
+    }
+
+    /// REDESIGN-NOTIFY: one Bool key per category; a missing key means the category's default (five on, crashes off).
+    static func resolveNotifyEnabled(in defaults: UserDefaults) -> Set<NotifyCategory> {
+        Set(NotifyCategory.allCases.filter { (defaults.object(forKey: $0.defaultsKey) as? Bool) ?? $0.defaultOn })
     }
 
     /// SLEEP-IGNORE-APP codec, exposed for tests. Missing or unreadable data is an empty
@@ -153,6 +158,11 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(lowSpacePercent, forKey: Self.lowSpacePercentKey) }
     }
 
+    /// REDESIGN-NOTIFY: categories whose attention kinds may post a macOS notification (read by the edge detector at every commit).
+    var notifyEnabled: Set<NotifyCategory> {
+        didSet { for c in NotifyCategory.allCases { UserDefaults.standard.set(notifyEnabled.contains(c), forKey: c.defaultsKey) } }
+    }
+
     private init() {
         Self.migrateLegacyValues(in: .standard)
         fastIntervalSeconds = Self.resolveFastInterval(raw: UserDefaults.standard.integer(forKey: Self.fastIntervalKey)) // 0 if unset
@@ -168,5 +178,6 @@ final class AppSettings {
         let storedPath = d.string(forKey: Self.claudeLogPathKey)
         claudeLogPath = (storedPath?.isEmpty ?? true) ? nil : storedPath
         lowSpacePercent = Self.resolveLowSpacePercent(raw: UserDefaults.standard.integer(forKey: Self.lowSpacePercentKey)) // 0 if unset
+        notifyEnabled = Self.resolveNotifyEnabled(in: d)
     }
 }

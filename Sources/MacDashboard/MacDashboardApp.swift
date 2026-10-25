@@ -31,6 +31,7 @@ struct MacDashboardApp: App {
                     } else {
                         model.start()
                         IPhoneModel.shared.start()
+                        if ProcessInfo.processInfo.arguments.contains("-notifyProbe") { NotificationCenterClient.shared.runProbe() }
                     }
                 }
         }

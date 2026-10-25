@@ -45,6 +45,16 @@ struct StringsEN: AppStrings {
     var settingsMenuItem: String { "Settings…" }
     func settingsLowSpaceOption(_ percent: Int) -> String { "\(percent)%" }
     func settingsWarnAfterDays(_ days: Int) -> String { "\(days) " + (days == 1 ? "day" : "days") }
+    var settingsNotifyCaption: String { "Notify about attention items" }
+    var settingsNotifyProtection: String { "Protection turned off" }
+    var settingsNotifyDisk: String { "Low disk space" }
+    var settingsNotifyBattery: String { "Battery health" }
+    var settingsNotifyBackup: String { "Backup overdue" }
+    var settingsNotifyUpdates: String { "Updates available" }
+    var settingsNotifyCrashes: String { "New crash reports" }
+    var settingsNotifyDenied: String { "Notifications for MacDashboard are turned off in System Settings." }
+    var settingsNotifyOpen: String { "Open Notification settings…" }
+    var settingsNotifyOpenA11y: String { "Open System Settings › Notifications" }
     var settingsWindowTitle: String { "Settings" }
 
     // MARK: Main dashboard (header + tab picker)

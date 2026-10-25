@@ -22,7 +22,7 @@ extension SerialTests {
             defer { VisualFixture.forced = false }
             // D8: Settings panes render with AppSettings at their unset defaults.
             let settings = AppSettings.shared
-            let saved = (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleDays, settings.lowSpacePercent, settings.appearance, settings.orbsEnabled, settings.snapshotMinutes, settings.claudeLogPath)
+            let saved = (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleDays, settings.lowSpacePercent, settings.appearance, settings.orbsEnabled, settings.snapshotMinutes, settings.claudeLogPath, settings.notifyEnabled)
             settings.fastIntervalSeconds = AppSettings.resolveFastInterval(raw: 0)
             settings.ignoredWakeHolderEntries = []
             settings.backupStaleDays = AppSettings.defaultBackupStaleDays
@@ -31,7 +31,8 @@ extension SerialTests {
             settings.orbsEnabled = true
             settings.snapshotMinutes = AppSettings.defaultSnapshotMinutes
             settings.claudeLogPath = nil
-            defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleDays, settings.lowSpacePercent, settings.appearance, settings.orbsEnabled, settings.snapshotMinutes, settings.claudeLogPath) = saved }
+            settings.notifyEnabled = NotifyCategory.allOnByDefault
+            defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleDays, settings.lowSpacePercent, settings.appearance, settings.orbsEnabled, settings.snapshotMinutes, settings.claudeLogPath, settings.notifyEnabled) = saved }
             L10nStore.shared.language = .en
             let run = try SnapshotRun(out: outDir)
             let m = DashboardModel()
@@ -1049,6 +1050,9 @@ extension SerialTests {
                 settingsState("content-settings-general", .general, m)
                 settingsState("content-settings-general-relaunch", .general, m, launch: .ru)
                 settingsState("content-settings-monitoring", .monitoring, m)
+                NotificationCenterClient.fixtureStatus = .denied
+                settingsState("content-settings-monitoring-denied", .monitoring, m)
+                NotificationCenterClient.fixtureStatus = nil
                 settingsState("content-settings-backup", .backup, m)
                 settingsState("content-settings-backup-missing", .backup, mMissing)
                 settingsState("content-settings-backup-permission", .backup, mPerm)

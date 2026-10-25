@@ -221,6 +221,9 @@ struct SettingsView: View {
     @State private var relaunching = false
     @State private var bannerShown: Bool
     @State private var loginStatus: LoginItem.Status = VisualFixture.isRequested ? .enabled : LoginItem.status()
+    /// REDESIGN-NOTIFY (R8): system authorization; fixture renders `fixtureStatus` or authorized without touching the system.
+    @State private var notifyAuth: NotificationAuthorization =
+        VisualFixture.isRequested ? (NotificationCenterClient.fixtureStatus ?? .authorized) : .notDetermined
     @State private var loginError: String?
 
     /// The chosen (or default) log file is not there: red path, red sidebar dot.
@@ -243,14 +246,19 @@ struct SettingsView: View {
         .onChange(of: model.claudeBackup) { _, s in
             withAnimation(rowAnim) { bannerShown = s == .unreadable }
         }
-        .onAppear { refreshLoginStatus() }
+        .onAppear { refreshLoginStatus(); refreshNotifyStatus() }
         // The window is kept alive when closed, so `onAppear` does not fire again: re-read the system status each time
         // it is brought forward (R8).
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in refreshLoginStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in refreshLoginStatus(); refreshNotifyStatus() }
     }
 
     private func refreshLoginStatus() {
         if !VisualFixture.isRequested { loginStatus = LoginItem.status() }
+    }
+
+    private func refreshNotifyStatus() {
+        guard !VisualFixture.isRequested else { return }
+        NotificationCenterClient.shared.status { s in withAnimation(rowAnim) { notifyAuth = s } }
     }
 
     // MARK: Sidebar (`Settings.dc.html:33-49`)
@@ -435,7 +443,7 @@ struct SettingsView: View {
 
     // MARK: Monitoring (`:183-187`)
 
-    private var monitoringGroup: some View {
+    @ViewBuilder private var monitoringGroup: some View {
         SettingsGroup {
             SettingsRow(label: L.settingsIntervalLabel, separator: false) {
                 DSSlidingSegmented(
@@ -465,6 +473,47 @@ struct SettingsView: View {
                 ) { p in L.settingsLowSpaceOption(p) }
             }
         }
+        notifyGroup
+    }
+
+    // MARK: Notify about attention items (`Settings.dc.html:188-195`, handoff 11-settings.md :26)
+
+    private var notifyGroup: some View {
+        SettingsGroup(caption: L.settingsNotifyCaption) {
+            if notifyAuth == .denied {
+                HStack(spacing: 16) {
+                    Text(L.settingsNotifyDenied)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(DS3.amberInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    SettingsSecondaryButton(title: L.settingsNotifyOpen) { AdviceActionRunner.openPane(AdvicePanes.notifications) }
+                        .accessibilityLabel(L.settingsNotifyOpenA11y)
+                        .fixedSize()
+                }
+                .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 14))
+                .transition(.dsDisclosure(reduceMotion: reduceMotion))
+            }
+            ForEach(Array(NotifyCategory.allCases.enumerated()), id: \.element) { i, c in
+                SettingsRow(label: L.settingsNotifyLabel(c), separator: i > 0 || notifyAuth == .denied) {
+                    DS3Switch(isOn: notifyBinding(c), label: L.settingsNotifyLabel(c), metrics: .settings)
+                }
+            }
+            .disabled(notifyAuth == .denied)
+        }
+    }
+
+    /// A switch turned on while the system has not been asked yet asks now (R6, D3).
+    private func notifyBinding(_ c: NotifyCategory) -> Binding<Bool> {
+        Binding(
+            get: { settings.notifyEnabled.contains(c) },
+            set: { on in
+                if on { settings.notifyEnabled.insert(c) } else { settings.notifyEnabled.remove(c) }
+                if on, notifyAuth == .notDetermined, !VisualFixture.isRequested {
+                    NotificationCenterClient.shared.requestAuthorization { _ in refreshNotifyStatus() }
+                }
+            }
+        )
     }
 
     /// Minutes since midnight ↔ a `Date` today at that time (only hour and minute are shown and read back).
