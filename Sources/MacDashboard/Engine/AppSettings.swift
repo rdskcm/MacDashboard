@@ -6,6 +6,9 @@ import Observation
 
 enum AppAppearance: String, CaseIterable { case system, light, dark }
 
+/// RIM-GLOW-OPTICS: edge-light height. Raw values are the `RimLight.heights` keys (narrow 40 / medium 70 / wide 110 pt).
+enum RimProfile: String, CaseIterable { case narrow = "1", medium = "2", wide = "3" }
+
 /// User-tunable settings backed by UserDefaults. Mirrors L10nStore's pattern.
 @Observable
 final class AppSettings {
@@ -56,6 +59,8 @@ final class AppSettings {
     static func resolveAppearance(raw: String?) -> AppAppearance { raw.flatMap(AppAppearance.init(rawValue:)) ?? .system }
 
     static let orbsEnabledKey = "backgroundOrbs"
+    static let rimProfileKey = "rimProfile"
+    static func resolveRimProfile(raw: String?) -> RimProfile { raw.flatMap(RimProfile.init(rawValue:)) ?? .medium }
     static let keepImportedArchivesKey = "keepImportedArchives"
     /// REDESIGN-IPHONE: read battery and crash logs on attach (true) or identify the phone only (false).
     static let iphoneAutoReadKey = "iphoneAutoRead"
@@ -141,6 +146,9 @@ final class AppSettings {
     var orbsEnabled: Bool {
         didSet { UserDefaults.standard.set(orbsEnabled, forKey: Self.orbsEnabledKey) }
     }
+    var rimProfile: RimProfile {
+        didSet { UserDefaults.standard.set(rimProfile.rawValue, forKey: Self.rimProfileKey) }
+    }
     /// REDESIGN-IPHONE: default of the import choice sheet (parse and keep when true).
     var keepImportedArchives: Bool {
         didSet { UserDefaults.standard.set(keepImportedArchives, forKey: Self.keepImportedArchivesKey) }
@@ -191,6 +199,7 @@ final class AppSettings {
         backupStaleDays = Self.resolveBackupStaleDays(raw: d.integer(forKey: Self.backupStaleDaysKey))
         appearance = Self.resolveAppearance(raw: d.string(forKey: Self.appearanceKey))
         orbsEnabled = d.object(forKey: Self.orbsEnabledKey) as? Bool ?? true
+        rimProfile = Self.resolveRimProfile(raw: d.string(forKey: Self.rimProfileKey))
         keepImportedArchives = d.object(forKey: Self.keepImportedArchivesKey) as? Bool ?? true
         iphoneAutoRead = d.object(forKey: Self.iphoneAutoReadKey) as? Bool ?? true
         let storedFolder = d.string(forKey: Self.iphoneArchiveFolderKey)

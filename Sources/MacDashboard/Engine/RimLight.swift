@@ -5,7 +5,9 @@ import IOSurface
 /// RIM-GLOW-OPTICS: the pointer light on card edges — a point light at height h over the glass (spec §3.2). Pure; pinned by RimLightTests.
 enum RimLight {
     enum LightMode { case none, white, shade }
-    /// Stage 3a/3b: read from the hidden defaults; Stage 4 freezes both to the user's picks.
+    /// The user's pick for the light-appearance rim (Stage 3b): a shaded ring.
+    static let lightMode = LightMode.shade
+    /// Profile key -> light height h in pt (narrow / medium / wide); the key is `RimProfile.rawValue`.
     static let heights: [String: Double] = ["1": 40, "2": 70, "3": 110]
     static let defaultProfileKey = "2"
     static let rangeFactor = 5.0                      // R = 5h

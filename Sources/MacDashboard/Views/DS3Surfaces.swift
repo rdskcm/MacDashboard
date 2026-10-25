@@ -294,7 +294,7 @@ struct DS3Rim: View {
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(DS3.windowSpace)) }) { model.rect = $0 }
                     .onAppear { tracker.register(model) }
                     .onDisappear { tracker.unregister(model) }
-            } else if colorScheme == .dark || RimDebugDefaults.shared.lightMode != .none {
+            } else if colorScheme == .dark || RimLight.lightMode != .none {
                 DS3RimStroke(cornerRadius: cornerRadius)
             }
         }

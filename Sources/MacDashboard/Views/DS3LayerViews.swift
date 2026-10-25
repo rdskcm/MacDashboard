@@ -35,8 +35,7 @@ struct DS3RimLayer: NSViewRepresentable {
     func updateNSView(_ nsView: DS3RimView, context: Context) {
         nsView.cornerRadius = cornerRadius
         nsView.setStatic(isStatic)
-        let d = RimDebugDefaults.shared
-        nsView.configure(profileKey: d.profileKey, lightMode: d.lightMode)
+        nsView.configure(profileKey: RimSettingsObserver.shared.profileKey)
         model.view = nsView
     }
 
@@ -68,7 +67,6 @@ final class DS3RimView: NSView {
     private var shadeRing: CALayer?
     private var shadeMask: CAShapeLayer?
     private var h: Double
-    private var lightMode: RimLight.LightMode
     private var spotVisible = false
     private var loggedRenderFailure = false
 
@@ -76,16 +74,13 @@ final class DS3RimView: NSView {
         let appearance: NSAppearance.Name
         let scale: CGFloat
         let h: Double
-        let lightMode: RimLight.LightMode
         let depthPx: Int
     }
     private var renderedKey: RenderKey?
 
     init(cornerRadius: CGFloat) {
         self.cornerRadius = cornerRadius
-        let d = RimDebugDefaults.shared
-        self.h = RimDebugDefaults.height(for: d.profileKey)
-        self.lightMode = d.lightMode
+        self.h = RimSettingsObserver.height(for: RimSettingsObserver.shared.profileKey)
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .never
@@ -105,7 +100,7 @@ final class DS3RimView: NSView {
         ring.addSublayer(ambient)
         ring.addSublayer(spot)
         layer?.addSublayer(ring)
-        RimDebugDefaults.shared.register(self)
+        RimSettingsObserver.shared.register(self)
     }
 
     @available(*, unavailable)
@@ -154,12 +149,11 @@ final class DS3RimView: NSView {
             .copy(strokingWithWidth: 1.2, lineCap: .butt, lineJoin: .miter, miterLimit: 10)
     }
 
-    /// Stage 3a/3b: profile and light mode from the hidden defaults (`RimDebugDefaults`).
-    func configure(profileKey: String, lightMode: RimLight.LightMode) {
-        let newH = RimDebugDefaults.height(for: profileKey)
-        guard newH != h || lightMode != self.lightMode else { return }
+    /// Edge-light profile from the Settings row (`RimSettingsObserver`).
+    func configure(profileKey: String) {
+        let newH = RimSettingsObserver.height(for: profileKey)
+        guard newH != h else { return }
         h = newH
-        self.lightMode = lightMode
         renderedKey = nil
         needsLayout = true
         renderIfNeeded()
@@ -171,7 +165,7 @@ final class DS3RimView: NSView {
         guard let window else { return }
         let scale = window.backingScaleFactor
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        if !isDark && lightMode == .none {
+        if !isDark && RimLight.lightMode == .none {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             ring.isHidden = true
@@ -181,10 +175,10 @@ final class DS3RimView: NSView {
             return
         }
         let depthPx = Int((cornerRadius * scale).rounded(.up))
-        let key = RenderKey(appearance: effectiveAppearance.name, scale: scale, h: h, lightMode: lightMode, depthPx: depthPx)
+        let key = RenderKey(appearance: effectiveAppearance.name, scale: scale, h: h, depthPx: depthPx)
         guard key != renderedKey else { return }
         var ground = isDark ? DS3.rimGroundDark : DS3.rimGroundLight
-        let shaded = !isDark && lightMode == .shade
+        let shaded = !isDark && RimLight.lightMode == .shade
         if shaded {
             ground = RimLight.shadedGround(ground, shade: SIMD3<Double>(60, 40, 20) / 255, alpha: 0.12)
         }
@@ -311,16 +305,15 @@ final class RimSpriteCache {
     }
 }
 
-/// Stage 3a/3b only (deleted in Stage 4): the hidden defaults `rimProfile` ("1" | "2" | "3", default "2") and
-/// `rimLight` ("none" | "white" | "shade", default "none") in the app's own domain, switched live by KVO.
+/// The edge-light profile: `rimProfile` ("1" | "2" | "3", default "2"; written by `AppSettings` from the Settings row)
+/// in the app's own domain, switched live by KVO.
 @MainActor
-final class RimDebugDefaults {
-    static let shared = RimDebugDefaults()
+final class RimSettingsObserver {
+    static let shared = RimSettingsObserver()
     private var observer: DefaultsKeyObserver?
     private let views = NSHashTable<DS3RimView>.weakObjects()
 
     private(set) var profileKey = RimLight.defaultProfileKey
-    private(set) var lightMode = RimLight.LightMode.none
 
     static func height(for key: String) -> Double {
         RimLight.heights[key] ?? RimLight.heights[RimLight.defaultProfileKey]!
@@ -329,7 +322,7 @@ final class RimDebugDefaults {
     private init() {
         read()
         // KVO reports changes made by other processes (`defaults write`); the callback may come on any thread.
-        observer = DefaultsKeyObserver(keys: ["rimProfile", "rimLight"]) { [weak self] in
+        observer = DefaultsKeyObserver(keys: [AppSettings.rimProfileKey]) { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.changed() } }
         }
     }
@@ -337,18 +330,13 @@ final class RimDebugDefaults {
     func register(_ v: DS3RimView) { views.add(v) }
 
     private func read() {
-        let k = UserDefaults.standard.string(forKey: "rimProfile") ?? RimLight.defaultProfileKey
+        let k = UserDefaults.standard.string(forKey: AppSettings.rimProfileKey) ?? RimLight.defaultProfileKey
         profileKey = RimLight.heights[k] != nil ? k : RimLight.defaultProfileKey
-        switch UserDefaults.standard.string(forKey: "rimLight") {
-        case "white": lightMode = .white
-        case "shade": lightMode = .shade
-        default: lightMode = .none
-        }
     }
 
     private func changed() {
         read()
-        for v in views.allObjects { v.configure(profileKey: profileKey, lightMode: lightMode) }
+        for v in views.allObjects { v.configure(profileKey: profileKey) }
     }
 }
 
