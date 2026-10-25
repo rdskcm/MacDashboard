@@ -1087,7 +1087,7 @@ extension SerialTests {
                         SettingsView(model: model, startSection: section, iphone: iphone, launchLanguage: launch).frame(width: 680, height: 420)
                     }
                 }
-                // REDESIGN-ORBS: the main window's backdrop alone, at the perf bench size (orbs: Stage 1; grain: Stage 2).
+                // REDESIGN-ORBS: the main window's backdrop alone, at the perf bench size (orbs: Stage 1; H1 profile: Stage 2 — invisible offscreen, see spec §5).
                 run.snap("content-backdrop-window", mode, width: 1000) { Color.clear.frame(width: 1000, height: 733).ds3Backdrop(orbs: DS3OrbSpec.window) }
                 let mMissing = DashboardModel(); mMissing.applyVisualFixture(); mMissing.claudeBackup = nil
                 let mPerm = DashboardModel(); mPerm.applyVisualFixture(); mPerm.claudeBackup = .unreadable
