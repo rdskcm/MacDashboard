@@ -50,6 +50,9 @@ struct IPhoneSnapshot {
     var build: String?
     var enclosureColor: String?
     var battery: BatteryDetail?
+    /// False when the read skipped the battery on purpose (auto-read off); the Battery card then says so
+    /// instead of «no data».
+    var batteryRead: Bool = true
 }
 
 final class MobileDeviceTransport {
@@ -469,16 +472,20 @@ final class MobileDeviceTransport {
     // MARK: - Public async API (runs on the transport thread, completes on main)
 
     /// Identity keys + the AppleSmartBattery registry entry. `battery` is nil when the
-    /// relay did not answer with Status Success.
+    /// relay did not answer with Status Success, or when `includeBattery` is false (then `batteryRead` is false).
     func readSnapshot(_ h: IPhoneHandle,
+                      includeBattery: Bool = true,
                       completion: @escaping @MainActor (Result<IPhoneSnapshot, IPhoneReadError>) -> Void) {
         let queued = onThread { [self] in
             let result = withSession(h) { dev -> IPhoneSnapshot in
                 guard let udid = lockdownString(dev, "UniqueDeviceID") else {
                     throw IPhoneReadError.failed(step: "UniqueDeviceID", code: 0)
                 }
-                let reply = relay(dev, [.ioRegistryName("AppleSmartBattery")]).first ?? nil
-                let battery = IPhoneData.relayPayload(reply).map { BatteryInspector.parse(dict: $0) }
+                var battery: BatteryDetail?
+                if includeBattery {
+                    let reply = relay(dev, [.ioRegistryName("AppleSmartBattery")]).first ?? nil
+                    battery = IPhoneData.relayPayload(reply).map { BatteryInspector.parse(dict: $0) }
+                }
                 return IPhoneSnapshot(
                     udid: udid,
                     name: lockdownString(dev, "DeviceName") ?? "iPhone",
@@ -487,7 +494,8 @@ final class MobileDeviceTransport {
                     osVersion: lockdownString(dev, "ProductVersion"),
                     build: lockdownString(dev, "BuildVersion"),
                     enclosureColor: lockdownString(dev, "DeviceEnclosureColor"),
-                    battery: battery)
+                    battery: battery,
+                    batteryRead: includeBattery)
             }
             Self.onMain { completion(result) }
         }

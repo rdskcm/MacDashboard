@@ -216,6 +216,18 @@ enum IPhoneData {
         return nil
     }
 
+    // MARK: - Auto-read on connect (REDESIGN-IPHONE)
+
+    /// Minimum spacing between two automatic crash-log listings of one phone, seconds. usbmuxd can report one
+    /// physical attach as several events (IPHONE-SPIKE P13/P14); the listing is the expensive part of auto-read.
+    static let autoReadMinInterval: TimeInterval = 30
+
+    /// True when an automatic listing may run: no earlier one, or the last one is at least `minInterval` old.
+    static func autoReadDue(last: Date?, now: Date, minInterval: TimeInterval = autoReadMinInterval) -> Bool {
+        guard let last else { return true }
+        return now.timeIntervalSince(last) >= minInterval
+    }
+
     // MARK: - Battery history chart (IPHONE-DESIGN)
 
     struct HealthChartScale: Equatable {
@@ -712,6 +724,23 @@ final class IPhoneStore {
         }
         try data.write(to: url, options: [.atomic])
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
+    /// Default archive folder, `~/Documents/MacDashboard/iPhone` (handoff 11-settings:33). Never created here:
+    /// the first keep or the migration creates it, so a user who never keeps an archive never gets the
+    /// Files & Folders prompt for Documents.
+    static func defaultArchiveRoot() -> URL {
+        let fm = FileManager.default
+        let docs = (try? fm.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false))
+            ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
+        return docs.appendingPathComponent("MacDashboard", isDirectory: true)
+            .appendingPathComponent("iPhone", isDirectory: true)
+    }
+
+    /// Where archives were kept before REDESIGN-IPHONE: `<App Support>/MacDashboard/iphones` (layout
+    /// `<deviceKey>/sysdiagnose/<name>`). Not created here (`AppInfo.supportFolderURL` does not create either).
+    static func legacyArchiveRoot() -> URL {
+        AppInfo.supportFolderURL.appendingPathComponent("iphones", isDirectory: true)
     }
 
     /// App Support/MacDashboard/iphones.json, built like `DashboardModel.defaultReportURL()`.

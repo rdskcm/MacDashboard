@@ -22,7 +22,13 @@ struct IPhoneImportCard: View {
 
     private var isConnected: Bool { model.connected[deviceKey] != nil }
     private var running: ImportProgress? { model.importing[deviceKey] }
-    private var kept: [String] { model.devices.first { $0.id == deviceKey }?.keptArchives ?? [] }
+    /// Kept names whose file still exists (display-only: the record keeps every name, so an unmounted archive
+    /// folder does not make the app forget archives).
+    private var kept: [(name: String, url: URL)] {
+        (model.devices.first { $0.id == deviceKey }?.keptArchives ?? []).compactMap { name in
+            model.keptArchiveURL(deviceKey: deviceKey, name: name).map { (name, $0) }
+        }
+    }
     private var targetName: String {
         model.devices.first { $0.id == deviceKey }.map(IPhoneData.displayName) ?? L.iphoneUnknownDevice
     }
@@ -36,12 +42,13 @@ struct IPhoneImportCard: View {
     }
 
     var body: some View {
-        DS3Card(title: L.iphoneImportTitle) {
+        let items = kept
+        return DS3Card(title: L.iphoneImportTitle) {
             VStack(alignment: .leading, spacing: 16) {
                 if !phoneArchives.isEmpty { phoneSection }
                 pickRow
                 status
-                if !kept.isEmpty { keptSection }
+                if !items.isEmpty { keptSection(items) }
             }
             .onAppear { onScreen = true }
             .onDisappear { onScreen = false }
@@ -69,6 +76,7 @@ struct IPhoneImportCard: View {
         .sheet(item: $pending) { p in
             IPhoneImportChoiceSheet(
                 title: L.iphoneImportConfirmTitle(p.name, into: targetName),
+                keepDefault: AppSettings.shared.keepImportedArchives,
                 onCancel: { pending = nil },
                 onParse: { start(p, keep: false) },
                 onKeep: { start(p, keep: true) })
@@ -188,12 +196,13 @@ struct IPhoneImportCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var keptSection: some View {
+    private func keptSection(_ items: [(name: String, url: URL)]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L.iphoneImportKeptTitle)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(DS3.muted)
-            ForEach(Array(kept.enumerated()), id: \.offset) { _, name in
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                let name = item.name
                 HStack(spacing: 14) {
                     Text(name)
                         .font(.system(size: 14))
@@ -201,7 +210,7 @@ struct IPhoneImportCard: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button(L.reportShowInFinder) { AdviceActionRunner.reveal(keptURL(name).path) }
+                    Button(L.reportShowInFinder) { AdviceActionRunner.reveal(item.url.path) }
                         .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, topRim: 1))
                         .accessibilityLabel(L.iphoneImportRevealA11y(name))
                 }
@@ -211,15 +220,6 @@ struct IPhoneImportCard: View {
                 .ds3RowPanel(cornerRadius: 20)
             }
         }
-    }
-
-    /// The path `SysdiagnoseImporter.keepArchive` writes to.
-    private func keptURL(_ name: String) -> URL {
-        IPhoneStore.defaultURL().deletingLastPathComponent()
-            .appendingPathComponent("iphones", isDirectory: true)
-            .appendingPathComponent(deviceKey, isDirectory: true)
-            .appendingPathComponent("sysdiagnose", isDirectory: true)
-            .appendingPathComponent(name)
     }
 
     private func pickFile() {
@@ -242,6 +242,8 @@ struct IPhoneImportCard: View {
 /// Parse-only / parse-and-keep choice (internal so the harness can render it).
 struct IPhoneImportChoiceSheet: View {
     let title: String
+    /// `AppSettings.keepImportedArchives`: which of the two actions is primary and answers Return.
+    let keepDefault: Bool
     let onCancel: () -> Void
     let onParse: () -> Void
     let onKeep: () -> Void
@@ -265,11 +267,12 @@ struct IPhoneImportChoiceSheet: View {
                     .keyboardShortcut(.cancelAction)
                     .accessibilityLabel(L.iphoneImportCancelA11y)
                 Button(L.iphoneImportParseOnly, action: onParse)
-                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 0))
+                    .buttonStyle(DS3ButtonStyle(kind: keepDefault ? .secondary : .primary, height: 34, hPad: 15, topRim: keepDefault ? 0 : 0.5))
+                    .keyboardShortcut(keepDefault ? nil : .defaultAction)
                     .accessibilityLabel(L.iphoneImportParseOnlyA11y)
                 Button(L.iphoneImportParseKeep, action: onKeep)
-                    .buttonStyle(DS3ButtonStyle(kind: .primary, height: 34, hPad: 15))
-                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(DS3ButtonStyle(kind: keepDefault ? .primary : .secondary, height: 34, hPad: 15, topRim: keepDefault ? 0.5 : 0))
+                    .keyboardShortcut(keepDefault ? .defaultAction : nil)
                     .accessibilityLabel(L.iphoneImportParseKeepA11y)
             }
         }

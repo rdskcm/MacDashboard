@@ -41,13 +41,28 @@ extension SerialTests {
             let ipStore = FileManager.default.temporaryDirectory
                 .appendingPathComponent("md-visual-iphone-\(ProcessInfo.processInfo.processIdentifier)")
                 .appendingPathComponent("iphones.json")
-            @MainActor func fixtureIPhone(_ tweak: (IPhoneModel) -> Void = { _ in }) -> IPhoneModel {
-                let m = IPhoneModel(store: IPhoneStore(url: ipStore))
+            @MainActor func fixtureIPhone(archiveRoot: URL = URL(fileURLWithPath: "/Users/fixture/Documents/MacDashboard/iPhone", isDirectory: true),
+                               _ tweak: (IPhoneModel) -> Void = { _ in }) -> IPhoneModel {
+                // Machine-independent archive path for the Settings › iPhone reference.
+                let m = IPhoneModel(store: IPhoneStore(url: ipStore),
+                                    archiveRoot: archiveRoot)
                 m.applyVisualFixture()
                 tweak(m)
                 return m
             }
             let ivan = IPhoneModel.fixtureIvanKey
+            // Live-tile variants of the fixture snapshot (battery-tone coverage).
+            func liveSnapshot(_ ip: IPhoneModel, _ key: String, percent: Int, external: Bool, temp: Double, cycles: Int,
+                              productType: String) -> IPhoneSnapshot {
+                var s = ip.lastSnapshot[key]!
+                s.productType = productType
+                s.battery!.percent = percent
+                s.battery!.externalConnected = external
+                s.battery!.isCharging = external
+                s.battery!.temperatureC = temp
+                s.battery!.cycleCount = cycles
+                return s
+            }
             let vic = IPhoneModel.fixtureVictoriaKey
             let longArchive = "sysdiagnose_2026.01.15_09-15-02+0300_iPhone-OS_iPhone_23E254.tar.gz"
             // NEWMAC-HISTORY-EMPTY: the same fixture with only `history` replaced. One model per
@@ -919,6 +934,15 @@ extension SerialTests {
                         HarnessSection(label: "iPhone battery: snapshot without battery data") {
                             IPhoneBatteryCard(record: rec, snapshot: noBattery)
                         }
+                        HarnessSection(label: "iPhone battery: live tiles, no tones") {
+                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, ivan, percent: 64, external: false, temp: 30.1, cycles: 412, productType: "iPhone16,2"))
+                        }
+                        HarnessSection(label: "iPhone battery: live tiles, amber tones") {
+                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, ivan, percent: 18, external: false, temp: 41.0, cycles: 850, productType: "iPhone18,2"))
+                        }
+                        HarnessSection(label: "iPhone battery: live tiles, hot tones") {
+                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, ivan, percent: 9, external: false, temp: 46.0, cycles: 1000, productType: "iPhone18,2"))
+                        }
                     }
                 }
                 run.snap("content-iphone-history", mode, width: 1134) {
@@ -964,10 +988,21 @@ extension SerialTests {
                         }
                     }
                 }
+                // Kept archives show only for names whose file exists: a temp root holds the fixture's one file.
+                let keptRoot = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("md-visual-kept-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+                defer { try? FileManager.default.removeItem(at: keptRoot) }
+                let keptName = IPhoneModel.fixtureIvanKeptArchive
+                try FileManager.default.createDirectory(at: keptRoot.appendingPathComponent(ivan, isDirectory: true),
+                                                        withIntermediateDirectories: true)
+                FileManager.default.createFile(atPath: keptRoot.appendingPathComponent(ivan).appendingPathComponent(keptName).path,
+                                               contents: Data())
                 run.snap("content-iphone-import", mode, width: 1134) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone import: copying") {
-                            IPhoneImportCard(model: fixtureIPhone {
+                            IPhoneImportCard(model: fixtureIPhone(archiveRoot: keptRoot) {
+                                // A second kept name with no file: must stay hidden.
+                                $0.devices[0].keptArchives.append("sysdiagnose_missing_file.tar.gz")
                                 $0.importing[ivan] = .copying(done: 125_000_000, total: 298_000_000)
                             }, deviceKey: ivan)
                         }
@@ -1025,6 +1060,12 @@ extension SerialTests {
                         HarnessSection(label: "iPhone dialogs: parse choice") {
                             IPhoneImportChoiceSheet(
                                 title: L.iphoneImportConfirmTitle(longArchive, into: "Ivan’s iPhone"),
+                                keepDefault: true,
+                                onCancel: {}, onParse: {}, onKeep: {})
+                                .background(DS3.overlay)
+                            IPhoneImportChoiceSheet(
+                                title: L.iphoneImportConfirmTitle(longArchive, into: "Ivan’s iPhone"),
+                                keepDefault: false,
                                 onCancel: {}, onParse: {}, onKeep: {})
                                 .background(DS3.overlay)
                         }
@@ -1040,9 +1081,10 @@ extension SerialTests {
                     }
                 }
                 // Settings states: the window frame (680 x 420) is owned by the test, not by SettingsView.
-                func settingsState(_ name: String, _ section: SettingsSection, _ model: DashboardModel, launch: AppLanguage = .en) {
+                func settingsState(_ name: String, _ section: SettingsSection, _ model: DashboardModel, launch: AppLanguage = .en,
+                                   iphone: IPhoneModel? = nil) {
                     run.snap(name, mode, width: 680) {
-                        SettingsView(model: model, startSection: section, launchLanguage: launch).frame(width: 680, height: 420)
+                        SettingsView(model: model, startSection: section, iphone: iphone, launchLanguage: launch).frame(width: 680, height: 420)
                     }
                 }
                 let mMissing = DashboardModel(); mMissing.applyVisualFixture(); mMissing.claudeBackup = nil
@@ -1056,7 +1098,9 @@ extension SerialTests {
                 settingsState("content-settings-backup", .backup, m)
                 settingsState("content-settings-backup-missing", .backup, mMissing)
                 settingsState("content-settings-backup-permission", .backup, mPerm)
-                settingsState("content-settings-iphone", .iphone, m)
+                settingsState("content-settings-iphone", .iphone, m, iphone: fixtureIPhone())
+                settingsState("content-settings-iphone-movefailed", .iphone, m,
+                              iphone: fixtureIPhone { $0.archiveFolderError = .couldNotMove(2) })
                 settingsState("content-settings-about", .about, m)
             }
             try run.finish()

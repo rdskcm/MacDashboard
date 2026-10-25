@@ -61,7 +61,10 @@ feedback and comments. Hope you like it!
 ## What it can change
 
 By default MacDashboard only reads: it collects information and writes its
-own report/history files under Application Support — nothing else. The only
+own report/history files under Application Support and, only when you choose to keep an
+imported iPhone sysdiagnose, that archive in the folder shown in Settings › iPhone (default
+`~/Documents/MacDashboard/iPhone`; if Documents syncs to iCloud Drive, kept archives sync with
+it) — nothing else. The only
 exceptions are actions you explicitly click, each of which shows a
 confirmation dialog (and, where the system requires it, a Touch ID / admin
 password prompt) before doing anything:

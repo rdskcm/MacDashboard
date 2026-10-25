@@ -5,6 +5,7 @@ import Foundation
 
 extension IPhoneModel {
     static let fixtureIvanKey = IPhoneData.deviceKey(udid: "fixture-ivan")
+    static let fixtureIvanKeptArchive = "sysdiagnose_2026.01.09_01-34-55+0300_iPhone-OS_iPhone_23E254.tar.gz"
     static let fixtureVictoriaKey = IPhoneData.deviceKey(udid: "fixture-victoria")
 
     func applyVisualFixture() {
@@ -35,7 +36,7 @@ extension IPhoneModel {
                 productType: "iPhone18,2", enclosureColor: "2", osVersion: "26.4.1", lastSeen: now,
                 battery: history(n: 180, endBack: 0, steps: [(0.5, 101), (0.627, 100), (0.874, 99)], last: 98,
                                  c0: 70, c1: 269, design: 5030, live: 2),
-                keptArchives: ["sysdiagnose_2026.01.09_01-34-55+0300_iPhone-OS_iPhone_23E254.tar.gz"]
+                keptArchives: [Self.fixtureIvanKeptArchive]
             ),
             IPhoneDeviceRecord(
                 id: Self.fixtureVictoriaKey, name: "Victoria’s iPhone", marketingName: "iPhone 15 Pro Max",
@@ -59,7 +60,7 @@ extension IPhoneModel {
             udid: "fixture-ivan", name: "Ivan’s iPhone", marketingName: "iPhone 17 Pro Max",
             productType: "iPhone18,2", osVersion: "26.4.1", build: "23E254", enclosureColor: "2",
             battery: BatteryDetail(
-                percent: 34, voltageMV: 3930, amperageMA: 1200, powerW: nil, temperatureC: 32.2,
+                percent: 34, voltageMV: 3930, amperageMA: 1200, powerW: nil, temperatureC: 40.6,
                 cellVoltagesMV: [], externalConnected: true, isCharging: true, fullyCharged: false,
                 timeToEmptyMin: nil, timeToFullMin: nil, currentCapacityMAh: nil, maxCapacityMAh: 4928,
                 designCapacityMAh: 5030, cycleCount: 269, designCycleCount: nil, healthPercent: 98,

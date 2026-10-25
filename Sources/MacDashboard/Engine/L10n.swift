@@ -85,6 +85,10 @@ protocol AppStrings {
     var settingsNotifyDenied: String { get }
     var settingsNotifyOpen: String { get }
     var settingsNotifyOpenA11y: String { get }
+    var settingsAutoReadLabel: String { get }
+    var settingsAutoReadSub: String { get }
+    var settingsArchiveFolderLabel: String { get }
+    func settingsArchiveFolderMoveFailed(_ n: Int) -> String
 
     // MARK: Main dashboard (header + tab picker)
     var mainCollectingInfo: String { get }
@@ -1047,7 +1051,7 @@ protocol AppStrings {
 
     // MARK: iPhone module
     var mainModeMac: String { get }
-    var mainModeIPhone: String { get }
+    var mainModeDevices: String { get }
     var iphoneKickerDevices: String { get }
     var iphoneStatusConnected: String { get }
     var iphoneStatusNeedsTrust: String { get }
@@ -1092,6 +1096,7 @@ protocol AppStrings {
     var iphoneWhSourceHelp: String { get }
     var iphoneBatteryConnectToRead: String { get }
     var iphoneBatteryNoData: String { get }
+    var iphoneBatteryAutoReadOff: String { get }
     var iphoneHistoryEmpty: String { get }
     var iphoneHistorySourceLive: String { get }
     var iphoneHistorySourceImport: String { get }

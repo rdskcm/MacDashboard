@@ -54,7 +54,11 @@ struct MainDashboardView: View {
             .onChange(of: model.externalDestinationSerial) { if let d = model.consumeExternalDestination() { router.navigate(to: d) } }
             .onAppear { if let d = model.consumeExternalDestination() { router.navigate(to: d) } }
             .background {
-                if router.canGoBack && router.mode == .mac && !router.isInlineConfirmOpen { BackShortcuts { _ = router.back() } }
+                if router.mode == .mac {
+                    if router.canGoBack && !router.isInlineConfirmOpen { BackShortcuts { _ = router.back() } }
+                } else if iphone.selectedDeviceKey != nil {
+                    BackShortcuts { iphone.selectedDeviceKey = nil }
+                }
             }
         }
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
@@ -105,41 +109,43 @@ struct MainDashboardView: View {
 
     // MARK: Toolbar (single row: title block · mode switch · flexible gap · per-mode actions)
 
-    /// Title block width by window width (01-window-chrome, width rules).
-    private var titleWidth: CGFloat { windowWidth >= 1200 ? 460 : windowWidth >= 1000 ? 400 : 280 }
-
     private var toolbar: some View {
-        HStack(alignment: .center, spacing: 12) {
+        // Custom layout instead of an HStack + centred overlay: the switch is centred in the window, and the
+        // actions are proposed only the width that is really left beside it, so their ViewThatFits picks the
+        // full or compact form from that (a fixed window-width threshold would be wrong for one language).
+        // The horizontal paddings (leading 20 / trailing 18) sit on the sides, not on the layout, so the
+        // layout's centre is the window's centre.
+        CentredToolbarLayout(spacing: 12) {
             // Pushes the title/subtitle clear of the traffic lights, so the toolbar's own `.padding(.top, 14)`
             // reads as the gap between the buttons and the title. Padding, not `.offset`: the header has to
             // actually grow, or the subtitle would ride into the bottom hairline. `titleBlock` is the tallest
             // child, so the mode switch and the actions stay centred in the taller header.
             titleBlock
-                .frame(width: titleWidth, alignment: .leading)
+                .frame(maxWidth: 460, alignment: .leading)
                 .padding(.top, headerTrafficLightBand)
-            // Outside the mode branch (control-identity-branch); its x depends only on the title block width.
+                .padding(.leading, 20)
+            // Centred in the window, outside the mode branch (control-identity-branch): the same x in both modes
+            // at every width.
             DSSlidingSegmented(options: [AppMode.mac, .iphone], selection: $router.mode, size: .header, identifier: { m in
                 m == .mac ? "main-mode-mac" : "main-mode-iphone"
             }, onReselect: { m in
-                // «This Mac» clicked again on a section page: back to Home.
+                // The selected segment clicked again: This Mac → Home, Devices → the device list.
                 if m == .mac && router.canGoBack { router.navigate(to: .home) }
+                if m == .iphone && iphone.selectedDeviceKey != nil { iphone.selectedDeviceKey = nil }
             }) { m in
-                m == .mac ? L.mainModeMac : L.mainModeIPhone
+                m == .mac ? L.mainModeMac : L.mainModeDevices
             }
-            .layoutPriority(2)
-            Spacer(minLength: 12)
-            if router.mode == .mac {
-                MacHeaderActions(model: model, router: router, narrow: windowWidth < 1000)
-                    .layoutPriority(1.5)
-            } else {
-                IPhoneHeaderActions(model: iphone)
-                    .layoutPriority(1.5)
+            Group {
+                if router.mode == .mac {
+                    MacHeaderActions(model: model, router: router)
+                } else {
+                    IPhoneHeaderActions(model: iphone)
+                }
             }
+            .padding(.trailing, 18)
         }
         .padding(.top, 14)
-        .padding(.trailing, 18)
         .padding(.bottom, 14)
-        .padding(.leading, 20)
         .background(toolbarChrome)
     }
 
@@ -179,22 +185,32 @@ struct MainDashboardView: View {
         }
     }
 
-    /// One line, tier picked from the window width (not by `ViewThatFits`, 00 §3); `.help` carries the full form.
+    /// One line, tier picked by the space the leading side is actually offered (`ViewThatFits`): the richest tier that
+    /// fits wins. Recorded departure from handoff 00 §3 «tier from the window width» (user 2026-10-25): the mode
+    /// switch takes the centre, so the window width does not say how much room is left. `.help` carries the full form.
     private var subtitleView: some View {
         let tiers = subtitleTiers
-        return Text(tiers.text)
+        return ViewThatFits(in: .horizontal) {
+            subtitleText(tiers.full)
+            subtitleText(tiers.mid)
+            subtitleText(tiers.short).truncationMode(.tail)
+        }
+        .help(tiers.full)
+    }
+
+    private func subtitleText(_ s: String) -> some View {
+        Text(s)
             .font(.system(size: 12))
             .foregroundStyle(DS3.muted)
             .monospacedDigit()
             .lineLimit(1)
-            .truncationMode(.tail)
-            .help(tiers.full)
     }
 
-    /// ≥ 1200 → model · chip · RAM · macOS ver (build) · uptime; 1000-1199 drops the build; < 1000 keeps model ·
-    /// chip · uptime. Missing parts drop out; uptime is never dropped. No system yet → `mainCollectingInfo`.
-    private var subtitleTiers: (text: String, full: String) {
-        guard let sys = model.headerSystem else { return (L.mainCollectingInfo, L.mainCollectingInfo) }
+    /// full: model · chip · RAM · macOS ver (build) · uptime; mid drops the build; short keeps model · chip · uptime.
+    /// Missing parts drop out; uptime is never dropped. No system yet → `mainCollectingInfo` in all three.
+    private var subtitleTiers: (full: String, mid: String, short: String) {
+        let none = L.mainCollectingInfo
+        guard let sys = model.headerSystem else { return (none, none, none) }
         let ram = sys.memBytes.map { tight(fmtBytesParts($0)) }
         let osFull: String? = sys.osVersion.map { ver in
             let build = sys.osBuild.map { " (\($0))" } ?? ""
@@ -203,25 +219,18 @@ struct MainDashboardView: View {
         let osShort: String? = sys.osVersion.map { "macOS \($0)" }
         let uptime = sys.uptime.map { L.headerUptimeChip($0) }
 
-        func join(_ parts: [String?]) -> String? {
+        func join(_ parts: [String?]) -> String {
             let present = parts.compactMap { $0 }
-            return present.isEmpty ? nil : present.joined(separator: " · ")
+            return present.isEmpty ? none : present.joined(separator: " · ")
         }
 
-        let full = join([sys.modelName, sys.chip, ram, osFull, uptime]) ?? L.mainCollectingInfo
-        let text: String
-        if windowWidth >= 1200 {
-            text = full
-        } else if windowWidth >= 1000 {
-            text = join([sys.modelName, sys.chip, ram, osShort, uptime]) ?? L.mainCollectingInfo
-        } else {
-            text = join([sys.modelName, sys.chip, uptime]) ?? L.mainCollectingInfo
-        }
-        return (text, full)
+        return (join([sys.modelName, sys.chip, ram, osFull, uptime]),
+                join([sys.modelName, sys.chip, ram, osShort, uptime]),
+                join([sys.modelName, sys.chip, uptime]))
     }
 }
 
-/// Esc and ⌘[ = Back (handoff 00 §5), installed only while a section page or the report is shown
+/// Esc and ⌘[ = Back (handoff 00 §5), installed only while a section page, the report or an iPhone device page is shown
 /// (REDESIGN-FOUNDATION D8). Zero-size and hidden from accessibility: the visible Back chip
 /// (REDESIGN-HOME) carries the label.
 private struct BackShortcuts: View {
@@ -249,19 +258,27 @@ private struct BackShortcuts: View {
 struct MacHeaderActions: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let narrow: Bool
 
+    /// Picks its form from the width `CentredToolbarLayout` offers: the full row, else the compact row (Report as
+    /// icon first, then the short Refresh label); the pill text shortens only when even the compact row does not fit.
     var body: some View {
-        HStack(spacing: 8) {
-            HeaderStatusPill(model: model)
-            reportButton
-            refreshButton
+        ViewThatFits(in: .horizontal) {
+            row(compact: false)
+            row(compact: true)
         }
     }
 
-    /// Narrow (< 1000 pt): a 34 pt circle with the icon only; otherwise the labelled secondary button.
-    @ViewBuilder private var reportButton: some View {
-        if narrow {
+    private func row(compact: Bool) -> some View {
+        HStack(spacing: 8) {
+            HeaderStatusPill(model: model)
+            reportButton(compact: compact)
+            refreshButton(compact: compact)
+        }
+    }
+
+    /// Compact: a 34 pt circle with the icon only; otherwise the labelled secondary button.
+    @ViewBuilder private func reportButton(compact: Bool) -> some View {
+        if compact {
             Button { router.isReportShown = true } label: {
                 Image(systemName: "doc.text").font(.system(size: 13))
             }
@@ -279,10 +296,10 @@ struct MacHeaderActions: View {
         }
     }
 
-    private var refreshButton: some View {
+    private func refreshButton(compact: Bool) -> some View {
         Button { model.refreshReport(trigger: .button) } label: {
             // The hidden label keeps the width while the spinner shows (swap-in-place).
-            Text(narrow ? L.commonRefresh : L.commonRefreshReport)
+            Text(compact ? L.commonRefresh : L.commonRefreshReport)
                 .dsSwapInPlace(model.isCollectingReport) { ProgressView().controlSize(.small).tint(.white) }
         }
         .buttonStyle(DS3ButtonStyle(kind: .primary, height: 34, hPad: 16, disabledOpacity: 0.5))
@@ -295,7 +312,7 @@ struct MacHeaderActions: View {
 
 /// The header status pill: not a button. Reads the same task list as the Attention card (same arguments as
 /// `HomeAttentionSlot`), so the two never disagree. No `.animation(_:value:)` (animation-value-size-coupling);
-/// the full text shows at every width.
+/// the full text shows unless even the compact row of `MacHeaderActions` does not fit.
 @MainActor
 private struct HeaderStatusPill: View {
     let model: DashboardModel
@@ -333,5 +350,42 @@ private extension View {
             .accessibilityLabel(L.commonReport)
             .accessibilityIdentifier("main-report")
             .layoutPriority(1)
+    }
+}
+
+/// Three subviews in order: leading, centre, trailing. The centre sits at the container's horizontal midpoint at its
+/// ideal size; the sides are proposed only the width left on their side of it (minus `spacing`), so a side that
+/// adapts to its proposal (`ViewThatFits`) picks its form from the real room. A side that reports more than it was
+/// proposed keeps its size and stays flush at its own edge; the centre does not move.
+private struct CentredToolbarLayout: Layout {
+    var spacing: CGFloat = 12
+
+    private func sideProposals(width: CGFloat?, height: CGFloat?, centreWidth: CGFloat)
+        -> (leading: ProposedViewSize, trailing: ProposedViewSize) {
+        guard let width else {
+            return (ProposedViewSize(width: nil, height: height), ProposedViewSize(width: nil, height: height))
+        }
+        let side = max(0, width / 2 - centreWidth / 2 - spacing)
+        return (ProposedViewSize(width: side, height: height), ProposedViewSize(width: side, height: height))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 3 else { return .zero }
+        let centre = subviews[1].sizeThatFits(.unspecified)
+        let sides = sideProposals(width: proposal.width, height: proposal.height, centreWidth: centre.width)
+        let leading = subviews[0].sizeThatFits(sides.leading)
+        let trailing = subviews[2].sizeThatFits(sides.trailing)
+        let width = proposal.width ?? (leading.width + spacing + centre.width + spacing + trailing.width)
+        return CGSize(width: width, height: max(leading.height, centre.height, trailing.height))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 3 else { return }
+        let centre = subviews[1].sizeThatFits(.unspecified)
+        let sides = sideProposals(width: bounds.width, height: proposal.height, centreWidth: centre.width)
+        let midY = bounds.midY
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: midY), anchor: .leading, proposal: sides.leading)
+        subviews[1].place(at: CGPoint(x: bounds.midX, y: midY), anchor: .center, proposal: .unspecified)
+        subviews[2].place(at: CGPoint(x: bounds.maxX, y: midY), anchor: .trailing, proposal: sides.trailing)
     }
 }

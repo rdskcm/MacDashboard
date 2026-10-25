@@ -154,6 +154,18 @@ extension SerialTests {
             #expect(AppSettings.shared.keepImportedArchives, "keepImportedArchives defaults to true")
         }
 
+        @Test func iphoneAutoReadDefault() {
+            #expect(AppSettings.shared.iphoneAutoRead, "iphoneAutoRead defaults to true")
+        }
+
+        @Test func archiveFolderResolve() {
+            let def = URL(fileURLWithPath: "/tmp/md-default", isDirectory: true)
+            #expect(AppSettings.resolveArchiveFolder(raw: nil, defaultRoot: def) == def)
+            #expect(AppSettings.resolveArchiveFolder(raw: "", defaultRoot: def) == def)
+            #expect(AppSettings.resolveArchiveFolder(raw: "relative/path", defaultRoot: def) == def)
+            #expect(AppSettings.resolveArchiveFolder(raw: "/Users/x/Archives/", defaultRoot: def).path == "/Users/x/Archives")
+        }
+
         @Test func lowSpacePercentResolve() async {
             #expect(AppSettings.resolveLowSpacePercent(raw: 0) == 20, "lowSpacePercent unset (0) -> 20")
             #expect(AppSettings.resolveLowSpacePercent(raw: 15) == 15, "lowSpacePercent 15 kept")
