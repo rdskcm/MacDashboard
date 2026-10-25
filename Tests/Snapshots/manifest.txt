@@ -227,3 +227,5 @@ content-settings-monitoring-denied-dark	2026-10-25	27.0.1	Xcode 27.1	1667418-dir
 content-settings-monitoring-denied-light	2026-10-25	27.0.1	Xcode 27.1	1667418-dirty
 content-settings-iphone-movefailed-dark	2026-10-25	27.0.1	Xcode 27.1	eb4a001-dirty
 content-settings-iphone-movefailed-light	2026-10-25	27.0.1	Xcode 27.1	eb4a001-dirty
+content-backdrop-window-dark	2026-10-25	27.0.1	Xcode 27.1	d1fa31d-dirty
+content-backdrop-window-light	2026-10-25	27.0.1	Xcode 27.1	d1fa31d-dirty

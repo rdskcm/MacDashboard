@@ -188,14 +188,16 @@ struct DS3OrbSpec {
     let d: CGFloat
     let centre: (CGSize) -> CGPoint
 
-    /// The main window's three orbs.
+    /// The main window's three v2 orbs (`This Mac Home v2.dc.html:33-35`): A back 780 `top -300 right -220`,
+    /// B mid 580 `top 330 left -250`, C front 420 `bottom -190 right 20%`. REDESIGN-ORBS.
     static let window: [DS3OrbSpec] = [
-        DS3OrbSpec(color: DS3.orbA, d: 640, centre: { CGPoint(x: $0.width - 180, y: 100) }),
-        DS3OrbSpec(color: DS3.orbB, d: 560, centre: { _ in CGPoint(x: 40, y: 640) }),
-        DS3OrbSpec(color: DS3.orbC, d: 520, centre: { CGPoint(x: $0.width * 0.82 - 260, y: $0.height) }),
+        DS3OrbSpec(color: DS3.orbA, d: 780, centre: { OrbGeometry.centre(left: OrbGeometry.leftFromRight(-220, d: 780, width: $0.width), top: -300, d: 780) }),
+        DS3OrbSpec(color: DS3.orbB, d: 580, centre: { _ in OrbGeometry.centre(left: -250, top: 330, d: 580) }),
+        DS3OrbSpec(color: DS3.orbC, d: 420, centre: { OrbGeometry.centre(left: OrbGeometry.leftFromRight(0.2 * $0.width, d: 420, width: $0.width), top: OrbGeometry.topFromBottom(-190, d: 420, height: $0.height), d: 420) }),
     ]
 
-    /// The Settings window's smaller set (`Settings.dc.html:28-30`).
+    /// The Settings window's smaller set (`Settings.dc.html:28-30`); values unchanged by REDESIGN-ORBS
+    /// (D1: colour, blend and H1 profile follow the window set).
     static let settings: [DS3OrbSpec] = [
         DS3OrbSpec(color: DS3.orbA, d: 520, centre: { _ in CGPoint(x: 80, y: 40) }),
         DS3OrbSpec(color: DS3.orbB, d: 460, centre: { CGPoint(x: $0.width - 70, y: $0.height + 10) }),
@@ -228,6 +230,7 @@ final class DS3OrbView: NSView {
     private let orbLayers: [CALayer]
     private var renderedAppearance: NSAppearance.Name?
     private var renderedScale: CGFloat?
+    private var loggedRenderFailure = false
 
     init(orbs: [DS3OrbSpec]) {
         self.orbs = orbs
@@ -236,7 +239,7 @@ final class DS3OrbView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         let off = NSNull()
-        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden"]
+        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden", "compositingFilter", "opacity"]
         for l in [container] + orbLayers {
             l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
         }
@@ -253,7 +256,8 @@ final class DS3OrbView: NSView {
         CATransaction.setDisableActions(true)
         container.frame = bounds
         for (l, o) in zip(orbLayers, orbs) {
-            l.bounds = CGRect(x: 0, y: 0, width: o.d, height: o.d)
+            let side = OrbProfile.sideFactor * o.d        // 1.4·d (spec §3.3): the layer holds the whole H1 window W(u)
+            l.bounds = CGRect(x: 0, y: 0, width: side, height: side)
             l.position = o.centre(bounds.size)
         }
         CATransaction.commit()
@@ -274,27 +278,42 @@ final class DS3OrbView: NSView {
         renderImagesIfNeeded()
     }
 
-    /// Radial images at the window's backing scale, with colours resolved for this view's appearance.
+    /// H1 orb bitmaps (spec §3.3) at the window's backing scale, colours and ground resolved for this view's
+    /// appearance. Runs once per appearance × scale on the main thread, before the first paint after attach; never
+    /// per frame (D12). Dark bitmaps are deltas over `DS3.ground`, so a ground change re-renders with the appearance.
     private func renderImagesIfNeeded() {
         guard let window else { return }
         let scale = window.backingScaleFactor
         let name = effectiveAppearance.name
         guard name != renderedAppearance || scale != renderedScale else { return }
-        renderedAppearance = name
-        renderedScale = scale
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let mode: OrbBitmap.Mode = isDark ? .dark(ground: Self.rgb(ds3Resolve(DS3.ground, in: effectiveAppearance))) : .light
+        let images = orbs.enumerated().map { i, o in
+            let c = ds3Resolve(o.color, in: effectiveAppearance)
+            return OrbBitmap.render(d: o.d, scale: scale, colour: Self.rgb(c), alpha: Double(c.alpha), mode: mode,
+                                    seed: OrbBitmap.seed(orb: i))?.surface   // the layer retains its surface
+        }
+        let failed = images.contains { $0 == nil }
+        if failed {
+            if !loggedRenderFailure { NSLog("[MacDashboard] orb bitmap render failed; keeping the previous contents, retrying on the next pass") }
+            loggedRenderFailure = true
+        } else {
+            renderedAppearance = name        // a failed render is not recorded, so the next pass retries
+            renderedScale = scale
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (l, o) in zip(orbLayers, orbs) {
-            let c = Color(cgColor: ds3Resolve(o.color, in: effectiveAppearance))
-            let renderer = ImageRenderer(
-                content: Circle()
-                    .fill(RadialGradient(colors: [c, c.opacity(0)], center: .center, startRadius: 0, endRadius: 0.495 * o.d))
-                    .frame(width: o.d, height: o.d)
-            )
-            renderer.scale = scale
-            l.contents = renderer.cgImage
+        for (l, img) in zip(orbLayers, images) {
+            if let img { l.contents = img }
             l.contentsScale = scale
+            l.compositingFilter = isDark ? "plusL" : nil
         }
         CATransaction.commit()
+    }
+
+    /// The r, g, b of a `ds3Resolve` colour (always sRGB with four components).
+    private static func rgb(_ c: CGColor) -> SIMD3<Double> {
+        guard let k = c.components, k.count >= 3 else { return SIMD3(repeating: 0) }
+        return SIMD3(Double(k[0]), Double(k[1]), Double(k[2]))
     }
 }

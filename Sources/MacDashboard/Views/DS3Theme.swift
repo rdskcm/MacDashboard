@@ -72,7 +72,7 @@ enum DS3 {
 
     static let orbA = Color(light: ds3RGB(62, 123, 239, 0.55), dark: ds3RGB(70, 130, 240, 0.45))
     static let orbB = Color(light: ds3RGB(244, 166, 59, 0.45), dark: ds3RGB(230, 140, 50, 0.30))
-    static let orbC = Color(light: ds3RGB(238, 110, 94, 0.35), dark: ds3RGB(220, 95, 90, 0.26))
+    static let orbC = Color(light: ds3RGB(238, 110, 94, 0.42), dark: ds3RGB(220, 95, 90, 0.34))  // v2 (00-shared §1 «orbC (changed)», REDESIGN-ORBS D1)
 
     /// accentSolid 70 % + white 30 %.
     static let primaryTop = Color(light: Color(hex: 0x629AE2), dark: Color(hex: 0x6DA5E9))

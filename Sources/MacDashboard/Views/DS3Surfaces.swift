@@ -336,8 +336,8 @@ extension DS3 {
 
 // MARK: - Orbs
 
-/// Three soft static colour glows (`DS3OrbLayer`). Static by decision in HOME-D: the 12 Hz drift kept
-/// WindowServer at ~10% CPU at idle (static: ~2.7%); motion returns only with the v2 orbs and their own perf A/B.
+/// Three soft static colour glows (`DS3OrbLayer`). Static since HOME-D; REDESIGN-ORBS kept them static
+/// after its drift A/B (WindowServer 2.3 → 10.8 %; a cheaper drift is ORB-DRIFT-CHEAP).
 /// Hidden when Settings › Background orbs is off or Reduce Motion is on (REDESIGN-SETTINGS).
 struct DS3OrbField: View {
     var orbs: [DS3OrbSpec] = DS3OrbSpec.window
