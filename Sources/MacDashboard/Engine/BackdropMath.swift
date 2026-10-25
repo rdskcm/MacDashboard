@@ -58,7 +58,7 @@ enum OrbProfile {
     }
 }
 
-/// One orb's premultiplied 8-bit bitmap, `sidePx × sidePx`, ±1 LSB triangular dither (spec §3.3). The pixels live in a
+/// Radial premultiplied bitmap for the orbs and the rim light spot, 8-bit `sidePx × sidePx`, ±1 LSB triangular dither (spec §3.3). The pixels live in a
 /// single IOSurface (BGRA, tagged sRGB) that goes straight into `layer.contents`: no `[UInt8]`, `Data` or `CGImage`
 /// copy, and no colour-converted copy made by Core Animation (step M, memory findings F1).
 struct OrbBitmap {
@@ -104,10 +104,14 @@ struct OrbBitmap {
     /// The surface row is padded (`IOSurfaceGetBytesPerRow` ≥ 4·side), so every offset uses the stride. Every pixel
     /// is written, pixels at and beyond Rl as four zero bytes (a fresh surface is not documented to be zeroed). Nil only if the surface cannot be created.
     static func render(d: CGFloat, scale: CGFloat, colour: SIMD3<Double>, alpha: Double, mode: Mode, seed: UInt64) -> OrbBitmap? {
-        let side = sidePx(d: d, scale: scale)
-        let lut = table(d: d, scale: scale, colour: colour, alpha: alpha, mode: mode)
+        render(lut: table(d: d, scale: scale, colour: colour, alpha: alpha, mode: mode),
+               radiusPx: OrbProfile.radiusFactor * Double(d) * Double(scale),
+               sidePx: sidePx(d: d, scale: scale), seed: seed)
+    }
+
+    /// The shared pixel loop: `lut` by integer pixel radius, zero at and beyond `radiusPx` (u ≥ 1 is skipped, as in honest.swift).
+    static func render(lut: [SIMD4<Double>], radiusPx rlPx: Double, sidePx side: Int, seed: UInt64) -> OrbBitmap? {
         let centre = Double(side) / 2
-        let rlPx = OrbProfile.radiusFactor * Double(d) * Double(scale)   // u ≥ 1 is skipped, as in honest.swift
         let props: [CFString: Any] = [kIOSurfaceWidth: side, kIOSurfaceHeight: side, kIOSurfaceBytesPerElement: 4,
                                       kIOSurfacePixelFormat: pixelFormatBGRA]
         guard let surface = IOSurfaceCreate(props as CFDictionary),
