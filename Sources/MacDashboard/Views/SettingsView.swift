@@ -93,6 +93,8 @@ private struct SettingsPathRow: View {
     let path: String
     var invalid = false
     let buttonTitle: String
+    var busy = false
+    var disabled = false
     let action: () -> Void
 
     var body: some View {
@@ -102,7 +104,7 @@ private struct SettingsPathRow: View {
                 SettingsRowLabel(label: label, sub: sub, subColor: subColor)
                 HStack(spacing: 8) {
                     pathField
-                    SettingsSecondaryButton(title: buttonTitle, action: action)
+                    SettingsSecondaryButton(title: buttonTitle, busy: busy, disabled: disabled, action: action)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -163,6 +165,7 @@ private struct SettingsRowLabel: View {
 private struct SettingsSecondaryButton: View {
     let title: String
     var busy = false
+    var disabled = false
     let action: () -> Void
 
     var body: some View {
@@ -170,7 +173,7 @@ private struct SettingsSecondaryButton: View {
             Text(title).dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
         }
         .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 13, fontSize: 13))
-        .disabled(busy)
+        .disabled(busy || disabled)
         .accessibilityLabel(title)
     }
 }
@@ -197,8 +200,10 @@ private struct SettingsGroup<Content: View>: View {
 }
 
 struct SettingsView: View {
-    init(model: DashboardModel, state: SettingsWindowState, launchLanguage: AppLanguage = L10nStore.launchLanguage) {
+    @MainActor init(model: DashboardModel, state: SettingsWindowState, iphone: IPhoneModel? = nil,
+         launchLanguage: AppLanguage = L10nStore.launchLanguage) {
         self.model = model
+        self.iphone = iphone ?? .shared
         self.state = state
         self.launchLanguage = launchLanguage
         _relaunchRowShown = State(initialValue: L10nStore.shared.language != launchLanguage)
@@ -207,11 +212,13 @@ struct SettingsView: View {
 
     // Harness-only init param so offscreen renders can show any section without
     // clicks (same precedent as MemoryCompositionCard.initialView).
-    init(model: DashboardModel, startSection: SettingsSection = .general, launchLanguage: AppLanguage = L10nStore.launchLanguage) {
-        self.init(model: model, state: SettingsWindowState(section: startSection), launchLanguage: launchLanguage)
+    @MainActor init(model: DashboardModel, startSection: SettingsSection = .general, iphone: IPhoneModel? = nil,
+         launchLanguage: AppLanguage = L10nStore.launchLanguage) {
+        self.init(model: model, state: SettingsWindowState(section: startSection), iphone: iphone, launchLanguage: launchLanguage)
     }
 
     var model: DashboardModel
+    var iphone: IPhoneModel
     @Bindable var state: SettingsWindowState
     let launchLanguage: AppLanguage
     @Bindable private var store = L10nStore.shared
@@ -608,14 +615,46 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: iPhone (`Settings.dc.html:206-209`, row 208 only)
+    // MARK: iPhone (`Settings.dc.html:206-209`)
+
+    private var archiveFolderSub: String? {
+        iphone.archiveFolderError.map { if case .couldNotMove(let n) = $0 { return L.settingsArchiveFolderMoveFailed(n) } else { return "" } }
+    }
 
     private var iphoneGroup: some View {
-        // Read by REDESIGN-IPHONE (auto-read); auto-read and archive-folder rows land there.
         SettingsGroup {
-            SettingsRow(label: L.settingsKeepArchivesLabel, separator: false) {
+            SettingsRow(label: L.settingsAutoReadLabel, sub: L.settingsAutoReadSub, separator: false) {
+                DS3Switch(isOn: $settings.iphoneAutoRead, label: L.settingsAutoReadLabel, metrics: .settings)
+            }
+            SettingsRow(label: L.settingsKeepArchivesLabel) {
                 DS3Switch(isOn: $settings.keepImportedArchives, label: L.settingsKeepArchivesLabel, metrics: .settings)
             }
+            SettingsPathRow(
+                label: L.settingsArchiveFolderLabel,
+                sub: archiveFolderSub,
+                subColor: DS3.hotInk,
+                path: iphone.archiveRoot.path,
+                invalid: iphone.archiveFolderError != nil,
+                buttonTitle: L.settingsChoose,
+                busy: iphone.archiveFolderBusy,
+                // importArchive captures the keep root at its start; a move mid-import would leave it writing to the old folder.
+                disabled: !iphone.importing.isEmpty,
+                action: chooseArchiveFolder
+            )
+        }
+    }
+
+    private func chooseArchiveFolder() {
+        let p = NSOpenPanel()
+        p.canChooseFiles = false
+        p.canChooseDirectories = true
+        p.canCreateDirectories = true
+        p.allowsMultipleSelection = false
+        let current = iphone.archiveRoot
+        p.directoryURL = FileManager.default.fileExists(atPath: current.path) ? current : current.deletingLastPathComponent()
+        guard let w = NSApp.keyWindow else { return }
+        p.beginSheetModal(for: w) { response in
+            if response == .OK, let url = p.url { Task { await iphone.setArchiveFolder(url) } }
         }
     }
 

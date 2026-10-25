@@ -103,7 +103,7 @@ struct IPhoneModeView: View {
                 }
                 ForEach(Array(model.sortedPending.enumerated()), id: \.element.raw) { j, h in
                     IPhonePendingTileView(status: model.pendingStatus[h] ?? .needsTrust) {
-                        model.refresh(handle: h)
+                        model.refresh(handle: h, trigger: .attach)
                     }
                     .ds3Appear(delay: DS3Motion.tileStagger * Double(model.devices.count + j))
                 }
@@ -239,7 +239,7 @@ struct IPhoneTileView: View {
         case .reading: return ""
         case .needsTrust: return L.iphoneSubTrust
         case .readFailed: return L.iphoneSubReconnect
-        case .remembered: return L.iphoneSubLastSeen(fmtDisplayDay(record.lastSeen))
+        case .remembered: return L.iphoneSubLastSeen(fmtShortDay(record.lastSeen))
         }
     }
 
@@ -278,12 +278,12 @@ struct IPhoneTileView: View {
 
     private func box(_ label: String, _ value: String, small: Bool = false, bar: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Wraps like the mockup's label (no nowrap there): a long RU label takes a second line
-            // instead of truncating; the card keeps its fixed height.
+            // Labels are one line so every box in a row has the same height.
             Text(label)
                 .font(.system(size: 12.5))
                 .foregroundStyle(DS3.muted)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .truncationMode(.tail)
             Spacer(minLength: 0)
             Text(value)
                 .font(small ? .system(size: 16, weight: .semibold) : .system(size: 18, weight: .bold))
@@ -295,6 +295,9 @@ struct IPhoneTileView: View {
             if bar {
                 DS3Bar(fraction: healthValue / 100, height: 5,
                        fill: AnyShapeStyle(connected ? DS3.accent : DS3.muted))
+            } else {
+                // Reserves the bar's slot so the values of a row sit on one line.
+                Color.clear.frame(height: 5).accessibilityHidden(true)
             }
         }
         .padding(.vertical, 11)

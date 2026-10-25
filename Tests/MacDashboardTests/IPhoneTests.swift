@@ -389,6 +389,15 @@ extension SerialTests {
 
 // IPHONE-BATTERY-THRESHOLDS: pure tone functions, no process-wide state.
 @Suite struct IPhoneBatteryToneTests {
+    @Test func autoReadDue() {
+        let now = Date()
+        #expect(IPhoneData.autoReadDue(last: nil, now: now))
+        #expect(!IPhoneData.autoReadDue(last: now.addingTimeInterval(-29), now: now))
+        #expect(IPhoneData.autoReadDue(last: now.addingTimeInterval(-30), now: now))
+        #expect(IPhoneData.autoReadDue(last: now.addingTimeInterval(-31), now: now))
+        #expect(IPhoneData.autoReadDue(last: now, now: now, minInterval: 0))
+    }
+
     @Test func chargeBoundaries() {
         #expect(IPhoneData.chargeTone(percent: 21, onExternalPower: false) == nil)
         #expect(IPhoneData.chargeTone(percent: 20, onExternalPower: false) == .amber)

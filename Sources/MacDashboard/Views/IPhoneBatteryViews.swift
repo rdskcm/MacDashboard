@@ -24,7 +24,7 @@ struct IPhoneBatteryCard: View {
                 liveTiles(b)
             }
         } else if snapshot != nil {
-            IPhoneMessagePanel(text: L.iphoneBatteryNoData)
+            IPhoneMessagePanel(text: snapshot?.batteryRead == false ? L.iphoneBatteryAutoReadOff : L.iphoneBatteryNoData)
         } else if let p = lastPoint {
             VStack(alignment: .leading, spacing: 12) {
                 hero(value: p.healthPercent.map { "\($0) %" }, fraction: Double(p.healthPercent ?? 0) / 100,
@@ -119,23 +119,33 @@ struct IPhoneBatteryCard: View {
     }
 
     private func liveTiles(_ b: BatteryDetail) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-            box(L.iphoneBatCharge, b.percent.map { "\($0) %" }, bar: b.percent.map { Double($0) / 100 })
+        let productType = snapshot?.productType ?? record?.productType
+        let charge = IPhoneData.chargeTone(percent: b.percent, onExternalPower: b.externalConnected)
+        let cycles = IPhoneData.cyclesTone(b.cycleCount, productType: productType)
+        let temp = IPhoneData.temperatureTone(b.temperatureC)
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+            box(L.iphoneBatCharge, b.percent.map { "\($0) %" }, tone: charge, bar: b.percent.map { Double($0) / 100 })
             box(L.iphoneBatState, state(b), accent: b.isCharging || b.externalConnected)
-            box(L.iphoneBatCycles, b.cycleCount.map { "\($0)" })
-            box(L.iphoneBatTemperature, b.temperatureC.map { L.batteryCelsius(fmtNum($0, decimals: 1)) })
+            box(L.iphoneBatCycles, b.cycleCount.map { "\($0)" }, tone: cycles,
+                note: cycles == .hot ? L.iphoneCyclesHigh : cycles == .amber ? L.iphoneCyclesAging : nil)
+            box(L.iphoneBatTemperature, b.temperatureC.map { L.batteryCelsius(fmtNum($0, decimals: 1)) }, tone: temp,
+                dot: b.temperatureC != nil,
+                note: b.temperatureC == nil ? nil : temp == .hot ? L.iphoneTempHot : temp == .amber ? L.iphoneTempWarm : L.iphoneTempNormal)
             box(L.iphoneBatVoltage, b.voltageMV.map { L.batteryVolts(fmtNum(Double($0) / 1000, decimals: 2)) })
             box(L.iphoneBatCapacity, capacity(b), help: unit == "Wh" ? L.iphoneWhSourceHelp : nil)
         }
     }
 
     @ViewBuilder
-    private func box(_ label: String, _ value: String?, bar: Double? = nil, accent: Bool = false, help: String? = nil) -> some View {
+    private func box(_ label: String, _ value: String?, tone: HomeTone? = nil, accent: Bool = false, dot: Bool = false,
+                     note: String? = nil, bar: Double? = nil, help: String? = nil) -> some View {
+        let dotColor: Color? = tone?.base ?? ((accent || dot) ? DS3.accent : nil)
+        let valueInk: Color = tone?.ink ?? (accent ? DS3.accentInk : DS3.ink)
         let content = VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 7) {
-                if accent {
-                    Circle().fill(DS3.accent).frame(width: 7, height: 7)
-                        .background(Circle().fill(DS3.accent.opacity(0.22)).frame(width: 13, height: 13))
+                if let dotColor {
+                    Circle().fill(dotColor).frame(width: 7, height: 7)
+                        .background(Circle().fill(dotColor.opacity(0.22)).frame(width: 13, height: 13))
                 }
                 Text(label)
                     .font(.system(size: 13, weight: .medium))
@@ -143,15 +153,24 @@ struct IPhoneBatteryCard: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            Text(value ?? "—")
-                .font(.system(size: 17, weight: .bold))
-                .tracking(-0.17)
-                .monospacedDigit()
-                .foregroundStyle(accent ? DS3.accentInk : DS3.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(value ?? "—")
+                    .font(.system(size: 17, weight: .bold))
+                    .tracking(-0.17)
+                    .monospacedDigit()
+                    .foregroundStyle(valueInk)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if let note {
+                    Text(note)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(tone?.ink ?? DS3.muted)
+                        .lineLimit(1)
+                        .layoutPriority(1)   // the value scales down first (fixed-size-in-header-row: no .fixedSize())
+                }
+            }
             if let bar {
-                DS3Bar(fraction: bar, height: 5, fill: AnyShapeStyle(DS3.accent))
+                DS3Bar(fraction: bar, height: 5, fill: AnyShapeStyle(tone?.base ?? DS3.accent))
             }
         }
         .padding(.vertical, 12)

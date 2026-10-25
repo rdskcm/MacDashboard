@@ -56,6 +56,12 @@ struct StringsEN: AppStrings {
     var settingsNotifyOpen: String { "Open Notification settings…" }
     var settingsNotifyOpenA11y: String { "Open System Settings › Notifications" }
     var settingsWindowTitle: String { "Settings" }
+    var settingsAutoReadLabel: String { "Auto-read on connect" }
+    var settingsAutoReadSub: String { "Battery and crash logs" }
+    var settingsArchiveFolderLabel: String { "Archive folder" }
+    func settingsArchiveFolderMoveFailed(_ n: Int) -> String {
+        "Could not move \(n) " + (n == 1 ? "archive" : "archives") + " to this folder; the folder is unchanged"
+    }
 
     // MARK: Main dashboard (header + tab picker)
     var mainCollectingInfo: String { "Collecting system information…" }
@@ -1051,7 +1057,7 @@ struct StringsEN: AppStrings {
 
     // MARK: iPhone module
     var mainModeMac: String { "This Mac" }
-    var mainModeIPhone: String { "iPhone" }
+    var mainModeDevices: String { "Devices" }
     var iphoneKickerDevices: String { "Devices" }
     var iphoneStatusConnected: String { "Connected by cable" }
     var iphoneStatusNeedsTrust: String { "Trust needed: unlock the iPhone and tap “Trust”" }
@@ -1079,11 +1085,11 @@ struct StringsEN: AppStrings {
     var iphoneBatCharge: String { "Charge" }
     var iphoneBatState: String { "State" }
     var iphoneBatTemperature: String { "Temperature" }
-    var iphoneTempNormal: String { "Normal" }
-    var iphoneTempWarm: String { "Warm" }
-    var iphoneTempHot: String { "Hot" }
-    var iphoneCyclesAging: String { "Aging" }
-    var iphoneCyclesHigh: String { "High" }
+    var iphoneTempNormal: String { "normal" }
+    var iphoneTempWarm: String { "warm" }
+    var iphoneTempHot: String { "hot" }
+    var iphoneCyclesAging: String { "aging" }
+    var iphoneCyclesHigh: String { "high" }
     var iphoneBatVoltage: String { "Voltage" }
     var iphoneBatCapacity: String { "Capacity" }
     var iphoneChargeCharging: String { "Charging" }
@@ -1095,6 +1101,7 @@ struct StringsEN: AppStrings {
     var iphoneWhSourceHelp: String { "Approximate: capacity × 3.88 V, the typical iPhone battery voltage (Wikipedia, iPhone 16 Pro / 17 Pro articles, from regulatory listings)" }
     var iphoneBatteryConnectToRead: String { "Connect the iPhone by cable to read the battery." }
     var iphoneBatteryNoData: String { "no data" }
+    var iphoneBatteryAutoReadOff: String { "Auto-read is off. Press Refresh to read the battery." }
     var iphoneHistoryEmpty: String { "No history yet: points appear on days the iPhone is connected." }
     var iphoneHistorySourceLive: String { "Measured" }
     var iphoneHistorySourceImport: String { "From sysdiagnose" }
@@ -1243,7 +1250,7 @@ struct StringsEN: AppStrings {
     var iphoneStateChargingLower: String { "charging" }
     var iphoneStateExternalLower: String { "plugged in" }
     var iphoneStateBatteryLower: String { "on battery" }
-    var iphoneTileHealth: String { "Battery health" }
+    var iphoneTileHealth: String { "Health" }
     var iphoneNotIdentified: String { "Not identified yet" }
     var iphonePendingTrustText: String { "Unlock the iPhone and tap “Trust” on its screen, then retry." }
     var iphonePendingFailedText: String { "Could not read the iPhone. Reconnect the cable, then retry." }

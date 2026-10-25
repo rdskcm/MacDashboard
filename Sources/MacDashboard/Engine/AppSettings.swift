@@ -1,6 +1,6 @@
 // Engine/AppSettings.swift
 // Non-language app settings (interval, wake-holder ignore list, hidden crash reports, backup-stale days, low-space %, notify categories, appearance, orbs,
-// keep-archives, snapshot time, claude log path). Foundation + Observation only — covered by Tests/MacDashboardTests.
+// keep-archives, iPhone auto-read, archive folder, snapshot time, claude log path). Foundation + Observation only — covered by Tests/MacDashboardTests.
 import Foundation
 import Observation
 
@@ -57,6 +57,15 @@ final class AppSettings {
 
     static let orbsEnabledKey = "backgroundOrbs"
     static let keepImportedArchivesKey = "keepImportedArchives"
+    /// REDESIGN-IPHONE: read battery and crash logs on attach (true) or identify the phone only (false).
+    static let iphoneAutoReadKey = "iphoneAutoRead"
+    /// REDESIGN-IPHONE: folder for kept sysdiagnose archives; absent or empty = `IPhoneStore.defaultArchiveRoot()`.
+    static let iphoneArchiveFolderKey = "iphoneArchiveFolder"
+    /// Pure resolution: nil, empty or a non-absolute path → `defaultRoot`; otherwise the stored path as a directory URL.
+    static func resolveArchiveFolder(raw: String?, defaultRoot: URL) -> URL {
+        guard let raw, !raw.isEmpty, raw.hasPrefix("/") else { return defaultRoot }
+        return URL(fileURLWithPath: raw, isDirectory: true).standardizedFileURL
+    }
 
     /// Daily snapshot time, minutes since midnight (default 03:00). 0 = 00:00 is valid, so raw is optional.
     static let snapshotMinutesKey = "snapshotMinutes"
@@ -132,9 +141,19 @@ final class AppSettings {
     var orbsEnabled: Bool {
         didSet { UserDefaults.standard.set(orbsEnabled, forKey: Self.orbsEnabledKey) }
     }
-    /// No reader until REDESIGN-IPHONE.
+    /// REDESIGN-IPHONE: default of the import choice sheet (parse and keep when true).
     var keepImportedArchives: Bool {
         didSet { UserDefaults.standard.set(keepImportedArchives, forKey: Self.keepImportedArchivesKey) }
+    }
+    var iphoneAutoRead: Bool {
+        didSet { UserDefaults.standard.set(iphoneAutoRead, forKey: Self.iphoneAutoReadKey) }
+    }
+    /// nil = the default archive folder; an empty string is stored as nil (same contract as `claudeLogPath`).
+    var iphoneArchiveFolder: String? {
+        didSet {
+            if let p = iphoneArchiveFolder, !p.isEmpty { UserDefaults.standard.set(p, forKey: Self.iphoneArchiveFolderKey) }
+            else { UserDefaults.standard.removeObject(forKey: Self.iphoneArchiveFolderKey); if iphoneArchiveFolder == "" { iphoneArchiveFolder = nil } }
+        }
     }
     var snapshotMinutes: Int {
         didSet { UserDefaults.standard.set(snapshotMinutes, forKey: Self.snapshotMinutesKey) }
@@ -173,6 +192,9 @@ final class AppSettings {
         appearance = Self.resolveAppearance(raw: d.string(forKey: Self.appearanceKey))
         orbsEnabled = d.object(forKey: Self.orbsEnabledKey) as? Bool ?? true
         keepImportedArchives = d.object(forKey: Self.keepImportedArchivesKey) as? Bool ?? true
+        iphoneAutoRead = d.object(forKey: Self.iphoneAutoReadKey) as? Bool ?? true
+        let storedFolder = d.string(forKey: Self.iphoneArchiveFolderKey)
+        iphoneArchiveFolder = (storedFolder?.isEmpty ?? true) ? nil : storedFolder
         snapshotMinutes = Self.resolveSnapshotMinutes(raw: d.object(forKey: Self.snapshotMinutesKey) as? Int)
         lastSnapshotAt = d.object(forKey: Self.lastSnapshotAtKey) as? Date
         let storedPath = d.string(forKey: Self.claudeLogPathKey)

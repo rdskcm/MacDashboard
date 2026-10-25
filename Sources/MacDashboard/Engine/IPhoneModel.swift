@@ -60,6 +60,16 @@ final class IPhoneModel {
     var restartError: String?
     /// The open device page (nil = tiles). Memory only; survives a Mac↔iPhone switch.
     var selectedDeviceKey: String?
+    /// REDESIGN-IPHONE: where kept archives live (`<archiveRoot>/<deviceKey>/<name>`); resolved from
+    /// `AppSettings.iphoneArchiveFolder`, changed only through `setArchiveFolder`.
+    private(set) var archiveRoot: URL
+    enum ArchiveFolderError: Equatable { case couldNotMove(Int) }
+    /// Why the last «Choose…» left the folder unchanged; cleared by the next successful change.
+    var archiveFolderError: ArchiveFolderError?
+    var archiveFolderBusy = false
+    enum ReadTrigger: Equatable { case attach, user }
+    /// Per device: when the last automatic crash-log listing started (memory only).
+    @ObservationIgnored private var autoReadAt: [String: Date] = [:]
 
     private let store: IPhoneStore
     private let transport: MobileDeviceTransport
@@ -69,9 +79,12 @@ final class IPhoneModel {
     private var attached: Set<IPhoneHandle> = []
 
     init(store: IPhoneStore = IPhoneStore(url: IPhoneStore.defaultURL()),
-         transport: MobileDeviceTransport = .shared) {
+         transport: MobileDeviceTransport = .shared,
+         archiveRoot: URL? = nil) {
         self.store = store
         self.transport = transport
+        self.archiveRoot = archiveRoot ?? AppSettings.resolveArchiveFolder(
+            raw: AppSettings.shared.iphoneArchiveFolder, defaultRoot: IPhoneStore.defaultArchiveRoot())
     }
 
     func start() {
@@ -81,9 +94,60 @@ final class IPhoneModel {
         IPhoneData.removeStaleImportRoots(in: FileManager.default.temporaryDirectory)
         devices = store.load()
         for d in devices { status[d.id] = .remembered }
+        migrateLegacyArchivesIfNeeded()
         transportAvailable = transport.isAvailable
         guard transportAvailable else { return }
         transport.start { [weak self] event in self?.handle(event) }
+    }
+
+    /// One-time move of archives kept before REDESIGN-IPHONE (Decision 5). Cheap when there is nothing to do:
+    /// one `fileExists` on App Support, nothing under ~/Documents is touched unless legacy files exist.
+    private func migrateLegacyArchivesIfNeeded() {
+        let legacy = IPhoneStore.legacyArchiveRoot()
+        guard FileManager.default.fileExists(atPath: legacy.path) else { return }
+        let moves = ArchiveMigration.planLegacy(legacyRoot: legacy, archiveRoot: archiveRoot)
+        guard !moves.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            let outcome = ArchiveMigration.execute(moves)
+            guard outcome.clean else { return }   // whatever stayed is still found through keptArchiveURL
+            let dirs = Set(moves.map { $0.source.deletingLastPathComponent() })
+            ArchiveMigration.removeEmptyDirectories(
+                dirs.flatMap { [$0, $0.deletingLastPathComponent()] } + [legacy], stopAt: legacy.deletingLastPathComponent())
+        }
+    }
+
+    /// The kept file, wherever it is: the archive folder first, then the legacy App Support place; nil when gone.
+    func keptArchiveURL(deviceKey: String, name: String) -> URL? {
+        let fm = FileManager.default
+        let current = archiveRoot.appendingPathComponent(deviceKey, isDirectory: true).appendingPathComponent(name)
+        if fm.fileExists(atPath: current.path) { return current }
+        let legacy = IPhoneStore.legacyArchiveRoot().appendingPathComponent(deviceKey, isDirectory: true)
+            .appendingPathComponent("sysdiagnose", isDirectory: true).appendingPathComponent(name)
+        return fm.fileExists(atPath: legacy.path) ? legacy : nil
+    }
+
+    /// Settings › iPhone › Choose…: moves every kept archive to `url`, then stores the setting. All or nothing:
+    /// a skipped or failed file moves the moved ones back and reports the count.
+    func setArchiveFolder(_ url: URL) async {
+        let new = url.standardizedFileURL
+        guard !archiveFolderBusy, new != archiveRoot.standardizedFileURL else { return }
+        archiveFolderBusy = true
+        defer { archiveFolderBusy = false }
+        archiveFolderError = nil
+        let old = archiveRoot
+        let moves = ArchiveMigration.plan(from: old, to: new)
+        let outcome = await Task.detached(priority: .userInitiated) { ArchiveMigration.execute(moves) }.value
+        if outcome.clean {
+            let def = IPhoneStore.defaultArchiveRoot().standardizedFileURL
+            AppSettings.shared.iphoneArchiveFolder = new == def ? nil : new.path
+            archiveRoot = new
+            let dirs = Array(Set(moves.map { $0.source.deletingLastPathComponent() }))
+            await Task.detached(priority: .utility) { ArchiveMigration.removeEmptyDirectories(dirs, stopAt: old) }.value
+        } else {
+            let back = ArchiveMigration.reversed(outcome)
+            _ = await Task.detached(priority: .userInitiated) { ArchiveMigration.execute(back) }.value
+            archiveFolderError = .couldNotMove(outcome.skipped.count + outcome.failed.count)
+        }
     }
 
     /// Tiles order: connected first, then by `lastSeen` descending.
@@ -105,7 +169,7 @@ final class IPhoneModel {
         case .attached(let h):
             attached.insert(h)
             restartError = nil
-            refresh(handle: h)
+            refresh(handle: h, trigger: .attach)
         case .detached(let h):
             attached.remove(h)
             logsLoading.detach(h)
@@ -124,12 +188,13 @@ final class IPhoneModel {
         }
     }
 
-    func refresh(handle h: IPhoneHandle) {
+    func refresh(handle h: IPhoneHandle, trigger: ReadTrigger = .user) {
         if let key = connected.first(where: { $0.value == h })?.key {
             status[key] = .reading
         }
-        transport.readSnapshot(h) { [weak self] result in
-            self?.apply(result, for: h)
+        let battery = trigger == .user || AppSettings.shared.iphoneAutoRead
+        transport.readSnapshot(h, includeBattery: battery) { [weak self] result in
+            self?.apply(result, for: h, trigger: trigger)
         }
     }
 
@@ -187,9 +252,10 @@ final class IPhoneModel {
             importing[deviceKey] = .extracting
         }
         importResult[deviceKey] = nil
+        let keepRoot = archiveRoot
         Task { [weak self] in
             let importer = SysdiagnoseImporter()
-            let result = await importer.run(source: source, deviceKey: deviceKey, keep: keep,
+            let result = await importer.run(source: source, deviceKey: deviceKey, keep: keep, keepRoot: keepRoot,
                                             confirm: { [weak self] name, mAh in
                                                 await self?.confirmIdentity(deviceKey: deviceKey, archiveName: name,
                                                                             archiveMAh: mAh) ?? false
@@ -235,7 +301,7 @@ final class IPhoneModel {
         importAnswer.removeValue(forKey: deviceKey)?.resume(returning: proceed)
     }
 
-    private func apply(_ result: Result<IPhoneSnapshot, IPhoneReadError>, for h: IPhoneHandle) {
+    private func apply(_ result: Result<IPhoneSnapshot, IPhoneReadError>, for h: IPhoneHandle, trigger: ReadTrigger) {
         guard attached.contains(h) else { return }
         switch result {
         case .success(let snap):
@@ -271,6 +337,11 @@ final class IPhoneModel {
             connected[key] = h
             status[key] = .connected
             lastSnapshot[key] = snap
+            if trigger == .attach, AppSettings.shared.iphoneAutoRead,
+               IPhoneData.autoReadDue(last: autoReadAt[key], now: now) {
+                autoReadAt[key] = now
+                loadLogs(deviceKey: key)
+            }
         case .failure(let err):
             if let key = connected.first(where: { $0.value == h })?.key {
                 // An already-identified phone keeps its tile; show the failure on it.

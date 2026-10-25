@@ -56,6 +56,12 @@ struct StringsRU: AppStrings {
     var settingsNotifyOpen: String { "Открыть «Уведомления»…" }
     var settingsNotifyOpenA11y: String { "Открыть Системные настройки › Уведомления" }
     var settingsWindowTitle: String { "Настройки" }
+    var settingsAutoReadLabel: String { "Читать при подключении" }
+    var settingsAutoReadSub: String { "Батарея и журналы сбоев" }
+    var settingsArchiveFolderLabel: String { "Папка архивов" }
+    func settingsArchiveFolderMoveFailed(_ n: Int) -> String {
+        "Не удалось переместить \(n) " + ruPlural(n, "архив", "архива", "архивов") + " в эту папку; папка не изменена"
+    }
 
     // MARK: Main dashboard (header + tab picker)
     var mainCollectingInfo: String { "Собираем сведения о системе…" }
@@ -1065,7 +1071,7 @@ struct StringsRU: AppStrings {
 
     // MARK: iPhone module
     var mainModeMac: String { "Этот Mac" }
-    var mainModeIPhone: String { "iPhone" }
+    var mainModeDevices: String { "Устройства" }
     var iphoneKickerDevices: String { "Устройства" }
     var iphoneStatusConnected: String { "Подключён по кабелю" }
     var iphoneStatusNeedsTrust: String { "Нужно доверие: разблокируйте iPhone и нажмите «Доверять»" }
@@ -1093,11 +1099,11 @@ struct StringsRU: AppStrings {
     var iphoneBatCharge: String { "Заряд" }
     var iphoneBatState: String { "Состояние" }
     var iphoneBatTemperature: String { "Температура" }
-    var iphoneTempNormal: String { "Норма" }
-    var iphoneTempWarm: String { "Тёплая" }
-    var iphoneTempHot: String { "Горячая" }
-    var iphoneCyclesAging: String { "Износ" }
-    var iphoneCyclesHigh: String { "Высокий" }
+    var iphoneTempNormal: String { "норма" }
+    var iphoneTempWarm: String { "тёплая" }
+    var iphoneTempHot: String { "горячая" }
+    var iphoneCyclesAging: String { "износ" }
+    var iphoneCyclesHigh: String { "высокий" }
     var iphoneBatVoltage: String { "Напряжение" }
     var iphoneBatCapacity: String { "Ёмкость" }
     var iphoneChargeCharging: String { "Заряжается" }
@@ -1109,6 +1115,7 @@ struct StringsRU: AppStrings {
     var iphoneWhSourceHelp: String { "Примерно: ёмкость × 3,88 В — типовое напряжение батарей iPhone (Википедия, статьи iPhone 16 Pro / 17 Pro, по данным регуляторов)" }
     var iphoneBatteryConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать батарею." }
     var iphoneBatteryNoData: String { "нет данных" }
+    var iphoneBatteryAutoReadOff: String { "Авточтение выключено. Нажмите «Обновить», чтобы прочитать батарею." }
     var iphoneHistoryEmpty: String { "История пока пуста: точки появятся в дни, когда iPhone подключён." }
     var iphoneHistorySourceLive: String { "Измерено" }
     var iphoneHistorySourceImport: String { "Из sysdiagnose" }
@@ -1257,7 +1264,7 @@ struct StringsRU: AppStrings {
     var iphoneStateChargingLower: String { "заряжается" }
     var iphoneStateExternalLower: String { "от сети" }
     var iphoneStateBatteryLower: String { "от батареи" }
-    var iphoneTileHealth: String { "Здоровье батареи" }
+    var iphoneTileHealth: String { "Здоровье" }
     var iphoneNotIdentified: String { "Ещё не опознан" }
     var iphonePendingTrustText: String { "Разблокируйте iPhone, нажмите «Доверять» на его экране и повторите." }
     var iphonePendingFailedText: String { "Не удалось прочитать iPhone. Переподключите кабель и повторите." }

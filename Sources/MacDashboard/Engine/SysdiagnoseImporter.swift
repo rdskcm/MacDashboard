@@ -2,7 +2,7 @@
 // App-only (temp dirs, file moves; app-only, not covered by tests; tar runs in SysdiagnoseExtractor). Imports one sysdiagnose
 // `.tar.gz`: copies it from the phone (read-only AFC, through the transport) or uses the
 // Mac file the user picked, extracts only the members the import parses (D13) into a
-// fresh temp dir, parses them, optionally keeps the archive under App Support, and ALWAYS
+// fresh temp dir, parses them, optionally keeps the archive under the archive folder, and ALWAYS
 // removes the temp dir. Nothing outside the temp dir is ever deleted, and a Mac-picked
 // file is never moved or deleted.
 
@@ -33,7 +33,7 @@ struct SysdiagnoseImporter {
     /// After parsing and before keeping, `confirm` receives the archive's battery design
     /// capacities; `false` ends the import as `.cancelled` with nothing kept (IPHONE-HISTORY-MIXUP).
     func run(source: Source, deviceKey: String, keep: Bool,
-             keepRoot: URL = IPhoneStore.defaultURL().deletingLastPathComponent(),
+             keepRoot: URL,
              confirm: @escaping @MainActor (_ archiveName: String, _ designMAh: Set<Int>) async -> Bool,
              onProgress: @escaping @MainActor (ImportProgress) -> Void) async -> Result<ImportOutput, ImportError> {
         let fm = FileManager.default
@@ -159,13 +159,17 @@ struct SysdiagnoseImporter {
     }
 
     /// Moves (phone copy) or copies (Mac file) the archive to
-    /// `<keepRoot>/iphones/<deviceKey>/sysdiagnose/<name>`; dirs 0700, file 0600; on a name
+    /// `<keepRoot>/<deviceKey>/<name>`; dirs 0700, file 0600; on a name
     /// clash " (2)", " (3)"… is inserted before `.tar.gz`; never overwrites.
-    /// `keepRoot` must exist; the default (App Support/MacDashboard) is created by `IPhoneStore.defaultURL()`.
+    /// `keepRoot` is created when missing (it may not exist yet under ~/Documents).
     static func keepArchive(from src: URL, move: Bool, deviceKey: String, keepRoot: URL) -> URL? {
         let fm = FileManager.default
+        if !fm.fileExists(atPath: keepRoot.path) {
+            guard (try? fm.createDirectory(at: keepRoot, withIntermediateDirectories: true,
+                                           attributes: [.posixPermissions: 0o700])) != nil else { return nil }
+        }
         var dir = keepRoot
-        for part in ["iphones", deviceKey, "sysdiagnose"] {
+        for part in [deviceKey] {
             dir.appendPathComponent(part, isDirectory: true)
             if !fm.fileExists(atPath: dir.path) {
                 guard (try? fm.createDirectory(at: dir, withIntermediateDirectories: false,

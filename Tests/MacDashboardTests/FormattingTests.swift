@@ -104,5 +104,16 @@ extension SerialTests {
             #expect(fmtGrouped(1204) == "1\u{2009}204", "fmtGrouped RU")
             #expect(fmtTB(dataUnits: 74_609_375) == "38,2 ТБ", "fmtTB RU")
         }
+
+        @Test func shortDayYearRule() {
+            let cal = Calendar.autoupdatingCurrent
+            let year = cal.component(.year, from: Date())
+            let now = cal.date(from: DateComponents(year: year, month: 3, day: 5, hour: 12))!
+            let prev = cal.date(from: DateComponents(year: year - 1, month: 3, day: 5, hour: 12))!
+            let yy = String(format: "%02d", year % 100)
+            #expect(!fmtShortDay(now).contains(String(year)), "current year: no 4-digit year")
+            #expect(!fmtShortDay(now).contains(yy), "current year: no 2-digit year")
+            #expect(fmtShortDay(prev).contains(String(format: "%02d", (year - 1) % 100)), "previous year: year shown")
+        }
     }
 }

@@ -132,3 +132,20 @@ private let displayDayFormatter: DateFormatter = {
 func fmtDisplayDay(_ date: Date) -> String {
     displayDayFormatter.string(from: date)
 }
+
+private func makeShortDayFormatter(_ template: String) -> DateFormatter {
+    let f = DateFormatter()
+    f.locale = .autoupdatingCurrent
+    f.timeZone = .autoupdatingCurrent
+    f.setLocalizedDateFormatFromTemplate(template)
+    return f
+}
+private let shortDayFormatter = makeShortDayFormatter("dMMM")
+private let shortDayYearFormatter = makeShortDayFormatter("dMMMyy")
+
+/// Compact day for tight tiles (display only, never parsing; same locale/time-zone policy as `fmtDisplayDay`):
+/// day + month in the current calendar year, plus a two-digit year otherwise.
+func fmtShortDay(_ date: Date) -> String {
+    let sameYear = Calendar.autoupdatingCurrent.isDate(date, equalTo: Date(), toGranularity: .year)
+    return (sameYear ? shortDayFormatter : shortDayYearFormatter).string(from: date)
+}

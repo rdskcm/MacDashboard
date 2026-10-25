@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file.
 
 ### New
 
+- [feat] The header's iPhone segment is now «Devices»; Esc, ⌘[ and a second click on the segment return from a device page to the list.
+- [feat] Settings › iPhone: «Auto-read on connect» (off = on attach the app only identifies the phone and reads the battery and crash logs on request).
+- [feat] Kept iPhone sysdiagnose archives live in `~/Documents/MacDashboard/iPhone` (or a folder chosen in Settings › iPhone); archives kept so far are moved there once. The first write to Documents can show macOS's Files & Folders prompt.
+- [feat] Battery tiles on the iPhone page show the charge, cycle and temperature tones.
 - [feat] iPhone firmware, engine only (nothing is visible in the app yet): on a click, Apple's catalogue gives the iOS build Apple restores the phone's model to; a separate, labelled click asks ipsw.me which builds are still signed (it sends the model identifier only). Apple's build can be downloaded to `~/Downloads` over https from Apple's firmware servers only, after size and free-space checks, verified against every checksum both sources publish, without ever replacing an existing file. The network is used only on these clicks; the hosts and what they receive are listed in the README.
 
 ## [2.3.3] (Krieg) - 2026-10-14

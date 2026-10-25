@@ -93,9 +93,15 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
    access or Full Disk Access was granted earlier; declining it surfaces as "no access to the
    Downloads folder" with a pointer to System Settings › Privacy & Security › Files and Folders.
 
+   The first write to `~/Documents` (the first kept iPhone sysdiagnose archive, or the one-time
+   move at launch when archives were kept before) can show the Files & Folders prompt for
+   Documents; declining it leaves the archive where it is (keep fails with «could not keep», the
+   move leaves the file under App Support, still reachable from the device page).
+
    Two further boundaries hold with no exceptions: the app writes file **content** only
-   inside `~/Library/Application Support/MacDashboard/` and the verified `.ipsw` in
-   `~/Downloads` (row 8) (rows 1, 3, 4 delete or move files elsewhere but never author
+   inside `~/Library/Application Support/MacDashboard/`, kept iPhone sysdiagnose archives in the
+   archive folder (default `~/Documents/MacDashboard/iPhone`, Settings › iPhone) and the verified
+   `.ipsw` in `~/Downloads` (row 8) (rows 1, 3, 4 delete or move files elsewhere but never author
    them), and the app has **no telemetry; the network is used only on an explicit user
    action** (`CONSTRAINTS-EVIDENCE.md` slug `network-stance` in the docs repo). Every host
    the app's own code contacts:
@@ -122,6 +128,8 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
   (create on first run via `FileManager.urls(for: .applicationSupportDirectory…)`).
   - `mac_report.txt` — the single report file (overwritten).
   - `mac_check_state.json` — history (same schema as legacy file, see §7).
+- iPhone archive folder: `~/Documents/MacDashboard/iPhone/<deviceKey>/<archive>` by default, or the
+  folder chosen in Settings › iPhone (kept sysdiagnose archives only).
 - Built app: `MacDashboard/dist.noindex/MacDashboard.app` — `APP_NAME="MacDashboard"` /
   `DIST="dist.noindex/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` moves it to
   `~/Applications/MacDashboard.app`, removing any stale bundle under the old
