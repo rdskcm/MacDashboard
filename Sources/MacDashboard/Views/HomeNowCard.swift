@@ -8,15 +8,15 @@ import SwiftUI
 struct HomeNowCard: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let windowWidth: CGFloat
+    let tier: WidthTier
     /// `false` only in the offscreen visual harness (see `homeEntrance`).
     var animatesEntrance = true
 
     var body: some View {
         let input = HomeInput.make(model)
         let hasBattery = input.hasBattery
-        let short = hasBattery && windowWidth >= 1000 && windowWidth < 1200
-        let narrow = windowWidth < 1000
+        let short = hasBattery && tier.isMid
+        let narrow = tier.isNarrow
         let columns = hasBattery ? (narrow ? 2 : 4) : 3
         let tasks = HomeModel.tasks(input.assessment, report: input.report, disk: input.disk, battery: model.battery)
         let cells = HomeModel.nowCells(input, tasks: tasks, memPressure: model.memPressure, socTempC: model.socTempC,

@@ -31,6 +31,10 @@ struct MainDashboardView: View {
     /// the header, Home and the section pages read it. Safe under `no-measured-size-feedback`: the number of
     /// columns cannot change the window's own width.
     @State private var windowWidth: CGFloat = 1150
+    /// RESIZE-MOTION: the width tier (`WidthTier`), committed once per boundary crossing from the same measurement.
+    /// Everything tier-shaped (Home tiles, Now cells) reads this, never the raw width; seeded by the first callback.
+    @State private var tier = WidthTier.initial(width: 1150)
+    @State private var tierSeeded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -60,7 +64,14 @@ struct MainDashboardView: View {
         }
         // One background owner for both modes (REDESIGN-HOME D13): nothing here depends on `router.mode`.
         .ds3Backdrop(orbs: DS3OrbSpec.window)
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { w in
+            windowWidth = w
+            let next = tierSeeded ? WidthTier.next(width: w, previous: tier) : WidthTier.initial(width: w)
+            tierSeeded = true
+            guard next != tier else { return }
+            // Stage A: no animation. Stage B replaces `nil` with the tier-change curve.
+            withAnimation(nil) { tier = next }
+        }
         .ignoresSafeArea()
         .sheet(isPresented: $router.isReportShown) { ReportSheet(model: model) { router.isReportShown = false } }
         .ds3PointerTracking(pointer)
@@ -71,7 +82,7 @@ struct MainDashboardView: View {
     /// `HomeView` and its slots do the reading (the Now card and the tiles keep the rule of reading live fields in their own structs).
     private var content: some View {
         ZStack {
-            HomeView(model: model, router: router, windowWidth: windowWidth)
+            HomeView(model: model, router: router, windowWidth: windowWidth, tier: tier)
                 .opacity(homeVisible ? 1 : 0)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: homeVisible)   // opacity only — no size depends on it
                 .allowsHitTesting(homeVisible)

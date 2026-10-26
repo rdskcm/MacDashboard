@@ -812,22 +812,22 @@ extension SerialTests {
                         HarnessSection(label: "Home: sections") {
                             VStack(alignment: .leading, spacing: 18) {
                                 HomeSectionsHeader(model: m)
-                                HomeSectionsGrid(model: m, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                                HomeSectionsGrid(model: m, router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                             }
                         }
                         HarnessSection(label: "Home: first scan (skeleton)") {
                             HomeSectionsGrid(model: fixtureHome { $0.applyFixtureScan(homeFirstScan) },
-                                             router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                                             router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }
                         HarnessSection(label: "Home: scan failed (last check)") {
                             HomeSectionsGrid(model: fixtureHome { $0.applyFixtureScan(homeFailedScan) },
-                                             router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                                             router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }
                         HarnessSection(label: "Home: no battery (7 tiles)") {
                             VStack(alignment: .leading, spacing: 18) {
                                 let noBattery = fixtureHome { $0.battery = nil; $0.report.battery = nil }
                                 HomeSectionsHeader(model: noBattery)
-                                HomeSectionsGrid(model: noBattery, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                                HomeSectionsGrid(model: noBattery, router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                             }
                         }
                     }
@@ -858,25 +858,25 @@ extension SerialTests {
                 run.snap("content-home-now", mode, width: 1300) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "Now, 1150") {
-                            HomeNowCard(model: m, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                            HomeNowCard(model: m, router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }
                         HarnessSection(label: "Now, 1280") {
-                            HomeNowCard(model: m, router: NavigationRouter(), windowWidth: 1280, animatesEntrance: false)
+                            HomeNowCard(model: m, router: NavigationRouter(), tier: .wide, animatesEntrance: false)
                                 .frame(width: 1224)
                         }
                         HarnessSection(label: "Now, 900 (2×2)") {
-                            HomeNowCard(model: m, router: NavigationRouter(), windowWidth: 900, animatesEntrance: false)
+                            HomeNowCard(model: m, router: NavigationRouter(), tier: .narrow, animatesEntrance: false)
                                 .frame(width: 844)
                         }
                         HarnessSection(label: "No battery (3 columns)") {
                             HomeNowCard(model: fixtureHome { $0.battery = nil; $0.report.battery = nil },
-                                        router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                                        router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }
                         HarnessSection(label: "Collecting (—)") {
                             HomeNowCard(model: fixtureHome {
                                 $0.cpu = nil; $0.mem = nil; $0.disk = nil
                                 $0.battery?.maxCapacity = nil; $0.report.battery?.maxCapacity = nil
-                            }, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                            }, router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }
                         HarnessSection(label: "Task tones") {
                             HomeNowCard(model: fixtureHome {
@@ -888,7 +888,7 @@ extension SerialTests {
                                                               live: LiveSnapshot(t: VisualFixture.referenceDate, load: $0.load, cpu: $0.cpu, mem: $0.mem,
                                                                                  swap: $0.swap, disk: $0.disk, battery: $0.battery),
                                                               memPressure: .critical, now: VisualFixture.referenceDate)
-                            }, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                            }, router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }
                     }
                 }
