@@ -1,49 +1,49 @@
 // Views/IPhoneHeaderActions.swift
 // iPhone-mode top-bar actions (IPHONE-DESIGN): «Restart connection service…» (secondary, confirmed
 // in a popover) and «Search again» (primary). Below the width where both labels fit, the restart
-// button becomes a round icon button (ViewThatFits).
+// button becomes a 34 pt round icon button: the tier (< 1000) drives it as one animated button identity, and a
+// ViewThatFits fallback keeps the compact form when the full label does not fit.
 
 import SwiftUI
 
 struct IPhoneHeaderActions: View {
     let model: IPhoneModel
+    /// The width tier's `isNarrow` (RESIZE-MOTION), passed by `MainDashboardView`.
+    let compact: Bool
     @State private var confirmingRestart = false
 
     private var disabled: Bool { model.restartingService || !model.transportAvailable }
 
     var body: some View {
+        // The first child animates the tier change (one button identity, RESIZE-MOTION §3.3); the second keeps the
+        // content-fit fallback for a language whose full label does not fit at tier mid (RU, D5).
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { restartFull; search }
-            HStack(spacing: 8) { restartCompact; search }
+            HStack(spacing: 8) { restart(compact: compact); search }
+            HStack(spacing: 8) { restart(compact: true); search }
         }
     }
 
-    private var restartFull: some View {
-        Button { confirmingRestart = true } label: {
-            Text(L.iphoneRestartService)
+    private func restart(compact: Bool) -> some View {
+        let font = Font.system(size: 13, weight: .semibold)
+        let fullW = ds3IdealWidth(key: "restart|\(L.iphoneRestartService)|13s") { Text(L.iphoneRestartService).font(font).lineLimit(1) }
+        let iconW = ds3IdealWidth(key: "restart|arrow.triangle.2.circlepath|13s") {
+            Image(systemName: "arrow.triangle.2.circlepath").font(font)
+        }
+        return Button { confirmingRestart = true } label: {
+            Color.clear
+                .frame(width: compact ? iconW : fullW)
+                .overlay { Text(L.iphoneRestartService).frame(width: fullW).opacity(compact ? 0 : 1) }
+                .overlay { Image(systemName: "arrow.triangle.2.circlepath").opacity(compact ? 1 : 0) }
+                .clipped()
                 .dsSwapInPlace(model.restartingService) {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small).accessibilityLabel(L.iphoneRestartBusy)
-                        Text(L.iphoneRestartingShort)
+                        if !compact { Text(L.iphoneRestartingShort) }
                     }
                 }
         }
-        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1, disabledOpacity: 0.5))
-        .disabled(disabled)
-        .accessibilityLabel(L.iphoneRestartService)
-        .popover(isPresented: $confirmingRestart, arrowEdge: .bottom) { restartConfirm }
-    }
-
-    private var restartCompact: some View {
-        Button { confirmingRestart = true } label: {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(DS3.ink)
-                .dsSwapInPlace(model.restartingService) {
-                    ProgressView().controlSize(.small).accessibilityLabel(L.iphoneRestartBusy)
-                }
-        }
-        .buttonStyle(DS3CircleButtonStyle(diameter: 34, disabledOpacity: 0.5))
+        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: compact ? (34 - iconW) / 2 : 15, topRim: 1,
+                                    disabledOpacity: 0.5))
         .help(L.iphoneRestartService)
         .disabled(disabled)
         .accessibilityLabel(L.iphoneRestartService)

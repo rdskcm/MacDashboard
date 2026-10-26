@@ -148,9 +148,9 @@ struct MainDashboardView: View {
             }
             Group {
                 if router.mode == .mac {
-                    MacHeaderActions(model: model, router: router)
+                    MacHeaderActions(model: model, router: router, compact: tier.isNarrow)
                 } else {
-                    IPhoneHeaderActions(model: iphone)
+                    IPhoneHeaderActions(model: iphone, compact: tier.isNarrow)
                 }
             }
             .padding(.trailing, 18)
@@ -270,11 +270,16 @@ struct MacHeaderActions: View {
     let model: DashboardModel
     let router: NavigationRouter
 
-    /// Picks its form from the width `CentredToolbarLayout` offers: the full row, else the compact row (Report as
-    /// icon first, then the short Refresh label); the pill text shortens only when even the compact row does not fit.
+    /// The tier's `isNarrow` (RESIZE-MOTION): below the tier boundary the buttons are always compact, and the change
+    /// animates because Report and Refresh keep one identity across both forms.
+    let compact: Bool
+
+    /// The first row follows the tier (animated); if it does not fit the width `CentredToolbarLayout` offers (long
+    /// Russian labels), the compact row is the content-fit fallback, swapped instantly as before. The pill text
+    /// shortens only when even the compact row does not fit.
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            row(compact: false)
+            row(compact: compact)
             row(compact: true)
         }
     }
@@ -287,30 +292,38 @@ struct MacHeaderActions: View {
         }
     }
 
-    /// Compact: a 34 pt circle with the icon only; otherwise the labelled secondary button.
-    @ViewBuilder private func reportButton(compact: Bool) -> some View {
-        if compact {
-            Button { router.isReportShown = true } label: {
+    /// One button in both forms (RESIZE-MOTION §3.3): the label slot and the padding animate with the tier, the text
+    /// keeps a constant frame and only fades, so the capsule shrinks into the mockup's 34 pt circle (D4).
+    private func reportButton(compact: Bool) -> some View {
+        let font = Font.system(size: 13, weight: .semibold)
+        let labelW = ds3IdealWidth(key: "report|\(L.commonReport)|13s") { Text(L.commonReport).font(font).lineLimit(1) }
+        let iconW = ds3IdealWidth(key: "report|doc.text|13") { Image(systemName: "doc.text").font(.system(size: 13)) }
+        return Button { router.isReportShown = true } label: {
+            HStack(spacing: compact ? 0 : 7) {
                 Image(systemName: "doc.text").font(.system(size: 13))
+                Color.clear
+                    .frame(width: compact ? 0 : labelW)
+                    .overlay(alignment: .leading) { Text(L.commonReport).frame(width: labelW, alignment: .leading) }
+                    .clipped()
+                    .opacity(compact ? 0 : 1)
             }
-            .buttonStyle(DS3CircleButtonStyle(diameter: 34, disabledOpacity: 0.5))
-            .reportActionTraits(busy: model.isCollectingReport)
-        } else {
-            Button { router.isReportShown = true } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: "doc.text").font(.system(size: 13))
-                    Text(L.commonReport)
-                }
-            }
-            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1, disabledOpacity: 0.5))
-            .reportActionTraits(busy: model.isCollectingReport)
         }
+        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: compact ? (34 - iconW) / 2 : 15, topRim: 1,
+                                    disabledOpacity: 0.5))
+        .reportActionTraits(busy: model.isCollectingReport)
     }
 
     private func refreshButton(compact: Bool) -> some View {
-        Button { model.refreshReport(trigger: .button) } label: {
-            // The hidden label keeps the width while the spinner shows (swap-in-place).
-            Text(compact ? L.commonRefresh : L.commonRefreshReport)
+        let font = Font.system(size: 13, weight: .semibold)
+        let longW = ds3IdealWidth(key: "refresh|\(L.commonRefreshReport)|13s") { Text(L.commonRefreshReport).font(font).lineLimit(1) }
+        let shortW = ds3IdealWidth(key: "refresh|\(L.commonRefresh)|13s") { Text(L.commonRefresh).font(font).lineLimit(1) }
+        return Button { model.refreshReport(trigger: .button) } label: {
+            // The slot keeps the width while the spinner shows (swap-in-place); the two texts cross-fade in it.
+            Color.clear
+                .frame(width: compact ? shortW : longW)
+                .overlay { Text(L.commonRefreshReport).frame(width: longW).opacity(compact ? 0 : 1) }
+                .overlay { Text(L.commonRefresh).frame(width: shortW).opacity(compact ? 1 : 0) }
+                .clipped()
                 .dsSwapInPlace(model.isCollectingReport) { ProgressView().controlSize(.small).tint(.white) }
         }
         .buttonStyle(DS3ButtonStyle(kind: .primary, height: 34, hPad: 16, disabledOpacity: 0.5))
