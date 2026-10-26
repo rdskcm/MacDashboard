@@ -815,6 +815,10 @@ extension SerialTests {
                                 HomeSectionsGrid(model: m, router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                             }
                         }
+                        HarnessSection(label: "Home: sections, 900 (2 columns)") {
+                            HomeSectionsGrid(model: m, router: NavigationRouter(), tier: .narrow, animatesEntrance: false)
+                                .frame(width: 844)
+                        }
                         HarnessSection(label: "Home: first scan (skeleton)") {
                             HomeSectionsGrid(model: fixtureHome { $0.applyFixtureScan(homeFirstScan) },
                                              router: NavigationRouter(), tier: .mid, animatesEntrance: false)

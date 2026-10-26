@@ -66,11 +66,12 @@ struct MainDashboardView: View {
         .ds3Backdrop(orbs: DS3OrbSpec.window)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { w in
             windowWidth = w
-            let next = tierSeeded ? WidthTier.next(width: w, previous: tier) : WidthTier.initial(width: w)
+            let seeding = !tierSeeded
+            let next = seeding ? WidthTier.initial(width: w) : WidthTier.next(width: w, previous: tier)
             tierSeeded = true
             guard next != tier else { return }
-            // Stage A: no animation. Stage B replaces `nil` with the tier-change curve.
-            withAnimation(nil) { tier = next }
+            // The seed is never animated; later crossings play the tier-change spring unless Reduce Motion / the fixture.
+            withAnimation((seeding || reduceMotion || DS3Motion.isFrozen) ? nil : DS3Motion.tierChange) { tier = next }
         }
         .ignoresSafeArea()
         .sheet(isPresented: $router.isReportShown) { ReportSheet(model: model) { router.isReportShown = false } }

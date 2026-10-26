@@ -1,7 +1,8 @@
 // Views/HomeNowCard.swift
 // REDESIGN-HOME (stage C): the Now card of Home — live CPU / Memory / Storage / Battery cells
 // (02-home.md §2, 00-shared §4.6/§4.7). The cells come from `HomeModel.nowCells`; this file only draws them.
-// Cells sit in a non-lazy `Grid` (the CPU cell holds a live sparkline: `live-list-identity`).
+// Cells sit in a non-lazy `EqualColumnsLayout` so a column change keeps their identity and animates their frames
+// (RESIZE-MOTION); `live-list-identity` still holds (non-lazy, live sparkline).
 
 import SwiftUI
 
@@ -22,16 +23,10 @@ struct HomeNowCard: View {
         let cells = HomeModel.nowCells(input, tasks: tasks, memPressure: model.memPressure, socTempC: model.socTempC,
                                        cpu: model.cpu, short: short, narrow: narrow)
         let spark = HomeModel.sparkline(model.cpuHistory)
-        let rows = stride(from: 0, to: cells.count, by: columns).map { Array(cells[$0..<min($0 + columns, cells.count)]) }
         DS3Card(title: L.commonNow, caption: L.homeEverySeconds(AppSettings.shared.fastIntervalSeconds)) {
-            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    GridRow {
-                        ForEach(row) { cell in
-                            HomeNowCellView(cell: cell, sparkline: spark) { router.navigate(to: cell.destination) }
-                                .frame(minWidth: 0, maxWidth: .infinity)
-                        }
-                    }
+            EqualColumnsLayout(columns: columns, spacing: 8) {
+                ForEach(cells) { cell in
+                    HomeNowCellView(cell: cell, sparkline: spark) { router.navigate(to: cell.destination) }
                 }
             }
         }
