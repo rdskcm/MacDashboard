@@ -305,6 +305,148 @@ final class RimSpriteCache {
     }
 }
 
+// MARK: - Shadow sprite
+
+/// RESIZE-FRAME-COST: the `ds3Elevation` stack of a glass card / the header, rendered once into a nine-slice bitmap and
+/// shown by one plain layer, so a width step costs the render server a stretch instead of an offscreen blur pass.
+struct DS3ShadowSpriteLayer: NSViewRepresentable {
+    let kind: DS3Shadow
+    let cornerRadius: CGFloat
+
+    func makeNSView(context: Context) -> DS3ShadowSpriteView {
+        DS3ShadowSpriteView(kind: kind, cornerRadius: cornerRadius)
+    }
+
+    func updateNSView(_ nsView: DS3ShadowSpriteView, context: Context) {
+        nsView.cornerRadius = cornerRadius
+    }
+
+    /// Takes whatever the parent offers (same as `DS3RimLayer.sizeThatFits`).
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: DS3ShadowSpriteView, context: Context) -> CGSize? {
+        func finite(_ v: CGFloat?) -> CGFloat {
+            guard let v, v.isFinite else { return 0 }
+            return v
+        }
+        return CGSize(width: finite(proposal.width), height: finite(proposal.height))
+    }
+}
+
+final class DS3ShadowSpriteView: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    let kind: DS3Shadow
+    var cornerRadius: CGFloat {
+        didSet {
+            guard cornerRadius != oldValue else { return }
+            nineSlice = Self.nineSlice(kind: kind, cornerRadius: cornerRadius)
+            renderedKey = nil
+            needsLayout = true
+        }
+    }
+
+    /// Cached per corner radius (recomputed in `cornerRadius.didSet`), not per layout pass.
+    private var nineSlice: DS3SliceGeometry.NineSlice
+    private let keyKind: String
+    private let sprite = CALayer()
+    private var renderedKey: DS3SpriteKey?
+    private var loggedRenderFailure = false
+
+    init(kind: DS3Shadow, cornerRadius: CGFloat) {
+        self.kind = kind
+        self.cornerRadius = cornerRadius
+        self.nineSlice = Self.nineSlice(kind: kind, cornerRadius: cornerRadius)
+        self.keyKind = "shadow.\(kind)"
+        super.init(frame: .zero)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .never
+        let off = NSNull()
+        let keys = ["bounds", "position", "frame", "contents", "contentsRect", "contentsCenter", "contentsScale",
+                    "hidden", "transform"]
+        sprite.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
+        layer?.addSublayer(sprite)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    private static func nineSlice(kind: DS3Shadow, cornerRadius: CGFloat) -> DS3SliceGeometry.NineSlice {
+        let ls = kind.layers
+        return DS3SliceGeometry.shadow(cornerRadius: cornerRadius,
+                                       maxRadius: ls.map(\.radius).max() ?? 0,
+                                       maxInset: ls.map(\.inset).max() ?? 0,
+                                       maxY: ls.map(\.y).max() ?? 0)
+    }
+
+    override func layout() {
+        super.layout()
+        let n = nineSlice
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sprite.frame = bounds.insetBy(dx: -n.bleed, dy: -n.bleed)
+        CATransaction.commit()
+        renderIfNeeded()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        renderIfNeeded()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        renderIfNeeded()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        renderIfNeeded()
+    }
+
+    private func renderIfNeeded() {
+        // An empty view (first layout before SwiftUI sizes it) has nothing to show; skip the throwaway 0 x 0 render.
+        guard let window, !bounds.isEmpty else { return }
+        let scale = window.backingScaleFactor
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let n = nineSlice
+        let fixedW = DS3SliceGeometry.fixedAxis(bounds.width, n, scale: scale)
+        let fixedH = DS3SliceGeometry.fixedAxis(bounds.height, n, scale: scale)
+        let key = DS3SpriteKey(kind: keyKind, shape: .rounded(cornerRadius), heightPx: fixedH ?? 0, widthPx: fixedW ?? 0,
+                               scale: Double(scale), dark: dark, stops: [], extra: Double(cornerRadius))
+        guard key != renderedKey else { return }
+        guard let image = DS3SpriteCache.shared.image(for: key, render: { render(n, fixedW: fixedW, fixedH: fixedH, scale: scale) }) else {
+            if !loggedRenderFailure {
+                loggedRenderFailure = true
+                NSLog("DS3ShadowSpriteView: shadow sprite render failed")
+            }
+            return
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sprite.contents = image
+        sprite.contentsScale = scale
+        sprite.contentsCenter = n.contentsCenter(fixedWidth: fixedW != nil, fixedHeight: fixedH != nil)
+        CATransaction.commit()
+        renderedKey = key
+    }
+
+    /// The existing `ds3Elevation` stack (blur, insets, offsets, `destinationOut` punch) on a view of the reference size,
+    /// padded by the bleed so the blur tail lands inside the bitmap.
+    private func render(_ n: DS3SliceGeometry.NineSlice, fixedW: Int?, fixedH: Int?, scale: CGFloat) -> CGImage? {
+        let w0 = fixedW.map { CGFloat($0) / scale } ?? (2 * n.core + 2)
+        let h0 = fixedH.map { CGFloat($0) / scale } ?? (2 * n.core + 2)
+        let appearance = effectiveAppearance
+        let view = Color.clear
+            .frame(width: w0, height: h0)
+            .ds3Elevation(kind, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
+                          resolve: { Color(cgColor: ds3Resolve($0, in: appearance)) })
+            .padding(n.bleed)
+        let size = CGSize(width: w0 + 2 * n.bleed, height: h0 + 2 * n.bleed)
+        return DS3SpriteCache.render(view, scale: scale, size: size,
+                                     pixelsWide: Int((size.width * scale).rounded()), pixelsHigh: Int((size.height * scale).rounded()))
+    }
+}
+
 /// The edge-light profile: `rimProfile` ("1" | "2" | "3", default "2"; written by `AppSettings` from the Settings row)
 /// in the app's own domain, switched live by KVO.
 @MainActor

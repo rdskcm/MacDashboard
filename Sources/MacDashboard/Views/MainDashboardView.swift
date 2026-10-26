@@ -175,24 +175,13 @@ struct MainDashboardView: View {
     /// fade-to-clear stroke the card sheen uses), a 1 pt bottom `line` and the `.header` shadow stack.
     private var toolbarChrome: some View {
         DS3GlassBar()
-        .overlay(
-            Rectangle()
-                .strokeBorder(
-                    LinearGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: DS3.rimMid, location: 0),
-                            .init(color: .clear, location: 0.15),
-                        ]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-        )
+        .overlay(alignment: .top) {
+            DS3StretchSprite(shape: Rectangle(), content: .topRim(stops: [.init(color: DS3.rimMid, location: 0), .init(color: .clear, location: 0.15)], lineWidth: 1))
+        }
         .overlay(alignment: .bottom) {
             Rectangle().fill(DS3.line).frame(height: 1)
         }
-        .ds3Elevation(.header, in: Rectangle())
+        .ds3ElevationSprite(.header, cornerRadius: 0)
     }
 
     private var titleBlock: some View {

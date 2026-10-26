@@ -37,6 +37,10 @@ struct HarnessSection<Content: View>: View {
 }
 
 /// Layout and settle exactly as tools/harness/HarnessKit.swift `harnessRender`, but into an explicit 2x bitmap (D4).
+/// The view is hosted in a borderless window that is never ordered front: a window-less `NSHostingView` reports
+/// `displayScale` 1 and snaps frames to whole points while the bitmap is 2x, so hairlines would render as a 1x picture
+/// scaled up. A window gets the main screen's backing scale (nothing can force 2 on another screen), so a non-2 main
+/// screen fails the render instead of producing a reference that no Retina window shows.
 @MainActor
 func renderSnapshotPNG<Content: View>(width: CGFloat, @ViewBuilder content: () -> Content) -> Data? {
     let rootView = VStack(alignment: .leading, spacing: 20) { content() }
@@ -45,14 +49,24 @@ func renderSnapshotPNG<Content: View>(width: CGFloat, @ViewBuilder content: () -
         .background(Color(nsColor: .windowBackgroundColor))
         .transaction { $0.disablesAnimations = true }
     let hosting = NSHostingView(rootView: rootView)
-    let fitting = hosting.fittingSize
-    hosting.frame = NSRect(x: 0, y: 0, width: max(fitting.width, width), height: max(fitting.height, 100))
-    hosting.layoutSubtreeIfNeeded()
+    let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = NSView(frame: .zero)
+    window.contentView?.addSubview(hosting)
+    guard window.backingScaleFactor == 2 else {
+        Issue.record("offscreen window backing scale is \(window.backingScaleFactor), snapshots need 2")
+        return nil
+    }
+    func place(_ fit: CGSize) {
+        let frame = NSRect(x: 0, y: 0, width: max(fit.width, width), height: max(fit.height, 100))
+        window.setContentSize(frame.size)
+        hosting.frame = frame
+        hosting.layoutSubtreeIfNeeded()
+    }
+    place(hosting.fittingSize)
     // Same 1.0 s settle as the harness (DSSlidingSegmented thumb, Charts layout).
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0))
-    let settled = hosting.fittingSize
-    hosting.frame = NSRect(x: 0, y: 0, width: max(settled.width, width), height: max(settled.height, 100))
-    hosting.layoutSubtreeIfNeeded()
+    place(hosting.fittingSize)
     let size = hosting.bounds.size
     guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
                                      pixelsWide: Int((size.width * 2).rounded()), pixelsHigh: Int((size.height * 2).rounded()),
