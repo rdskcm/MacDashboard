@@ -112,6 +112,11 @@ extension View {
         }
     }
 
+    /// RESIZE-FRAME-COST: the `ds3Elevation` stack rendered once into a nine-slice layer; for static card/header shadows only.
+    func ds3ElevationSprite(_ s: DS3Shadow, cornerRadius: CGFloat) -> some View {
+        background { DS3ShadowSpriteLayer(kind: s, cornerRadius: cornerRadius).allowsHitTesting(false).accessibilityHidden(true) }
+    }
+
     /// CSS `inset 0 1px 0 X` is `top: X`; `inset 0 0 0 .5px X` is `ring: X`; `inset 0 0 0 1px X` is `ring: X, ringWidth: 1`.
     /// The `top:` highlight is a stretched sprite (`DS3StretchSprite`, RESIZE-FRAME-COST).
     func ds3InsetRims<S: InsettableShape>(_ shape: S, top: Color? = nil, ring: Color? = nil, ringWidth: CGFloat = 0.5) -> some View {
@@ -231,7 +236,7 @@ private struct DS3GlassCard: ViewModifier {
                 }
             }
             .overlay(DS3Rim(cornerRadius: cornerRadius))
-            .ds3Elevation(.card, in: shape)
+            .ds3ElevationSprite(.card, cornerRadius: cornerRadius)
     }
 }
 

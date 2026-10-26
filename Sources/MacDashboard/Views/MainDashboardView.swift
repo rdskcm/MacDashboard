@@ -181,7 +181,7 @@ struct MainDashboardView: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(DS3.line).frame(height: 1)
         }
-        .ds3Elevation(.header, in: Rectangle())
+        .ds3ElevationSprite(.header, cornerRadius: 0)
     }
 
     private var titleBlock: some View {
