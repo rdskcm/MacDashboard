@@ -3,7 +3,7 @@
 ## 1. Purpose
 
 `tools/perf/gate.sh` measures the main-thread, Core Animation and WindowServer cost of the real app
-(scenarios G1-G7, G9 and GP:<page>; G8, the System page's breathing Outdated capsule, was retired in PERF-GATE-RETARGET because REDESIGN-SYSTEM removed that capsule) and compares it with absolute limits and, optionally, with a pre-block build. It
+(scenarios G1-G7, G9, G10 and GP:<page>; G8, the System page's breathing Outdated capsule, was retired in PERF-GATE-RETARGET because REDESIGN-SYSTEM removed that capsule) and compares it with absolute limits and, optionally, with a pre-block build. It
 exists because per-frame animation work cannot be seen by the offscreen harness or the visual baseline
 (rule `gpu-per-frame`). It runs nightly (`night.sh`) and at release prep; per block only when the queue row says perf: yes.
 
@@ -24,7 +24,7 @@ cd MacDashboard && ./build_app.sh && tools/perf/gate.sh --baseline tools/perf/ou
 
 - `--app` default `dist.noindex/MacDashboard.app`. `--baseline`: candidate and baseline runs alternate A,B,A,B so drift hits both.
 - Baseline rule: the `--baseline` bundle must be built from the PERF-GATE-RETARGET merge or later, the first build with the `report-show-in-finder` identifier (G5 route). An older baseline can lack an element a route needs; that run is an ERROR on the baseline arm (tag `<item>-base<N>`, the report adds a baseline hint) and the scenario gets no verdict: rebuild the baseline from a newer commit. The night runner's baseline (its previous build) meets the rule.
-- `--scenarios`: `G1..G7`, `G9`, `GP:<page>` (scroll scenario on one page: cpu memory storage battery security backups system history) or `all` (every G item plus GP for all pages); default `G1,G2,G3,G4,G5,G6,G7,G9`. `--runs` 1-7, default 3 for every item; arms are aggregated by median.
+- `--scenarios`: `G1..G7`, `G9`, `G10` (live-resize sweep, RESIZE-MOTION), `GP:<page>` (scroll scenario on one page: cpu memory storage battery security backups system history) or `all` (every G item plus GP for all pages); default `G1,G2,G3,G4,G5,G6,G7,G9` (G10 is not in the default list; `all` includes it). `--runs` 1-7, default 3 for every item; arms are aggregated by median.
 - Both bundles are copied with `tools/bench-app.sh` (bundle id `com.rdskcm.mac-dashboard.bench`) into `$OUT/apps`, removed at exit; the app runs with `-appLanguage en -ApplePersistenceIgnoreState YES`.
 - `--out` must be inside `tools/perf/out/` (gitignored); default `tools/perf/out/<stamp>`. A reused `--out` keeps the previous `summary`/`report`/`runs` files under a time-stamped name.
 - `--keep-traces` keeps the `.trace` bundles and exported XML (10-60 MB each). `*-analysis.txt` is always kept.
@@ -66,13 +66,14 @@ All run on the synthetic bench home with the window pinned to 1000x733 pt at (0,
 | G7 | This Mac scroll | Time Profiler, Hitches | hitches, ms, main busy total, `scrollable` |
 | GP:<page> | G7's scroll scenario on the page opened from `home-tile-<page>`; a page whose content fits the window is recorded as an idle page (`scrollable 0`, report heading "IDLE PAGE") | Time Profiler, Hitches | hitches, ms, main busy total, `scrollable` |
 | G9 | CPU page idle (Home → CPU tile), 22 s, then `top -l 41` | none | app %, WindowServer % |
+| G10 | Home, window width 1060 ↔ 940 twice at 60 Hz via AX (`drv resize`), four crossings of the 1000 pt tier | Time Profiler, Hitches | hitches, ms, main busy total; report-only `sweep_wall_s`, `app_cpu_s`, `ws_cpu_s` (the sweep call only, CPU-s = `top` mean % × wall) |
 
 Limits: G1 and G9 app % <= `--g1-max`; G3 median <= 25 ms/s; G4 hitches/s <= 3, median <= 400 ms/s; G5 `capsule` commits/s median <= 60 and
 `capsule` app % <= control + 3; G6 `shade_conic` = 0. Every metric is the median over the runs of an arm. Regression rule against `--baseline`:
 the candidate median must not exceed the baseline median by more than the margin (hitches + 3 for G3 G4 G6 G7 GP; main busy total x 1.15 for
 G4 G6 G7 GP; app % + 0.5 for G1 G3 G9). A row over its margin is FAIL only when the exact one-sided Mann-Whitney test gives p <= 0.05
 (with 3 v 3 runs: every candidate run above every baseline run); otherwise it is NOISY and does not block. A NOISY row is re-run with `--runs 5`.
-With `--runs` 1 or 2 a regression is always NOISY; absolute limits still apply. WindowServer numbers are reported, never gated (+-2 pt noise). Scroll scenarios (G3, G7, GP) record `scrollable` per run (1 = the scroll area under the pointer has a vertical scroll bar, 0 = nothing to scroll); when the two arms differ in it, or an arm is mixed, the regression rule is skipped for that scenario ("no regression check") and only absolute limits apply.
+G10 has no absolute limit; regression rule only, on main busy total x 1.15 (hitches are reported, not gated: a build that is already saturated during a live resize hides the animation cost in them). With `--runs` 1 or 2 a regression is always NOISY; absolute limits still apply. WindowServer numbers are reported, never gated (+-2 pt noise). Scroll scenarios (G3, G7, GP) record `scrollable` per run (1 = the scroll area under the pointer has a vertical scroll bar, 0 = nothing to scroll); when the two arms differ in it, or an arm is mixed, the regression rule is skipped for that scenario ("no regression check") and only absolute limits apply.
 
 ## 5. Permissions (as `tools/visual/README.md` §3)
 

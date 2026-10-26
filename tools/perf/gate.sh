@@ -1,5 +1,5 @@
 #!/bin/bash
-# tools/perf/gate.sh — the perf gate (GPU-RENDER-AUDIT): scenarios G1-G7, G9 and GP:<page> against an app bundle,
+# tools/perf/gate.sh — the perf gate (GPU-RENDER-AUDIT): scenarios G1-G7, G9, G10 and GP:<page> against an app bundle,
 # optionally against a baseline bundle too. Moves the real pointer and sends AX actions: do not use
 # the Mac while it runs. See tools/perf/README.md.
 #
@@ -7,8 +7,9 @@
 #                [--keep-traces] [--g1-max PCT]
 #   --app        bundle under test (default dist.noindex/MacDashboard.app)
 #   --baseline   pre-block bundle, built from the PERF-GATE-RETARGET merge or later (README §2); candidate and baseline runs alternate A,B,A,B,...
-#   --scenarios  G1..G7, G9, GP:<page> (pages: cpu memory storage battery security backups system history), or
-#                all (= every G item plus GP for all pages); default G1,G2,G3,G4,G5,G6,G7,G9.
+#   --scenarios  G1..G7, G9, G10, GP:<page> (pages: cpu memory storage battery security backups system history), or
+#                all (= every G item plus GP for all pages); default G1,G2,G3,G4,G5,G6,G7,G9 (G10, the
+#                live-resize sweep of RESIZE-MOTION, is opt-in and part of all).
 #   --runs       runs per scenario and arm, 1-7 (default 3)
 #   --out        run directory, must be inside tools/perf/out/ (default tools/perf/out/<stamp>)
 #   --keep-traces  keep .trace bundles and exported XML (10-60 MB each)
@@ -126,7 +127,7 @@ add_item() { case " $ITEMS " in *" $1 "*) ;; *) ITEMS="$ITEMS $1" ;; esac; }
 for t in $(echo "$SCENARIOS" | tr ',' ' '); do
   case "$t" in
     all|ALL)
-      for s in G1 G2 G3 G4 G5 G5-top G6-page G6-table G6-hover G7 G9; do add_item "$s"; done
+      for s in G1 G2 G3 G4 G5 G5-top G6-page G6-table G6-hover G7 G9 G10; do add_item "$s"; done
       for p in $GP_PAGES; do add_item "GP-$p"; done ;;
     [Gg][Pp]:*)
       p="$(echo "${t#*:}" | tr 'A-Z' 'a-z')"
@@ -134,10 +135,10 @@ for t in $(echo "$SCENARIOS" | tr ',' ' '); do
     *)
       s="$(echo "$t" | tr 'a-z' 'A-Z')"
       case "$s" in
-        G1|G2|G3|G4|G7|G9) add_item "$s" ;;
+        G1|G2|G3|G4|G7|G9|G10) add_item "$s" ;;
         G5) add_item G5; add_item G5-top ;;
         G6) add_item G6-page; add_item G6-table; add_item G6-hover ;;
-        *) fatal 64 "unknown scenario: $t (G1..G7, G9, GP:<page>, all)" ;;
+        *) fatal 64 "unknown scenario: $t (G1..G7, G9, G10, GP:<page>, all)" ;;
       esac ;;
   esac
 done
@@ -403,6 +404,7 @@ define_item() {
     G6-page)  S_ROUTE=iphone; S_PRE=2; S_SECS=17; S_SCEN=scen-page.sh ;;
     G6-table) S_ROUTE=table;  S_PRE=2; S_SECS=24; S_SCEN=scen-table.sh ;;
     G6-hover) S_ROUTE=iphone; S_PRE=2; S_SECS=20; S_SCEN=scen-hover.sh ;;
+    G10) S_PRE=3; S_SECS=20; S_SCEN=scen-resize.sh ;;   # sweep ~8 s nominal, +50% when the app is saturated; starts 3 s in
     G7) S_SECS=21; S_SCEN=scen-mac-scroll.sh; S_SCROLL=1 ;;
     GP-*) S_ROUTE="page:${1#GP-}"; S_SECS=21; S_SCEN=scen-mac-scroll.sh; S_SCROLL=1 ;;
   esac
@@ -466,7 +468,7 @@ attempt() {
     xcrun xctrace record "${S_INSTR[@]}" --attach "$PID" --time-limit "${S_SECS}s" --output "$prefix.trace" --no-prompt >"$prefix-rec.txt" 2>&1 &
     local xp=$!; track "$xp"
     topsamp $((S_SECS + 1)) "$PID" > "$prefix-top.txt" & local tp=$!; track "$tp"
-    bash -c 'sleep 3; exec bash "$@"' _ "$PERF/$S_SCEN" $S_ARGS > "$prefix-drv.txt" 2>&1 & local sp=$!; track "$sp"
+    PID="$PID" bash -c 'sleep 3; exec bash "$@"' _ "$PERF/$S_SCEN" $S_ARGS > "$prefix-drv.txt" 2>&1 & local sp=$!; track "$sp"
     wait "$xp"; untrack "$xp"
     wait "$tp"; untrack "$tp"
     wait "$sp"; untrack "$sp"
@@ -559,6 +561,18 @@ analyze_item() {   # item prefix buf -> 0 | 1 with ERR_WHY / ERR_DIAG set (expor
     G6-*)
       export_tables "$prefix" || return 1
       az "$buf" "" "$an" -- tp "$prefix" rgba64_shade_conic || return 1 ;;
+    G10)
+      export_tables "$prefix" || return 1
+      az "$buf" "" "$an" -- tp "$prefix" || return 1
+      # RESIZE-MOTION amendment: per arm app CPU-s, WindowServer CPU-s and sweep wall time (report-only, no rule).
+      # Window = the drv resize call only (s0..s1 marks); CPU-s = top mean % x wall / 100 (top samples at 1 Hz).
+      local s0 s1
+      s0="$(awk '$1=="s0" && NF==2 {print $2; exit}' "$prefix-drv.txt")"; s1="$(awk '$1=="s1" && NF==2 {print $2; exit}' "$prefix-drv.txt")"
+      { [ -n "$s0" ] && [ -n "$s1" ]; } || { ERR_WHY="G10: no s0/s1 mark (the sweep did not finish inside the recording)"; ERR_DIAG="$prefix-drv.txt"; return 1; }
+      az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$s0" "$s1" || { rm -f "$buf.top"; return 1; }
+      awk -v a="$s0" -v b="$s1" '$1=="app_pct" {ap=$2} $1=="ws_pct" {wp=$2} END {
+        w=b-a; printf "sweep_wall_s %.2f\napp_cpu_s %.2f\nws_cpu_s %.2f\n", w, ap*w/100, wp*w/100 }' "$buf.top" >> "$buf"
+      rm -f "$buf.top" ;;
     G7|GP-*)
       export_tables "$prefix" || return 1
       az "$buf" "" "$an" -- tp "$prefix" || return 1 ;;

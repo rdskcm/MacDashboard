@@ -90,6 +90,7 @@ struct HomeView: View {
     let model: DashboardModel
     let router: NavigationRouter
     let windowWidth: CGFloat
+    let tier: WidthTier
 
     var body: some View {
         ScrollView {
@@ -98,7 +99,7 @@ struct HomeView: View {
                 HomeAttentionSlot(model: model, router: router, windowWidth: windowWidth)
                 nowSlot
                 HomeSectionsHeader(model: model)
-                HomeSectionsGrid(model: model, router: router, windowWidth: windowWidth)
+                HomeSectionsGrid(model: model, router: router, tier: tier)
             }
             .padding(.top, 26)
             .padding(.horizontal, 28)
@@ -108,6 +109,6 @@ struct HomeView: View {
     }
 
     private var nowSlot: some View {
-        HomeNowCard(model: model, router: router, windowWidth: windowWidth)
+        HomeNowCard(model: model, router: router, tier: tier)
     }
 }

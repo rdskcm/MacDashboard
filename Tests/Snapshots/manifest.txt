@@ -19,7 +19,7 @@ content-history-disk-quarter-dark	2026-10-26	27.0.1	Xcode 27.1	fe28ca7
 content-history-disk-year-dark	2026-10-26	27.0.1	Xcode 27.1	fe28ca7
 content-history-disk-all-dark	2026-10-26	27.0.1	Xcode 27.1	fe28ca7
 content-home-attention-dark	2026-10-26	27.0.1	Xcode 27.1	fe28ca7
-content-home-sections-dark	2026-10-26	27.0.1	Xcode 27.1	fe28ca7
+content-home-sections-dark	2026-10-26	27.0.1	Xcode 27.1	cb84af3
 content-home-now-dark	2026-10-26	27.0.1	Xcode 27.1	fe28ca7
 content-iphone-tiles-dark	2026-10-26	27.0.1	Xcode 27.1	fe28ca7
 content-iphone-notices-dark	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty
@@ -51,7 +51,7 @@ content-history-disk-quarter-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-disk-year-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-history-disk-all-light	2026-10-22	27.0.1	Xcode 27.1	6d80105-dirty
 content-home-attention-light	2026-10-22	27.0.1	Xcode 27.1	dd349af-dirty
-content-home-sections-light	2026-10-22	27.0.1	Xcode 27.1	7fd2923-dirty
+content-home-sections-light	2026-10-26	27.0.1	Xcode 27.1	cb84af3
 content-home-now-light	2026-10-20	27.0.1	Xcode 27.1	fbeabcf-dirty
 content-iphone-tiles-light	2026-10-25	27.0.1	Xcode 27.1	eb4a001-dirty
 content-iphone-notices-light	2026-10-19	27.0.1	Xcode 27.1	fd2c9e7-dirty

@@ -223,6 +223,24 @@ private struct DS3TileButtonBody: View {
     }
 }
 
+// MARK: - Width probe
+
+/// Ideal width of a small label, measured once per key through an offscreen hosting controller (same technique as
+/// `attnTipContentWidth`, HoverTip.swift). Static per string + font, never read from live layout, so a slot framed
+/// to it is not measured-size feedback (RESIZE-MOTION §3.3). Key = the text (or symbol name) + font description.
+@MainActor
+func ds3IdealWidth<V: View>(key: String, @ViewBuilder _ content: () -> V) -> CGFloat {
+    if let w = DS3WidthProbeCache.widths[key] { return w }
+    let probe = NSHostingController(rootView: content())
+    let w = ceil(probe.sizeThatFits(in: CGSize(width: CGFloat.greatestFiniteMagnitude,
+                                               height: CGFloat.greatestFiniteMagnitude)).width)
+    DS3WidthProbeCache.widths[key] = w
+    return w
+}
+
+@MainActor
+enum DS3WidthProbeCache { static var widths: [String: CGFloat] = [:] }
+
 // MARK: - Tag
 
 struct DS3Tag: View {

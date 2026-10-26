@@ -25,7 +25,7 @@ struct HomeSectionsHeader: View {
 struct HomeSectionsGrid: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let windowWidth: CGFloat
+    let tier: WidthTier
     /// `false` only in the offscreen visual harness (see `homeEntrance`).
     var animatesEntrance = true
 
@@ -34,7 +34,7 @@ struct HomeSectionsGrid: View {
         // Equal columns (`equal-split-columns`) from a non-lazy layout: eight static tiles gain nothing from
         // laziness, and a lazy grid leaves the tiles below the fold out of the accessibility tree (the visual
         // and perf harnesses press `home-tile-*` by AX identifier without scrolling).
-        EqualColumnsLayout(columns: windowWidth < 1000 ? 2 : 4, spacing: 16) {
+        EqualColumnsLayout(columns: tier.isNarrow ? 2 : 4, spacing: 16) {
             ForEach(Array(tiles.enumerated()), id: \.element.id) { i, tile in
                 HomeSectionTile(tile: tile) { router.navigate(to: tile.destination) }
                     .homeEntrance(delay: 0.18 + 0.05 * Double(i), enabled: animatesEntrance)

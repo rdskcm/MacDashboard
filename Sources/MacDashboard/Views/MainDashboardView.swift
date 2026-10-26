@@ -31,6 +31,20 @@ struct MainDashboardView: View {
     /// the header, Home and the section pages read it. Safe under `no-measured-size-feedback`: the number of
     /// columns cannot change the window's own width.
     @State private var windowWidth: CGFloat = 1150
+    /// RESIZE-MOTION: the width tier (`WidthTier`), committed once per boundary crossing from the same measurement.
+    /// Everything tier-shaped (Home tiles, Now cells) reads this, never the raw width; seeded by the first callback.
+    @State private var tier = WidthTier.initial(width: 1150)
+    @State private var tierSeeded = false
+    /// RESIZE-MOTION C2: the committed form of each header action row (`HeaderActionsForm`), decided here with the
+    /// tier from the window width so the change is inside the animation transaction — never by layout.
+    @State private var macActionsCompact = false
+    @State private var iphoneActionsCompact = false
+    /// RESIZE-MOTION C2: the subtitle form the content-fit probe chose last (`subtitleView`); drives opacity only.
+    @State private var subtitleLevel = SubtitleLevel.full
+    @State private var subtitleLevelSeeded = false
+    /// Toolbar geometry shared by the layout and the header-form fit formula (RESIZE-MOTION C2): keep them equal.
+    private static let toolbarSpacing: CGFloat = 12
+    private static let actionsTrailingPad: CGFloat = 18
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -46,7 +60,10 @@ struct MainDashboardView: View {
                     IPhoneModeView(model: iphone)
                 }
             }
-            .onChange(of: L10nStore.shared.language) { model.refreshReport(trigger: .automatic) }
+            .onChange(of: L10nStore.shared.language) {
+                model.refreshReport(trigger: .automatic)
+                commitWidthState(windowWidth, seeding: false, animated: false)
+            }
             // REDESIGN-NOTIFY: a notification click navigates through the view-owned router (R5, D15).
             .onChange(of: model.externalDestinationSerial) { if let d = model.consumeExternalDestination() { router.navigate(to: d) } }
             .onAppear { if let d = model.consumeExternalDestination() { router.navigate(to: d) } }
@@ -60,7 +77,12 @@ struct MainDashboardView: View {
         }
         // One background owner for both modes (REDESIGN-HOME D13): nothing here depends on `router.mode`.
         .ds3Backdrop(orbs: DS3OrbSpec.window)
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { w in
+            windowWidth = w
+            let seeding = !tierSeeded
+            tierSeeded = true
+            commitWidthState(w, seeding: seeding, animated: !seeding)
+        }
         .ignoresSafeArea()
         .sheet(isPresented: $router.isReportShown) { ReportSheet(model: model) { router.isReportShown = false } }
         .ds3PointerTracking(pointer)
@@ -71,7 +93,7 @@ struct MainDashboardView: View {
     /// `HomeView` and its slots do the reading (the Now card and the tiles keep the rule of reading live fields in their own structs).
     private var content: some View {
         ZStack {
-            HomeView(model: model, router: router, windowWidth: windowWidth)
+            HomeView(model: model, router: router, windowWidth: windowWidth, tier: tier)
                 .opacity(homeVisible ? 1 : 0)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: homeVisible)   // opacity only — no size depends on it
                 .allowsHitTesting(homeVisible)
@@ -110,11 +132,12 @@ struct MainDashboardView: View {
 
     private var toolbar: some View {
         // Custom layout instead of an HStack + centred overlay: the switch is centred in the window, and the
-        // actions are proposed only the width that is really left beside it, so their ViewThatFits picks the
-        // full or compact form from that (a fixed window-width threshold would be wrong for one language).
+        // actions are proposed only the width that is really left beside it. The actions' form is committed at the
+        // root from the same width (RESIZE-MOTION C2); the layout still proposes the real room, which the actions'
+        // last-resort ViewThatFits uses.
         // The horizontal paddings (leading 20 / trailing 18) sit on the sides, not on the layout, so the
         // layout's centre is the window's centre.
-        CentredToolbarLayout(spacing: 12) {
+        CentredToolbarLayout(spacing: Self.toolbarSpacing) {
             // Pushes the title/subtitle clear of the traffic lights, so the toolbar's own `.padding(.top, 14)`
             // reads as the gap between the buttons and the title. Padding, not `.offset`: the header has to
             // actually grow, or the subtitle would ride into the bottom hairline. `titleBlock` is the tallest
@@ -136,12 +159,12 @@ struct MainDashboardView: View {
             }
             Group {
                 if router.mode == .mac {
-                    MacHeaderActions(model: model, router: router)
+                    MacHeaderActions(model: model, router: router, compact: macActionsCompact)
                 } else {
-                    IPhoneHeaderActions(model: iphone)
+                    IPhoneHeaderActions(model: iphone, compact: iphoneActionsCompact)
                 }
             }
-            .padding(.trailing, 18)
+            .padding(.trailing, Self.actionsTrailingPad)
         }
         .padding(.top, 14)
         .padding(.bottom, 14)
@@ -184,17 +207,41 @@ struct MainDashboardView: View {
         }
     }
 
-    /// One line, tier picked by the space the leading side is actually offered (`ViewThatFits`): the richest tier that
-    /// fits wins. Recorded departure from handoff 00 §3 «tier from the window width» (user 2026-10-25): the mode
-    /// switch takes the centre, so the window width does not say how much room is left. `.help` carries the full form.
+    /// One line, form picked by the space the leading side is actually offered (`ViewThatFits`): the richest form
+    /// that fits wins. Recorded departure from handoff 00 §3 «tier from the window width» (user 2026-10-25): the mode
+    /// switch takes the centre, so the window width does not say how much room is left. RESIZE-MOTION C2: the
+    /// `ViewThatFits` stays the laid-out element but is invisible; the child it picks commits `subtitleLevel` through
+    /// `withAnimation`, and the visible texts are overlay layers that only cross-fade — the layout decision drives
+    /// opacity, never layout (no-measured-size-feedback). `.help` carries the full form.
     private var subtitleView: some View {
         let tiers = subtitleTiers
         return ViewThatFits(in: .horizontal) {
-            subtitleText(tiers.full)
-            subtitleText(tiers.mid)
-            subtitleText(tiers.short).truncationMode(.tail)
+            subtitleText(tiers.full).onAppear { commitSubtitleLevel(.full) }
+            subtitleText(tiers.mid).onAppear { commitSubtitleLevel(.mid) }
+            subtitleText(tiers.short).truncationMode(.tail).onAppear { commitSubtitleLevel(.short) }
         }
+        .opacity(0)
+        .overlay(alignment: .leading) {
+            // Proposed the chosen child's width: an outgoing wider text truncates with `…` while it fades (one layout
+            // per level change, none per frame); the common prefix of two forms renders on the same pixels.
+            ZStack(alignment: .leading) {
+                subtitleText(tiers.full).opacity(subtitleLevel == .full ? 1 : 0)
+                subtitleText(tiers.mid).opacity(subtitleLevel == .mid ? 1 : 0)
+                subtitleText(tiers.short).truncationMode(.tail).opacity(subtitleLevel == .short ? 1 : 0)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(tiers.full)
         .help(tiers.full)
+    }
+
+    /// The content-fit probe's choice, committed as the visible form. The first write (launch) and Reduce Motion /
+    /// the fixture are instant; every later change cross-fades with the tier spring.
+    private func commitSubtitleLevel(_ level: SubtitleLevel) {
+        let animated = subtitleLevelSeeded && !reduceMotion && !DS3Motion.isFrozen
+        subtitleLevelSeeded = true
+        guard level != subtitleLevel else { return }
+        withAnimation(animated ? DS3Motion.tierChange : nil) { subtitleLevel = level }
     }
 
     private func subtitleText(_ s: String) -> some View {
@@ -227,7 +274,47 @@ struct MainDashboardView: View {
                 join([sys.modelName, sys.chip, ram, osShort, uptime]),
                 join([sys.modelName, sys.chip, uptime]))
     }
+
+    /// Everything the window width decides — the tier and the two header forms — committed in ONE transaction
+    /// (RESIZE-MOTION §3.1, C2). `seeding`: exact thresholds, no previous state (launch). `animated` is false for the
+    /// seed and for a language switch (the strings swap instantly anyway); Reduce Motion and the fixture never animate.
+    private func commitWidthState(_ w: CGFloat, seeding: Bool, animated: Bool) {
+        let nextTier = seeding ? WidthTier.initial(width: w) : WidthTier.next(width: w, previous: tier)
+        let macNext = HeaderActionsForm.compact(
+            width: w, tier: nextTier, fitWidth: Self.fitWindowWidth(rowWidth: MacHeaderActions.fullRowIdealWidth()),
+            previousCompact: seeding ? nil : macActionsCompact)
+        let iphoneNext = HeaderActionsForm.compact(
+            width: w, tier: nextTier, fitWidth: Self.fitWindowWidth(rowWidth: IPhoneHeaderActions.fullRowIdealWidth()),
+            previousCompact: seeding ? nil : iphoneActionsCompact)
+        guard nextTier != tier || macNext != macActionsCompact || iphoneNext != iphoneActionsCompact else { return }
+        withAnimation((animated && !reduceMotion && !DS3Motion.isFrozen) ? DS3Motion.tierChange : nil) {
+            tier = nextTier
+            macActionsCompact = macNext
+            iphoneActionsCompact = iphoneNext
+        }
+    }
+
+    /// Smallest window width at which a header row of `rowWidth` pt shows its full form: the inverse of what
+    /// `CentredToolbarLayout` proposes the trailing side, minus the actions' trailing padding (RESIZE-MOTION C2).
+    @MainActor
+    static func fitWindowWidth(rowWidth: CGFloat) -> CGFloat {
+        CentredToolbarLayout.containerWidth(side: rowWidth + actionsTrailingPad, centreWidth: modeSwitchIdealWidth(),
+                                            spacing: toolbarSpacing)
+    }
+
+    /// Ideal width of the header mode switch (the layout's centre), hosted once per language like the button labels.
+    @MainActor
+    private static func modeSwitchIdealWidth() -> CGFloat {
+        ds3IdealWidth(key: "mode-switch|\(L.mainModeMac)|\(L.mainModeDevices)|header") {
+            DSSlidingSegmented(options: [AppMode.mac, .iphone], selection: .constant(.mac), size: .header) { m in
+                m == .mac ? L.mainModeMac : L.mainModeDevices
+            }
+        }
+    }
 }
+
+/// The subtitle form the content-fit probe chose (RESIZE-MOTION C2).
+private enum SubtitleLevel { case full, mid, short }
 
 /// Esc and ⌘[ = Back (handoff 00 §5), installed only while a section page, the report or an iPhone device page is shown
 /// (REDESIGN-FOUNDATION D8). Zero-size and hidden from accessibility: the visible Back chip
@@ -257,68 +344,109 @@ private struct BackShortcuts: View {
 struct MacHeaderActions: View {
     let model: DashboardModel
     let router: NavigationRouter
+    /// The committed form (RESIZE-MOTION C2, `HeaderActionsForm`): compact below the tier boundary and whenever the
+    /// full row would not fit with the margin to spare, decided at the window root inside the tier transaction so
+    /// Report and Refresh animate between their two forms (one identity each).
+    let compact: Bool
 
-    /// Picks its form from the width `CentredToolbarLayout` offers: the full row, else the compact row (Report as
-    /// icon first, then the short Refresh label); the pill text shortens only when even the compact row does not fit.
     var body: some View {
+        let tasks = HomeModel.tasks(model.assessment, report: model.homeReport, disk: model.disk, battery: model.battery)
+        let status = HomeModel.status(scan: HomeModel.scan(model.blockState(.scan)), tasks: tasks)
+        let busy = model.isCollectingReport
+        // Last resort only: the committed form leaves `HeaderActionsForm.margin` to spare, so this fallback fires
+        // only when one layout pass loses more than that (programmatic resize, fullscreen exit, a flick) and then
+        // snaps to compact rather than overlapping the mode switch. A status change never changes the form.
         ViewThatFits(in: .horizontal) {
-            row(compact: false)
-            row(compact: true)
+            row(status: status, busy: busy, compact: compact)
+            row(status: status, busy: busy, compact: true)
         }
     }
 
-    private func row(compact: Bool) -> some View {
+    private func row(status: HomeStatus, busy: Bool, compact: Bool) -> MacActionsRow {
+        MacActionsRow(status: status, busy: busy, compact: compact,
+                      onReport: { router.isReportShown = true },
+                      onRefresh: { model.refreshReport(trigger: .button) })
+    }
+
+    /// Ideal width of the full row with the WIDEST of the four status texts, so the committed form never depends on
+    /// the live status. Hosted once per language and status by `ds3IdealWidth` (RESIZE-MOTION C2).
+    @MainActor
+    static func fullRowIdealWidth() -> CGFloat {
+        let statuses: [HomeStatus] = [.checking, .good, .attention, .critical]
+        return statuses.map { status in
+            ds3IdealWidth(key: "mac-actions-full|\(L10nStore.shared.language.rawValue)|\(status)") {
+                MacActionsRow(status: status, busy: false, compact: false, onReport: {}, onRefresh: {})
+            }
+        }.max() ?? 0
+    }
+}
+
+/// One row at one form, built from values only (no model) so the width probe can host it with any status.
+private struct MacActionsRow: View {
+    let status: HomeStatus
+    let busy: Bool
+    let compact: Bool
+    let onReport: () -> Void
+    let onRefresh: () -> Void
+
+    var body: some View {
         HStack(spacing: 8) {
-            HeaderStatusPill(model: model)
-            reportButton(compact: compact)
-            refreshButton(compact: compact)
+            HeaderStatusPill(status: status)
+            reportButton
+            refreshButton
         }
     }
 
-    /// Compact: a 34 pt circle with the icon only; otherwise the labelled secondary button.
-    @ViewBuilder private func reportButton(compact: Bool) -> some View {
-        if compact {
-            Button { router.isReportShown = true } label: {
+    /// One button in both forms (RESIZE-MOTION §3.3): the label slot and the padding animate with the tier, the text
+    /// keeps a constant frame and only fades, so the capsule shrinks into the mockup's 34 pt circle (D4).
+    private var reportButton: some View {
+        let font = Font.system(size: 13, weight: .semibold)
+        let labelW = ds3IdealWidth(key: "report|\(L.commonReport)|13s") { Text(L.commonReport).font(font).lineLimit(1) }
+        let iconW = ds3IdealWidth(key: "report|doc.text|13") { Image(systemName: "doc.text").font(.system(size: 13)) }
+        return Button { onReport() } label: {
+            HStack(spacing: compact ? 0 : 7) {
                 Image(systemName: "doc.text").font(.system(size: 13))
+                Color.clear
+                    .frame(width: compact ? 0 : labelW)
+                    .overlay(alignment: .leading) { Text(L.commonReport).frame(width: labelW, alignment: .leading) }
+                    .clipped()
+                    .opacity(compact ? 0 : 1)
             }
-            .buttonStyle(DS3CircleButtonStyle(diameter: 34, disabledOpacity: 0.5))
-            .reportActionTraits(busy: model.isCollectingReport)
-        } else {
-            Button { router.isReportShown = true } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: "doc.text").font(.system(size: 13))
-                    Text(L.commonReport)
-                }
-            }
-            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1, disabledOpacity: 0.5))
-            .reportActionTraits(busy: model.isCollectingReport)
         }
+        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: compact ? (34 - iconW) / 2 : 15, topRim: 1,
+                                    disabledOpacity: 0.5))
+        .reportActionTraits(busy: busy)
     }
 
-    private func refreshButton(compact: Bool) -> some View {
-        Button { model.refreshReport(trigger: .button) } label: {
-            // The hidden label keeps the width while the spinner shows (swap-in-place).
-            Text(compact ? L.commonRefresh : L.commonRefreshReport)
-                .dsSwapInPlace(model.isCollectingReport) { ProgressView().controlSize(.small).tint(.white) }
+    private var refreshButton: some View {
+        let font = Font.system(size: 13, weight: .semibold)
+        let longW = ds3IdealWidth(key: "refresh|\(L.commonRefreshReport)|13s") { Text(L.commonRefreshReport).font(font).lineLimit(1) }
+        let shortW = ds3IdealWidth(key: "refresh|\(L.commonRefresh)|13s") { Text(L.commonRefresh).font(font).lineLimit(1) }
+        return Button { onRefresh() } label: {
+            // The slot keeps the width while the spinner shows (swap-in-place); the two texts cross-fade in it.
+            Color.clear
+                .frame(width: compact ? shortW : longW)
+                .overlay { Text(L.commonRefreshReport).frame(width: longW).opacity(compact ? 0 : 1) }
+                .overlay { Text(L.commonRefresh).frame(width: shortW).opacity(compact ? 1 : 0) }
+                .clipped()
+                .dsSwapInPlace(busy) { ProgressView().controlSize(.small).tint(.white) }
         }
         .buttonStyle(DS3ButtonStyle(kind: .primary, height: 34, hPad: 16, disabledOpacity: 0.5))
-        .disabled(model.isCollectingReport)
-        .accessibilityLabel(model.isCollectingReport ? L.commonRefreshing : L.commonRefreshReport)
+        .disabled(busy)
+        .accessibilityLabel(busy ? L.commonRefreshing : L.commonRefreshReport)
         .accessibilityIdentifier("main-refresh")
         .layoutPriority(2)
     }
 }
 
-/// The header status pill: not a button. Reads the same task list as the Attention card (same arguments as
-/// `HomeAttentionSlot`), so the two never disagree. No `.animation(_:value:)` (animation-value-size-coupling);
-/// the full text shows unless even the compact row of `MacHeaderActions` does not fit.
-@MainActor
+/// The header status pill: not a button. The status is computed by `MacHeaderActions` (the same task list as the
+/// Attention card, so the two never disagree) so the width probe can host the pill with any status. No
+/// `.animation(_:value:)` (animation-value-size-coupling); the full text shows unless even the compact row of
+/// `MacHeaderActions` does not fit.
 private struct HeaderStatusPill: View {
-    let model: DashboardModel
+    let status: HomeStatus
 
     var body: some View {
-        let tasks = HomeModel.tasks(model.assessment, report: model.homeReport, disk: model.disk, battery: model.battery)
-        let status = HomeModel.status(scan: HomeModel.scan(model.blockState(.scan)), tasks: tasks)
         let (colour, ink, text) = look(status)
         HStack(spacing: 8) {
             Circle().fill(colour).frame(width: 7, height: 7)
@@ -356,15 +484,26 @@ private extension View {
 /// ideal size; the sides are proposed only the width left on their side of it (minus `spacing`), so a side that
 /// adapts to its proposal (`ViewThatFits`) picks its form from the real room. A side that reports more than it was
 /// proposed keeps its size and stays flush at its own edge; the centre does not move.
-private struct CentredToolbarLayout: Layout {
+struct CentredToolbarLayout: Layout {
     var spacing: CGFloat = 12
+
+    /// Room one side is proposed in a container of `container` pt: the layout's rule, also used by
+    /// `MainDashboardView.fitWindowWidth` through its inverse `containerWidth` (RESIZE-MOTION C2).
+    static func sideWidth(container: CGFloat, centreWidth: CGFloat, spacing: CGFloat) -> CGFloat {
+        max(0, container / 2 - centreWidth / 2 - spacing)
+    }
+
+    /// Inverse of `sideWidth`: the smallest container width that proposes `side` pt to each side.
+    static func containerWidth(side: CGFloat, centreWidth: CGFloat, spacing: CGFloat) -> CGFloat {
+        2 * (side + spacing) + centreWidth
+    }
 
     private func sideProposals(width: CGFloat?, height: CGFloat?, centreWidth: CGFloat)
         -> (leading: ProposedViewSize, trailing: ProposedViewSize) {
         guard let width else {
             return (ProposedViewSize(width: nil, height: height), ProposedViewSize(width: nil, height: height))
         }
-        let side = max(0, width / 2 - centreWidth / 2 - spacing)
+        let side = Self.sideWidth(container: width, centreWidth: centreWidth, spacing: spacing)
         return (ProposedViewSize(width: side, height: height), ProposedViewSize(width: side, height: height))
     }
 

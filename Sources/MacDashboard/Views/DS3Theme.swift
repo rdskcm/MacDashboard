@@ -142,6 +142,8 @@ enum DS3Motion {
     static let cardDelays: [Double] = [0.08, 0.14, 0.20, 0.26, 0.32]
 
     static let page: Animation = .spring(response: 0.5, dampingFraction: 0.75)
+    /// RESIZE-MOTION (decision D2): one curve for a width-tier change (tile/cell frames, header capsules, label fades).
+    static let tierChange: Animation = .spring(response: 0.45, dampingFraction: 0.85)
     static let pageOffsetX: CGFloat = 28
 
     /// Rim light spot position smoothing (s).
