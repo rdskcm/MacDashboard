@@ -426,6 +426,20 @@ struct SettingsView: View {
             SettingsRow(label: L.settingsOrbsLabel, sub: L.settingsOrbsSub) {
                 DS3Switch(isOn: $settings.orbsEnabled, label: L.settingsOrbsLabel, metrics: .settings)
             }
+            SettingsRow(label: L.settingsRimLabel, sub: L.settingsRimSub) {
+                DSSlidingSegmented(
+                    options: RimProfile.allCases,
+                    selection: $settings.rimProfile,
+                    size: .settingsRow,
+                    groupLabel: L.settingsRimLabel
+                ) { p in
+                    switch p {
+                    case .narrow: L.settingsRimNarrow
+                    case .medium: L.settingsRimMedium
+                    case .wide: L.settingsRimWide
+                    }
+                }
+            }
             SettingsRow(label: L.settingsLaunchAtLoginLabel,
                         sub: loginError ?? (loginStatus == .requiresApproval ? L.settingsLaunchAtLoginApproval : nil),
                         subColor: loginError != nil ? DS3.hotInk : nil) {

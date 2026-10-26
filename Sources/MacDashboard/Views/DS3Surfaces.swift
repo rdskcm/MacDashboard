@@ -1,5 +1,5 @@
 // Views/DS3Surfaces.swift
-// IPHONE-DESIGN: DS v3 surfaces (hand-drawn shadows, inset rims, glass card, pointer-following rim,
+// IPHONE-DESIGN: DS v3 surfaces (hand-drawn shadows, inset rims, glass card, pointer-light rim sprite,
 // static orbs, entrance motion). Used by iPhone mode; APP-REDESIGN will reuse them later.
 
 import SwiftUI
@@ -35,7 +35,10 @@ final class DS3PointerTracker {
         scrollEnd?.cancel()
     }
 
-    func register(_ m: DS3RimModel) { rims[ObjectIdentifier(m)] = m }
+    func register(_ m: DS3RimModel) {
+        rims[ObjectIdentifier(m)] = m
+        if !isScrolling { m.aim(at: location) }
+    }
     func unregister(_ m: DS3RimModel) { rims[ObjectIdentifier(m)] = nil }
 
     /// Reports the pointer; re-aims only when the location actually changed (D7) and no scroll is in flight.
@@ -73,8 +76,7 @@ final class DS3RimModel {
 
     func aim(at p: CGPoint?) {
         guard let view else { return }
-        let target = p.map { RimAngle.target(pointer: $0, center: CGPoint(x: rect.midX, y: rect.midY)) } ?? RimAngle.resting
-        view.aim(to: target)
+        view.aim(to: p.map { RimLight.localPoint($0, in: rect) })
     }
 }
 
@@ -122,7 +124,8 @@ extension View {
                 // Top-edge-only highlight, same technique as `DSCardSurface`.
                 shape.strokeBorder(
                     LinearGradient(
-                        stops: [.init(color: top, location: 0), .init(color: .clear, location: 0.18)],
+                        stops: RimAmbient.ramp(alpha: 0.55, ground: DS3.rimGroundDark)
+                            .map { .init(color: top.opacity($0.multiplier), location: 0.18 * $0.location) },
                         startPoint: .top,
                         endPoint: .bottom
                     ),
@@ -271,10 +274,10 @@ struct DS3GlassBar: View {
 
 // MARK: - Rim
 
-/// Pointer-following edge highlight, dark appearance only. The gradient is a pre-rendered image rotated by a
-/// Core Animation transform (`DS3RimLayer`); the tracker re-aims it imperatively, only when the pointer location
-/// changes (D7) and once after a scroll ends. No body here reads the pointer (D6). Without a tracker (offscreen
-/// harness renders) it is the static stroke at the resting angle.
+/// Pointer light on the card edge (RIM-GLOW-OPTICS): a point light at height h over the glass. One pre-rendered
+/// sprite layer per card (`DS3RimLayer`) is moved by the tracker imperatively, only when the pointer location
+/// changes (D7) and once after a scroll ends; a static sublayer holds the ambient light from above. No body here
+/// reads the pointer (D6). Without a tracker (offscreen harness renders) it is the static ambient stroke.
 @MainActor
 struct DS3Rim: View {
     let cornerRadius: CGFloat
@@ -285,52 +288,37 @@ struct DS3Rim: View {
     @State private var model = DS3RimModel()
 
     var body: some View {
-        // Light appearance draws no pointer rim (the white highlight is invisible on the light glass).
-        if colorScheme == .dark {
-            Group {
-                if let tracker {
-                    DS3RimLayer(cornerRadius: cornerRadius, model: model, isStatic: reduceMotion || DS3Motion.isFrozen)
-                        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(DS3.windowSpace)) }) { model.rect = $0 }
-                        .onAppear { tracker.register(model) }
-                        .onDisappear { tracker.unregister(model) }
-                } else {
-                    DS3RimStroke(angle: RimAngle.resting, cornerRadius: cornerRadius)
-                }
+        Group {
+            if let tracker {
+                DS3RimLayer(cornerRadius: cornerRadius, model: model, isStatic: reduceMotion || DS3Motion.isFrozen)
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(DS3.windowSpace)) }) { model.rect = $0 }
+                    .onAppear { tracker.register(model) }
+                    .onDisappear { tracker.unregister(model) }
+            } else if colorScheme == .dark || RimLight.lightMode != .none {
+                DS3RimStroke(cornerRadius: cornerRadius)
             }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
         }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
+/// The static ambient-only stroke: top light fading over the corner radius (spec §3.3, D7).
 struct DS3RimStroke: View {
-    let angle: Double
     let cornerRadius: CGFloat
 
     var body: some View {
-        // CSS conic 0 deg = up; SwiftUI 0 deg = trailing.
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).strokeBorder(
-            AngularGradient(
-                stops: DS3.rimStops(hi: DS3.rimHi, mid: DS3.rimMid, lo: DS3.rimLo),
-                center: .center,
-                startAngle: .degrees(angle - 90),
-                endAngle: .degrees(angle + 270)
-            ),
-            lineWidth: 1.2
-        )
-    }
-}
-
-extension DS3 {
-    /// One stop list for the SwiftUI stroke and `DS3RimImage`. CSS conic 0 deg = up.
-    static func rimStops(hi: Color, mid: Color, lo: Color) -> [Gradient.Stop] {
-        [
-            .init(color: hi, location: 0),
-            .init(color: lo, location: 0.22),
-            .init(color: mid, location: 0.5),
-            .init(color: lo, location: 0.78),
-            .init(color: hi, location: 1),
-        ]
+        GeometryReader { g in
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).strokeBorder(
+                LinearGradient(
+                    stops: RimAmbient.ramp(alpha: 0.2 /* rimMid dark */, ground: DS3.rimGroundDark)
+                        .map { .init(color: DS3.rimMid.opacity($0.multiplier), location: $0.location) },
+                    startPoint: .top,
+                    endPoint: UnitPoint(x: 0.5, y: min(1, cornerRadius / max(1, g.size.height)))
+                ),
+                lineWidth: 1.2
+            )
+        }
     }
 }
 

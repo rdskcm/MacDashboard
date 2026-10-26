@@ -69,6 +69,11 @@ enum DS3 {
     static let rimHi = Color(light: Color.white.opacity(1), dark: Color.white.opacity(0.55))
     static let rimMid = Color(light: Color.white.opacity(0.5), dark: Color.white.opacity(0.2))
     static let rimLo = Color(light: Color.white.opacity(0.14), dark: Color.white.opacity(0.04))
+    /// RIM-GLOW-OPTICS: encoded sRGB of a glass card's surface with no orb under it (measured in Stage 1, 2026-10-26).
+    static let rimGroundDark = SIMD3<Double>(27, 27, 29) / 255
+    static let rimGroundLight = SIMD3<Double>(250, 250, 249) / 255
+    /// Light `shade` variant: warm dark ink of the light-mode card shadow (`DS3Shadow.card`), under the additive ring.
+    static let rimShade = ds3RGB(60, 40, 20, 0.12)
 
     static let orbA = Color(light: ds3RGB(62, 123, 239, 0.55), dark: ds3RGB(70, 130, 240, 0.45))
     static let orbB = Color(light: ds3RGB(244, 166, 59, 0.45), dark: ds3RGB(230, 140, 50, 0.30))
@@ -139,11 +144,12 @@ enum DS3Motion {
     static let page: Animation = .spring(response: 0.5, dampingFraction: 0.75)
     static let pageOffsetX: CGFloat = 28
 
-    /// Rim re-aim spring; fed to CASpringAnimation as mass/stiffness/damping (same curve as the former .spring(response: 0.6, dampingFraction: 0.9)).
-    static let rimSpring = Spring(response: 0.6, dampingRatio: 0.9)
+    /// Rim light spot position smoothing (s).
+    static let rimFollow: Double = 0.06
+    /// Rim light spot opacity on pointer enter/leave (s).
+    static let rimFade: Double = 0.12
     /// Quiet time after the last scroll event before rims re-aim once.
     static let rimScrollSettle: Double = 0.15
-    static let rimResting: Double = RimAngle.resting
 
     /// Kept under Reduce Motion.
     static let chartTracking: Animation = .easeOut(duration: 0.12)

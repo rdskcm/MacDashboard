@@ -27,6 +27,11 @@ struct StringsEN: AppStrings {
     var settingsThemeDark: String { "Dark" }
     var settingsOrbsLabel: String { "Background orbs" }
     var settingsOrbsSub: String { "Off when Reduce Motion is on" }
+    var settingsRimLabel: String { "Edge light" }
+    var settingsRimSub: String { "Pointer highlight is off with Reduce Motion" }
+    var settingsRimNarrow: String { "Narrow" }
+    var settingsRimMedium: String { "Medium" }
+    var settingsRimWide: String { "Wide" }
     var settingsLaunchAtLoginLabel: String { "Launch at login" }
     var settingsLaunchAtLoginApproval: String { "Allow it in System Settings › General › Login Items" }
     var settingsSnapshotLabel: String { "Daily snapshot" }

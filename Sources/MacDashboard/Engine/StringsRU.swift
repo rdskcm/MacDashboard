@@ -27,6 +27,11 @@ struct StringsRU: AppStrings {
     var settingsThemeDark: String { "Тёмная" }
     var settingsOrbsLabel: String { "Фоновые сферы" }
     var settingsOrbsSub: String { "Выключены при «Уменьшении движения»" }
+    var settingsRimLabel: String { "Подсветка краёв" }
+    var settingsRimSub: String { "Блик у курсора выключен при «Уменьшении движения»" }
+    var settingsRimNarrow: String { "Узкая" }
+    var settingsRimMedium: String { "Средняя" }
+    var settingsRimWide: String { "Широкая" }
     var settingsLaunchAtLoginLabel: String { "Открывать при входе" }
     var settingsLaunchAtLoginApproval: String { "Разрешите в Системных настройках › Основные › Объекты входа" }
     var settingsSnapshotLabel: String { "Ежедневный снимок" }

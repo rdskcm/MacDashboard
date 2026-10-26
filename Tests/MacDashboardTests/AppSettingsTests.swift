@@ -51,6 +51,25 @@ extension SerialTests {
             }
         }
 
+        @Test func rimProfilePersistence() {
+            let d = UserDefaults.standard
+            let saved = d.object(forKey: AppSettings.rimProfileKey)
+            let savedSetting = AppSettings.shared.rimProfile
+            defer {
+                AppSettings.shared.rimProfile = savedSetting
+                if let saved { d.set(saved, forKey: AppSettings.rimProfileKey) } else { d.removeObject(forKey: AppSettings.rimProfileKey) }
+            }
+            #expect(AppSettings.resolveRimProfile(raw: nil) == .medium)
+            #expect(AppSettings.resolveRimProfile(raw: "1") == .narrow)
+            #expect(AppSettings.resolveRimProfile(raw: "3") == .wide)
+            #expect(AppSettings.resolveRimProfile(raw: "9") == .medium)
+            AppSettings.shared.rimProfile = .wide
+            #expect(d.string(forKey: AppSettings.rimProfileKey) == "3")
+            AppSettings.shared.rimProfile = .narrow
+            #expect(d.string(forKey: AppSettings.rimProfileKey) == "1")
+            #expect(RimProfile.allCases.allSatisfy { RimLight.heights[$0.rawValue] != nil })
+        }
+
         @Test func notifyEnabledPersistence() {
             let saved = AppSettings.shared.notifyEnabled
             defer { AppSettings.shared.notifyEnabled = saved }

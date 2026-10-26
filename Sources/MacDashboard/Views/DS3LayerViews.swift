@@ -1,9 +1,10 @@
 // Views/DS3LayerViews.swift
-// IPHONE-SCROLL-LAG: Core Animation hosts for the DS3 pointer rim and orbs. Content is rendered once; motion is layer animation evaluated by the render server.
+// IPHONE-SCROLL-LAG: Core Animation hosts for the DS3 pointer-light rim (RIM-GLOW-OPTICS) and orbs. Content is rendered once; motion is layer animation evaluated by the render server.
 
 import SwiftUI
 import AppKit
 import QuartzCore
+import IOSurface
 
 /// Resolves an appearance-dynamic SwiftUI `Color` against `appearance`. Same technique as
 /// `BarFillLayerView.resolvedColor`: `ImageRenderer` does not reliably resolve `NSColor(dynamicProvider:)` colours.
@@ -18,32 +19,6 @@ func ds3Resolve(_ color: Color, in appearance: NSAppearance) -> CGColor {
 }
 
 // MARK: - Rim
-
-/// The rim gradient, rendered once per process for the dark appearance: `hi` at the top (resting direction 0).
-/// A conic gradient's colour depends only on the angle from the centre, so one square image serves every card
-/// at any size, and rotating it about the card centre equals moving the gradient's start angle.
-@MainActor
-enum DS3RimImage {
-    static let side: CGFloat = 1024
-
-    static let conic: CGImage? = {
-        let dark = NSAppearance(named: .darkAqua)!
-        let hi = ds3Resolve(DS3.rimHi, in: dark)
-        let mid = ds3Resolve(DS3.rimMid, in: dark)
-        let lo = ds3Resolve(DS3.rimLo, in: dark)
-        let renderer = ImageRenderer(
-            content: Rectangle()
-                .fill(AngularGradient(
-                    stops: DS3.rimStops(hi: Color(cgColor: hi), mid: Color(cgColor: mid), lo: Color(cgColor: lo)),
-                    center: .center,
-                    startAngle: .degrees(-90),
-                    endAngle: .degrees(270)))
-                .frame(width: side, height: side)
-        )
-        renderer.scale = 1
-        return renderer.cgImage
-    }()
-}
 
 struct DS3RimLayer: NSViewRepresentable {
     let cornerRadius: CGFloat
@@ -60,6 +35,7 @@ struct DS3RimLayer: NSViewRepresentable {
     func updateNSView(_ nsView: DS3RimView, context: Context) {
         nsView.cornerRadius = cornerRadius
         nsView.setStatic(isStatic)
+        nsView.configure(profileKey: RimSettingsObserver.shared.profileKey)
         model.view = nsView
     }
 
@@ -73,6 +49,8 @@ struct DS3RimLayer: NSViewRepresentable {
     }
 }
 
+/// RIM-GLOW-OPTICS: the 1.2 pt ring of a glass card, masked; inside it the static ambient layer and the pointer light
+/// sprite, both composited `plusL` (spec §3.2, §3.3, D8). Per pointer event: one `position` set and one fixed-key animation.
 final class DS3RimView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -81,33 +59,48 @@ final class DS3RimView: NSView {
         didSet { if cornerRadius != oldValue { needsLayout = true } }
     }
     private(set) var isStatic = false
-    /// Model angle in CSS degrees, unbounded; advanced only by `RimAngle.continuing`.
-    private var angle = RimAngle.resting
 
     private let ring = CALayer()
     private let ringMask = CAShapeLayer()
-    private let conic = CALayer()
+    private let ambient = CALayer()
+    private let spot = CALayer()
+    private var shadeRing: CALayer?
+    private var shadeMask: CAShapeLayer?
+    private var h: Double
+    private var spotVisible = false
+    private var loggedRenderFailure = false
 
-    /// In flipped geometry a positive z rotation is clockwise on screen (orientation table in the spec).
-    private static let rotationSign: Double = 1
+    private struct RenderKey: Equatable {
+        let appearance: NSAppearance.Name
+        let scale: CGFloat
+        let h: Double
+        let depthPx: Int
+    }
+    private var renderedKey: RenderKey?
 
     init(cornerRadius: CGFloat) {
         self.cornerRadius = cornerRadius
+        self.h = RimSettingsObserver.height(for: RimSettingsObserver.shared.profileKey)
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         let off = NSNull()
-        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden"]
-        for l in [ring, ringMask, conic] as [CALayer] {
+        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden",
+                    "compositingFilter", "opacity", "backgroundColor"]
+        for l in [ring, ringMask, ambient, spot] as [CALayer] {
             l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
         }
         ringMask.fillColor = CGColor(gray: 0, alpha: 1)
         ring.mask = ringMask
-        conic.contents = DS3RimImage.conic
-        conic.contentsGravity = .resize
-        ring.addSublayer(conic)
+        ambient.contentsGravity = .resize
+        spot.contentsGravity = .resize
+        spot.opacity = 0
+        spot.compositingFilter = "plusL"
+        ring.compositingFilter = "plusL"
+        ring.addSublayer(ambient)
+        ring.addSublayer(spot)
         layer?.addSublayer(ring)
-        setRotation(angle)
+        RimSettingsObserver.shared.register(self)
     }
 
     @available(*, unavailable)
@@ -120,17 +113,31 @@ final class DS3RimView: NSView {
         ring.frame = bounds
         ringMask.frame = ring.bounds
         ringMask.path = Self.ringPath(bounds.size, cornerRadius)
-        let d = (bounds.width * bounds.width + bounds.height * bounds.height).squareRoot().rounded(.up) + 2
-        conic.bounds = CGRect(x: 0, y: 0, width: d, height: d)
-        conic.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        if let shadeRing, let shadeMask {
+            shadeRing.frame = bounds
+            shadeMask.frame = shadeRing.bounds
+            shadeMask.path = ringMask.path
+        }
+        ambient.frame = CGRect(x: 0, y: 0, width: bounds.width, height: cornerRadius)
+        let r = CGFloat(RimLight.range(h: h))
+        spot.bounds = CGRect(x: 0, y: 0, width: 2 * r, height: 2 * r)
         CATransaction.commit()
+        renderIfNeeded()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        renderIfNeeded()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        renderIfNeeded()
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        let s = window?.backingScaleFactor ?? 2
-        ring.contentsScale = s
-        ringMask.contentsScale = s
+        renderIfNeeded()
     }
 
     /// The 1.2 pt `strokeBorder` outline of the continuous rounded rectangle, as a fillable path.
@@ -142,41 +149,194 @@ final class DS3RimView: NSView {
             .copy(strokingWithWidth: 1.2, lineCap: .butt, lineJoin: .miter, miterLimit: 10)
     }
 
+    /// Edge-light profile from the Settings row (`RimSettingsObserver`).
+    func configure(profileKey: String) {
+        let newH = RimSettingsObserver.height(for: profileKey)
+        guard newH != h else { return }
+        h = newH
+        renderedKey = nil
+        needsLayout = true
+        renderIfNeeded()
+    }
+
+    /// Sprite and ambient bitmaps at the window's backing scale, for this appearance; shared through `RimSpriteCache`.
+    /// Never per event. A failed render is not recorded, so the next pass retries.
+    private func renderIfNeeded() {
+        guard let window else { return }
+        let scale = window.backingScaleFactor
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if !isDark && RimLight.lightMode == .none {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            ring.isHidden = true
+            shadeRing?.isHidden = true
+            CATransaction.commit()
+            renderedKey = nil
+            return
+        }
+        let depthPx = Int((cornerRadius * scale).rounded(.up))
+        let key = RenderKey(appearance: effectiveAppearance.name, scale: scale, h: h, depthPx: depthPx)
+        guard key != renderedKey else { return }
+        var ground = isDark ? DS3.rimGroundDark : DS3.rimGroundLight
+        let shaded = !isDark && RimLight.lightMode == .shade
+        if shaded {
+            ground = RimLight.shadedGround(ground, shade: SIMD3<Double>(60, 40, 20) / 255, alpha: 0.12)
+        }
+        let sprite = RimSpriteCache.shared.sprite(h: h, scale: scale, ground: ground)
+        let amb = depthPx > 0 ? RimSpriteCache.shared.ambient(depthPx: depthPx, ground: ground, alpha: isDark ? 0.2 : 0.5) : nil
+        if sprite == nil || (depthPx > 0 && amb == nil) {
+            if !loggedRenderFailure { NSLog("[MacDashboard] rim bitmap render failed; keeping the previous contents, retrying on the next pass") }
+            loggedRenderFailure = true
+        } else {
+            renderedKey = key
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        ring.isHidden = false
+        if shaded {
+            if shadeRing == nil, let host = layer {
+                let sr = CALayer()
+                let sm = CAShapeLayer()
+                let off = NSNull()
+                let keys = ["bounds", "position", "frame", "path", "hidden", "backgroundColor"]
+                for l in [sr, sm] as [CALayer] { l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) }) }
+                sm.fillColor = CGColor(gray: 0, alpha: 1)
+                sr.mask = sm
+                host.insertSublayer(sr, below: ring)
+                shadeRing = sr
+                shadeMask = sm
+                needsLayout = true
+            }
+            shadeRing?.isHidden = false
+            shadeRing?.backgroundColor = ds3Resolve(DS3.rimShade, in: effectiveAppearance)
+        } else {
+            shadeRing?.isHidden = true
+        }
+        if let sprite { spot.contents = sprite }
+        if let amb { ambient.contents = amb }
+        spot.contentsScale = scale
+        ambient.contentsScale = scale
+        CATransaction.commit()
+    }
+
     func setStatic(_ s: Bool) {
         guard s != isStatic else { return }
         isStatic = s
         if s {
-            conic.removeAllAnimations()
-            angle = RimAngle.resting
-            setRotation(angle)
+            spot.removeAllAnimations()
+            spotVisible = false
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            spot.opacity = 0
+            CATransaction.commit()
         }
     }
 
-    /// Retargets with an additive spring from `-delta` to 0, so position and velocity stay continuous.
-    func aim(to target: Double) {
+    /// Moves the light to the pointer's card-local point (nil = pointer outside the window: fade out).
+    /// A fixed animation key replaces the previous one, so at most one live animation per card.
+    func aim(to local: CGPoint?) {
         guard !isStatic else { return }
-        let next = RimAngle.continuing(from: angle, to: target)
-        let delta = next - angle
-        guard abs(delta) >= 0.25 else { return }
-        angle = next
-        setRotation(next)
-        let spring = DS3Motion.rimSpring
-        let a = CASpringAnimation(keyPath: "transform.rotation.z")
-        a.isAdditive = true
-        a.fromValue = -delta * .pi / 180 * Self.rotationSign
-        a.toValue = 0.0
-        a.mass = CGFloat(spring.mass)
-        a.stiffness = CGFloat(spring.stiffness)
-        a.damping = CGFloat(spring.damping)
-        a.duration = a.settlingDuration
-        conic.add(a, forKey: nil)
-    }
-
-    private func setRotation(_ deg: Double) {
+        guard let local else {
+            if spotVisible { spotVisible = false; fade(to: 0) }
+            return
+        }
+        if !spotVisible {
+            spotVisible = true
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            spot.position = local
+            CATransaction.commit()
+            spot.removeAnimation(forKey: "pos")
+            fade(to: 1)
+            return
+        }
+        let from = spot.presentation()?.position ?? spot.position
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        conic.setValue(deg * .pi / 180 * Self.rotationSign, forKeyPath: "transform.rotation.z")
+        spot.position = local
         CATransaction.commit()
+        let a = CABasicAnimation(keyPath: "position")
+        a.fromValue = NSValue(point: from)
+        a.toValue = NSValue(point: local)
+        a.duration = DS3Motion.rimFollow
+        a.timingFunction = CAMediaTimingFunction(name: .linear)
+        spot.add(a, forKey: "pos")
+    }
+
+    private func fade(to value: Float) {
+        let from = spot.presentation()?.opacity ?? spot.opacity
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        spot.opacity = value
+        CATransaction.commit()
+        let a = CABasicAnimation(keyPath: "opacity")
+        a.fromValue = from
+        a.toValue = value
+        a.duration = DS3Motion.rimFade
+        spot.add(a, forKey: "fade")
+    }
+}
+
+/// One surface per key for every card on every page (R4). Entries are never evicted: a handful per process.
+@MainActor
+final class RimSpriteCache {
+    static let shared = RimSpriteCache()
+    private struct SpriteKey: Hashable { let h: Double; let scale: Double; let ground: [Int] }
+    private struct AmbientKey: Hashable { let depthPx: Int; let alpha: Double; let ground: [Int] }
+    private var sprites: [SpriteKey: IOSurfaceRef] = [:]
+    private var ambients: [AmbientKey: IOSurfaceRef] = [:]
+
+    private static func quantised(_ g: SIMD3<Double>) -> [Int] { (0..<3).map { Int((g[$0] * 255).rounded()) } }
+
+    func sprite(h: Double, scale: CGFloat, ground: SIMD3<Double>) -> IOSurfaceRef? {
+        let k = SpriteKey(h: h, scale: Double(scale), ground: Self.quantised(ground))
+        if let s = sprites[k] { return s }
+        guard let s = RimLight.render(h: h, scale: Double(scale), ground: ground)?.surface else { return nil }
+        sprites[k] = s
+        return s
+    }
+
+    func ambient(depthPx: Int, ground: SIMD3<Double>, alpha: Double) -> IOSurfaceRef? {
+        let k = AmbientKey(depthPx: depthPx, alpha: alpha, ground: Self.quantised(ground))
+        if let s = ambients[k] { return s }
+        guard let s = RimAmbient.render(depthPx: depthPx, ground: ground, alpha: alpha)?.surface else { return nil }
+        ambients[k] = s
+        return s
+    }
+}
+
+/// The edge-light profile: `rimProfile` ("1" | "2" | "3", default "2"; written by `AppSettings` from the Settings row)
+/// in the app's own domain, switched live by KVO.
+@MainActor
+final class RimSettingsObserver {
+    static let shared = RimSettingsObserver()
+    private var observer: DefaultsKeyObserver?
+    private let views = NSHashTable<DS3RimView>.weakObjects()
+
+    private(set) var profileKey = RimLight.defaultProfileKey
+
+    static func height(for key: String) -> Double {
+        RimLight.heights[key] ?? RimLight.heights[RimLight.defaultProfileKey]!
+    }
+
+    private init() {
+        read()
+        // KVO reports changes made by other processes (`defaults write`); the callback may come on any thread.
+        observer = DefaultsKeyObserver(keys: [AppSettings.rimProfileKey]) { [weak self] in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.changed() } }
+        }
+    }
+
+    func register(_ v: DS3RimView) { views.add(v) }
+
+    private func read() {
+        let k = UserDefaults.standard.string(forKey: AppSettings.rimProfileKey) ?? RimLight.defaultProfileKey
+        profileKey = RimLight.heights[k] != nil ? k : RimLight.defaultProfileKey
+    }
+
+    private func changed() {
+        read()
+        for v in views.allObjects { v.configure(profileKey: profileKey) }
     }
 }
 

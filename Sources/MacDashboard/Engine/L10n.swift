@@ -56,6 +56,11 @@ protocol AppStrings {
     var settingsThemeDark: String { get }
     var settingsOrbsLabel: String { get }
     var settingsOrbsSub: String { get }
+    var settingsRimLabel: String { get }
+    var settingsRimSub: String { get }
+    var settingsRimNarrow: String { get }
+    var settingsRimMedium: String { get }
+    var settingsRimWide: String { get }
     var settingsLaunchAtLoginLabel: String { get }
     var settingsLaunchAtLoginApproval: String { get }
     var settingsSnapshotLabel: String { get }

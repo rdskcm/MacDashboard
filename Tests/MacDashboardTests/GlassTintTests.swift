@@ -1,5 +1,5 @@
 // Tests/MacDashboardTests/GlassTintTests.swift
-// CARD-GLASS-BACKDROP: token table for the glass card tint (Engine/GlassTint.swift). Same shape as RimAngleTests.swift.
+// CARD-GLASS-BACKDROP: token table for the glass card tint (Engine/GlassTint.swift). Same shape as BackdropMathTests.swift.
 import Foundation
 import Testing
 @testable import MacDashboard
