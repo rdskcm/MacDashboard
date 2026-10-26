@@ -343,8 +343,9 @@ route_hist() {
     || { ax_miss "G4: history chart centre ($HIST_SWEEP_X,$HIST_SWEEP_Y) is outside the pinned window"; return 1; }
   export HIST_SWEEP_X HIST_SWEEP_Y
 }
-# Report screen (header «Report» -> report text); G5 holds on the rainbow «Show in Finder» capsule (RainbowCapsuleButton,
-# ReportTab.swift) and on the same toolbar row 300 pt to its left (D17). «Report» is disabled while the launch report
+# Report sheet (REDESIGN-REPORT: main-report opens ReportSheet.swift as a sheet, root identifier report-sheet; its contents
+# are reachable through window 1, as in tools/visual/smoke.sh). G5 holds on its «Show in Finder» button
+# (report-show-in-finder) and on the same header row 300 pt to its left (D17). «Report» is disabled while the launch report
 # pass runs and the toolbar shows a spinner then, so wait (<= 90 s) until the button is enabled before pressing it.
 route_report() {
   route_mac || return 1
@@ -355,7 +356,7 @@ route_report() {
     sleep 2
   done
   ax_press id main-report || return 1; sleep 2
-  [ "$(ax exists report-page)" = present ] || { ax_miss "G5: report-page absent after pressing main-report"; return 1; }
+  [ "$(ax exists report-sheet)" = present ] || { ax_miss "G5: report-sheet absent after pressing main-report"; return 1; }
   local fr fx fy fw fh; fr="$(ax_frame frame report-show-in-finder)" || return 1; read -r fx fy fw fh <<< "$fr"
   local dx=$((fx + fw / 2)) dy=$((fy + fh / 2)) cx=$((fx - 300))
   { [ "$cx" -ge 40 ] && [ "$dx" -le 990 ] && [ "$dy" -ge 29 ] && [ "$dy" -le 762 ]; } \
