@@ -56,24 +56,16 @@ final class DS3RimView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     var cornerRadius: CGFloat {
-        didSet {
-            guard cornerRadius != oldValue else { return }
-            appliedMaskKey = nil
-            needsLayout = true
-        }
+        didSet { if cornerRadius != oldValue { needsLayout = true } }
     }
     private(set) var isStatic = false
 
     private let ring = CALayer()
-    private let ringMask = CALayer()
+    private let ringMask = CAShapeLayer()
     private let ambient = CALayer()
     private let spot = CALayer()
     private var shadeRing: CALayer?
-    private var shadeMask: CALayer?
-    /// RESIZE-FRAME-COST: the (corner radius, scale) the ring masks currently show; the nine-slice sprite is stretched by the
-    /// render server, so a width step sets no mask content.
-    private var appliedMaskKey: MaskKey?
-    private struct MaskKey: Equatable { let cornerRadius: CGFloat; let scale: CGFloat }
+    private var shadeMask: CAShapeLayer?
     private var h: Double
     private var spotVisible = false
     private var loggedRenderFailure = false
@@ -93,11 +85,12 @@ final class DS3RimView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         let off = NSNull()
-        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "contentsCenter", "contentsScale",
-                    "hidden", "compositingFilter", "opacity", "backgroundColor"]
+        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden",
+                    "compositingFilter", "opacity", "backgroundColor"]
         for l in [ring, ringMask, ambient, spot] as [CALayer] {
             l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
         }
+        ringMask.fillColor = CGColor(gray: 0, alpha: 1)
         ring.mask = ringMask
         ambient.contentsGravity = .resize
         spot.contentsGravity = .resize
@@ -119,44 +112,21 @@ final class DS3RimView: NSView {
         CATransaction.setDisableActions(true)
         ring.frame = bounds
         ringMask.frame = ring.bounds
+        ringMask.path = Self.ringPath(bounds.size, cornerRadius)
         if let shadeRing, let shadeMask {
             shadeRing.frame = bounds
             shadeMask.frame = shadeRing.bounds
+            shadeMask.path = ringMask.path
         }
         ambient.frame = CGRect(x: 0, y: 0, width: bounds.width, height: cornerRadius)
         let r = CGFloat(RimLight.range(h: h))
         spot.bounds = CGRect(x: 0, y: 0, width: 2 * r, height: 2 * r)
-        applyMask()
         CATransaction.commit()
         renderIfNeeded()
     }
 
-    /// Shows the shared nine-slice ring-mask sprite on the ring masks; a no-op until the corner radius or the scale changes.
-    private func applyMask() {
-        guard let window else { return }
-        let scale = window.backingScaleFactor
-        let maskKey = MaskKey(cornerRadius: cornerRadius, scale: scale)
-        guard maskKey != appliedMaskKey else { return }
-        guard let img = DS3SpriteCache.shared.ringMask(cornerRadius: cornerRadius, scale: scale) else {
-            if !loggedRenderFailure { NSLog("[MacDashboard] rim mask render failed; retrying on the next pass") }
-            loggedRenderFailure = true
-            return
-        }
-        let center = DS3SliceGeometry.ringMask(cornerRadius: cornerRadius).contentsCenter(fixedWidth: false, fixedHeight: false)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        for m in [ringMask, shadeMask].compactMap({ $0 }) {
-            m.contents = img
-            m.contentsScale = scale
-            m.contentsCenter = center
-        }
-        CATransaction.commit()
-        appliedMaskKey = maskKey
-    }
-
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        applyMask()
         renderIfNeeded()
     }
 
@@ -167,7 +137,6 @@ final class DS3RimView: NSView {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        applyMask()
         renderIfNeeded()
     }
 
@@ -227,17 +196,15 @@ final class DS3RimView: NSView {
         if shaded {
             if shadeRing == nil, let host = layer {
                 let sr = CALayer()
-                let sm = CALayer()
+                let sm = CAShapeLayer()
                 let off = NSNull()
-                let keys = ["bounds", "position", "frame", "path", "contents", "contentsCenter", "contentsScale", "hidden",
-                            "backgroundColor"]
+                let keys = ["bounds", "position", "frame", "path", "hidden", "backgroundColor"]
                 for l in [sr, sm] as [CALayer] { l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) }) }
+                sm.fillColor = CGColor(gray: 0, alpha: 1)
                 sr.mask = sm
                 host.insertSublayer(sr, below: ring)
                 shadeRing = sr
                 shadeMask = sm
-                appliedMaskKey = nil
-                applyMask()
                 needsLayout = true
             }
             shadeRing?.isHidden = false
