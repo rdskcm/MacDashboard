@@ -56,16 +56,24 @@ final class DS3RimView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     var cornerRadius: CGFloat {
-        didSet { if cornerRadius != oldValue { needsLayout = true } }
+        didSet {
+            guard cornerRadius != oldValue else { return }
+            appliedMaskKey = nil
+            needsLayout = true
+        }
     }
     private(set) var isStatic = false
 
     private let ring = CALayer()
-    private let ringMask = CAShapeLayer()
+    private let ringMask = CALayer()
     private let ambient = CALayer()
     private let spot = CALayer()
     private var shadeRing: CALayer?
-    private var shadeMask: CAShapeLayer?
+    private var shadeMask: CALayer?
+    /// RESIZE-FRAME-COST: the (corner radius, scale) the ring masks currently show; the nine-slice sprite is stretched by the
+    /// render server, so a width step sets no mask content.
+    private var appliedMaskKey: MaskKey?
+    private struct MaskKey: Equatable { let cornerRadius: CGFloat; let scale: CGFloat }
     private var h: Double
     private var spotVisible = false
     private var loggedRenderFailure = false
@@ -85,12 +93,11 @@ final class DS3RimView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         let off = NSNull()
-        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden",
-                    "compositingFilter", "opacity", "backgroundColor"]
+        let keys = ["bounds", "position", "frame", "transform", "path", "contents", "contentsCenter", "contentsScale",
+                    "hidden", "compositingFilter", "opacity", "backgroundColor"]
         for l in [ring, ringMask, ambient, spot] as [CALayer] {
             l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
         }
-        ringMask.fillColor = CGColor(gray: 0, alpha: 1)
         ring.mask = ringMask
         ambient.contentsGravity = .resize
         spot.contentsGravity = .resize
@@ -112,21 +119,44 @@ final class DS3RimView: NSView {
         CATransaction.setDisableActions(true)
         ring.frame = bounds
         ringMask.frame = ring.bounds
-        ringMask.path = Self.ringPath(bounds.size, cornerRadius)
         if let shadeRing, let shadeMask {
             shadeRing.frame = bounds
             shadeMask.frame = shadeRing.bounds
-            shadeMask.path = ringMask.path
         }
         ambient.frame = CGRect(x: 0, y: 0, width: bounds.width, height: cornerRadius)
         let r = CGFloat(RimLight.range(h: h))
         spot.bounds = CGRect(x: 0, y: 0, width: 2 * r, height: 2 * r)
+        applyMask()
         CATransaction.commit()
         renderIfNeeded()
     }
 
+    /// Shows the shared nine-slice ring-mask sprite on the ring masks; a no-op until the corner radius or the scale changes.
+    private func applyMask() {
+        guard let window else { return }
+        let scale = window.backingScaleFactor
+        let maskKey = MaskKey(cornerRadius: cornerRadius, scale: scale)
+        guard maskKey != appliedMaskKey else { return }
+        guard let img = DS3SpriteCache.shared.ringMask(cornerRadius: cornerRadius, scale: scale) else {
+            if !loggedRenderFailure { NSLog("[MacDashboard] rim mask render failed; retrying on the next pass") }
+            loggedRenderFailure = true
+            return
+        }
+        let center = DS3SliceGeometry.ringMask(cornerRadius: cornerRadius).contentsCenter(fixedWidth: false, fixedHeight: false)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for m in [ringMask, shadeMask].compactMap({ $0 }) {
+            m.contents = img
+            m.contentsScale = scale
+            m.contentsCenter = center
+        }
+        CATransaction.commit()
+        appliedMaskKey = maskKey
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        applyMask()
         renderIfNeeded()
     }
 
@@ -137,6 +167,7 @@ final class DS3RimView: NSView {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
+        applyMask()
         renderIfNeeded()
     }
 
@@ -196,15 +227,17 @@ final class DS3RimView: NSView {
         if shaded {
             if shadeRing == nil, let host = layer {
                 let sr = CALayer()
-                let sm = CAShapeLayer()
+                let sm = CALayer()
                 let off = NSNull()
-                let keys = ["bounds", "position", "frame", "path", "hidden", "backgroundColor"]
+                let keys = ["bounds", "position", "frame", "path", "contents", "contentsCenter", "contentsScale", "hidden",
+                            "backgroundColor"]
                 for l in [sr, sm] as [CALayer] { l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) }) }
-                sm.fillColor = CGColor(gray: 0, alpha: 1)
                 sr.mask = sm
                 host.insertSublayer(sr, below: ring)
                 shadeRing = sr
                 shadeMask = sm
+                appliedMaskKey = nil
+                applyMask()
                 needsLayout = true
             }
             shadeRing?.isHidden = false
@@ -339,11 +372,15 @@ final class DS3ShadowSpriteView: NSView {
     var cornerRadius: CGFloat {
         didSet {
             guard cornerRadius != oldValue else { return }
+            nineSlice = Self.nineSlice(kind: kind, cornerRadius: cornerRadius)
             renderedKey = nil
             needsLayout = true
         }
     }
 
+    /// Cached per corner radius (recomputed in `cornerRadius.didSet`), not per layout pass.
+    private var nineSlice: DS3SliceGeometry.NineSlice
+    private let keyKind: String
     private let sprite = CALayer()
     private var renderedKey: DS3SpriteKey?
     private var loggedRenderFailure = false
@@ -351,6 +388,8 @@ final class DS3ShadowSpriteView: NSView {
     init(kind: DS3Shadow, cornerRadius: CGFloat) {
         self.kind = kind
         self.cornerRadius = cornerRadius
+        self.nineSlice = Self.nineSlice(kind: kind, cornerRadius: cornerRadius)
+        self.keyKind = "shadow.\(kind)"
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .never
@@ -364,7 +403,7 @@ final class DS3ShadowSpriteView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    private var nineSlice: DS3SliceGeometry.NineSlice {
+    private static func nineSlice(kind: DS3Shadow, cornerRadius: CGFloat) -> DS3SliceGeometry.NineSlice {
         let ls = kind.layers
         return DS3SliceGeometry.shadow(cornerRadius: cornerRadius,
                                        maxRadius: ls.map(\.radius).max() ?? 0,
@@ -398,13 +437,14 @@ final class DS3ShadowSpriteView: NSView {
     }
 
     private func renderIfNeeded() {
-        guard let window else { return }
+        // An empty view (first layout before SwiftUI sizes it) has nothing to show; skip the throwaway 0 x 0 render.
+        guard let window, !bounds.isEmpty else { return }
         let scale = window.backingScaleFactor
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let n = nineSlice
         let fixedW = DS3SliceGeometry.fixedAxis(bounds.width, n, scale: scale)
         let fixedH = DS3SliceGeometry.fixedAxis(bounds.height, n, scale: scale)
-        let key = DS3SpriteKey(kind: "shadow.\(kind)", shape: .rounded(cornerRadius), heightPx: fixedH ?? 0, widthPx: fixedW ?? 0,
+        let key = DS3SpriteKey(kind: keyKind, shape: .rounded(cornerRadius), heightPx: fixedH ?? 0, widthPx: fixedW ?? 0,
                                scale: Double(scale), dark: dark, stops: [], extra: Double(cornerRadius))
         guard key != renderedKey else { return }
         guard let image = DS3SpriteCache.shared.image(for: key, render: { render(n, fixedW: fixedW, fixedH: fixedH, scale: scale) }) else {

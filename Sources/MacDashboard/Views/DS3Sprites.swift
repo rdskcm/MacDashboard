@@ -55,6 +55,26 @@ final class DS3SpriteCache {
         return img
     }
 
+    /// RESIZE-FRAME-COST: the 1.2 pt ring mask of `DS3RimView` as an alpha-only nine-slice bitmap, drawn once per
+    /// (corner radius, scale) from `DS3RimView.ringPath` and stretched by the render server. Vertically symmetric, so the
+    /// bottom-left origin of the bitmap does not matter.
+    func ringMask(cornerRadius: CGFloat, scale: CGFloat) -> CGImage? {
+        let key = DS3SpriteKey(kind: "mask", shape: .rounded(cornerRadius), heightPx: 0, widthPx: 0, scale: Double(scale),
+                               dark: false, stops: [], extra: Double(cornerRadius))
+        return image(for: key) {
+            let side = DS3SliceGeometry.ringMask(cornerRadius: cornerRadius).side
+            let px = Int((side * scale).rounded())
+            guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)
+            else { return nil }
+            ctx.scaleBy(x: scale, y: scale)
+            ctx.addPath(DS3RimView.ringPath(CGSize(width: side, height: side), cornerRadius))
+            ctx.setFillColor(gray: 0, alpha: 1)
+            ctx.fillPath()
+            return ctx.makeImage()
+        }
+    }
+
     /// Renders `v` (laid out at `size` points) into a 16-bit-per-component premultiplied sRGB bitmap of `pixelsWide` x
     /// `pixelsHigh`, content at the top-left. `ImageRenderer.cgImage` is 8-bit, and its premultiplied rounding loses the faint
     /// alpha tail of a gradient edge; 16 bits keep the single 8-bit rounding for the compositing of the final frame.
