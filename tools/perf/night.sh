@@ -61,6 +61,22 @@ idle_threshold() {
   fi
   echo "$t"
 }
+# Claude Code at work (NIGHT-WORK-AWARE): a main or subagent transcript (*.jsonl at any depth under ~/.claude/projects)
+# written in the last WORK_QUIET_MIN minutes. HID idle alone let the 2026-10-26 run start while agents worked with the
+# user away. Test seams, honoured only with --dry-run: NIGHT_CLAUDE_PROJECTS (another folder), NIGHT_HOUR (--check) and
+# NIGHT_DATE (a night with no started marker).
+WORK_QUIET_MIN=15
+CLAUDE_PROJECTS="$HOME/.claude/projects"
+[ "$DRY" = 1 ] && [ -n "${NIGHT_CLAUDE_PROJECTS:-}" ] && CLAUDE_PROJECTS="$NIGHT_CLAUDE_PROJECTS"
+if [ "$DRY" = 1 ] && [ -n "${NIGHT_DATE:-}" ]; then [[ "$NIGHT_DATE" =~ ^[0-9]{8}$ ]] || fatal 64 "NIGHT_DATE must be YYYYMMDD"; DATE="$NIGHT_DATE"; fi
+claude_working() {   # 0 + one-line reason on stdout when a transcript was written in the window; 1 when quiet or no folder
+  local list n last t f
+  list="$(find "$CLAUDE_PROJECTS" -type f -name '*.jsonl' -mmin -"$WORK_QUIET_MIN" -exec stat -f '%m %N' {} + 2>/dev/null | sort -n)"
+  [ -n "$list" ] || return 1
+  n="$(grep -c . <<< "$list")"
+  last="${list##*$'\n'}"; t="${last%% *}"; f="${last#* }"
+  echo "Claude Code working: $n transcript(s) written in the last $WORK_QUIET_MIN min, newest at $(date -r "$t" +%H:%M): ${f#"$CLAUDE_PROJECTS"/}"
+}
 busy() {   # another night run or gate, excluding this shell and its ancestors/children (as gate.sh)
   local anc=" " a=$$ p
   while [ -n "$a" ] && [ "$a" -gt 1 ]; do
@@ -133,7 +149,7 @@ if [ "$MODE" = "--install" ]; then
 PL
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null
   launchctl bootstrap "gui/$(id -u)" "$PLIST" || fatal 70 "launchctl bootstrap failed"
-  echo "installed: checks every 60 s, starts between 00:00 and 03:00 when the Mac is idle; report: $NIGHT/latest.md"
+  echo "installed: checks every 60 s, starts between 00:00 and 03:00 when the Mac is idle and no Claude Code transcript was written for $WORK_QUIET_MIN min; report: $NIGHT/latest.md"
   exit 0
 fi
 if [ "$MODE" = "--uninstall" ]; then
@@ -150,7 +166,12 @@ if [ "$MODE" = "--check" ]; then
     if [ "$DRY" = 1 ]; then echo "would restore the brightness a crashed run left saved"
     else restore_brightness; decide "restored saved brightness: $BR_NOTE"; fi
   fi
-  H="$(date +%H)"; H=$((10#$H))
+  H="$(date +%H)"
+  if [ "$DRY" = 1 ] && [ -n "${NIGHT_HOUR:-}" ]; then
+    { [[ "$NIGHT_HOUR" =~ ^[0-9]{1,2}$ ]] && [ $((10#$NIGHT_HOUR)) -le 23 ]; } || fatal 64 "NIGHT_HOUR must be 0-23"
+    H="$NIGHT_HOUR"
+  fi
+  H=$((10#$H))
   if [ "$H" -ge 0 ] && [ "$H" -lt 3 ]; then
     :
   else
@@ -173,6 +194,7 @@ if [ "$MODE" = "--check" ]; then
     [ "$DRY" = 1 ] || echo "$(date +%H:%M) $1" > "$NIGHT/state/last-skip-$DATE"
     decide "not starting: $1"; exit 0
   }
+  CC="$(claude_working)" && skip "$CC"
   power_ok || skip "on battery or Low Power Mode on"
   unlocked || skip "screen locked"
   IS="$(idle_secs)"; T="$(idle_threshold)"
