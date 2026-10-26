@@ -15,7 +15,7 @@ enum DS3SliceGeometry {
         switch s {
         case .rect: return 2
         case .rounded(let r): return ceil(1.6 * min(r, height / 2)) + 2
-        case .capsule: return ceil(height / 2) + 2
+        case .capsule: return ceil(1.6 * height / 2) + 2   // `Capsule()` is continuous-cornered: same extent as a rounded rect with r = h/2
         }
     }
 
@@ -27,10 +27,12 @@ enum DS3SliceGeometry {
         let narrow: Bool
     }
 
-    static func measure(_ s: DS3SliceShape, size: CGSize, scale: CGFloat) -> Measure {
+    /// Measure from the frame in window space: SwiftUI snaps the top and bottom edge of every frame to the pixel grid
+    /// separately, so a 106.6 px tall view at a half-pixel offset covers 106 rows, not 107. The sprite must be that tall.
+    static func measure(_ s: DS3SliceShape, frame: CGRect, scale: CGFloat) -> Measure {
         Measure(
-            heightPx: Int((size.height * scale).rounded()),
-            narrow: size.height <= 0 || size.width < referenceWidth(cap: cap(s, height: size.height))
+            heightPx: max(0, Int((frame.maxY * scale).rounded()) - Int((frame.minY * scale).rounded())),
+            narrow: frame.height <= 0 || frame.width < referenceWidth(cap: cap(s, height: frame.height))
         )
     }
 

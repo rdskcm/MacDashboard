@@ -27,6 +27,20 @@ func ds3ResolvedStops(_ stops: [Gradient.Stop], dark: Bool) -> [DS3ResolvedStop]
     }
 }
 
+private struct DS3SpriteScaleKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    /// Backing scale for sprites when it differs from `displayScale`. A window-less `NSHostingView` (offscreen snapshots and
+    /// harness) reports `displayScale` 1 while its capture bitmap is 2x; setting `displayScale` itself would also change every
+    /// hairline and layout that reads it, so only sprites are told the true scale. `nil` (the app) means `displayScale`.
+    var ds3SpriteScale: CGFloat? {
+        get { self[DS3SpriteScaleKey.self] }
+        set { self[DS3SpriteScaleKey.self] = newValue }
+    }
+}
+
 enum DS3SpriteContent {
     case topRim(stops: [Gradient.Stop], lineWidth: CGFloat)
     case fill(stops: [Gradient.Stop])
@@ -56,11 +70,25 @@ final class DS3SpriteCache {
         return img
     }
 
-    static func render<V: View>(_ v: V, scale: CGFloat) -> CGImage? {
+    /// Renders `v` (laid out at `size` points) into a 16-bit-per-component premultiplied sRGB bitmap of `pixelsWide` x
+    /// `pixelsHigh`, content at the top-left. `ImageRenderer.cgImage` is 8-bit, and its premultiplied rounding loses the faint
+    /// alpha tail of a gradient edge; 16 bits keep the single 8-bit rounding for the compositing of the final frame.
+    static func render<V: View>(_ v: V, scale: CGFloat, size: CGSize, pixelsWide: Int, pixelsHigh: Int) -> CGImage? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: pixelsWide, height: pixelsHigh, bitsPerComponent: 16, bytesPerRow: 0,
+                                  space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder16Little.rawValue)
+        else { return nil }
         let r = ImageRenderer(content: v)
         r.scale = scale
-        r.isOpaque = false
-        return r.cgImage
+        r.proposedSize = ProposedViewSize(size)
+        var drawn = false
+        r.render { _, draw in
+            ctx.scaleBy(x: scale, y: scale)
+            ctx.translateBy(x: 0, y: CGFloat(pixelsHigh) / scale - size.height)
+            draw(ctx)
+            drawn = true
+        }
+        return drawn ? ctx.makeImage() : nil
     }
 }
 
@@ -71,10 +99,13 @@ struct DS3StretchSprite<S: InsettableShape>: View {
     let content: DS3SpriteContent
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.displayScale) private var scale
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.ds3SpriteScale) private var spriteScale
     @State private var measure: DS3SliceGeometry.Measure?
-    @State private var sprite: CGImage?
+    /// The bitmap is stored with the key it was rendered for, so a changed height or appearance never shows the old one.
+    @State private var sprite: (key: DS3SpriteKey, image: CGImage)?
 
+    private var scale: CGFloat { spriteScale ?? displayScale }
     private var slice: DS3SliceShape? { (shape as? any DS3SliceableShape)?.ds3Slice }
 
     private var stops: [Gradient.Stop] {
@@ -118,18 +149,20 @@ struct DS3StretchSprite<S: InsettableShape>: View {
     var body: some View {
         Color.clear
             .onGeometryChange(for: DS3SliceGeometry.Measure?.self,
-                              of: { g in slice.map { DS3SliceGeometry.measure($0, size: g.size, scale: scale) } }) { measure = $0 }
+                              of: { g in slice.map { DS3SliceGeometry.measure($0, frame: g.frame(in: .global), scale: scale) } }) { measure = $0 }
             .overlay(alignment: .top) {
-                if let key, let sprite, let slice {
+                if let key, let sprite, sprite.key == key, let slice {
                     let cap = DS3SliceGeometry.cap(slice, height: CGFloat(key.heightPx) / scale)
-                    Image(decorative: sprite, scale: scale)
+                    Image(decorative: sprite.image, scale: scale)
                         .resizable(capInsets: EdgeInsets(top: 0, leading: cap, bottom: 0, trailing: cap), resizingMode: .stretch)
                         .frame(height: CGFloat(key.heightPx) / scale)
                 } else {
                     live
                 }
             }
-            .task(id: key) { sprite = key.flatMap { k in DS3SpriteCache.shared.image(for: k) { renderSprite(k) } } }
+            .task(id: key) {
+                sprite = key.flatMap { k in DS3SpriteCache.shared.image(for: k) { renderSprite(k) }.map { (k, $0) } }
+            }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -143,6 +176,8 @@ struct DS3StretchSprite<S: InsettableShape>: View {
             return Gradient.Stop(color: color, location: CGFloat(s.location) / 10000)
         }
         let view = gradientView(resolved).frame(width: w0, height: h0)
-        return DS3SpriteCache.render(view, scale: scale)
+        return DS3SpriteCache.render(view, scale: scale, size: CGSize(width: w0, height: h0),
+                                     pixelsWide: Int((w0 * scale).rounded()), pixelsHigh: k.heightPx)
     }
+
 }

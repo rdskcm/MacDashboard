@@ -85,11 +85,16 @@ func harnessRender<Content: View>(width: CGFloat = 460, appearance: HarnessAppea
     }
     defer { if pinned != nil { NSApplication.shared.appearance = previousAppearance } }
 
+    let captureScale = NSScreen.main?.backingScaleFactor ?? 2
     let rootView = VStack(alignment: .leading, spacing: 20) { content() }
         .padding(20)
         .frame(width: width)
         .background(Color(nsColor: .windowBackgroundColor))
         .transaction { $0.disablesAnimations = true }
+        // A window-less NSHostingView reports displayScale 1 while the capture bitmap uses the backing scale;
+        // sprites (DS3StretchSprite) are told the true scale (displayScale stays as is: layouts keep their
+        // references). The rep size is checked against it below.
+        .environment(\.ds3SpriteScale, captureScale)
 
     let hosting = NSHostingView(rootView: rootView)
     let fitting = hosting.fittingSize
@@ -107,6 +112,9 @@ func harnessRender<Content: View>(width: CGFloat = 460, appearance: HarnessAppea
     guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
         FileHandle.standardError.write(Data("ERROR: bitmapImageRepForCachingDisplay returned nil\n".utf8))
         exit(1)
+    }
+    if abs(CGFloat(rep.pixelsWide) / hosting.bounds.width - captureScale) > 0.01 {
+        FileHandle.standardError.write(Data("WARNING: capture bitmap scale \(CGFloat(rep.pixelsWide) / hosting.bounds.width) differs from displayScale \(captureScale)\n".utf8))
     }
     rep.size = hosting.bounds.size
     hosting.cacheDisplay(in: hosting.bounds, to: rep)

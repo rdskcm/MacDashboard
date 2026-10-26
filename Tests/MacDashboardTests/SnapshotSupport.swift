@@ -44,6 +44,9 @@ func renderSnapshotPNG<Content: View>(width: CGFloat, @ViewBuilder content: () -
         .frame(width: width)
         .background(Color(nsColor: .windowBackgroundColor))
         .transaction { $0.disablesAnimations = true }
+        // A window-less NSHostingView reports displayScale 1; the bitmap below is 2x, so sprites (DS3StretchSprite)
+        // are told the true scale and render the pixels users see (displayScale stays 1: layouts keep their references).
+        .environment(\.ds3SpriteScale, 2)
     let hosting = NSHostingView(rootView: rootView)
     let fitting = hosting.fittingSize
     hosting.frame = NSRect(x: 0, y: 0, width: max(fitting.width, width), height: max(fitting.height, 100))
