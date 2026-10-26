@@ -113,25 +113,24 @@ extension View {
     }
 
     /// CSS `inset 0 1px 0 X` is `top: X`; `inset 0 0 0 .5px X` is `ring: X`; `inset 0 0 0 1px X` is `ring: X, ringWidth: 1`.
+    /// The `top:` highlight is a stretched sprite (`DS3StretchSprite`, RESIZE-FRAME-COST).
     func ds3InsetRims<S: InsettableShape>(_ shape: S, top: Color? = nil, ring: Color? = nil, ringWidth: CGFloat = 0.5) -> some View {
         overlay {
             if let ring {
                 shape.strokeBorder(ring, lineWidth: ringWidth).allowsHitTesting(false)
             }
         }
-        .overlay {
+        .overlay(alignment: .top) {
             if let top {
-                // Top-edge-only highlight, same technique as `DSCardSurface`.
-                shape.strokeBorder(
-                    LinearGradient(
+                // Top-edge-only highlight: a stretched sprite (`DS3StretchSprite`, RESIZE-FRAME-COST).
+                DS3StretchSprite(
+                    shape: shape,
+                    content: .topRim(
                         stops: RimAmbient.ramp(alpha: 0.55, ground: DS3.rimGroundDark)
-                            .map { .init(color: top.opacity($0.multiplier), location: 0.18 * $0.location) },
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
+                            .map { Gradient.Stop(color: top.opacity($0.multiplier), location: 0.18 * $0.location) },
+                        lineWidth: 1
+                    )
                 )
-                .allowsHitTesting(false)
             }
         }
     }
@@ -146,8 +145,9 @@ extension View {
     /// For capsules pass `cornerRadius: 999`.
     func ds3TintPanel(_ tone: Color, from a: Double, to b: Double, ring: Double?, cornerRadius r: CGFloat, top: Color? = nil) -> some View {
         background(
-            RoundedRectangle(cornerRadius: r, style: .continuous).fill(
-                LinearGradient(colors: [tone.opacity(a), tone.opacity(b)], startPoint: .top, endPoint: .bottom)
+            DS3StretchSprite(
+                shape: RoundedRectangle(cornerRadius: r, style: .continuous),
+                content: .fill(stops: [.init(color: tone.opacity(a), location: 0), .init(color: tone.opacity(b), location: 1)])
             )
         )
         .ds3InsetRims(RoundedRectangle(cornerRadius: r, style: .continuous), top: top, ring: ring.map { tone.opacity($0) })
