@@ -1,5 +1,5 @@
 // Sources/MacDashboard/Engine/SliceSprite.swift
-// RESIZE-FRAME-COST: pure geometry for width-invariant sprites (rims, fills, shadows, ring masks) that are drawn once
+// RESIZE-FRAME-COST: pure geometry for width-invariant sprites (rims, shadows, ring masks) that are drawn once
 // at the smallest width holding both corner caps and stretched by the render server. No AppKit/SwiftUI here.
 import CoreGraphics
 

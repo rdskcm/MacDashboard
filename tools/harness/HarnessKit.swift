@@ -85,36 +85,41 @@ func harnessRender<Content: View>(width: CGFloat = 460, appearance: HarnessAppea
     }
     defer { if pinned != nil { NSApplication.shared.appearance = previousAppearance } }
 
-    let captureScale = NSScreen.main?.backingScaleFactor ?? 2
     let rootView = VStack(alignment: .leading, spacing: 20) { content() }
         .padding(20)
         .frame(width: width)
         .background(Color(nsColor: .windowBackgroundColor))
         .transaction { $0.disablesAnimations = true }
-        // A window-less NSHostingView reports displayScale 1 while the capture bitmap uses the backing scale;
-        // sprites (DS3StretchSprite) are told the true scale (displayScale stays as is: layouts keep their
-        // references). The rep size is checked against it below.
-        .environment(\.ds3SpriteScale, captureScale)
 
+    // Host in a borderless window that is never ordered front: a window-less NSHostingView reports displayScale 1 and
+    // snaps frames to whole points while the capture bitmap is 2x. A window gets the main screen's backing scale
+    // (nothing can force 2 on another screen), so a non-2 main screen is a hard failure.
     let hosting = NSHostingView(rootView: rootView)
-    let fitting = hosting.fittingSize
-    hosting.frame = NSRect(x: 0, y: 0, width: max(fitting.width, width), height: max(fitting.height, 100))
-    hosting.layoutSubtreeIfNeeded()
+    let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = NSView(frame: .zero)
+    window.contentView?.addSubview(hosting)
+    guard window.backingScaleFactor == 2 else {
+        FileHandle.standardError.write(Data("ERROR: offscreen window backing scale is \(window.backingScaleFactor), harness renders need 2\n".utf8))
+        exit(1)
+    }
+    func place(_ fit: CGSize) {
+        let frame = NSRect(x: 0, y: 0, width: max(fit.width, width), height: max(fit.height, 100))
+        window.setContentSize(frame.size)
+        hosting.frame = frame
+        hosting.layoutSubtreeIfNeeded()
+    }
+    place(hosting.fittingSize)
 
     // Settle before capture: let a measured-thumb control (DSSlidingSegmented's
     // `onGeometryChange`) and Charts finish their layout pass before we re-measure
     // and cache — otherwise an offscreen render can catch the thumb/chart mid-layout.
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0))
-    let settledFitting = hosting.fittingSize
-    hosting.frame = NSRect(x: 0, y: 0, width: max(settledFitting.width, width), height: max(settledFitting.height, 100))
-    hosting.layoutSubtreeIfNeeded()
+    place(hosting.fittingSize)
 
     guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
         FileHandle.standardError.write(Data("ERROR: bitmapImageRepForCachingDisplay returned nil\n".utf8))
         exit(1)
-    }
-    if abs(CGFloat(rep.pixelsWide) / hosting.bounds.width - captureScale) > 0.01 {
-        FileHandle.standardError.write(Data("WARNING: capture bitmap scale \(CGFloat(rep.pixelsWide) / hosting.bounds.width) differs from displayScale \(captureScale)\n".utf8))
     }
     rep.size = hosting.bounds.size
     hosting.cacheDisplay(in: hosting.bounds, to: rep)

@@ -145,9 +145,8 @@ extension View {
     /// For capsules pass `cornerRadius: 999`.
     func ds3TintPanel(_ tone: Color, from a: Double, to b: Double, ring: Double?, cornerRadius r: CGFloat, top: Color? = nil) -> some View {
         background(
-            DS3StretchSprite(
-                shape: RoundedRectangle(cornerRadius: r, style: .continuous),
-                content: .fill(stops: [.init(color: tone.opacity(a), location: 0), .init(color: tone.opacity(b), location: 1)])
+            RoundedRectangle(cornerRadius: r, style: .continuous).fill(
+                LinearGradient(colors: [tone.opacity(a), tone.opacity(b)], startPoint: .top, endPoint: .bottom)
             )
         )
         .ds3InsetRims(RoundedRectangle(cornerRadius: r, style: .continuous), top: top, ring: ring.map { tone.opacity($0) })

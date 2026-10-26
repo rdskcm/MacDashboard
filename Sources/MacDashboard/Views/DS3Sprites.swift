@@ -27,34 +27,19 @@ func ds3ResolvedStops(_ stops: [Gradient.Stop], dark: Bool) -> [DS3ResolvedStop]
     }
 }
 
-private struct DS3SpriteScaleKey: EnvironmentKey {
-    static let defaultValue: CGFloat? = nil
-}
-
-extension EnvironmentValues {
-    /// Backing scale for sprites when it differs from `displayScale`. A window-less `NSHostingView` (offscreen snapshots and
-    /// harness) reports `displayScale` 1 while its capture bitmap is 2x; setting `displayScale` itself would also change every
-    /// hairline and layout that reads it, so only sprites are told the true scale. `nil` (the app) means `displayScale`.
-    var ds3SpriteScale: CGFloat? {
-        get { self[DS3SpriteScaleKey.self] }
-        set { self[DS3SpriteScaleKey.self] = newValue }
-    }
-}
-
 enum DS3SpriteContent {
     case topRim(stops: [Gradient.Stop], lineWidth: CGFloat)
-    case fill(stops: [Gradient.Stop])
 }
 
 struct DS3SpriteKey: Hashable {
-    let kind: String   // "rim" | "fill" | "shadow" | "mask"
+    let kind: String   // "rim" | "shadow" | "mask"
     let shape: DS3SliceShape
     let heightPx: Int
     let widthPx: Int   // 0 = stretched
     let scale: Double
     let dark: Bool
     let stops: [DS3ResolvedStop]
-    let extra: Double  // line width (rim), 0 (fill), corner radius (shadow, mask)
+    let extra: Double  // line width (rim), corner radius (shadow, mask)
 }
 
 @MainActor
@@ -92,33 +77,30 @@ final class DS3SpriteCache {
     }
 }
 
-/// Top rim / vertical fill drawn once at the reference width and stretched horizontally (three-slice).
-/// Non-sliceable shapes, narrow views and the frames before the first measurement draw the live stroke/fill.
+/// Top rim drawn once at the reference width and stretched horizontally (three-slice).
+/// Non-sliceable shapes, narrow views and the frames before the first measurement draw the live stroke.
 struct DS3StretchSprite<S: InsettableShape>: View {
     let shape: S
     let content: DS3SpriteContent
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
-    @Environment(\.ds3SpriteScale) private var spriteScale
     @State private var measure: DS3SliceGeometry.Measure?
     /// The bitmap is stored with the key it was rendered for, so a changed height or appearance never shows the old one.
     @State private var sprite: (key: DS3SpriteKey, image: CGImage)?
 
-    private var scale: CGFloat { spriteScale ?? displayScale }
+    private var scale: CGFloat { displayScale }
     private var slice: DS3SliceShape? { (shape as? any DS3SliceableShape)?.ds3Slice }
 
     private var stops: [Gradient.Stop] {
         switch content {
         case .topRim(let s, _): return s
-        case .fill(let s): return s
         }
     }
 
     private var kind: String {
         switch content {
         case .topRim: return "rim"
-        case .fill: return "fill"
         }
     }
 
@@ -139,8 +121,6 @@ struct DS3StretchSprite<S: InsettableShape>: View {
         switch content {
         case .topRim(_, let w):
             shape.strokeBorder(LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom), lineWidth: w)
-        case .fill:
-            shape.fill(LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom))
         }
     }
 
