@@ -45,7 +45,11 @@ struct RimLightTests {
         let pk = RimLight.peak(ground: g)
         #expect(abs(pk.x - 0.3144) <= 0.0005)
         let d1 = RimLight.delta(f: 1, ground: g, peak: pk)
-        for k in 0..<3 { #expect(abs(d1[k] * 255 - 0.55 * (255 - g[k] * 255)) <= 0.01, "channel \(k)") }
+        for k in 0..<3 {
+            let want: Double = 0.55 * (255 - g[k] * 255)
+            let got: Double = d1[k] * 255
+            #expect(abs(got - want) <= 0.01, "channel \(k)")
+        }
         let d0 = RimLight.delta(f: 0, ground: g, peak: pk)
         for k in 0..<4 { #expect(abs(d0[k]) <= 1e-12) }
         #expect(abs(RimLight.delta(f: 0.3536, ground: g, peak: pk).x * 255 - 65.9) <= 0.3)
