@@ -4,12 +4,12 @@ main-glass-clear-dark	2026-10-25	27.0.1	27	ee15e56-dirty
 main-glass-tinted-dark	2026-10-25	27.0.1	27	ee15e56-dirty
 main-glass-rt-dark	2026-10-25	27.0.1	27	ee15e56-dirty
 main-report-dark	2026-10-25	27.0.1	27	ee15e56-dirty
-settings-general-dark	2026-10-25	27.0.1	27	ee15e56-dirty
+settings-general-dark	2026-10-26	27.0.1	27	fe28ca7
 main-light	2026-10-25	27.0.1	27	ee15e56-dirty
 main-glass-clear-light	2026-10-25	27.0.1	27	ee15e56-dirty
 main-glass-tinted-light	2026-10-25	27.0.1	27	ee15e56-dirty
 main-glass-rt-light	2026-10-25	27.0.1	27	ee15e56-dirty
 main-report-light	2026-10-25	27.0.1	27	ee15e56-dirty
-settings-general-light	2026-10-25	27.0.1	27	ee15e56-dirty
-settings-glass-rt-dark	2026-10-25	27.0.1	27	ee15e56-dirty
-settings-glass-rt-light	2026-10-25	27.0.1	27	ee15e56-dirty
+settings-general-light	2026-10-26	27.0.1	27	fe28ca7
+settings-glass-rt-dark	2026-10-26	27.0.1	27	fe28ca7
+settings-glass-rt-light	2026-10-26	27.0.1	27	fe28ca7
