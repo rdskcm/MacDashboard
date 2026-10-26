@@ -1,9 +1,12 @@
 import Foundation
 import CoreGraphics
+import ApplicationServices
 // tools/perf helper, compiled by gate.sh into $OUT/.bin/drv (never run from here). Marks are epoch seconds.
 // usage: drv winfo <pid>            -> prints window frame
 //        drv scroll x y secs dy [gap] [phase]  -> trackpad-like gesture (began/changed/ended), prints t0
 //        drv move x y secs         -> sweep pointer horizontally around x,y for secs
+//        drv resize <pid> <w0> <w1> <secs> [cycles] -> AX-set the first window's width w0 -> w1 -> w0 ... at 60 Hz
+//                                                  (height unchanged), prints t0 / t1
 let a = CommandLine.arguments
 func now() -> String { String(format: "%.3f", Date().timeIntervalSince1970) }
 if a[1] == "winfo" {
@@ -44,6 +47,29 @@ if a[1] == "winfo" {
         CGWarpMouseCursorPosition(CGPoint(x: px, y: y))
         CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: px, y: y), mouseButton: .left)!.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: 1.0 / 60)
+    }
+    print("t1 \(now())")
+} else if a[1] == "resize" {
+    let pid = Int32(a[2])!, w0 = Double(a[3])!, w1 = Double(a[4])!, secs = Double(a[5])!
+    let cycles = a.count > 6 ? Int(a[6])! : 2
+    let app = AXUIElementCreateApplication(pid)
+    var wins: CFTypeRef?
+    AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &wins)
+    guard let win = (wins as? [AXUIElement])?.first else { print("no window"); exit(1) }
+    var sz: CFTypeRef?
+    AXUIElementCopyAttributeValue(win, kAXSizeAttribute as CFString, &sz)
+    var cur = CGSize.zero
+    if let v = sz { AXValueGetValue(v as! AXValue, .cgSize, &cur) }
+    let hz = 60.0, nLeg = max(1, Int(secs * hz))
+    print("t0 \(now())"); fflush(stdout)
+    for leg in 0..<(cycles * 2) {
+        let (from, to) = leg % 2 == 0 ? (w0, w1) : (w1, w0)
+        for i in 0...nLeg {
+            var s = CGSize(width: from + (to - from) * Double(i) / Double(nLeg), height: cur.height)
+            let v = AXValueCreate(.cgSize, &s)!
+            AXUIElementSetAttributeValue(win, kAXSizeAttribute as CFString, v)
+            Thread.sleep(forTimeInterval: 1.0 / hz)
+        }
     }
     print("t1 \(now())")
 }

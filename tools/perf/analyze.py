@@ -396,7 +396,9 @@ ABS = {
 REG = {}
 for _s in ("G3", "G4", "G6-page", "G6-table", "G6-hover", "G7"):
     REG[(_s, "hitches_total")] = ("add", 3.0)
-for _s in ("G4", "G6-page", "G6-table", "G6-hover", "G7"):
+# G10 (RESIZE-MOTION): main busy total only; hitches are reported, not gated (the pre-block build is already saturated
+# during a live resize, so hitches cannot see the animation cost)
+for _s in ("G4", "G6-page", "G6-table", "G6-hover", "G7", "G10"):
     REG[(_s, "main_busy_total")] = ("mul", 1.15)
 REG[("GP", "hitches_total")] = ("add", 3.0)
 REG[("GP", "main_busy_total")] = ("mul", 1.15)
@@ -404,12 +406,12 @@ REG[("G1", "app_pct")] = ("add", 0.5)
 REG[("G3", "app_pct")] = ("add", 0.5)
 REG[("G9", "app_pct")] = ("add", 0.5)
 
-ORDER = ["G1", "G2", "G3", "G4", "G5", "G5-top", "G6-page", "G6-table", "G6-hover", "G7", "G9"]
+ORDER = ["G1", "G2", "G3", "G4", "G5", "G5-top", "G6-page", "G6-table", "G6-hover", "G7", "G9", "G10"]
 TITLES = {
     "G1": "G1 idle-home", "G2": "G2 ca-idle", "G3": "G3 post-scroll-bottom", "G4": "G4 hist-all",
     "G5": "G5 rainbow (traced)", "G5-top": "G5 rainbow (untraced, top)", "G6-page": "G6 iphone page",
     "G6-table": "G6 iphone table", "G6-hover": "G6 iphone hover", "G7": "G7 mac-scroll",
-    "G9": "G9 idle-cpu-page",
+    "G9": "G9 idle-cpu-page", "G10": "G10 resize-sweep",
 }
 
 
