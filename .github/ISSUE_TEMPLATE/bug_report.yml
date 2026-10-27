@@ -33,8 +33,8 @@ body:
     id: macos-version
     attributes:
       label: macOS version
-      description: Apple menu → About This Mac (e.g. "macOS 14.5 Sonoma")
-      placeholder: macOS 14.5 Sonoma
+      description: Apple menu → About This Mac (e.g. "macOS 26.1 Tahoe")
+      placeholder: macOS 26.1 Tahoe
     validations:
       required: true
   - type: dropdown

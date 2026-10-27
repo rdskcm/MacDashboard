@@ -1193,8 +1193,8 @@ func brewProgressText(_ p: BrewProgress) -> String {
 /// binding is left alone entirely, so a non-interactive element shows no hover
 /// visual either — that gating is load-bearing for the former attention card's plates.
 ///
-/// `.pointerStyle(.link)` would replace all of this but is macOS 15+, and
-/// Package.swift pins `.macOS(.v14)`.
+/// `.pointerStyle(.link)` (macOS 15+) is within the package's macOS 26 floor and
+/// could replace this modifier; that replacement has not been made yet.
 struct PointingHandOnHover: ViewModifier {
     var isEnabled: Bool = true
     var hovering: Binding<Bool>? = nil

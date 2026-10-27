@@ -41,6 +41,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Assert the runner runs macOS >= 26
+        # MIN-MACOS-26: the package's floor is macOS 26 and `swift test` runs the test
+        # bundle on this runner, so a runner on an older macOS cannot load it.
+        run: |
+          set -euo pipefail
+          os="$(sw_vers -productVersion)"
+          echo "runner macOS: $os"
+          [ "${os%%.*}" -ge 26 ] || { echo "::error::runner runs macOS $os, below the package's macOS 26 floor; set runs-on to macos-26"; exit 1; }
+
       - name: Select the newest Xcode (>= 26)
         uses: ./.github/actions/select-xcode
 

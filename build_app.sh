@@ -34,9 +34,10 @@ echo "== toolchain =="
 #   --build-system native  the default `swiftbuild` system injects its own -sdk next
 #                          to ours (duplicate -sdk => mixed-SDK link failures)
 #   -Xswiftc -sdk          compile against exactly $SDK_PATH
-#   -platform_version      with --triple alone, ld records sdk == minos (14.0)
+#   -platform_version      with --triple alone, ld records sdk == minos ($MIN_MACOS)
 # The check under "== result ==" fails the build if the recorded value drifts.
-MIN_MACOS="14.0"
+# MIN-MACOS-26: keep in step with `.macOS(.v26)` in Package.swift (swift build / swift test).
+MIN_MACOS="26.0"
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 if [ ! -d "$SDK_PATH" ] || [ -z "$SDK_VERSION" ]; then
