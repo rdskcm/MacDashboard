@@ -63,7 +63,7 @@ struct BatteryPage: View {
                 // visual fixture (it would overwrite the fixture detail with live data).
                 guard !VisualFixture.isRequested else { return }
                 while !Task.isCancelled {
-                    await model.readBatteryNow(showsLoading: false)
+                    await model.readBatteryNow()
                     try? await Task.sleep(for: .seconds(BatteryPageModel.refreshSeconds))
                 }
             }
@@ -172,10 +172,7 @@ struct BatteryNowCard: View {
                 SectionWait(text: L.batteryLoadingText)
             } else if let note = m.failureNote {
                 VStack(alignment: .leading, spacing: 16) {
-                    SectionNote(tone: DS3.hot, text: note,
-                                button: (L.commonTryAgain, L.batTryAgainA11y, false,
-                                         { Task { await model.readBatteryNow(showsLoading: true) } }),
-                                buttonIdentifier: "battery-try-again")
+                    SectionNote(tone: DS3.hot, text: note)
                     EqualColumnsLayout(columns: narrow ? 2 : m.nowColumns, spacing: 8) {
                         ForEach(m.nowTiles.indices, id: \.self) { tile(m.nowTiles[$0]) }
                     }

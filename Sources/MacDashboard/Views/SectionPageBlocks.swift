@@ -145,7 +145,7 @@ struct SectionTile: View {
 
 // MARK: - Note
 
-/// Tinted note with an optional action button (the CPU failed state's «Try again»).
+/// Tinted note with an optional action button (e.g. the folder-count failure's «Try again» on Storage).
 struct SectionNote: View {
     let tone: Color
     let text: String

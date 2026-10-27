@@ -117,6 +117,7 @@ struct BatteryPageModel: Equatable {
         if let f = failure {
             var t = f == .timedOut ? L.batFailTimedOut : L.batFailNoReading
             if lastGood != nil && d != nil { t += " " + L.batFailShowingSaved }
+            t += " " + L.readRetriesAutomatically
             failureNote = t
         }
 

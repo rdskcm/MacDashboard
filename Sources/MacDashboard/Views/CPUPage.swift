@@ -92,8 +92,7 @@ struct CPUUsageCard: View {
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     if let note = m.failureNote {
-                        SectionNote(tone: DS3.hot, text: note,
-                                    button: (L.commonTryAgain, L.cpuTryAgainA11y, model.cpuRefreshing, { model.refreshCPUNow() }))
+                        SectionNote(tone: DS3.hot, text: note)
                     }
                     HeroSplitLayout {
                         SectionHero(label: L.cpuUsage, value: m.hero.value, fraction: m.hero.fraction, note: m.hero.note,

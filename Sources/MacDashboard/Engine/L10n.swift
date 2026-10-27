@@ -106,7 +106,6 @@ protocol AppStrings {
     var overviewKickerSystem: String { get }
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String
     func headerUptimeChip(_ uptime: String) -> String
-    var headerRefreshReport: String { get }
     /// Status chip label when `assessment.problems` is non-empty (pairs with `recommendationsAllGood`).
     var headerStatusNeedsAttention: String { get }
 
@@ -233,7 +232,6 @@ protocol AppStrings {
     func memUpdatesEvery(_ seconds: Int) -> String
     var memFailTimedOut: String { get }
     var memFailNoReading: String { get }
-    var memTryAgainA11y: String { get }
     var memCompViewA11y: String { get }
 
     // MARK: Storage page (REDESIGN-STORAGE)
@@ -290,7 +288,6 @@ protocol AppStrings {
     func storageFDANoteMore(_ names: String, _ n: Int) -> String
     var storageFDAButtonA11y: String { get }
     var storageSmartCardTitle: String { get }
-    var storageSmartRefreshA11y: String { get }
     var storageSubInternalOK: String { get }
     var storageSubExternalOK: String { get }
     var storageSubInternalNoData: String { get }
@@ -345,7 +342,8 @@ protocol AppStrings {
     var cpuSubCollecting: String { get }
     var cpuFailTimedOut: String { get }
     var cpuFailNoReading: String { get }
-    var cpuTryAgainA11y: String { get }
+    /// REFRESH-BUTTONS-AUDIT: appended to the CPU, Memory and Battery failure notes — their loops retry on their own, there is no button.
+    var readRetriesAutomatically: String { get }
     var procsTopByCPU: String { get }
     var procsTopByMemory: String { get }
     func procsCount(_ n: Int) -> String
@@ -553,7 +551,6 @@ protocol AppStrings {
     var batFailTimedOut: String { get }
     var batFailNoReading: String { get }
     var batFailShowingSaved: String { get }
-    var batTryAgainA11y: String { get }
     var batHealthNote: String { get }
     var batWornNote: String { get }
     func batServiceNote(_ parts: [String]) -> String

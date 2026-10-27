@@ -101,7 +101,7 @@ struct MemoryPageModel: Equatable {
             } else {
                 sub = total
             }
-            failureNote = f == .timedOut ? L.memFailTimedOut : L.memFailNoReading
+            failureNote = (f == .timedOut ? L.memFailTimedOut : L.memFailNoReading) + " " + L.readRetriesAutomatically
         }
 
         let labels = [L.commonCompressed, L.memPurgeable, L.memSwap, L.memFileCache]

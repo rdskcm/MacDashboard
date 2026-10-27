@@ -439,8 +439,7 @@ struct StorageSmartCard: View {
         let present = report.smartctlPresent
         let failing = (report.smart ?? []).contains { StoragePageModel.driveState($0, smartctlPresent: present) == .failing }
         DS3Card(title: L.storageSmartCardTitle,
-                caption: model.smartUpdatedAt.map { L.storageSmartUpdatedCaption(HomeModel.hhmm($0)) },
-                trailing: { refresh }) {
+                caption: model.smartUpdatedAt.map { L.storageSmartUpdatedCaption(HomeModel.hhmm($0)) }) {
             if let disks = report.smart {
                 if disks.isEmpty {
                     Text(L.sharedUnavailable)
@@ -458,21 +457,6 @@ struct StorageSmartCard: View {
             }
         }
         .homeHotRing(failing)
-    }
-
-    /// Opacity ZStack: «Refresh» ↔ «Refreshing…» without a width change (`swap-in-place`).
-    private var refresh: some View {
-        let busy = model.smartRefreshing
-        return Button { model.refreshSmartNow() } label: {
-            ZStack {
-                Text(L.commonRefresh).opacity(busy ? 0 : 1)
-                Text(L.commonRefreshing).opacity(busy ? 1 : 0)
-            }
-        }
-        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14))
-        .disabled(busy)
-        .accessibilityLabel(L.storageSmartRefreshA11y)
-        .accessibilityIdentifier("storage-smart-refresh")
     }
 
     // MARK: Split block
