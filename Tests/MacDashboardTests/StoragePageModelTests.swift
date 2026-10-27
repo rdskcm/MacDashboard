@@ -216,8 +216,8 @@ extension SerialTests {
                 #expect(StoragePageModel.installFailureText(.timedOut).contains("5 min"))
                 #expect(StoragePageModel.installFailureText(.noBrew).contains("Homebrew"))
             }
-            #expect(StoragePageModel.splitLeftWidth(window: 1150) == 240 && StoragePageModel.splitLeftWidth(window: 1149) == 200)
-            #expect(StoragePageModel.kvColumns(window: 1150) == 3 && StoragePageModel.kvColumns(window: 1149) == 2)
+            #expect(StoragePageModel.splitLeftWidth(wide: true) == 240 && StoragePageModel.splitLeftWidth(wide: false) == 200)
+            #expect(StoragePageModel.kvColumns(wide: true) == 3 && StoragePageModel.kvColumns(wide: false) == 2)
         }
     }
 }

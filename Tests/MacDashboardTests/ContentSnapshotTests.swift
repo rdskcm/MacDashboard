@@ -487,7 +487,7 @@ extension SerialTests {
                     VStack(spacing: 16) {
                         StorageDiskCard(model: stOK)
                         StorageFoldersCard(model: stOK, router: NavigationRouter())
-                        StorageSmartCard(model: stOK, windowWidth: 1150)
+                        StorageSmartCard(model: stOK, breakpoints: PageBreakpoints(width: 1150))
                     }
                 }
                 run.snap("content-storage-low", mode, width: 1094) {
@@ -509,8 +509,8 @@ extension SerialTests {
                 run.snap("content-storage-loading", mode, width: 1094) {
                     VStack(spacing: 16) {
                         StorageDiskCard(model: stNoDisk)
-                        StorageSmartCard(model: stNoDisk, windowWidth: 1150)
-                        StorageSmartCard(model: stNoDisks, windowWidth: 1150)
+                        StorageSmartCard(model: stNoDisk, breakpoints: PageBreakpoints(width: 1150))
+                        StorageSmartCard(model: stNoDisks, breakpoints: PageBreakpoints(width: 1150))
                     }
                 }
                 run.snap("content-storage-folders-counting", mode, width: 1094) {
@@ -538,30 +538,30 @@ extension SerialTests {
                     StorageFoldersCard(model: stOK, router: NavigationRouter(), initialCounting: true)
                 }
                 run.snap("content-storage-smart-wear", mode, width: 1094) {
-                    StorageSmartCard(model: stWorn, windowWidth: 1150)
+                    StorageSmartCard(model: stWorn, breakpoints: PageBreakpoints(width: 1150))
                 }
                 run.snap("content-storage-smart-failing", mode, width: 1094) {
                     VStack(spacing: 16) {
-                        StorageSmartCard(model: stFailing, windowWidth: 1150, initialSelection: "/dev/disk4")
-                        StorageSmartCard(model: stUnavailable, windowWidth: 1150, initialSelection: "/dev/disk4")
+                        StorageSmartCard(model: stFailing, breakpoints: PageBreakpoints(width: 1150), initialSelection: "/dev/disk4")
+                        StorageSmartCard(model: stUnavailable, breakpoints: PageBreakpoints(width: 1150), initialSelection: "/dev/disk4")
                     }
                 }
                 run.snap("content-storage-tools-installable", mode, width: 1094) {
-                    StorageSmartCard(model: stInstallable, windowWidth: 1150)
+                    StorageSmartCard(model: stInstallable, breakpoints: PageBreakpoints(width: 1150))
                 }
                 run.snap("content-storage-tools-installing", mode, width: 1094) {
-                    StorageSmartCard(model: stInstalling, windowWidth: 1150)
+                    StorageSmartCard(model: stInstalling, breakpoints: PageBreakpoints(width: 1150))
                 }
                 run.snap("content-storage-tools-failed", mode, width: 1094) {
-                    StorageSmartCard(model: stInstallFailed, windowWidth: 1150)
+                    StorageSmartCard(model: stInstallFailed, breakpoints: PageBreakpoints(width: 1150))
                 }
                 run.snap("content-storage-tools-needsbrew", mode, width: 1094) {
-                    StorageSmartCard(model: stNeedsBrew, windowWidth: 1150)
+                    StorageSmartCard(model: stNeedsBrew, breakpoints: PageBreakpoints(width: 1150))
                 }
                 run.snap("content-storage-narrow", mode, width: 924) {
                     VStack(spacing: 16) {
-                        StorageSmartCard(model: stFailing, windowWidth: 980)
-                        StorageSmartCard(model: stInstallable, windowWidth: 980)
+                        StorageSmartCard(model: stFailing, breakpoints: PageBreakpoints(width: 980))
+                        StorageSmartCard(model: stInstallable, breakpoints: PageBreakpoints(width: 980))
                     }
                 }
                 run.snap("content-battery-worn", mode, width: 1094) {
@@ -785,24 +785,24 @@ extension SerialTests {
                 run.snap("content-home-attention", mode, width: 1094) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "Home: critical, 6 tasks") {
-                            HomeAttentionCard(model: m, router: NavigationRouter(), windowWidth: 1150)
+                            HomeAttentionCard(model: m, router: NavigationRouter(), width: LiveWindowWidth(1150))
                         }
                         HarnessSection(label: "Home: Show all expanded") {
-                            HomeAttentionCard(model: m, router: NavigationRouter(), windowWidth: 1150, initialShowAll: true)
+                            HomeAttentionCard(model: m, router: NavigationRouter(), width: LiveWindowWidth(1150), initialShowAll: true)
                         }
                         HarnessSection(label: "Home: all good") {
                             HomeAttentionSlot(model: fixtureHome { $0.assessment = Assessment() },
-                                              router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                                              router: NavigationRouter(), width: LiveWindowWidth(1150), animatesEntrance: false)
                         }
                         HarnessSection(label: "Home: first scan") {
                             HomeAttentionSlot(model: fixtureHome { $0.applyFixtureScan(homeFirstScan) },
-                                              router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                                              router: NavigationRouter(), width: LiveWindowWidth(1150), animatesEntrance: false)
                         }
                         HarnessSection(label: "Home: scan failed (banner + kept tasks)") {
                             let failed = fixtureHome { $0.applyFixtureScan(homeFailedScan) }
                             VStack(alignment: .leading, spacing: 18) {
                                 HomeScanBannerSlot(model: failed)
-                                HomeAttentionSlot(model: failed, router: NavigationRouter(), windowWidth: 1150, animatesEntrance: false)
+                                HomeAttentionSlot(model: failed, router: NavigationRouter(), width: LiveWindowWidth(1150), animatesEntrance: false)
                             }
                         }
                     }

@@ -10,7 +10,6 @@ import SwiftUI
 struct CPUPage: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let onBack: () -> Void
 
     @State private var pulse: CardID? = nil
 
@@ -34,7 +33,7 @@ struct CPUPage: View {
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { CPUPageBar(model: model, onBack: onBack) }
+            .safeAreaInset(edge: .top, spacing: 0) { CPUPageBar(model: model, onBack: { _ = router.back() }) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (the CPU card is already on top) and pulse it.
                 let d = router.destination
