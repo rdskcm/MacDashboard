@@ -271,6 +271,7 @@ private struct SecurityBanner: View {
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .ds3TintPanel(DS3.hot, from: 0.12, to: 0.12, ring: 0.40, cornerRadius: 999)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isStaticText)

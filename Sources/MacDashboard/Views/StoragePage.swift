@@ -334,10 +334,10 @@ struct StorageFoldersCard: View {
             Text(r.label).font(.system(size: 14)).foregroundStyle(DS3.ink)
                 .lineLimit(1).truncationMode(.tail).help(r.label)
             Spacer(minLength: 8)
+            rowButton(r)
             Text(r.value).font(.system(size: 13, weight: .semibold, design: .monospaced)).monospacedDigit()
                 .foregroundStyle(DS3.ink)
                 .lineLimit(1).frame(minWidth: 64, alignment: .trailing)
-            rowButton(r)
         }
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)

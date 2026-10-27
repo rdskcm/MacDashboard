@@ -185,10 +185,11 @@ struct HomeMiniKV: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(kv.label).font(.system(size: 12)).foregroundStyle(DS3.muted).lineLimit(1).help(kv.label)
-            Text(kv.value).font(.system(size: 14, weight: .semibold)).monospacedDigit()
-                .foregroundStyle(valueColor).lineLimit(1).help(kv.value)
+        VStack(alignment: .leading, spacing: 0) {
+            Text(kv.label).font(.system(size: 12, weight: .medium)).foregroundStyle(DS3.inkSoft)
+                .lineLimit(1).frame(height: 17.5).help(kv.label)
+            Text(kv.value).font(.system(size: 14.5, weight: .bold)).monospacedDigit()
+                .foregroundStyle(valueColor).lineLimit(1).frame(height: 21).help(kv.value)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)

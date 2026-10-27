@@ -300,7 +300,7 @@ struct SettingsView: View {
             HStack(spacing: 8) {
                 Text(title)
                     .font(.system(size: 14, weight: selected ? .semibold : .medium))
-                    .foregroundStyle(selected ? DS3.ink : DS3.inkSoft)
+                    .foregroundStyle(DS3.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help(title)

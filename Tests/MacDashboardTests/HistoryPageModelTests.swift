@@ -185,9 +185,18 @@ extension SerialTests {
                 #expect(HistoryPageModel.window(es, range: .year, calendar: cal) == HistorySeries.dateRange(es, .year))
 
                 let m = ticks(400, .month)
-                #expect(m.count == 4 && m.allSatisfy { if case .weekLabel = $0 { return true } else { return false } })
-                #expect(m.map(\.date) == ["2026-09-26", "2026-10-03", "2026-10-10", "2026-10-17"].map(day))
-                #expect(m.compactMap(\.label) == ["Sep 26", "Oct 3", "Oct 10", "Oct 17"])
+                let weeks = m.filter { if case .weekLabel = $0 { return true } else { return false } }
+                #expect(weeks.count == 4)
+                #expect(weeks.map(\.date) == ["2026-09-26", "2026-10-03", "2026-10-10", "2026-10-17"].map(day))
+                #expect(weeks.compactMap(\.label) == ["Sep 26", "Oct 3", "Oct 10", "Oct 17"])
+                // 1M also draws a label-less line at the month start inside the window (Oct 1 at x ≈ 0.33)
+                let mStarts = m.compactMap { t -> (Date, String?)? in
+                    if case .monthStart(let d, let l) = t { return (d, l) } else { return nil }
+                }
+                #expect(mStarts.count == 1 && mStarts[0].0 == day("2026-10-01") && mStarts[0].1 == nil)
+                // window ending on Oct 1: Oct 1 is at the edge (x = 1), Sep 1 lies before the window
+                let m2 = ticks(400, .month, end: "2026-10-01")
+                #expect(!m2.contains { if case .monthStart = $0 { return true } else { return false } })
 
                 let q = ticks(400, .quarter)
                 #expect(q.map(\.date) == ["2026-08-01", "2026-09-01", "2026-10-01"].map(day))

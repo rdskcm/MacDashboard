@@ -56,7 +56,7 @@ struct HomeNowCellView: View {
             .padding(.vertical, 16)
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .modifier(HomeNowTint(tone: cell.tone))
+            .modifier(HomeNowTint(tone: cell.tone, kind: cell.kind))
         }
         .buttonStyle(DS3TileButtonStyle())
         .accessibilityLabel("\(cell.label), \(cell.big) \(cell.of)")
@@ -64,6 +64,7 @@ struct HomeNowCellView: View {
     }
 
     private var labelColor: Color {
+        if cell.kind == .cpu { return DS3.accentInk }
         switch cell.tone {
         case .amber: return DS3.amberInk
         case .hot: return DS3.hotInk
@@ -144,8 +145,18 @@ struct HomeNowCellView: View {
 /// Cell surface by tone (00 §1.1): neutral row fill with inset rims, amber / hot tint panels.
 private struct HomeNowTint: ViewModifier {
     let tone: HomeTone
+    let kind: HomeNowKind
 
     func body(content: Content) -> some View {
+        if kind == .cpu {
+            content.ds3TintPanel(DS3.accent, from: 0.16, to: 0.06, ring: 0.40, cornerRadius: 20, top: DS3.rimMid)
+        } else {
+            toneBody(content)
+        }
+    }
+
+    @ViewBuilder
+    private func toneBody(_ content: Content) -> some View {
         switch tone {
         case .amber:
             content.ds3TintPanel(DS3.amber, from: 0.13, to: 0.04, ring: 0.34, cornerRadius: 20, top: DS3.rimMid)
@@ -173,7 +184,7 @@ func homeSeriesColor(_ s: HomeSeries) -> Color {
     }
 }
 
-/// 24-point CPU line with a gradient area (00 §4.7; prototype `This Mac Home v2.dc.html:219-222`).
+/// 24-point CPU line with a flat 22 % area (00 §4.7; prototype `This Mac Home v2.dc.html:219-222`).
 struct HomeSparkline: View {
     let values: [Double]
 
@@ -181,8 +192,7 @@ struct HomeSparkline: View {
         if values.count >= 2 {
             ZStack {
                 HomeSparklinePath(values: values, closed: true)
-                    .fill(LinearGradient(colors: [DS3.accent.opacity(0.30), DS3.accent.opacity(0)],
-                                         startPoint: .top, endPoint: .bottom))
+                    .fill(DS3.accent.opacity(0.22))
                 HomeSparklinePath(values: values, closed: false)
                     .stroke(DS3.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             }

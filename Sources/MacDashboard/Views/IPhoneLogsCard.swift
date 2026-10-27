@@ -29,12 +29,10 @@ struct IPhoneLogsCard: View {
         DS3Card(title: L.iphoneLogsTitle, caption: caption, trailing: {
             HStack(spacing: 10) {
                 if !archive.isEmpty {
-                    Picker(L.iphoneLogsSourceA11y, selection: $source) {
-                        Text(L.iphoneLogsSourceLive).tag(Source.live)
-                        Text(L.iphoneLogsSourceArchive).tag(Source.archive)
+                    DSSlidingSegmented(options: [Source.live, .archive], selection: $source, size: .section,
+                                       groupLabel: L.iphoneLogsSourceA11y) {
+                        $0 == .live ? L.iphoneLogsSourceLive : L.iphoneLogsSourceArchive
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
                 }
                 Button(L.iphoneRefresh) { model.loadLogs(deviceKey: deviceKey) }
                     .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, topRim: 1))

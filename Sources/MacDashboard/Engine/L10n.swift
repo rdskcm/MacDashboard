@@ -1172,6 +1172,7 @@ protocol AppStrings {
     var iphoneStateExternalLower: String { get }
     var iphoneStateBatteryLower: String { get }
     var iphoneTileHealth: String { get }
+    var iphoneTileHealthFull: String { get }
     var iphoneNotIdentified: String { get }
     var iphonePendingTrustText: String { get }
     var iphonePendingFailedText: String { get }

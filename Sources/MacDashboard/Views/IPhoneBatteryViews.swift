@@ -52,12 +52,8 @@ struct IPhoneBatteryCard: View {
 
     /// mAh | Wh switch, in the header slot outside any branch on the unit or the snapshot.
     private var unitPicker: some View {
-        Picker(L.iphoneCapacityUnitA11y, selection: $unit) {
-            Text(L.iphoneUnitMAh).tag("mAh")
-            Text(L.iphoneUnitWh).tag("Wh")
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        DSSlidingSegmented(options: ["mAh", "Wh"], selection: $unit, size: .section,
+                           groupLabel: L.iphoneCapacityUnitA11y) { $0 == "mAh" ? L.iphoneUnitMAh : L.iphoneUnitWh }
     }
 
     /// One decimal, half-up, when both capacities are known; the integer value otherwise.
@@ -217,12 +213,10 @@ struct IPhoneBatteryHistoryCard: View {
                 caption: points.isEmpty ? nil : L.iphoneHistoryCaption(points.count),
                 trailing: {
                     if !points.isEmpty {
-                        Picker(L.iphoneHistoryViewA11y, selection: $view) {
-                            Text(L.iphoneHistoryChart).tag(HistoryView.chart)
-                            Text(L.iphoneHistoryTable).tag(HistoryView.table)
+                        DSSlidingSegmented(options: [HistoryView.chart, .table], selection: $view, size: .section,
+                                           groupLabel: L.iphoneHistoryViewA11y) {
+                            $0 == .chart ? L.iphoneHistoryChart : L.iphoneHistoryTable
                         }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
                     }
                 }) {
             if points.isEmpty {
