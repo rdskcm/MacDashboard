@@ -419,8 +419,8 @@ private struct HistoryChart: View {
             }
         }
         .chartXAxis {
-            // Dashed lines only at month starts (`.weekLabel` draws none, History.dc.html:91); a thinned month
-            // start keeps its line and has no label.
+            // Dashed line at every month start (H:91 loops `b.months`, computed for every range at H:266); 1M emits
+            // label-less `.monthStart` ticks beside its week labels, a thinned month start keeps its line and has no label.
             AxisMarks(values: monthLineDates) { _ in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 1, dash: [3, 3])).foregroundStyle(DS3.lineStrong)
             }

@@ -138,12 +138,10 @@ struct DS3Switch: View {
         Button { isOn.toggle() } label: {
             ZStack(alignment: .leading) {
                 Capsule(style: .circular).fill(isOn ? (dirty ? DS3.amber : DS3.accentSolid) : DS3.track)
-                // `.circular`: the default (continuous) capsule stroke leaves square nubs at both ends at this size.
-                Capsule(style: .circular).strokeBorder(DS3.lineStrong, lineWidth: 0.5).opacity(dirty ? 0 : 1)
                 Circle()
                     .fill(Color.white)
                     .frame(width: metrics.knob, height: metrics.knob)
-                    .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
+                    .shadow(color: .black.opacity(0.25), radius: 1.5, y: 1)
                     .offset(x: isOn ? metrics.onX : 2)
                 if dirty {
                     // CSS `0 0 0 1.5px` outside the capsule: a 1.5 pt stroke on a capsule 3 pt larger each way.

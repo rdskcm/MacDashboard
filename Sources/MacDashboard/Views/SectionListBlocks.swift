@@ -42,6 +42,7 @@ struct SectionListRow: View {
     let value: String
     /// The mockup's row: the name takes the free width and the secondary text sits right of it, before the value
     /// column. Default false keeps the Security rows (secondary text right after the name).
+    /// An empty `value` draws no value column (Homebrew rows, MOCKUP-DEVIATIONS-REVIEW D7).
     var subTrailing = false
 
     var body: some View {
@@ -61,12 +62,14 @@ struct SectionListRow: View {
                     .lineLimit(1)
             }
             if !subTrailing { Spacer(minLength: 8) }
-            Text(value)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-                .foregroundStyle(DS3.ink)
-                .lineLimit(1)
-                .frame(minWidth: 64, alignment: .trailing)
+            if !value.isEmpty {
+                Text(value)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(DS3.ink)
+                    .lineLimit(1)
+                    .frame(minWidth: 64, alignment: .trailing)
+            }
         }
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)

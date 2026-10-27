@@ -19,7 +19,7 @@ struct HistoryYScale: Equatable {
 }
 
 enum HistoryXTick: Equatable {
-    case monthStart(date: Date, label: String?)   // dashed line + label (nil when thinned out)
+    case monthStart(date: Date, label: String?)   // dashed line + label (nil when thinned out; nil in 1M: line only, H:91 + H:266)
     case weekLabel(date: Date, label: String)     // label only, 1M
 
     var date: Date {
@@ -223,13 +223,6 @@ struct HistoryPageModel: Equatable {
 
     static func xTicks(window: ClosedRange<Date>, range: HistoryRange, narrow: Bool, calendar: Calendar) -> [HistoryXTick] {
         let start = window.lowerBound, end = window.upperBound
-        if range == .month {
-            return [25, 18, 11, 4].compactMap { back in
-                guard let d = calendar.date(byAdding: .day, value: -back, to: end) else { return nil }
-                let c = calendar.dateComponents([.day, .month], from: d)
-                return .weekLabel(date: d, label: L.historyShortDate(day: c.day ?? 1, month: c.month ?? 1, year: nil))
-            }
-        }
         let total = end.timeIntervalSince(start)
         guard total > 0 else { return [] }
         let sc = calendar.dateComponents([.year, .month], from: start)
@@ -243,6 +236,14 @@ struct HistoryPageModel: Equatable {
             let x = d.timeIntervalSince(start) / total
             if d <= start || x < 0.015 || x > 0.985 { continue }
             starts.append((d, m, y))
+        }
+        if range == .month {
+            let weeks: [HistoryXTick] = [25, 18, 11, 4].compactMap { back in
+                guard let d = calendar.date(byAdding: .day, value: -back, to: end) else { return nil }
+                let c = calendar.dateComponents([.day, .month], from: d)
+                return .weekLabel(date: d, label: L.historyShortDate(day: c.day ?? 1, month: c.month ?? 1, year: nil))
+            }
+            return starts.map { HistoryXTick.monthStart(date: $0.date, label: nil) } + weeks
         }
         let n = starts.count
         let limit = narrow ? 7 : 10

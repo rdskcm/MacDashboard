@@ -105,7 +105,7 @@ struct MemoryUsageCard: View {
                         SectionHero(label: L.memUsed, value: m.heroValue, fraction: m.heroFraction, note: m.heroNote,
                                     tone: heroTone(m.heroTone), toneInk: heroInk(m.heroTone),
                                     dimmed: m.heroTone == .neutral)
-                        EqualColumnsLayout(columns: narrow ? 2 : 4, spacing: 8) {
+                        EqualColumnsLayout(columns: narrow ? 2 : 4, spacing: 8, fillsHeight: true) {
                             ForEach(m.tiles.indices, id: \.self) { tile(m.tiles[$0]) }
                         }
                     }
@@ -287,7 +287,7 @@ struct MemoryCompositionCard: View {
         .background(alignment: .leading) {
             BarFillLayer(spans: [BarSpan(key: "share", fraction: CGFloat(min(seg.listFraction, 1)), alpha: 0.18,
                                          color: swatch(seg.key))],
-                         layout: .single(minWidth: 0, cornerRadius: 16), animated: !reduceMotion)
+                         layout: .single(minWidth: 0, cornerRadius: 0), animated: !reduceMotion)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))

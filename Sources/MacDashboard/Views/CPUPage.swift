@@ -99,7 +99,7 @@ struct CPUUsageCard: View {
                                     tone: m.hero.high ? DS3.amber : DS3.accent,
                                     toneInk: m.hero.high ? DS3.amberInk : DS3.accentInk,
                                     dimmed: m.hero.dimmed)
-                        EqualColumnsLayout(columns: 3, spacing: 8) {
+                        EqualColumnsLayout(columns: 3, spacing: 8, fillsHeight: true) {
                             ForEach(m.tiles.indices, id: \.self) { tile(m.tiles[$0]) }
                         }
                     }

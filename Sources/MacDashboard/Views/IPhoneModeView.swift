@@ -269,21 +269,28 @@ struct IPhoneTileView: View {
 
     private var metrics: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
-            box(L.iphoneTileHealth, health.text, bar: true)
+            box(L.iphoneTileHealthFull, short: L.iphoneTileHealth, health.text, bar: true)
             box(L.iphoneBatCycles, cyclesText)
             box("iOS", record.osVersion ?? "—", small: true)
             box(L.iphoneIdentityLabel(.storage), storage ?? "—", small: true)
         }
     }
 
-    private func box(_ label: String, _ value: String, small: Bool = false, bar: Bool = false) -> some View {
+    private func labelText(_ s: String) -> some View {
+        Text(s)
+            .font(.system(size: 12.5))
+            .foregroundStyle(DS3.muted)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    private func box(_ label: String, short: String? = nil, _ value: String, small: Bool = false, bar: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             // Labels are one line so every box in a row has the same height.
-            Text(label)
-                .font(.system(size: 12.5))
-                .foregroundStyle(DS3.muted)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            ViewThatFits(in: .horizontal) {
+                labelText(label)
+                if let short { labelText(short) }
+            }
             Spacer(minLength: 0)
             Text(value)
                 .font(small ? .system(size: 16, weight: .semibold) : .system(size: 18, weight: .bold))

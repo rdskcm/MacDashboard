@@ -96,11 +96,10 @@ struct SystemPageBar: View {
 
     var body: some View {
         let m = SystemPageModel.make(systemInput(model, now: model.fixtureNow ?? Date()))
-        // The mockup bar has the title block flexible and the tag at the far right: it goes in the trailing slot.
         SectionPageBar(symbol: Page.system.symbol, title: Page.system.title, sub: m.sub, onBack: onBack) {
-            EmptyView()
-        } trailing: {
             DS3Tag(tone: tagTone(m.tag), text: m.tagText).help(m.tagText)
+        } trailing: {
+            EmptyView()
         }
     }
 }
@@ -178,7 +177,7 @@ struct SystemSleepCard: View {
     }
 }
 
-/// One blocker: dot (amber when the app would warn, muted for system services), name, age, «Don’t warn».
+/// One blocker: dot (amber when the app would warn, muted for system services), name, «Don’t warn», age.
 private struct SleepRowView: View {
     let row: SleepRow
     let onDontWarn: () -> Void
@@ -193,19 +192,20 @@ private struct SleepRowView: View {
                 .layoutPriority(1)
                 .help(row.name)
             Spacer(minLength: 8)
-            // Mockup: the age is the 12.5 muted secondary text; the 64 pt value column after it stays empty.
-            Text(row.age)
-                .font(.system(size: 12.5))
-                .monospacedDigit()
-                .foregroundStyle(DS3.muted)
-                .lineLimit(1)
-            Color.clear.frame(width: 64, height: 1)
+            // Button left of the age, ages right-aligned at the trailing edge in one column — the Storage folder-row
+            // order (user 2026-10-27, MOCKUP-DEVIATIONS-REVIEW D12); the mockup's empty 64 pt value slot is dropped.
             if row.warnable {
                 Button(action: onDontWarn) { Text(L.sysDontWarn) }
                     .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5))
                     .accessibilityLabel(L.sysDontWarnA11y(row.name))
                     .accessibilityIdentifier("system-dont-warn-\(row.id)")
             }
+            Text(row.age)
+                .font(.system(size: 12.5))
+                .monospacedDigit()
+                .foregroundStyle(DS3.muted)
+                .lineLimit(1)
+                .frame(minWidth: 64, alignment: .trailing)
         }
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)

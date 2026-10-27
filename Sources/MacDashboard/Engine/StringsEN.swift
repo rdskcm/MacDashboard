@@ -1252,6 +1252,7 @@ struct StringsEN: AppStrings {
     var iphoneStateExternalLower: String { "plugged in" }
     var iphoneStateBatteryLower: String { "on battery" }
     var iphoneTileHealth: String { "Health" }
+    var iphoneTileHealthFull: String { "Battery health" }
     var iphoneNotIdentified: String { "Not identified yet" }
     var iphonePendingTrustText: String { "Unlock the iPhone and tap “Trust” on its screen, then retry." }
     var iphonePendingFailedText: String { "Could not read the iPhone. Reconnect the cable, then retry." }

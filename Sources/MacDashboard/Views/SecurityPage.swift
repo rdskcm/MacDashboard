@@ -183,17 +183,19 @@ private struct ProtectionTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                Text(tile.label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(DS3.inkSoft)
-                    .lineLimit(1)
+            // Dot before the label, gap 7 (Security:76); the 13 pt halo is a user override of the plain mockup dot
+            // (MOCKUP-DEVIATIONS-REVIEW B-01).
+            HStack(spacing: 7) {
                 if let dot = tile.dot {
                     let c = toneColor(dot)
                     Circle().fill(c)
                         .frame(width: 7, height: 7)
                         .background(Circle().fill(c.opacity(0.22)).frame(width: 13, height: 13))
                 }
+                Text(tile.label)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(DS3.inkSoft)
+                    .lineLimit(1)
             }
             Text(tile.value)
                 .font(.system(size: 17, weight: .bold))
@@ -269,6 +271,7 @@ private struct SecurityBanner: View {
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .ds3TintPanel(DS3.hot, from: 0.12, to: 0.12, ring: 0.40, cornerRadius: 999)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isStaticText)

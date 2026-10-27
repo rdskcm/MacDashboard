@@ -370,7 +370,7 @@ private struct ProcessRowView: View {
                                                  fraction: CGFloat(min(primaryValue / maxValue, 1)),
                                                  alpha: CPUPageModel.procBarOpacity(primary),
                                                  color: gaugeColor)],
-                                 layout: .single(minWidth: 0, cornerRadius: 16),
+                                 layout: .single(minWidth: 0, cornerRadius: 0),
                                  animated: !reduceMotion)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

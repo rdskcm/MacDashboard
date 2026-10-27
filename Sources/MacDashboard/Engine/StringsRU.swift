@@ -1266,6 +1266,7 @@ struct StringsRU: AppStrings {
     var iphoneStateExternalLower: String { "от сети" }
     var iphoneStateBatteryLower: String { "от батареи" }
     var iphoneTileHealth: String { "Здоровье" }
+    var iphoneTileHealthFull: String { "Здоровье батареи" }
     var iphoneNotIdentified: String { "Ещё не опознан" }
     var iphonePendingTrustText: String { "Разблокируйте iPhone, нажмите «Доверять» на его экране и повторите." }
     var iphonePendingFailedText: String { "Не удалось прочитать iPhone. Переподключите кабель и повторите." }

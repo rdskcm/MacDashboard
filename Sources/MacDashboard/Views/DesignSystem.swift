@@ -307,8 +307,8 @@ func dsRecessedTrack<S: InsettableShape>(in shape: S) -> some View {
 
 // MARK: - Sliding segmented control
 
-/// `DSSlidingSegmented<T: Hashable>` — a recessed-track segmented control with
-/// an inverted sliding capsule thumb (never a per-button background). The
+/// `DSSlidingSegmented<T: Hashable>` — a flat-track segmented control (MOCKUP-DEVIATIONS-REVIEW) with
+/// a sliding capsule thumb (never a per-button background). The
 /// thumb is rendered BEHIND the labels (zIndex 0 vs 1); its motion is a
 /// `.spring(response: 0.38, dampingFraction: 0.68)` slide plus a `scaleX(1.09)`
 /// stretch anchored to the trailing edge that relaxes back to 1.0 over 0.19 s
@@ -367,16 +367,6 @@ enum DSSegmentedSize {
         case .section: return 2
         }
     }
-}
-
-private enum DSSlidingSegmentedTokens {
-    // Thumb outward shadows (dark opacity > light, same reasoning as the track).
-    // Exact `--thumb-shadow` alphas per Desktop/Segmented Control Spec.md (2026-08-11).
-    static let shadow1 = Color(light: dsShadowNavy(0.10), dark: Color.black.opacity(0.26))
-    static let shadow2 = Color(light: dsShadowNavy(0.13), dark: Color.black.opacity(0.34))
-    static let shadow3 = Color(light: dsShadowNavy(0.16), dark: Color.black.opacity(0.40))
-    // Top gleam (inner, white — light needs more alpha to read against the light ground).
-    static let gleam = Color(light: Color.white.opacity(0.95), dark: Color.white.opacity(0.22))
 }
 
 /// Applies `.accessibilityIdentifier` only when `id` is non-nil, so a `nil`
@@ -498,7 +488,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
                 } label: {
                     Text(label(option))
                         .font(size.font)
-                        .foregroundStyle(option == selection ? DS.ink : DS.muted)
+                        .foregroundStyle(option == selection ? DS3.ink : DS3.muted)
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .padding(.horizontal, size.hPad)
@@ -541,66 +531,20 @@ struct DSSlidingSegmented<T: Hashable>: View {
         .modifier(DSOptionalAXGroupLabel(label: groupLabel))
     }
 
-    // Local reimplementation of `dsRecessedTrack` (never edit that shared helper —
-    // `SharedUI.swift:90` reuses it for 6 pt progress bars) using the same
-    // opaque-layer technique as the thumb below: native `ShapeStyle.shadow(.inner(...))`
-    // on a translucent fill (`DS.track`, ~0.10 alpha) reads flat — confirmed live, twice,
-    // for both this and the GlassSegmented.swift reference port. Hand-rolled here as
-    // blurred, offset, opaque Capsules masked back to the track's own shape (so they
-    // stay INSET rather than haloing outward like the thumb's).
+    /// Mockup track (S:87, CPU:67, I:197): flat `--field` fill with a 1 pt inset `--line` ring. The card/header
+    /// tracks' `inset 0 1px 3px rgba(0,0,0,.08)` is not drawn (MOCKUP-DEVIATIONS-REVIEW D2).
     private var track: some View {
-        ZStack {
-            Capsule().fill(DS.track)
-            // A masked, shifted-then-blurred opaque copy reveals MORE of itself on the
-            // side it's shifted TOWARD, not away from — the inverse of a normal offset
-            // shadow's intuition. To darken the top inner edge (matching CSS positive-Y
-            // inset shadows) the copy must shift UP (negative y); the bottom "bounce"
-            // highlight (CSS y:-3) mirrors that and shifts DOWN (positive y).
-            // Full magnitudes per Desktop/Segmented Control Spec.md §1 (radius = blur / 2,
-            // same as `dsRecessedTrack`'s own untouched numbers: 18px blur → 9, 7px → 3.5,
-            // 2px → 1, 8px bounce → 4).
-            ZStack {
-                Capsule().fill(DSRecessedTrackTokens.inner3).blur(radius: 9).offset(y: -9)
-                Capsule().fill(DSRecessedTrackTokens.inner2).blur(radius: 3.5).offset(y: -3)
-                Capsule().fill(DSRecessedTrackTokens.inner1).blur(radius: 1).offset(y: -1)
-                Capsule().fill(DSRecessedTrackTokens.bounce).blur(radius: 4).offset(y: 3)
-            }
-            .compositingGroup()
-            .mask(Capsule())
-        }
-        .overlay(Capsule().strokeBorder(DS.line, lineWidth: 1))
+        // `.circular`: the default (continuous) capsule stroke leaves square nubs at both ends (see `DS3Switch`).
+        Capsule(style: .circular).fill(DS3.field)
+            .ds3InsetRims(Capsule(style: .circular), ring: DS3.line, ringWidth: 1)
     }
 
-    // Radii use the app-wide CSS-blur→SwiftUI-radius convention (radius = blur / 2,
-    // spread not modeled) — the same one `dsRecessedTrack` uses for its own
-    // negative-spread shadows (`--thumb-shadow`: `0 4px 10px -3px` → radius 5 y 4,
-    // `inset 0 3px 6px -4px` → radius 3 y 3).
-    //
-    // These are hand-rolled as blurred, offset, opaque-filled Capsules BEHIND the
-    // visible thumb rather than `.shadow()` view modifiers — confirmed by an A/B
-    // test (solid white fill vs `DS.glass3`) that `.shadow()`'s effective strength
-    // is multiplied by the shadowed content's OWN alpha, and `DS.glass3` is ~0.11
-    // alpha, which crushed every one of these shadows to invisible. Filling a shape
-    // directly with a color that already carries its own alpha has no such dilution.
-    //
-    // The blurred core of each shadow is punched out exactly where it sits under the
-    // thumb's own footprint (`.blendMode(.destinationOut)` inside a `.compositingGroup()`)
-    // so only the halo bleeding past the visible edge shows — a `.padding`-based shrink
-    // alone still left enough full-alpha core under the translucent glass fill to
-    // darken the whole pill toward black instead of just haloing its edge (found live).
+    /// Mockup lens (S:88, H:124): `--lens` fill, `inset 0 1px 0 rim-hi`, `inset 0 0 0 .5px rim-mid`, `--lens-sh`
+    /// (= `DS3Shadow.lens`). Same recipe as the Settings sidebar pill (`SettingsView.navRow`).
     private var thumb: some View {
-        ZStack {
-            ZStack {
-                Capsule().fill(DSSlidingSegmentedTokens.shadow3).blur(radius: 10).offset(y: 10)
-                Capsule().fill(DSSlidingSegmentedTokens.shadow2).blur(radius: 5).offset(y: 4)
-                Capsule().fill(DSSlidingSegmentedTokens.shadow1).blur(radius: 1).offset(y: 1)
-                Capsule().fill(Color.black).blendMode(.destinationOut)
-            }
-            .compositingGroup()
-
-            Capsule()
-                .fill(DS.glass3.shadow(.inner(color: DSSlidingSegmentedTokens.gleam, radius: 3, y: 3)))
-        }
+        Capsule(style: .circular).fill(DS3.lens)
+            .ds3InsetRims(Capsule(style: .circular), top: DS3.rimHi, ring: DS3.rimMid)
+            .ds3Elevation(.lens, in: Capsule(style: .circular))
     }
 
     private func select(_ option: T) {

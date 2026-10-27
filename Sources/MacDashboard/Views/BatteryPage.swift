@@ -180,7 +180,7 @@ struct BatteryNowCard: View {
             } else if let h = m.nowHero {
                 HeroSplitLayout {
                     hero(h)
-                    EqualColumnsLayout(columns: 2, spacing: 8) {
+                    EqualColumnsLayout(columns: 2, spacing: 8, fillsHeight: true) {
                         ForEach(m.nowTiles.indices, id: \.self) { tile(m.nowTiles[$0]) }
                     }
                 }
@@ -203,7 +203,7 @@ struct BatteryHealthCard: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HeroSplitLayout {
                         hero(m.healthHero)
-                        EqualColumnsLayout(columns: narrow ? 2 : 3, spacing: 8) {
+                        EqualColumnsLayout(columns: narrow ? 2 : 3, spacing: 8, fillsHeight: true) {
                             ForEach(m.healthTiles.indices, id: \.self) { tile(m.healthTiles[$0]) }
                         }
                     }
