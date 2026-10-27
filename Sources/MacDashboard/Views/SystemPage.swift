@@ -96,11 +96,10 @@ struct SystemPageBar: View {
 
     var body: some View {
         let m = SystemPageModel.make(systemInput(model, now: model.fixtureNow ?? Date()))
-        // The mockup bar has the title block flexible and the tag at the far right: it goes in the trailing slot.
         SectionPageBar(symbol: Page.system.symbol, title: Page.system.title, sub: m.sub, onBack: onBack) {
-            EmptyView()
-        } trailing: {
             DS3Tag(tone: tagTone(m.tag), text: m.tagText).help(m.tagText)
+        } trailing: {
+            EmptyView()
         }
     }
 }

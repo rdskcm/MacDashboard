@@ -9,7 +9,7 @@ import SwiftUI
 // MARK: - Page bar
 
 /// Pinned frosted bar (00 §4.2 / §8), the shape of `IPhoneDeviceView.header`: Back chip, icon, title,
-/// sub line, tag, then a trailing slot (Refresh) after the spacer.
+/// sub line, then after the spacer the tag and the trailing slot (Refresh).
 @MainActor
 struct SectionPageBar<Tag: View, Trailing: View>: View {
     let symbol: String
@@ -37,9 +37,9 @@ struct SectionPageBar<Tag: View, Trailing: View>: View {
                         .help(sub)
                 }
             }
+            Spacer(minLength: 0)
             tag()
                 .layoutPriority(1)
-            Spacer(minLength: 0)
             trailing()
         }
         .padding(.horizontal, 28)
@@ -76,22 +76,29 @@ struct SectionHero: View {
     var dimmed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // Gaps of 10 pt are explicit paddings, so the Spacer adds one gap (min 10) between value and bar, not two
+        // (147 pt with a one-line note, CPU:77-81).
+        VStack(alignment: .leading, spacing: 0) {
             Text(label)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(toneInk)
+                .frame(height: 19)
             Text(value)
                 .font(.system(size: 40, weight: .bold))
                 .tracking(-1.2)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .foregroundStyle(dimmed ? DS3.muted : DS3.ink)
-            Spacer(minLength: 0)
+                .frame(height: 40)
+                .padding(.top, 10)
+            Spacer(minLength: 10)
             DS3Bar(fraction: fraction, height: 8, fill: AnyShapeStyle(tone))
             Text(note)
                 .font(.system(size: 12.5))
                 .foregroundStyle(DS3.muted)
                 .lineLimit(2)
+                .frame(minHeight: 18)
+                .padding(.top, 10)
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 18)
@@ -113,26 +120,29 @@ struct SectionTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(DS3.inkSoft)
-                    .lineLimit(1)
+            HStack(spacing: 7) {
                 if let dot {
                     Circle().fill(dot)
                         .frame(width: 7, height: 7)
                         .background(Circle().fill(dot.opacity(0.22)).frame(width: 13, height: 13))
                 }
+                Text(label)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(DS3.inkSoft)
+                    .lineLimit(1)
+                    .frame(height: 19)
             }
             Text(value)
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(valueInk)
                 .lineLimit(1)
+                .frame(height: 25)
             if let note {
                 Text(note)
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(noteInk)
                     .lineLimit(1)
+                    .frame(height: 18)
             }
         }
         .padding(.vertical, 14)

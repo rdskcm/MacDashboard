@@ -142,7 +142,7 @@ struct StorageDiskCard: View {
                 SectionHero(label: L.storageFree, value: fmtCapacity(disk.avail), fraction: disk.pct,
                             note: StoragePageModel.heroNote(size: disk.size, usedFraction: disk.pct),
                             tone: tone, toneInk: toneInk)
-                EqualColumnsLayout(columns: 2, spacing: 8) {
+                EqualColumnsLayout(columns: 2, spacing: 8, fillsHeight: true) {
                     sizeTile(L.storageData, disk.dataUsed)
                     sizeTile(L.storageSystem, disk.sysUsed)
                     sizeTile(L.storagePurgeable, disk.purgeable)
@@ -343,7 +343,7 @@ struct StorageFoldersCard: View {
         .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
         .background(alignment: .leading) {
             BarFillLayer(spans: [BarSpan(key: "share", fraction: CGFloat(min(r.fraction, 1)), alpha: 0.16, color: DS3.amber)],
-                         layout: .single(minWidth: 0, cornerRadius: 16), animated: !reduceMotion)
+                         layout: .single(minWidth: 0, cornerRadius: 0), animated: !reduceMotion)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))

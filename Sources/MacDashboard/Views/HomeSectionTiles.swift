@@ -99,9 +99,12 @@ struct HomeSectionTile: View {
 
 /// Equal-width columns, row height = tallest cell. The column width comes from the proposed width only, never
 /// from a measurement of the cells, so nothing feeds back (`no-measured-size-feedback`).
+/// `fillsHeight`: inside `HeroSplitLayout` the rows stretch equally to the proposed height (CSS auto rows under
+/// `align-content: normal`, CPU.dc.html:76-83; MOCKUP-DEVIATIONS-REVIEW D5).
 struct EqualColumnsLayout: Layout {
     var columns: Int
     var spacing: CGFloat
+    var fillsHeight = false
 
     private func columnWidth(_ width: CGFloat) -> CGFloat {
         max(0, (width - spacing * CGFloat(columns - 1)) / CGFloat(columns))
@@ -125,14 +128,22 @@ struct EqualColumnsLayout: Layout {
             width = widest * CGFloat(columns) + spacing * CGFloat(columns - 1)
         }
         let heights = rowHeights(subviews, columnWidth: columnWidth(width))
-        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(0, heights.count - 1)))
+        let content = CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(0, heights.count - 1)))
+        if fillsHeight, let h = proposal.height, h.isFinite, h > content.height {
+            return CGSize(width: width, height: h)
+        }
+        return content
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let w = columnWidth(bounds.width)
         let heights = rowHeights(subviews, columnWidth: w)
+        let content = heights.reduce(0, +) + spacing * CGFloat(max(0, heights.count - 1))
+        let extra = fillsHeight && bounds.height > content && !heights.isEmpty
+            ? (bounds.height - content) / CGFloat(heights.count) : 0
         var y = bounds.minY
-        for (row, h) in heights.enumerated() {
+        for (row, rowHeight) in heights.enumerated() {
+            let h = rowHeight + extra
             for col in 0..<columns {
                 let i = row * columns + col
                 guard i < subviews.count else { break }
