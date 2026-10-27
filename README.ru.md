@@ -143,7 +143,7 @@ Time Machine. Всё это остаётся локально — но если 
 
 ## Требования
 
-- macOS 14 (Sonoma) и новее на Mac с Apple Silicon. Для Mac с Intel — [версия 2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1), последняя, собранная для них.
+- Mac с Apple Silicon и macOS 26 (Tahoe) или новее — для версии 3.0 и новее; версия 2.3.x работает на macOS 14 (Sonoma) и новее. Для Mac с Intel — [версия 2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1), последняя, собранная для них.
 - Ничего устанавливать не нужно. Опционально: `smartmontools` (`brew install
   smartmontools`) — тогда для внешних NVMe появятся атрибуты SMART; приложение
   умеет поставить его само в один клик.
@@ -186,8 +186,8 @@ Time Machine. Всё это остаётся локально — но если 
 
 Нужен **Xcode 26 (Tahoe SDK)** с выбранными командными инструментами — приложение
 использует SwiftUI API (`.onGeometryChange`), который есть только в этом SDK, и
-более старый Xcode сборку не осилит. Это требование только к сборке: готовое
-приложение по-прежнему работает на macOS 14 (Sonoma) и новее.
+более старый Xcode сборку не осилит. Приложение, собранное из этих исходников,
+работает на macOS 26 (Tahoe) и новее.
 
 ```bash
 git clone https://github.com/rdskcm/MacDashboard.git

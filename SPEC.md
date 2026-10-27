@@ -118,7 +118,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
    every redirect hop, and comes only from Apple's catalogue. Adding a host or a field is a
    spec change here, in `network-stance` and in both READMEs. `softwareupdate -l` and the
    Homebrew commands are separate tools the app runs, disclosed in the README.
-7. min deployment: **macOS 14** (needed for @Observable + Swift Charts). Build:
+7. min deployment: **macOS 26 (Tahoe)** from v3.0, so the app may use macOS 26 API such as Liquid Glass with no fallback (v2.3.x stays on macOS 14). Build:
    SwiftPM, Apple Silicon (arm64) binary, hand-rolled .app bundle, codesign with the local signing identity if present, otherwise ad-hoc (§9).
 
 ## 2. Locations
@@ -611,8 +611,8 @@ Structure:
 ## 9. Packaging (build_app.sh)
 
 ```
-swift build -c release --build-system native --triple arm64-apple-macosx14.0 \
-  -Xswiftc -sdk -Xswiftc <SDK path> -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker <SDK version>
+swift build -c release --build-system native --triple arm64-apple-macosx26.0 \
+  -Xswiftc -sdk -Xswiftc <SDK path> -Xlinker -platform_version -Xlinker macos -Xlinker 26.0 -Xlinker <SDK version>
 dist.noindex/MacDashboard.app/Contents/{MacOS/MacDashboard, Info.plist, Resources/AppIcon.icns, Resources/{en,ru}.lproj/InfoPlist.strings}
 ```
 Apple Silicon only (arm64) from v2.2 on; Intel Macs stay on v2.1, the last universal release.
@@ -620,10 +620,10 @@ The SDK is whatever `xcrun --sdk macosx` resolves; the explicit `-sdk`,
 `-platform_version` and `--build-system native` make the binary's LC_BUILD_VERSION
 `sdk` record that SDK (it decides the app's appearance). The script ends by checking
 with `lipo`/`vtool` that the binary is exactly arm64 and records that `sdk` and
-`minos 14.0`, and fails on any mismatch.
+`minos 26.0`, and fails on any mismatch.
 
 Info.plist: CFBundleIdentifier=com.rdskcm.mac-dashboard, CFBundleName=MacDashboard,
-CFBundleDisplayName=MacDashboard, LSMinimumSystemVersion=14.0, NSHighResolutionCapable,
+CFBundleDisplayName=MacDashboard, LSMinimumSystemVersion=26.0, NSHighResolutionCapable,
 CFBundleShortVersionString/CFBundleVersion: version is defined solely by `VERSION`/`CODENAME` in `build_app.sh`. LSApplicationCategoryType=public.app-category.utilities,
 NSHumanReadableCopyright, NSAppleEventsUsageDescription. NO LSUIElement (normal Dock app).
 Localized `en.lproj`/`ru.lproj` InfoPlist.strings are generated for the copyright and the

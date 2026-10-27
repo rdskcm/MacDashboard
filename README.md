@@ -139,7 +139,7 @@ privacy notice before attaching anything.
 
 ## Requirements
 
-- macOS 14 (Sonoma) or newer on an Apple Silicon Mac. Intel Macs: use [v2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1), the last release built for them.
+- An Apple Silicon Mac with macOS 26 (Tahoe) or newer for version 3.0 and later; version 2.3.x runs on macOS 14 (Sonoma) and newer. Intel Macs: use [v2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1), the last release built for them.
 - Nothing to install. Optionally: `smartmontools` (`brew install
   smartmontools`) to see SMART attributes for external NVMe drives — the app
   can also install it for you with one click.
@@ -182,8 +182,8 @@ Two ways — pick one.
 
 Requires **Xcode 26 (Tahoe SDK)** with its command-line tools selected — the app
 uses SwiftUI API (`.onGeometryChange`) that only ships in that SDK, so an older
-Xcode will fail to compile it. This is a build-time requirement only; the built
-app still runs on macOS 14 (Sonoma) and later.
+Xcode will fail to compile it. The app built from this source runs on macOS 26
+(Tahoe) and later.
 
 ```bash
 git clone https://github.com/rdskcm/MacDashboard.git
