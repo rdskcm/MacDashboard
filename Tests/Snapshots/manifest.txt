@@ -19,7 +19,7 @@ content-history-disk-quarter-dark	2026-10-27	27.0.1	Xcode 27.1	f2ea8fa-dirty
 content-history-disk-year-dark	2026-10-27	27.0.1	Xcode 27.1	f2ea8fa-dirty
 content-history-disk-all-dark	2026-10-27	27.0.1	Xcode 27.1	f2ea8fa-dirty
 content-home-attention-dark	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
-content-home-sections-dark	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
+content-home-sections-dark	2026-10-27	27.2	Xcode 27.1	214bd7d
 content-home-now-dark	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-iphone-tiles-dark	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-iphone-notices-dark	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
@@ -29,7 +29,7 @@ content-iphone-logs-dark	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-iphone-import-dark	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
 content-iphone-identity-dark	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
 content-iphone-dialogs-dark	2026-10-26	27.0.1	Xcode 27.1	c7e6d75+host
-content-settings-monitoring-dark	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
+content-settings-monitoring-dark	2026-10-27	27.2	Xcode 27.1	214bd7d
 content-settings-backup-dark	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-processes-cpu-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-processes-mem-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
@@ -51,7 +51,7 @@ content-history-disk-quarter-light	2026-10-27	27.0.1	Xcode 27.1	f2ea8fa-dirty
 content-history-disk-year-light	2026-10-27	27.0.1	Xcode 27.1	f2ea8fa-dirty
 content-history-disk-all-light	2026-10-27	27.0.1	Xcode 27.1	f2ea8fa-dirty
 content-home-attention-light	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
-content-home-sections-light	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
+content-home-sections-light	2026-10-27	27.2	Xcode 27.1	214bd7d
 content-home-now-light	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-iphone-tiles-light	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-iphone-notices-light	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
@@ -61,7 +61,7 @@ content-iphone-logs-light	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-iphone-import-light	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
 content-iphone-identity-light	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
 content-iphone-dialogs-light	2026-10-26	27.0.1	Xcode 27.1	c7e6d75+host
-content-settings-monitoring-light	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
+content-settings-monitoring-light	2026-10-27	27.2	Xcode 27.1	214bd7d
 content-settings-backup-light	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-memory-usage-live-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-memory-usage-medium-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
@@ -131,7 +131,7 @@ content-battery-service-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-battery-reading-dark	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
 content-battery-failed-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-battery-narrow-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
-content-battery-bars-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
+content-battery-bars-dark	2026-10-27	27.2	Xcode 27.1	214bd7d
 content-battery-worn-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-battery-rest-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-battery-normal-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
@@ -140,7 +140,7 @@ content-battery-service-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-battery-reading-light	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
 content-battery-failed-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-battery-narrow-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
-content-battery-bars-light	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
+content-battery-bars-light	2026-10-27	27.2	Xcode 27.1	214bd7d
 content-security-firewall-off-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-security-all-on-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
 content-security-enabling-dark	2026-10-27	27.0.1	Xcode 27.1	d51c0ea-dirty
@@ -223,8 +223,8 @@ content-security-crash-actions-dark	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
 content-security-crash-actions-narrow-dark	2026-10-26	27.0.1	Xcode 27.1	78a394d-dirty
 content-security-crash-actions-light	2026-10-27	27.0.1	Xcode 27.1	0af6c24-dirty
 content-security-crash-actions-narrow-light	2026-10-26	27.0.1	Xcode 27.1	78a394d-dirty
-content-settings-monitoring-denied-dark	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
-content-settings-monitoring-denied-light	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
+content-settings-monitoring-denied-dark	2026-10-27	27.2	Xcode 27.1	214bd7d
+content-settings-monitoring-denied-light	2026-10-27	27.2	Xcode 27.1	214bd7d
 content-settings-iphone-movefailed-dark	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-settings-iphone-movefailed-light	2026-10-27	27.0.1	Xcode 27.1	6e0ebd0-dirty
 content-backdrop-window-dark	2026-10-26	27.0.1	Xcode 27.1	c7e6d75+host
