@@ -8,8 +8,7 @@ import Charts
 struct HistoryPage: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let windowWidth: CGFloat
-    let onBack: () -> Void
+    let narrow: Bool
     @State private var pulse: CardID? = nil
 
     /// Reads no live model field (only `router.navigationSerial` / `destination`): the bar and the card do the reading.
@@ -17,7 +16,7 @@ struct HistoryPage: View {
         ScrollViewReader { _ in            // one card, no scrollTo needed
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    HistoryCardView(model: model, router: router, narrow: windowWidth < 1000)
+                    HistoryCardView(model: model, router: router, narrow: narrow)
                         .id(CardID.hist)
                         .sectionFocusPulse(pulse == .hist)
                         .ds3Appear(delay: 0.08)
@@ -27,7 +26,7 @@ struct HistoryPage: View {
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { HistoryPageBar(model: model, onBack: onBack) }
+            .safeAreaInset(edge: .top, spacing: 0) { HistoryPageBar(model: model, onBack: { _ = router.back() }) }
             .task(id: router.navigationSerial) {
                 let d = router.destination
                 guard d.page == .history, d.focus == .hist else { return }

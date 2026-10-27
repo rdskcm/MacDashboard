@@ -86,7 +86,7 @@ struct HomeScanBannerSlot: View {
 struct HomeAttentionSlot: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let windowWidth: CGFloat
+    let width: LiveWindowWidth
     /// `false` only in the offscreen visual harness (see `homeEntrance`).
     var animatesEntrance = true
 
@@ -102,7 +102,7 @@ struct HomeAttentionSlot: View {
         if scan == .firstScan {
             HomeFirstScanCard()
         } else if hasTasks {
-            HomeAttentionCard(model: model, router: router, windowWidth: windowWidth)
+            HomeAttentionCard(model: model, router: router, width: width)
         } else if case .failed(_, nil) = scan {
             EmptyView()
         } else {
@@ -117,24 +117,20 @@ struct HomeAttentionSlot: View {
 struct HomeAttentionCard: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let windowWidth: CGFloat
+    let width: LiveWindowWidth
 
     /// Owns confirmations / busy state for the rows' verb buttons (AdviceActionDispatch). `@State` so the
     /// `@Observable` instance survives body re-evaluations.
     @State private var dispatch: AdviceActionDispatch
     @State private var showAll: Bool
 
-    init(model: DashboardModel, router: NavigationRouter, windowWidth: CGFloat, initialShowAll: Bool = false) {
+    init(model: DashboardModel, router: NavigationRouter, width: LiveWindowWidth, initialShowAll: Bool = false) {
         self.model = model
         self.router = router
-        self.windowWidth = windowWidth
+        self.width = width
         _dispatch = State(wrappedValue: AdviceActionDispatch(model: model))
         _showAll = State(initialValue: initialShowAll)
     }
-
-    /// Hero column width, derived from the window width, never from this card's own size
-    /// (`no-measured-size-feedback`): 0.8 fr of 0.8 fr + 2 fr over the card's inner width.
-    private var heroWidth: CGFloat { max(220, (windowWidth - 56 - 44 - 16) * 0.8 / 2.8) }
 
     var body: some View {
         let input = HomeInput.attention(model)
@@ -144,7 +140,7 @@ struct HomeAttentionCard: View {
         let anyHot = tasks.contains { $0.tone == .hot }
         HStack(alignment: .top, spacing: 16) {
             hero(tasks: tasks, scan: scan, anyHot: anyHot)
-                .frame(width: heroWidth)
+                .modifier(HeroColumnWidth(width: width))
                 .frame(maxHeight: .infinity)
             right(tasks: tasks, chips: chips)
                 .frame(maxWidth: .infinity)
@@ -263,6 +259,18 @@ struct HomeAttentionCard: View {
                 .accessibilityLabel([chip.object, chip.value].compactMap { $0 }.joined(separator: " "))
             }
         }
+    }
+}
+
+/// RESIZE-WIDTH-STATE: the hero column's width, derived from the window width, never from this card's own size
+/// (`no-measured-size-feedback`): 0.8 fr of 0.8 fr + 2 fr over the card's inner width. The one per-drag-frame read
+/// of `LiveWindowWidth.value` lives in this modifier's body, so a live resize re-evaluates only this frame,
+/// not the card body (tasks, chips, rows, glass).
+struct HeroColumnWidth: ViewModifier {
+    let width: LiveWindowWidth
+    static func heroWidth(window w: CGFloat) -> CGFloat { max(220, (w - 56 - 44 - 16) * 0.8 / 2.8) }
+    func body(content: Content) -> some View {
+        content.frame(width: Self.heroWidth(window: width.value))
     }
 }
 

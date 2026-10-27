@@ -11,8 +11,7 @@ import SwiftUI
 struct StoragePage: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let windowWidth: CGFloat
-    let onBack: () -> Void
+    let breakpoints: PageBreakpoints
 
     @State private var pulse: CardID? = nil
 
@@ -31,7 +30,7 @@ struct StoragePage: View {
                         .id(CardID.folders)
                         .sectionFocusPulse(pulse == .folders)
                         .ds3Appear(delay: 0.14)
-                    StorageSmartCard(model: model, windowWidth: windowWidth)
+                    StorageSmartCard(model: model, breakpoints: breakpoints)
                         .id(CardID.smart)
                         .sectionFocusPulse(pulse == .smart)
                         .ds3Appear(delay: 0.20)
@@ -41,7 +40,7 @@ struct StoragePage: View {
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { StoragePageBar(model: model, onBack: onBack) }
+            .safeAreaInset(edge: .top, spacing: 0) { StoragePageBar(model: model, onBack: { _ = router.back() }) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Disk is already on top) and pulse it.
                 let d = router.destination
@@ -424,12 +423,12 @@ struct StorageFoldersCard: View {
 @MainActor
 struct StorageSmartCard: View {
     let model: DashboardModel
-    let windowWidth: CGFloat
+    let breakpoints: PageBreakpoints
     @State private var selected: String?
 
-    init(model: DashboardModel, windowWidth: CGFloat, initialSelection: String? = nil) {
+    init(model: DashboardModel, breakpoints: PageBreakpoints, initialSelection: String? = nil) {
         self.model = model
-        self.windowWidth = windowWidth
+        self.breakpoints = breakpoints
         _selected = State(initialValue: initialSelection)
     }
 
@@ -482,7 +481,7 @@ struct StorageSmartCard: View {
         let disk = disks.first { $0.device == current } ?? disks[0]
         return HStack(alignment: .top, spacing: 12) {
             driveList(disks, present: present, current: disk.device)
-                .frame(width: StoragePageModel.splitLeftWidth(window: windowWidth))
+                .frame(width: StoragePageModel.splitLeftWidth(wide: breakpoints.storageWide))
             detail(disk, present: present)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -516,7 +515,7 @@ struct StorageSmartCard: View {
         let state = StoragePageModel.driveState(disk, smartctlPresent: present)
         VStack(alignment: .leading, spacing: 8) {
             if model.smartToolsState != .installed {
-                StorageToolsNote(model: model, windowWidth: windowWidth)
+                StorageToolsNote(model: model, narrow: breakpoints.narrow)
             } else {
                 if let line = StoragePageModel.statusLine(state) {
                     Text(line.text)
@@ -528,7 +527,7 @@ struct StorageSmartCard: View {
                     SectionNote(tone: DS3.amber, text: wear)
                 }
                 let tiles = StoragePageModel.kvTiles(disk.health)
-                EqualColumnsLayout(columns: StoragePageModel.kvColumns(window: windowWidth), spacing: 8) {
+                EqualColumnsLayout(columns: StoragePageModel.kvColumns(wide: breakpoints.storageWide), spacing: 8) {
                     ForEach(tiles.indices, id: \.self) { i in
                         kvTile(tiles[i]).ds3Appear(delay: 0.08 + 0.06 * Double(i))
                     }
@@ -620,11 +619,11 @@ private struct DriveItem: View {
 // MARK: - smartmontools states
 
 /// The right-side Note that replaces the tiles while smartctl is missing: installable / installing / failed /
-/// needs Homebrew. Layout switches on the window width passed down, never on a measured size (D23).
+/// needs Homebrew. Layout switches on the page breakpoint passed down (`PageBreakpoints.narrow`), never on a measured size (D23).
 @MainActor
 private struct StorageToolsNote: View {
     let model: DashboardModel
-    let windowWidth: CGFloat
+    let narrow: Bool
 
     var body: some View {
         let needsBrew = model.smartToolsState == .needsHomebrew
@@ -632,7 +631,7 @@ private struct StorageToolsNote: View {
         let text = failure.map { StoragePageModel.installFailureText($0) }
             ?? (needsBrew ? L.storageToolsNeedsBrew : L.storageToolsInstallable)
         let tone = failure != nil ? DS3.hot : DS3.muted
-        let oneRow = windowWidth >= StoragePageModel.oneRowNoteBreakpoint
+        let oneRow = !narrow
         Group {
             if oneRow {
                 HStack(alignment: .top, spacing: 12) {

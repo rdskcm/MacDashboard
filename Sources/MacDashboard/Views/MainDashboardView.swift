@@ -27,10 +27,12 @@ struct MainDashboardView: View {
     /// REDESIGN-FOUNDATION: mode, report tab and (later) pages go through the router.
     @State private var router = NavigationRouter()
     @State private var pointer = DS3PointerTracker()
-    /// Window width, measured once at the window root (REDESIGN-HOME D18): column counts and text tiers of
-    /// the header, Home and the section pages read it. Safe under `no-measured-size-feedback`: the number of
-    /// columns cannot change the window's own width.
-    @State private var windowWidth: CGFloat = 1150
+    /// Window width, measured once at the window root (REDESIGN-HOME D18). RESIZE-WIDTH-STATE: the body never reads
+    /// the raw width (it changes every drag frame). It goes to `liveWidth` (read only by the Home attention slot) and to
+    /// `breakpoints` (written only when a page breakpoint flips). Safe under `no-measured-size-feedback`: column counts
+    /// and the hero column cannot change the window's own width.
+    @State private var liveWidth = LiveWindowWidth(1150)
+    @State private var breakpoints = PageBreakpoints(width: 1150)
     /// RESIZE-MOTION: the width tier (`WidthTier`), committed once per boundary crossing from the same measurement.
     /// Everything tier-shaped (Home tiles, Now cells) reads this, never the raw width; seeded by the first callback.
     @State private var tier = WidthTier.initial(width: 1150)
@@ -62,7 +64,7 @@ struct MainDashboardView: View {
             }
             .onChange(of: L10nStore.shared.language) {
                 model.refreshReport(trigger: .automatic)
-                commitWidthState(windowWidth, seeding: false, animated: false)
+                commitWidthState(liveWidth.value, seeding: false, animated: false)
             }
             // REDESIGN-NOTIFY: a notification click navigates through the view-owned router (R5, D15).
             .onChange(of: model.externalDestinationSerial) { if let d = model.consumeExternalDestination() { router.navigate(to: d) } }
@@ -78,7 +80,9 @@ struct MainDashboardView: View {
         // One background owner for both modes (REDESIGN-HOME D13): nothing here depends on `router.mode`.
         .ds3Backdrop(orbs: DS3OrbSpec.window)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { w in
-            windowWidth = w
+            liveWidth.value = w
+            let nextBreakpoints = PageBreakpoints(width: w)
+            if nextBreakpoints != breakpoints { breakpoints = nextBreakpoints }
             let seeding = !tierSeeded
             tierSeeded = true
             commitWidthState(w, seeding: seeding, animated: !seeding)
@@ -93,34 +97,34 @@ struct MainDashboardView: View {
     /// `HomeView` and its slots do the reading (the Now card and the tiles keep the rule of reading live fields in their own structs).
     private var content: some View {
         ZStack {
-            HomeView(model: model, router: router, windowWidth: windowWidth, tier: tier)
+            HomeView(model: model, router: router, width: liveWidth, tier: tier)
                 .opacity(homeVisible ? 1 : 0)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: homeVisible)   // opacity only — no size depends on it
                 .allowsHitTesting(homeVisible)
                 .accessibilityHidden(!homeVisible)
             if router.destination.page == .cpu {
-                CPUPage(model: model, router: router) { _ = router.back() }
+                CPUPage(model: model, router: router)
                     .id(router.destination.page)
             } else if router.destination.page == .memory {
-                MemoryPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
+                MemoryPage(model: model, router: router, narrow: breakpoints.narrow)
                     .id(router.destination.page)
             } else if router.destination.page == .storage {
-                StoragePage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
+                StoragePage(model: model, router: router, breakpoints: breakpoints)
                     .id(router.destination.page)
             } else if router.destination.page == .battery {
-                BatteryPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
+                BatteryPage(model: model, router: router, narrow: breakpoints.narrow)
                     .id(router.destination.page)
             } else if router.destination.page == .security {
-                SecurityPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
+                SecurityPage(model: model, router: router, narrow: breakpoints.narrow)
                     .id(router.destination.page)
             } else if router.destination.page == .backups {
-                BackupsPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
+                BackupsPage(model: model, router: router, narrow: breakpoints.narrow)
                     .id(router.destination.page)
             } else if router.destination.page == .system {
-                SystemPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
+                SystemPage(model: model, router: router)
                     .id(router.destination.page)
             } else if router.destination.page == .history {
-                HistoryPage(model: model, router: router, windowWidth: windowWidth) { _ = router.back() }
+                HistoryPage(model: model, router: router, narrow: breakpoints.narrow)
                     .id(router.destination.page)
             }
         }

@@ -38,13 +38,13 @@ MainActor.assumeIsolated {
 
     harnessRender(width: 1094) {
         HarnessSection(label: "A: .installable (button)") {
-            StorageSmartCard(model: installable, windowWidth: 1150)
+            StorageSmartCard(model: installable, breakpoints: PageBreakpoints(width: 1150))
         }
         HarnessSection(label: "B: .installable + smartInstallFailure") {
-            StorageSmartCard(model: installableWithError, windowWidth: 1150)
+            StorageSmartCard(model: installableWithError, breakpoints: PageBreakpoints(width: 1150))
         }
         HarnessSection(label: "C: .needsHomebrew (hint, no button)") {
-            StorageSmartCard(model: needsHomebrew, windowWidth: 1150)
+            StorageSmartCard(model: needsHomebrew, breakpoints: PageBreakpoints(width: 1150))
         }
     }
 }

@@ -315,9 +315,8 @@ enum StoragePageModel {
     // MARK: Layout breakpoints (window width, never a measured child size)
 
     static let wideBreakpoint: CGFloat = 1150
-    static let oneRowNoteBreakpoint: CGFloat = 1000
-    static func splitLeftWidth(window: CGFloat) -> CGFloat { window >= wideBreakpoint ? 240 : 200 }
-    static func kvColumns(window: CGFloat) -> Int { window >= wideBreakpoint ? 3 : 2 }
+    static func splitLeftWidth(wide: Bool) -> CGFloat { wide ? 240 : 200 }
+    static func kvColumns(wide: Bool) -> Int { wide ? 3 : 2 }
 
     // MARK: smartmontools
 

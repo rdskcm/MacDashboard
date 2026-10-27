@@ -46,4 +46,23 @@ struct WidthTierTests {
         #expect(WidthTier.mid.titleBlockWidth == 400)
         #expect(WidthTier.wide.titleBlockWidth == 460)
     }
+
+    /// RESIZE-WIDTH-STATE: page breakpoints are exact (no tier hysteresis) and equal between breakpoints.
+    @Test func pageBreakpointsAreExact() {
+        #expect(PageBreakpoints(width: 999).narrow && !PageBreakpoints(width: 1000).narrow)
+        #expect(!PageBreakpoints(width: 1007).narrow)          // the tier is still .narrow here when widening; pages are not
+        #expect(WidthTier.next(width: 1007, previous: .narrow).isNarrow && !PageBreakpoints(width: 1007).narrow)
+        #expect(!PageBreakpoints(width: 1149).storageWide && PageBreakpoints(width: 1150).storageWide)
+        #expect(PageBreakpoints(width: 1000) == PageBreakpoints(width: 1149))
+        #expect(PageBreakpoints(width: 1150) == PageBreakpoints(width: 1260))
+        #expect(PageBreakpoints(width: 999) != PageBreakpoints(width: 1000))
+        // Launch: the seed tier and the page breakpoint agree at the shared 1000 pt boundary (same first frame as today).
+        #expect(WidthTier.initial(width: 999).isNarrow == PageBreakpoints(width: 999).narrow
+                && WidthTier.initial(width: 1000).isNarrow == PageBreakpoints(width: 1000).narrow)
+    }
+
+    @Test func heroColumnWidthFormula() {
+        #expect(abs(HeroColumnWidth.heroWidth(window: 1150) - 1034 * 0.8 / 2.8) < 0.0001)   // floating point: compare within a tolerance
+        #expect(HeroColumnWidth.heroWidth(window: 800) == 220)
+    }
 }

@@ -89,14 +89,14 @@ extension View {
 struct HomeView: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let windowWidth: CGFloat
+    let width: LiveWindowWidth
     let tier: WidthTier
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HomeScanBannerSlot(model: model)
-                HomeAttentionSlot(model: model, router: router, windowWidth: windowWidth)
+                HomeAttentionSlot(model: model, router: router, width: width)
                 nowSlot
                 HomeSectionsHeader(model: model)
                 HomeSectionsGrid(model: model, router: router, tier: tier)

@@ -10,12 +10,10 @@ import SwiftUI
 struct MemoryPage: View {
     let model: DashboardModel
     let router: NavigationRouter
-    let windowWidth: CGFloat
-    let onBack: () -> Void
+    let narrow: Bool
 
     @State private var pulse: CardID? = nil
 
-    private var narrow: Bool { windowWidth < 1000 }
 
     /// Reads no live model field (only `router.navigationSerial` / `destination`): the bar and the cards do the
     /// reading, so a 2 s tick never re-evaluates the page itself (same rule as `CPUPage`).
@@ -41,7 +39,7 @@ struct MemoryPage: View {
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { MemoryPageBar(model: model, onBack: onBack) }
+            .safeAreaInset(edge: .top, spacing: 0) { MemoryPageBar(model: model, onBack: { _ = router.back() }) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Usage is already on top) and pulse it.
                 let d = router.destination
