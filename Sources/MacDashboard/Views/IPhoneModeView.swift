@@ -135,7 +135,7 @@ struct IPhoneListBanner: View {
             .ds3InsetRims(Capsule(), ring: DS3.hot.opacity(0.4))
         case .restarting:
             HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
+                DS3Spinner(role: .accentInkRing, size: 14)
                 Text(L.iphoneRestartingBanner)
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(DS3.accentInk)

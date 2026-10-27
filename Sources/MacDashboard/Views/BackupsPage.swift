@@ -188,7 +188,7 @@ private struct BackupsProgressBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                ProgressView().controlSize(.small)
+                DS3Spinner(role: .tinted, size: 14)
                 Text(progress.text)
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(DS3.accentInk)
@@ -201,11 +201,12 @@ private struct BackupsProgressBlock: View {
                     .lineLimit(1)
                     .layoutPriority(1)
                 Button { onStop() } label: {
-                    Text(L.bkStop).dsSwapInPlace(stopBusy) { ProgressView().controlSize(.small) }
+                    Text(L.bkStop).dsSwapInPlace(stopBusy) { DS3Spinner(role: .softRing, size: 12) }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(stopBusy || progress.stopping)
                 .accessibilityLabel(L.bkStopA11y)
+                .ds3BusyValue(stopBusy)
                 .accessibilityIdentifier("backups-tm-stop")
             }
             if let f = progress.fraction {

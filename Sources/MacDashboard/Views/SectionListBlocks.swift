@@ -341,11 +341,12 @@ struct SectionConfirmPanel: View {
                             .accessibilityHidden(true)
                     }
                 Button(action: onConfirm) {
-                    Text(confirmTitle).dsSwapInPlace(busy) { ProgressView().controlSize(.small).tint(.white) }
+                    Text(confirmTitle).dsSwapInPlace(busy) { DS3Spinner(role: .onSolid, size: 12) }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: confirmKind, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(busy)
                 .accessibilityLabel(confirmTitle)
+                .ds3BusyValue(busy)
             }
         }
         .padding(.vertical, 14)

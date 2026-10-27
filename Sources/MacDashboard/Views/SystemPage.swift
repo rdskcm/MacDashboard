@@ -258,8 +258,8 @@ struct SystemStartupCard: View {
         DS3Card(title: L.sysStartupTitle, caption: m.startupWait ? nil : m.startupCaption) {
             Button { model.checkStaleStartupItemsNow() } label: {
                 Text(L.sysCheckStale).dsSwapInPlace(m.startupChecking) {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
+                    HStack(spacing: 8) {
+                        DS3Spinner(role: .track, size: 13)
                         Text(L.sysChecking)
                     }
                 }
@@ -268,6 +268,7 @@ struct SystemStartupCard: View {
                                         disabledOpacity: m.startupChecking ? 1 : 0.45))
             .disabled(m.startupChecking || m.startupBusy)
             .accessibilityLabel(L.sysCheckStale)
+            .ds3BusyValue(m.startupChecking)
             .accessibilityIdentifier("system-check-stale")
         } content: {
             if m.startupWait {
@@ -414,12 +415,13 @@ struct SystemStartupCard: View {
                     Button {
                         withAnimation(confirmCurve) { pendingDelete = .one(row) }
                     } label: {
-                        Text(L.sysDelete).dsSwapInPlace(row.deleting) { ProgressView().controlSize(.small) }
+                        Text(L.sysDelete).dsSwapInPlace(row.deleting) { DS3Spinner(role: .track, size: 13) }
                     }
                     .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5,
                                                 disabledOpacity: busy ? 1 : 0.45, dangerOnHover: true))
                     .disabled(busy || m.startupChecking)
                     .accessibilityLabel(row.a11yDelete)
+                    .ds3BusyValue(row.deleting)
                     .accessibilityIdentifier("system-delete-\(row.fileName)")
                 }
                 .transition(sectionRowTransition(reduceMotion: reduceMotion))
@@ -431,8 +433,8 @@ struct SystemStartupCard: View {
                         withAnimation(confirmCurve) { pendingDelete = .all }
                     } label: {
                         Text(L.sysDeleteAll(m.staleRows.count)).dsSwapInPlace(bulk) {
-                            HStack(spacing: 6) {
-                                ProgressView().controlSize(.small)
+                            HStack(spacing: 8) {
+                                DS3Spinner(role: .track, size: 13)
                                 Text(L.sysDeleting)
                             }
                         }
@@ -441,6 +443,7 @@ struct SystemStartupCard: View {
                                                 disabledOpacity: busy ? 1 : 0.45, dangerOnHover: true))
                     .disabled(busy || m.startupChecking)
                     .accessibilityLabel(L.sysDeleteAll(m.staleRows.count))
+                    .ds3BusyValue(bulk)
                     .accessibilityIdentifier("system-delete-all")
                 }
                 .padding(.horizontal, 4)
@@ -470,8 +473,8 @@ struct SystemBrewCard: View {
                 // idle label stays underneath at opacity 0 (`swap-in-place`).
                 Button { showConfirm = true } label: {
                     Text(L.sysBrewUpdate).dsSwapInPlace(updating) {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
+                        HStack(spacing: 8) {
+                            DS3Spinner(role: .track, size: 13)
                             Text(m.brewUpdatingLabel)
                         }
                     }
@@ -479,6 +482,7 @@ struct SystemBrewCard: View {
                 .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, disabledOpacity: 1))
                 .disabled(updating)
                 .accessibilityLabel(updating ? m.brewUpdatingLabel : L.sysBrewUpdate)
+                .ds3BusyValue(updating)
                 .accessibilityIdentifier("system-brew-update")
             }
         } content: {
@@ -551,7 +555,7 @@ struct SystemBrewCard: View {
             : m.brewProgressText
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                ProgressView().controlSize(.small)
+                DS3Spinner(role: .tinted, size: 14)
                 Text(status)
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(DS3.accentInk)
@@ -681,11 +685,12 @@ struct SystemEnergyCard: View {
             Button {
                 withAnimation(confirmCurve) { showConfirm = true }
             } label: {
-                Text(L.sysEnergyApply(m.dirtyCount)).dsSwapInPlace(applying) { ProgressView().controlSize(.small).tint(.white) }
+                Text(L.sysEnergyApply(m.dirtyCount)).dsSwapInPlace(applying) { DS3Spinner(role: .onSolid, size: 12) }
             }
             .buttonStyle(DS3ButtonStyle(kind: .primary, height: 30, hPad: 13, fontSize: 12.5, disabledOpacity: 0.5))
             .disabled(m.dirtyCount == 0 || applying)
             .accessibilityLabel(L.sysEnergyApply(m.dirtyCount))
+            .ds3BusyValue(applying)
             .accessibilityIdentifier("system-energy-apply")
 
             Button {

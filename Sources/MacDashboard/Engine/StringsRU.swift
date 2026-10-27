@@ -1350,6 +1350,7 @@ struct StringsRU: AppStrings {
     var commonChart: String { "График" }
     var commonTable: String { "Таблица" }
     var commonRefreshing: String { "Обновление…" }
+    var commonInProgress: String { "Выполняется" }
     var commonCancel: String { "Отмена" }
     var commonOpenPrivacySettings: String { "Открыть «Конфиденциальность»…" }
     func commonUpdated(_ time: String) -> String { "обновлено \(time)" }

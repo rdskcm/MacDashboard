@@ -137,7 +137,7 @@ struct IPhoneImportCard: View {
         if let p = running {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
+                    DS3Spinner(role: .accentInkRing, size: 14)
                     Text(L.iphoneImportProgress(p))
                         .font(.system(size: 14, weight: .semibold))
                         .monospacedDigit()

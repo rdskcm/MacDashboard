@@ -359,11 +359,12 @@ struct StorageFoldersCard: View {
         case .emptyTrash:
             let busy = dispatch.busy(for: .emptyTrash)
             Button { dispatch.requestEmptyTrash(id: "storage-trash") } label: {
-                Text(L.storageEmptyTrashButton).dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
+                Text(L.storageEmptyTrashButton).dsSwapInPlace(busy) { DS3Spinner(role: .softRing, size: 13) }
             }
             .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5))
             .disabled(busy)
             .accessibilityLabel(L.storageEmptyTrashA11y)
+            .ds3BusyValue(busy)
         case nil:
             EmptyView()
         }
@@ -400,11 +401,12 @@ struct StorageFoldersCard: View {
                             .accessibilityHidden(true)
                     }
                 Button { dispatch.confirmEmptyTrash() } label: {
-                    Text(L.storageConfirmEmpty).dsSwapInPlace(busy) { ProgressView().controlSize(.small).tint(.white) }
+                    Text(L.storageConfirmEmpty).dsSwapInPlace(busy) { DS3Spinner(role: .onSolid, size: 12) }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: .dangerSolid, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(busy)
                 .accessibilityLabel(L.storageConfirmEmpty)
+                .ds3BusyValue(busy)
             }
         }
         .padding(.vertical, 14)
@@ -679,11 +681,12 @@ private struct StorageToolsNote: View {
             let installing = model.smartInstalling
             VStack(alignment: .trailing, spacing: 6) {
                 Button { model.installSmartmontoolsNow() } label: {
-                    Text(L.storageToolsInstall).dsSwapInPlace(installing) { ProgressView().controlSize(.small).tint(.white) }
+                    Text(L.storageToolsInstall).dsSwapInPlace(installing) { DS3Spinner(role: .onSolid, size: 12) }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: .primary, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(installing)
                 .accessibilityLabel(L.storageToolsInstallA11y)
+                .ds3BusyValue(installing)
                 if installing {
                     Text("brew install smartmontools")
                         .font(.system(size: 12.5, design: .monospaced))

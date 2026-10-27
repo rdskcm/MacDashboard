@@ -170,11 +170,12 @@ private struct SettingsSecondaryButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
+            Text(title).dsSwapInPlace(busy) { DS3Spinner(role: .softRing, size: 13) }
         }
         .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 13, fontSize: 13))
         .disabled(busy || disabled)
         .accessibilityLabel(title)
+        .ds3BusyValue(busy)
     }
 }
 

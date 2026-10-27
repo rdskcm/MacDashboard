@@ -166,16 +166,16 @@ struct SectionNote: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             if let button {
-                // Opacity ZStack: the label swaps for a spinner without changing the width (`swap-in-place`).
+                // The label swaps for a spinner without changing the width (`swap-in-place`).
                 Button(action: button.action) {
-                    ZStack {
-                        Text(button.title).opacity(button.busy ? 0 : 1)
-                        ProgressView().controlSize(.small).opacity(button.busy ? 1 : 0)
+                    Text(button.title).dsSwapInPlace(button.busy) {
+                        DS3Spinner(role: primary ? .onSolid : .softRing, size: 12)
                     }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: primary ? .primary : .secondary, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(button.busy || buttonDisabled)
                 .accessibilityLabel(button.a11y)
+                .ds3BusyValue(button.busy)
                 .accessibilityIdentifier(buttonIdentifier ?? "")
             }
         }
@@ -195,7 +195,7 @@ struct SectionWait: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ProgressView().controlSize(.small)
+            DS3Spinner(role: .track, size: 14)
             Text(text)
                 .font(.system(size: 13.5))
                 .foregroundStyle(DS3.muted)

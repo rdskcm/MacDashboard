@@ -1336,6 +1336,7 @@ struct StringsEN: AppStrings {
     var commonChart: String { "Chart" }
     var commonTable: String { "Table" }
     var commonRefreshing: String { "Refreshing…" }
+    var commonInProgress: String { "In progress" }
     var commonCancel: String { "Cancel" }
     var commonOpenPrivacySettings: String { "Open Privacy settings…" }
     func commonUpdated(_ time: String) -> String { "updated \(time)" }

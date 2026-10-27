@@ -208,11 +208,12 @@ private struct ProtectionTile: View {
             if let button = tile.button {
                 Button(action: action) {
                     // Label hidden (kept as the width determinant) and a centred spinner while busy (`swap-in-place`).
-                    Text(buttonTitle(button)).dsSwapInPlace(tile.busy) { ProgressView().controlSize(.small) }
+                    Text(buttonTitle(button)).dsSwapInPlace(tile.busy) { DS3Spinner(role: .onSolid, size: 12) }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: .primary, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(tile.busy)
                 .accessibilityLabel(buttonA11y(button))
+                .ds3BusyValue(tile.busy)
                 .accessibilityIdentifier(buttonIdentifier(button))
                 .padding(.top, 4)
             }
@@ -426,13 +427,14 @@ struct SecurityCrashesCard: View {
                     ForEach(m.crashHiddenRows, id: \.id) { r in
                         SectionRowsRow(name: r.name, sub: r.sub) {
                             Button { model.unhideCrashGroup(r.id) } label: {
-                                Text(L.secCrashUnhide).dsSwapInPlace(r.working) { ProgressView().controlSize(.small) }
+                                Text(L.secCrashUnhide).dsSwapInPlace(r.working) { DS3Spinner(role: .track, size: 13) }
                             }
                             .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5,
                                                         disabledOpacity: r.working ? 1 : 0.45))
                             .disabled(m.crashActionsDisabled)
                             .help(r.a11y)
                             .accessibilityLabel(r.a11y)
+                            .ds3BusyValue(r.working)
                             .accessibilityIdentifier("security-crash-unhide-\(r.id)")
                         }
                     }
@@ -494,13 +496,14 @@ private struct CrashRow: View {
                               action: @escaping () -> Void) -> some View {
         let busy = row.working == kind
         return Button(action: action) {
-            Text(title).dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
+            Text(title).dsSwapInPlace(busy) { DS3Spinner(role: .track, size: 13) }
         }
         .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5,
                                     disabledOpacity: busy ? 1 : 0.45, dangerOnHover: danger))
         .disabled(disabled)
         .help(a11y)
         .accessibilityLabel(a11y)
+        .ds3BusyValue(busy)
         .accessibilityIdentifier(identifier)
     }
 }

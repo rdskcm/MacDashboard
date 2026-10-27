@@ -51,6 +51,7 @@ struct CommonStringsTests {
             (en.commonChart, "Chart", ru.commonChart, "График"),
             (en.commonTable, "Table", ru.commonTable, "Таблица"),
             (en.commonRefreshing, "Refreshing…", ru.commonRefreshing, "Обновление…"),
+            (en.commonInProgress, "In progress", ru.commonInProgress, "Выполняется"),
             (en.commonCancel, "Cancel", ru.commonCancel, "Отмена"),
             (en.commonOpenPrivacySettings, "Open Privacy settings…", ru.commonOpenPrivacySettings, "Открыть «Конфиденциальность»…"),
             (en.commonUpdated("14:02"), "updated 14:02", ru.commonUpdated("14:02"), "обновлено 14:02"),
@@ -58,7 +59,7 @@ struct CommonStringsTests {
             (en.commonCritical, "Critical", ru.commonCritical, "Критично"),
             (en.commonLastData("10:29:52"), "last data — 10:29:52", ru.commonLastData("10:29:52"), "последние данные — 10:29:52"),
         ]
-        #expect(rows.count == 49, "49 common rows")
+        #expect(rows.count == 50, "50 common rows")
         for r in rows {
             #expect(r.gotEN == r.wantEN, "\(r.wantEN)")
             #expect(r.gotRU == r.wantRU, "\(r.wantEN)")

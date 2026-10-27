@@ -1246,6 +1246,7 @@ protocol AppStrings {
     var commonChart: String { get }
     var commonTable: String { get }
     var commonRefreshing: String { get }
+    var commonInProgress: String { get }
     var commonCancel: String { get }
     var commonOpenPrivacySettings: String { get }
     func commonUpdated(_ time: String) -> String

@@ -492,18 +492,29 @@ private struct ProcessDetailView: View {
     private var actionRow: some View {
         HStack(spacing: 8) {
             Button { quit(SIGTERM) } label: {
+                // Not `dsSwapInPlace`: «Quitting…» is wider than «Quit». A hidden copy of the busy
+                // row sets the width in both states (`swap-in-place`); the spinner itself is mounted
+                // only while quitting, so no animation or "In progress" element exists when idle.
                 ZStack {
                     HStack(spacing: 6) {
-                        ProgressView().controlSize(.mini)
+                        Color.clear.frame(width: 13, height: 13)
                         Text(L.processQuitting)
                     }
-                    .opacity(quitting ? 1 : 0)
-                    Text(L.processQuit).opacity(quitting ? 0 : 1)
+                    .hidden()
+                    if quitting {
+                        HStack(spacing: 6) {
+                            DS3Spinner(role: .track, size: 13)
+                            Text(L.processQuitting)
+                        }
+                    } else {
+                        Text(L.processQuit)
+                    }
                 }
             }
             .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
             .disabled(quitting)
             .accessibilityLabel(quitting ? L.processQuitting : L.processTerminateA11y(row.name))
+            .ds3BusyValue(quitting)
 
             Button(L.processForceQuit) { showForceQuitConfirm = true }
                 .buttonStyle(DS3ButtonStyle(kind: .danger, height: 30, hPad: 13, fontSize: 12.5))
@@ -570,7 +581,7 @@ private struct ProcessDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             if loading {
                 HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
+                    DS3Spinner(role: .track, size: 13)
                     Text(L.processLoadingDetails).font(.system(size: 12.5)).foregroundStyle(DS3.muted)
                 }
             } else {
