@@ -593,7 +593,7 @@ struct IPhoneMessagePanel: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if tone == .loading { ProgressView().controlSize(.small) }
+            if tone == .loading { DS3Spinner(role: .softRing, size: 14) }
             Text(text)
                 .font(.system(size: 14))
                 .foregroundStyle(tone == .error ? DS3.hotInk : DS3.inkSoft)

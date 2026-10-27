@@ -65,7 +65,7 @@ private struct IPhoneActionsRow: View {
                 .clipped()
                 .dsSwapInPlace(restarting) {
                     HStack(spacing: 8) {
-                        ProgressView().controlSize(.small).accessibilityLabel(L.iphoneRestartBusy)
+                        DS3Spinner(role: .softRing, size: 13, accessibilityLabel: L.iphoneRestartBusy)
                         if !compact { Text(L.iphoneRestartingShort) }
                     }
                 }
@@ -75,6 +75,7 @@ private struct IPhoneActionsRow: View {
         .help(L.iphoneRestartService)
         .disabled(disabled)
         .accessibilityLabel(L.iphoneRestartService)
+        .ds3BusyValue(restarting)
         .popover(isPresented: $confirmingRestart, arrowEdge: .bottom) {
             IPhoneRestartConfirm(
                 onCancel: { confirmingRestart = false },

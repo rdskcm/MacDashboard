@@ -1084,6 +1084,53 @@ extension SerialTests {
                         }
                     }
                 }
+                run.snap("content-spinner-roles", mode, width: 460) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        HarnessSection(label: "Spinner: primary 30 (.onSolid 12) · header primary 34 (.onSolidRing 13)") {
+                            HStack(spacing: 12) {
+                                Button {} label: { Text("Apply 3 changes").dsSwapInPlace(true) { DS3Spinner(role: .onSolid, size: 12) } }
+                                    .buttonStyle(DS3ButtonStyle(kind: .primary, height: 30, hPad: 13, fontSize: 12.5))
+                                Button {} label: { Text("Refresh report").dsSwapInPlace(true) { DS3Spinner(role: .onSolidRing, size: 13) } }
+                                    .buttonStyle(DS3ButtonStyle(kind: .primary, height: 34, hPad: 16))
+                            }
+                        }
+                        HarnessSection(label: "Spinner: secondary 30 (.softRing 12) · secondary 28 (.softRing 13) · card 32 (.track 13 + label)") {
+                            HStack(spacing: 12) {
+                                Button {} label: { Text("Stop").dsSwapInPlace(true) { DS3Spinner(role: .softRing, size: 12) } }
+                                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
+                                Button {} label: { Text("Relaunch now").dsSwapInPlace(true) { DS3Spinner(role: .softRing, size: 13) } }
+                                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 13, fontSize: 13))
+                                Button {} label: {
+                                    Text("Check for stale").dsSwapInPlace(true) {
+                                        HStack(spacing: 8) { DS3Spinner(role: .track, size: 13); Text("Checking…") }
+                                    }
+                                }
+                                .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, disabledOpacity: 1))
+                            }
+                        }
+                        HarnessSection(label: "Spinner: wait (.track 14) · info panel (.tinted 14)") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                SectionWait(text: "Collecting data…")
+                                HStack(spacing: 12) {
+                                    DS3Spinner(role: .tinted, size: 14)
+                                    Text("Updating 3 packages…").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(DS3.accentInk)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.vertical, 12).padding(.horizontal, 14)
+                                .ds3TintPanel(DS3.accent, from: 0.16, to: 0.06, ring: 0.42, cornerRadius: 20)
+                            }
+                        }
+                        HarnessSection(label: "Spinner rings: .accentRing 14 / 13 · .accentInkRing 14 · .softRing 14 · .mutedRing 20") {
+                            HStack(spacing: 16) {
+                                DS3Spinner(role: .accentRing, size: 14)
+                                DS3Spinner(role: .accentRing, size: 13)
+                                DS3Spinner(role: .accentInkRing, size: 14)
+                                DS3Spinner(role: .softRing, size: 14)
+                                DS3Spinner(role: .mutedRing, size: 20)
+                            }
+                        }
+                    }
+                }
                 // Settings states: the window frame (680 x 420) is owned by the test, not by SettingsView.
                 func settingsState(_ name: String, _ section: SettingsSection, _ model: DashboardModel, launch: AppLanguage = .en,
                                    iphone: IPhoneModel? = nil) {

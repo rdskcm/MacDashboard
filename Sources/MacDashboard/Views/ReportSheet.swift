@@ -118,7 +118,7 @@ struct ReportSheetState: Equatable {
 
     private var generatingCaption: some View {
         HStack(spacing: 7) {
-            ProgressView().controlSize(.small)
+            DS3Spinner(role: .accentRing, size: 13)
             Text(L.reportCollecting)
                 .font(.system(size: 13))
                 .foregroundStyle(DS3.muted)

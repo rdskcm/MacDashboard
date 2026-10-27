@@ -422,11 +422,12 @@ private struct MacActionsRow: View {
                 .overlay { Text(L.commonRefreshReport).frame(width: longW).opacity(compact ? 0 : 1) }
                 .overlay { Text(L.commonRefresh).frame(width: shortW).opacity(compact ? 1 : 0) }
                 .clipped()
-                .dsSwapInPlace(busy) { ProgressView().controlSize(.small).tint(.white) }
+                .dsSwapInPlace(busy) { DS3Spinner(role: .onSolidRing, size: 13) }
         }
         .buttonStyle(DS3ButtonStyle(kind: .primary, height: 34, hPad: 16, disabledOpacity: 0.5))
         .disabled(busy)
         .accessibilityLabel(busy ? L.commonRefreshing : L.commonRefreshReport)
+        .ds3BusyValue(busy)
         .accessibilityIdentifier("main-refresh")
         .layoutPriority(2)
     }

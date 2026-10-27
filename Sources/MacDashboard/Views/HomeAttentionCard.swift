@@ -344,11 +344,12 @@ private struct HomeTaskRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if let verb = task.verb {
                 Button(action: runVerb) {
-                    Text(verb).dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
+                    Text(verb).dsSwapInPlace(busy) { DS3Spinner(role: .softRing, size: 12) }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
                 .disabled(busy)
                 .accessibilityLabel("\(verb) — \(task.object)")
+                .ds3BusyValue(busy)
                 .layoutPriority(1)
             }
             Image(systemName: "chevron.right")
@@ -448,7 +449,7 @@ struct HomeFirstScanCard: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                ProgressView().controlSize(.small)
+                DS3Spinner(role: .accentRing, size: 14)
                 Text(L.homeFirstScanTitle).font(.system(size: 14, weight: .semibold))
                 Text(L.homeFirstScanCaption)
                     .font(.system(size: 13))

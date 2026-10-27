@@ -611,7 +611,7 @@ struct SectionStateView: View {
                 .foregroundStyle(DS.muted)
         } else {
             HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
+                DS3Spinner(role: .track, size: 13)
                 Text(L.sharedCollectingData)
                     .font(.callout)
                     .foregroundStyle(DS.muted)
@@ -1086,34 +1086,6 @@ extension View {
     }
 }
 
-/// 11×11pt circular loading spinner (spec §2.7) — a `DS.lineStrong` base ring
-/// with a `DS.accent`-colored quarter-turn arc at the top, continuously
-/// rotating (360°/0.8 s, linear). Reduce Motion: mirrors `RainbowBorder`'s
-/// continuous-rotation contract (see above) — the ring stays static, no spin.
-struct DSSpinner: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var rotation: Double = 0
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(DS.lineStrong, lineWidth: 1.6)
-            Circle()
-                .trim(from: 0, to: 0.25)
-                .stroke(DS.accent, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-        }
-        .frame(width: 11, height: 11)
-        .rotationEffect(.degrees(rotation))
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
-                rotation = 360
-            }
-        }
-    }
-}
-
 /// Size variants for `RainbowCapsuleButton`, matching the prototype's four
 /// capsule sizes (C1/C4/C5/C6): `(font, horizontal padding, vertical padding)`.
 enum DSCapsuleSize {
@@ -1168,7 +1140,7 @@ struct RainbowCapsuleButton: View {
             Text(title).font(size.font)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .dsSwapInPlace(busy) { ProgressView().controlSize(.small) }
+                .dsSwapInPlace(busy) { DS3Spinner(role: .softRing, size: 12) }
                 .padding(.horizontal, size.hPad)
                 .padding(.vertical, size.vPad)
                 .background(Capsule().fill(DS.glass3))
@@ -1178,6 +1150,7 @@ struct RainbowCapsuleButton: View {
         .buttonStyle(.plain)
         .disabled(busy)
         .accessibilityLabel(title)
+        .ds3BusyValue(busy)
         .pointingHandOnHover(isEnabled: !busy, hovering: $hovering)
     }
 }
