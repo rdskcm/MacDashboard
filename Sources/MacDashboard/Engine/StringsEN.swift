@@ -80,7 +80,6 @@ struct StringsEN: AppStrings {
 
     func headerLoadChip(_ load: String, _ ncpu: Int) -> String { "load \(load) · \(ncpu) cores" }
     func headerUptimeChip(_ uptime: String) -> String { "uptime \(uptime)" }
-    var headerRefreshReport: String { "Refresh report" }
     var headerStatusNeedsAttention: String { "Needs attention" }
 
     // MARK: KPI tiles
@@ -199,7 +198,6 @@ struct StringsEN: AppStrings {
     func memUpdatesEvery(_ seconds: Int) -> String { "updates every \(seconds) s" }
     var memFailTimedOut: String { "Couldn’t read memory statistics: no response within 5 s." }
     var memFailNoReading: String { "Couldn’t read memory statistics: the system returned no data." }
-    var memTryAgainA11y: String { "Read the memory statistics again" }
     var memCompViewA11y: String { "Composition view" }
     // REDESIGN-STORAGE
     var groupingSeparator: String { "," }
@@ -255,7 +253,6 @@ struct StringsEN: AppStrings {
     func storageFDANoteMore(_ names: String, _ n: Int) -> String { "Not shown here: \(names) and \(n) more — MacDashboard doesn’t have Full Disk Access." }
     var storageFDAButtonA11y: String { "Open Full Disk Access in Privacy & Security settings" }
     var storageSmartCardTitle: String { "Disks (SMART)" }
-    var storageSmartRefreshA11y: String { "Read SMART data again" }
     var storageSubInternalOK: String { "INTERNAL · OK" }
     var storageSubExternalOK: String { "EXTERNAL · OK" }
     var storageSubInternalNoData: String { "INTERNAL · no data" }
@@ -309,7 +306,7 @@ struct StringsEN: AppStrings {
     var cpuSubCollecting: String { "collecting data…" }
     var cpuFailTimedOut: String { "Couldn’t read CPU counters: no response within 5 s." }
     var cpuFailNoReading: String { "Couldn’t read CPU counters: the system returned no data." }
-    var cpuTryAgainA11y: String { "Read the CPU counters again" }
+    var readRetriesAutomatically: String { "The app keeps trying automatically." }
     var procsTopByCPU: String { "top by CPU" }
     var procsTopByMemory: String { "top by memory" }
     func procsCount(_ n: Int) -> String { n == 1 ? "1 process" : "\(n) processes" }
@@ -525,7 +522,6 @@ struct StringsEN: AppStrings {
     var batFailTimedOut: String { "Couldn’t read battery data: ioreg didn’t respond within 5 s." }
     var batFailNoReading: String { "Couldn’t read battery data: ioreg reported no battery." }
     var batFailShowingSaved: String { "Showing the last saved values." }
-    var batTryAgainA11y: String { "Read the battery data again" }
     var batHealthNote: String { "maximum vs design" }
     var batWornNote: String { "Capacity is below 80%: the battery is nearing the service threshold. Replace it at an Apple service provider." }
     func batServiceNote(_ parts: [String]) -> String { "macOS recommends service" + (parts.isEmpty ? "" : ": " + parts.joined(separator: " and ")) + ". Runtime may be shorter and the Mac may shut down unexpectedly. Replace it at an Apple service provider." }

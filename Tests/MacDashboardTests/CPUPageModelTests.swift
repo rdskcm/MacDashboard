@@ -153,7 +153,7 @@ extension SerialTests {
                 #expect(m.tag == .failed && m.tagText == "Read error" && m.subIsFailure)
                 #expect(m.caption == "last data — \(hms)")
                 #expect(m.sub == "Apple M3 · last data — \(hms)")
-                #expect(m.failureNote == "Couldn’t read CPU counters: no response within 5 s.")
+                #expect(m.failureNote == "Couldn’t read CPU counters: no response within 5 s. The app keeps trying automatically.")
                 #expect(m.hero.value == "—" && m.hero.note == "No current reading" && m.hero.dimmed && !m.hero.high)
                 #expect(m.tiles.map(\.value) == ["—", "—", "—"] && m.tiles.allSatisfy { $0.dimmed && $0.note == nil && $0.dot == nil })
                 #expect(!m.showsWait)
@@ -178,7 +178,11 @@ extension SerialTests {
                 #expect(m.phase == .failed(.noReading, lastGoodAt: nil))
                 #expect(m.sub == "Apple M3 · 8 cores")
                 #expect(m.caption == "live snapshot")
-                #expect(m.failureNote == "Couldn’t read CPU counters: the system returned no data.")
+                #expect(m.failureNote == "Couldn’t read CPU counters: the system returned no data. The app keeps trying automatically.")
+            }
+            withLanguage(.ru) {
+                let m = CPUPageModel.make(cpuInput(cpu: nil, block: .failed(.noReading, lastGoodAt: nil)))
+                #expect(m.failureNote == "Не удалось прочитать счётчики CPU: система не вернула данных. Приложение повторяет попытки автоматически.")
             }
         }
 

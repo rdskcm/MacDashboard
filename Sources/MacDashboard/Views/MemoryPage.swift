@@ -99,8 +99,7 @@ struct MemoryUsageCard: View {
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     if let note = m.failureNote {
-                        SectionNote(tone: DS3.hot, text: note,
-                                    button: (L.commonTryAgain, L.memTryAgainA11y, model.memoryRefreshing, { model.refreshMemoryNow() }))
+                        SectionNote(tone: DS3.hot, text: note)
                     }
                     HeroSplitLayout {
                         SectionHero(label: L.memUsed, value: m.heroValue, fraction: m.heroFraction, note: m.heroNote,

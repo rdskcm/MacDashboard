@@ -72,8 +72,7 @@ final class DashboardModel {
     private var tmRefreshing = false
 
     /// Re-entrancy guard for `refreshSmartNow()` (SPEC Block H follow-up): true while a
-    /// manual SMART refresh is in flight, so the card's «Обновить» button can disable
-    /// itself and avoid overlapping ReportCollector instances.
+    /// SMART re-check is in flight, so two ReportCollector instances never overlap.
     var smartRefreshing = false
 
     /// Re-entrancy guard for `refreshEnergyNow()` (SPEC Block K), true while a
@@ -85,12 +84,6 @@ final class DashboardModel {
     /// Re-entrancy guard for `refreshProcessesNow()`, true while a manual process-list
     /// refresh is in flight — mirrors `smartRefreshing`.
     var processesRefreshing = false
-
-    /// True while refreshCPUNow() runs (CPU page «Try again»).
-    private(set) var cpuRefreshing = false
-
-    /// REDESIGN-MEMORY: Memory page Refresh / Try again in flight.
-    private(set) var memoryRefreshing = false
 
     /// Re-entrancy guard for `upgradeBrewNow()`, true while an in-app `brew upgrade`
     /// is in flight — mirrors `smartRefreshing`.
@@ -1050,10 +1043,10 @@ final class DashboardModel {
         }
     }
 
-    /// Manual, on-demand SMART re-check (SPEC Block H follow-up), triggered by the
-    /// «Обновить» button on the Диски card. Independent of the periodic smartTask
-    /// sampler — a fresh ReportCollector instance is created per call, never shared
-    /// with a concurrent sampler pass (see the fastBox/procBox/smartBox comment above).
+    /// On-demand SMART re-check, run by `installSmartmontoolsNow()` right after smartmontools is installed (the
+    /// Диски card's «Обновить» button was removed in REFRESH-BUTTONS-AUDIT: the 300 s smartTask re-reads the same
+    /// data). Independent of the periodic smartTask sampler — a fresh ReportCollector instance is created per call,
+    /// never shared with a concurrent sampler pass (see the fastBox/procBox/smartBox comment above).
     func refreshSmartNow() {
         guard !smartRefreshing else { return }
         smartRefreshing = true
@@ -1143,35 +1136,6 @@ final class DashboardModel {
 
     /// Visual fixture only (REDESIGN-SYSTEM): the Energy card's apply state.
     func applyFixtureEnergyApply(_ s: EnergyApplyState) { energyApply = s }
-
-    /// REDESIGN-CPU: CPU page «Try again» (the page-bar Refresh button was removed in CPU-REFRESH-REMOVE). One user-initiated sample on a fresh LiveCollector
-    /// (its own 0.5 s delta window, independent of the fast loop's baseline) plus a process re-sample.
-    func refreshCPUNow() {
-        guard !cpuRefreshing else { return }
-        cpuRefreshing = true
-        beginBlock(.cpu, showsLoading: true)
-        refreshProcessesNow()
-        Task { [weak self] in
-            let (snap, soc): (LiveSnapshot, Int?) = await withCheckedContinuation { c in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    let collector = LiveCollector()
-                    _ = collector.collectFast()
-                    Thread.sleep(forTimeInterval: 0.5)
-                    let s = collector.collectFast()
-                    let t = ThermalSensors.socTemperature(from: ThermalHIDReader.readTemperatureSensors())
-                    c.resume(returning: (s, t.map { Int($0.rounded()) }))
-                }
-            }
-            guard let self else { return }
-            defer { self.cpuRefreshing = false }
-            guard let cpu = snap.cpu else { self.failBlock(.cpu, .noReading); return }
-            if self.cpu != cpu { self.cpu = cpu }
-            if self.load != snap.load { self.load = snap.load }
-            if self.socTempC != soc { self.socTempC = soc }
-            self.recordCPUSample(cpu, at: snap.t)
-            self.succeedBlock(.cpu)
-        }
-    }
 
     /// REDESIGN-BACKUPS: Time Machine destination + local snapshots now (after a backup ends; after Stop).
     func refreshTimeMachineNow() {
@@ -1383,42 +1347,14 @@ final class DashboardModel {
         AdviceActionRunner.openPane(AdvicePanes.fullDiskAccess)
     }
 
-    /// REDESIGN-MEMORY: Memory page Refresh / Try again. One native memory + swap + pressure read off the
-    /// main actor plus a process re-sample. `showsLoading: false` (D4): the read takes milliseconds, so a
-    /// loading phase would only flash; the button's «Refreshing…» is the feedback.
-    func refreshMemoryNow() {
-        guard !memoryRefreshing else { return }
-        memoryRefreshing = true
-        beginBlock(.memory)
-        refreshProcessesNow()
-        Task { [weak self] in
-            let (snap, pressure): (LiveSnapshot, MemoryPressureLevel?) = await withCheckedContinuation { c in
-                DispatchQueue.global(qos: .userInitiated).async {
-                    c.resume(returning: (LiveCollector().collectFast(), LiveCollector.readMemoryPressure()))
-                }
-            }
-            guard let self else { return }
-            defer { self.memoryRefreshing = false }
-            guard let mem = snap.mem else { self.failBlock(.memory, .noReading); return }
-            if self.mem != mem { self.mem = mem }
-            if self.swap != snap.swap { self.swap = snap.swap }
-            if self.memPressure != pressure { self.memPressure = pressure }
-            self.succeedBlock(.memory)
-        }
-    }
-
     /// REDESIGN-BATTERY: one ioreg read for the Battery page (the page's `.task` calls it every
-    /// `BatteryPageModel.refreshSeconds`; «Try again» calls it with `showsLoading: true`). Awaits the read, so a
-    /// loop never overlaps itself. A call while a read is in flight only re-arms the block (same shape as
-    /// `retryFolderCount`): the Wait and a fresh 5 s watchdog come back, the running read's result still lands.
-    func readBatteryNow(showsLoading: Bool) async {
-        if batteryReading {
-            if showsLoading { beginBlock(.battery, showsLoading: true) }
-            return
-        }
+    /// `BatteryPageModel.refreshSeconds`). Awaits the read, so the loop never overlaps itself; a call that arrives
+    /// while an earlier read is still in flight (the page re-mounted before it returned) returns at once.
+    func readBatteryNow() async {
+        guard !batteryReading else { return }
         batteryReading = true
         defer { batteryReading = false }
-        beginBlock(.battery, showsLoading: showsLoading)
+        beginBlock(.battery)
         let result = await BatteryInspector.read()
         switch result {
         case .detail(let d):
@@ -1432,7 +1368,7 @@ final class DashboardModel {
     }
 
     /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up).
-    /// Its callers are `refreshCPUNow()`, `refreshMemoryNow()` and the Processes card's Quit flow (REDESIGN-CPU);
+    /// Its caller is the Processes card's Quit flow (REDESIGN-CPU); the CPU and Memory «Try again» callers were removed in REFRESH-BUTTONS-AUDIT, and
     /// the «Применить» button of the retired process-limit setting was removed in
     /// REDESIGN-FOUNDATION. One-shot, independent of the periodic slowTask sampler — a fresh
     /// LiveCollector instance is created per call, never shared with a concurrent

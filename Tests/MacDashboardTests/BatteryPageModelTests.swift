@@ -187,7 +187,7 @@ extension SerialTests {
                 let hh = CPUPageModel.hhmmss(t0)
                 #expect(m.phase == .failed(.timedOut, lastGoodAt: t0))
                 #expect(m.nowCaption == L.commonLastData(hh))
-                #expect(m.failureNote == L.batFailTimedOut + " " + L.batFailShowingSaved)
+                #expect(m.failureNote == L.batFailTimedOut + " " + L.batFailShowingSaved + " " + L.readRetriesAutomatically)
                 #expect(m.nowHero == nil)
                 #expect(m.nowColumns == 4)
                 #expect(m.nowTiles.allSatisfy { $0.value == "—" })
@@ -203,7 +203,7 @@ extension SerialTests {
         @Test func failedWithoutSaved() {
             withLanguage(.en) {
                 let m = BatteryPageModel.make(batInput(detail: nil, block: .failed(.noReading, lastGoodAt: nil)))
-                #expect(m.failureNote == L.batFailNoReading)
+                #expect(m.failureNote == L.batFailNoReading + " " + L.readRetriesAutomatically)
                 #expect(!m.showsDetailCards)
                 #expect(m.nowCaption == nil)
                 #expect(m.sub == "internal")

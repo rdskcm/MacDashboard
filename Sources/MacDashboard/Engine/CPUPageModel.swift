@@ -109,10 +109,8 @@ struct CPUPageModel: Equatable {
             } else {
                 sub = chipPrefix + L.homeCoresOnly(i.ncpu)
             }
-            switch f {
-            case .timedOut: failureNote = L.cpuFailTimedOut
-            case .noReading: failureNote = L.cpuFailNoReading
-            }
+            let reason = f == .timedOut ? L.cpuFailTimedOut : L.cpuFailNoReading
+            failureNote = reason + " " + L.readRetriesAutomatically
         }
 
         let hero: CPUHeroModel

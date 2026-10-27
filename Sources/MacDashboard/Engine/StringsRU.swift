@@ -82,7 +82,6 @@ struct StringsRU: AppStrings {
         "load \(load) · \(ncpu) \(ruPlural(ncpu, "ядро", "ядра", "ядер"))"
     }
     func headerUptimeChip(_ uptime: String) -> String { "аптайм \(uptime)" }
-    var headerRefreshReport: String { "Обновить отчёт" }
     var headerStatusNeedsAttention: String { "Требует внимания" }
 
     // MARK: KPI tiles
@@ -201,7 +200,6 @@ struct StringsRU: AppStrings {
     func memUpdatesEvery(_ seconds: Int) -> String { "обновляется каждые \(seconds) с" }
     var memFailTimedOut: String { "Не удалось прочитать статистику памяти: нет ответа за 5 с." }
     var memFailNoReading: String { "Не удалось прочитать статистику памяти: система не вернула данных." }
-    var memTryAgainA11y: String { "Повторить чтение статистики памяти" }
     var memCompViewA11y: String { "Вид состава памяти" }
     // REDESIGN-STORAGE
     var groupingSeparator: String { "\u{2009}" }
@@ -257,7 +255,6 @@ struct StringsRU: AppStrings {
     func storageFDANoteMore(_ names: String, _ n: Int) -> String { "Здесь не показаны: \(names) и ещё \(n) — у приложения нет полного доступа к диску." }
     var storageFDAButtonA11y: String { "Открыть «Полный доступ к диску» в настройках конфиденциальности" }
     var storageSmartCardTitle: String { "Диски (SMART)" }
-    var storageSmartRefreshA11y: String { "Прочитать данные SMART заново" }
     var storageSubInternalOK: String { "ВНУТРЕННИЙ · в норме" }
     var storageSubExternalOK: String { "ВНЕШНИЙ · в норме" }
     var storageSubInternalNoData: String { "ВНУТРЕННИЙ · нет данных" }
@@ -311,7 +308,7 @@ struct StringsRU: AppStrings {
     var cpuSubCollecting: String { "сбор данных…" }
     var cpuFailTimedOut: String { "Не удалось прочитать счётчики CPU: нет ответа за 5 с." }
     var cpuFailNoReading: String { "Не удалось прочитать счётчики CPU: система не вернула данных." }
-    var cpuTryAgainA11y: String { "Повторить чтение счётчиков CPU" }
+    var readRetriesAutomatically: String { "Приложение повторяет попытки автоматически." }
     var procsTopByCPU: String { "топ по CPU" }
     var procsTopByMemory: String { "топ по памяти" }
     func procsCount(_ n: Int) -> String { "\(n) " + ruPlural(n, "процесс", "процесса", "процессов") }
@@ -533,7 +530,6 @@ struct StringsRU: AppStrings {
     var batFailTimedOut: String { "Не удалось прочитать данные батареи: ioreg не ответил за 5 с." }
     var batFailNoReading: String { "Не удалось прочитать данные батареи: ioreg не нашёл батарею." }
     var batFailShowingSaved: String { "Показаны последние сохранённые значения." }
-    var batTryAgainA11y: String { "Повторить чтение данных батареи" }
     var batHealthNote: String { "максимальная от проектной" }
     var batWornNote: String { "Ёмкость ниже 80 %: батарея приближается к сервисному порогу. Замена — в сервисе Apple." }
     func batServiceNote(_ parts: [String]) -> String { "macOS рекомендует обслуживание" + (parts.isEmpty ? "" : ": " + parts.joined(separator: ", ")) + ". Mac может работать от батареи меньше или внезапно выключаться. Замена — в сервисе Apple." }

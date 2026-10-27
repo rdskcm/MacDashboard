@@ -286,7 +286,6 @@ enum Assess {
         }
 
         // --- disk-space tips (home / caches) ---
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
         if let dirs = report.homeDirs {
             for d in dirs {
                 let name = (d.path as NSString).lastPathComponent
