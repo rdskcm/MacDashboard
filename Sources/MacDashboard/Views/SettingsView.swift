@@ -228,10 +228,9 @@ struct SettingsView: View {
     @State private var relaunchRowShown: Bool
     @State private var relaunching = false
     @State private var bannerShown: Bool
-    @State private var loginStatus: LoginItem.Status = VisualFixture.isRequested ? .enabled : LoginItem.status()
-    /// REDESIGN-NOTIFY (R8): system authorization; fixture renders `fixtureStatus` or authorized without touching the system.
-    @State private var notifyAuth: NotificationAuthorization =
-        VisualFixture.isRequested ? (NotificationCenterClient.fixtureStatus ?? .authorized) : .notDetermined
+    @State private var loginStatus: LoginItem.Status = LoginItem.status()
+    /// REDESIGN-NOTIFY (R8): system authorization; the fixture status comes from the client, never from the view.
+    @State private var notifyAuth: NotificationAuthorization = NotificationCenterClient.fixtureStatus ?? .notDetermined
     @State private var loginError: String?
 
     /// The chosen (or default) log file is not there: red path, red sidebar dot.
@@ -260,11 +259,10 @@ struct SettingsView: View {
     }
 
     private func refreshLoginStatus() {
-        if !VisualFixture.isRequested { loginStatus = LoginItem.status() }
+        loginStatus = LoginItem.status()
     }
 
     private func refreshNotifyStatus() {
-        guard !VisualFixture.isRequested else { return }
         NotificationCenterClient.shared.status { s in withAnimation(rowAnim) { notifyAuth = s } }
     }
 
@@ -380,7 +378,7 @@ struct SettingsView: View {
                     options: LanguageChoice.allCases,
                     // AppleLanguages first: `Locale.preferredLanguages` includes the app-domain override, and `choice`'s didSet
                     // resolves `.system` against it (a stale explicit "ru" there would keep the app Russian).
-                    selection: Binding(get: { store.choice }, set: { syncAppleLanguages(for: $0); store.choice = $0 }),
+                    selection: Binding(get: { store.choice }, set: { AppLifecycle.syncAppleLanguages(for: $0); store.choice = $0 }),
                     size: .settingsRow,
                     groupLabel: L.settingsLanguageLabel
                 ) { c in
@@ -402,7 +400,7 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         SettingsSecondaryButton(title: L.settingsRelaunchNow, busy: relaunching) {
                             relaunching = true
-                            relaunchApp()
+                            AppLifecycle.relaunch()
                         }
                         .fixedSize()
                     }
@@ -454,7 +452,6 @@ struct SettingsView: View {
         Binding(
             get: { loginStatus == .enabled },
             set: { on in
-                if VisualFixture.isRequested { loginStatus = on ? .enabled : .disabled; return }
                 do { try LoginItem.setEnabled(on); loginError = nil } catch { loginError = error.localizedDescription }
                 loginStatus = LoginItem.status()
                 if loginStatus == .requiresApproval { LoginItem.openLoginItemsSettings() }
@@ -530,7 +527,7 @@ struct SettingsView: View {
             get: { settings.notifyEnabled.contains(c) },
             set: { on in
                 if on { settings.notifyEnabled.insert(c) } else { settings.notifyEnabled.remove(c) }
-                if on, notifyAuth == .notDetermined, !VisualFixture.isRequested {
+                if on, notifyAuth == .notDetermined {
                     NotificationCenterClient.shared.requestAuthorization { _ in refreshNotifyStatus() }
                 }
             }
@@ -690,29 +687,5 @@ struct SettingsView: View {
                 action: { AdviceActionRunner.reveal(AppInfo.supportFolderURL.path) }
             )
         }
-    }
-
-    /// Same write as `MacDashboardApp.syncAppleLanguages()` (duplicated rather
-    /// than shared across files: that one is file-private by design, and Engine
-    /// must stay free of AppleLanguages writes since the tests cover Engine too).
-    private func syncAppleLanguages(for choice: LanguageChoice) {
-        switch choice {
-        case .system:
-            if UserDefaults.standard.object(forKey: "AppleLanguages") != nil {
-                UserDefaults.standard.removeObject(forKey: "AppleLanguages")
-            }
-        case .en, .ru:
-            let want = [choice.rawValue]
-            if UserDefaults.standard.stringArray(forKey: "AppleLanguages") != want {
-                UserDefaults.standard.set(want, forKey: "AppleLanguages")
-            }
-        }
-    }
-
-    private func relaunchApp() {
-        let cfg = NSWorkspace.OpenConfiguration()
-        cfg.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: cfg) { _, _ in }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
     }
 }

@@ -20,7 +20,7 @@ struct ReportSheetState: Equatable {
         else if case .failed(let f, _) = HomeModel.scan(model.blockState(.scan)) { phase = .failed(f) }
         else { phase = .ready }
         return ReportSheetState(phase: phase, text: model.reportText, updatedAt: model.reportUpdatedAt,
-                                now: model.fixtureNow ?? Date())
+                                now: model.now())
     }
 }
 

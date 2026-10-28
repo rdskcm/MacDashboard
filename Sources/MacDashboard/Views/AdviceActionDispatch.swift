@@ -221,3 +221,14 @@ extension View {
         modifier(AdviceActionDialogs(dispatch: dispatch))
     }
 }
+
+/// HIDDEN-CONTENT-WORK: Home's dispatch, created on first use and kept alive by the model (see
+/// `DashboardModel.homeAdviceDispatchStorage`); the same instance is returned for as long as the model lives.
+extension DashboardModel {
+    var homeAdviceDispatch: AdviceActionDispatch {
+        if let d = homeAdviceDispatchStorage as? AdviceActionDispatch { return d }
+        let d = AdviceActionDispatch(model: self)
+        homeAdviceDispatchStorage = d
+        return d
+    }
+}

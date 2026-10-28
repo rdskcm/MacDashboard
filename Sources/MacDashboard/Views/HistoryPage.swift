@@ -49,7 +49,7 @@ struct HistoryPageBar: View {
 
     var body: some View {
         let b = HistoryPageModel.bar(entries: model.history.mac_history, unreadable: model.historyUnreadable,
-                                     refreshing: model.historyRefreshing, now: model.fixtureNow ?? Date())
+                                     refreshing: model.historyRefreshing, now: model.now())
         SectionPageBar(symbol: Page.history.symbol, title: Page.history.title, sub: b.sub, onBack: onBack) {
             if !b.tag.isEmpty { DS3Tag(tone: tone(b.tone), text: b.tag).help(b.tag) }
         } trailing: {
@@ -113,7 +113,7 @@ struct HistoryCardView: View {
     var body: some View {
         let m = HistoryPageModel.make(.init(entries: model.history.mac_history, unreadable: model.historyUnreadable,
                                             refreshing: model.historyRefreshing, metric: metric, range: range, view: view,
-                                            showAll: showAll, narrow: narrow, now: model.fixtureNow ?? Date(),
+                                            showAll: showAll, narrow: narrow, now: model.now(),
                                             historyPath: model.historyFilePath))
         DS3Card(title: m.title, caption: m.caption, trailing: {
             HStack(spacing: 10) {
@@ -305,7 +305,7 @@ struct HistoryCardView: View {
     }
 
     private func headerRow(_ t: HistoryTableData) -> some View {
-        IPhoneFractionRow(fractions: Array(repeating: 1, count: t.headers.count), spacing: 16) {
+        FractionRow(fractions: Array(repeating: 1, count: t.headers.count), spacing: 16) {
             ForEach(t.headers.indices, id: \.self) { i in
                 Text(t.headers[i])
                     .frame(maxWidth: .infinity, alignment: i == 0 ? .leading : .trailing)
@@ -334,7 +334,7 @@ private struct HistoryTableRow: View {
     @State private var hover = false
 
     var body: some View {
-        IPhoneFractionRow(fractions: Array(repeating: 1, count: cells.count), spacing: 16) {
+        FractionRow(fractions: Array(repeating: 1, count: cells.count), spacing: 16) {
             ForEach(cells.indices, id: \.self) { i in
                 Text(cells[i] ?? "—")
                     .foregroundStyle(cells[i] == nil ? DS3.muted : DS3.ink)

@@ -1,4 +1,4 @@
-// Engine/GlassTint.swift
+// Views/GlassTint.swift
 // CARD-GLASS-BACKDROP: glass card tint opacity from the system Liquid Glass slider (NSGlassTintAmount) and
 // Reduce Transparency. `GlassTint` is the single token table (pure, covered by Tests/MacDashboardTests/GlassTintTests.swift);
 // `GlassSettings` is the one app-wide reader, created in MacDashboardApp and injected with `.environment(_:)`.
@@ -89,7 +89,7 @@ final class GlassSettings {
     /// (`GlassSettings(fixture: true)`) register no workspace observer. `DefaultsKeyObserver` removes its KVO in deinit.
     @ObservationIgnored private var workspaceToken: NSObjectProtocol?
 
-    init(fixture: Bool = VisualFixture.isRequested) {
+    init(fixture: Bool) {
         self.fixture = fixture
         let initial = GlassSettings.read(fixture: fixture)
         self.fill = initial

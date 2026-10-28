@@ -95,7 +95,7 @@ struct SystemPageBar: View {
     let onBack: () -> Void
 
     var body: some View {
-        let m = SystemPageModel.make(systemInput(model, now: model.fixtureNow ?? Date()))
+        let m = SystemPageModel.make(systemInput(model, now: model.now()))
         SectionPageBar(symbol: Page.system.symbol, title: Page.system.title, sub: m.sub, onBack: onBack) {
             DS3Tag(tone: tagTone(m.tag), text: m.tagText).help(m.tagText)
         } trailing: {
@@ -121,7 +121,7 @@ struct SystemSleepCard: View {
     }
 
     var body: some View {
-        let m = SystemPageModel.make(systemInput(model, ignored: initialHidden, now: model.fixtureNow ?? Date()))
+        let m = SystemPageModel.make(systemInput(model, ignored: initialHidden, now: model.now()))
         let rowCurve = sectionRowAnimation(reduceMotion: reduceMotion)
         let rowTransition = sectionRowTransition(reduceMotion: reduceMotion)
         DS3Card(title: L.sysSleepTitle, caption: m.sleepCaption) {
@@ -239,13 +239,13 @@ struct SystemStartupCard: View {
         self.onConfirmShown = onConfirmShown
         _open = State(initialValue: initialOpen ?? [.login])
         _pendingDelete = State(initialValue: initialConfirm ? .all : nil)
-        _rows = State(initialValue: SystemPageModel.make(systemInput(model, now: model.fixtureNow ?? Date())).staleRows)
+        _rows = State(initialValue: SystemPageModel.make(systemInput(model, now: model.now())).staleRows)
     }
 
     /// The ageing caption («checked just now» → «checked 10:31») re-renders once a minute.
     var body: some View {
         TimelineView(.everyMinute) { ctx in
-            card(now: model.fixtureNow ?? ctx.date)
+            card(now: model.now(or: ctx.date))
         }
     }
 
@@ -465,7 +465,7 @@ struct SystemBrewCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let m = SystemPageModel.make(systemInput(model, now: model.fixtureNow ?? Date()))
+        let m = SystemPageModel.make(systemInput(model, now: model.now()))
         let updating = m.brewState == .updating
         DS3Card(title: L.sysBrewTitle, caption: m.brewCaption.isEmpty ? nil : m.brewCaption) {
             if showsUpdateButton(m) {
@@ -615,7 +615,7 @@ struct SystemEnergyCard: View {
     private var confirmCurve: Animation { reduceMotion ? .easeOut(duration: 0.12) : DS3Motion.popIn }
 
     var body: some View {
-        let m = SystemPageModel.make(systemInput(model, pending: pending, now: model.fixtureNow ?? Date()))
+        let m = SystemPageModel.make(systemInput(model, pending: pending, now: model.now()))
         DS3Card(title: L.sysEnergyTitle, caption: m.energyCaption) {
             content(m)
         }

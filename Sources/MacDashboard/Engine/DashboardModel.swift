@@ -7,7 +7,6 @@
 
 import Foundation
 import Observation
-import AppKit
 
 @MainActor
 @Observable
@@ -62,6 +61,10 @@ final class DashboardModel {
     /// VISUAL-HARNESS-STALE: visual fixture only — the instant that backup-age displays and
     /// assessments treat as "now", so fixture captures do not depend on the wall clock. nil = wall clock.
     var fixtureNow: Date? = nil
+    /// The clock the views render with: the fixture's frozen date under -visualFixture (set by `applyVisualFixture`
+    /// and by the snapshot tests), else `fallback`. Views call `now()` / `now(or: ctx.date)` and never read
+    /// `fixtureNow` themselves (ARCH-ENGINE-GUARD, EngineBoundaryTests).
+    func now(or fallback: Date = Date()) -> Date { fixtureNow ?? fallback }
 
     /// REDESIGN-BACKUPS: last `tmutil status` sample while the Backups page polls; nil = not probed on this visit.
     private(set) var tmBackup: TMBackupProgress? = nil
@@ -138,16 +141,11 @@ final class DashboardModel {
     /// failed; cleared at the start of the next run. Shown as an inline error on
     /// the Рекомендации card.
     var adviceActionError: String? = nil
-    /// HIDDEN-CONTENT-WORK: confirmations, busy and done state of Home's attention-card verbs. Owned here, not by the
-    /// card, because Home is unmounted while a page is open: the state (and an empty-Trash still running in Finder)
-    /// must outlive the card. Created on first use; Storage keeps its own per-card dispatch.
-    @ObservationIgnored private var homeAdviceDispatchStorage: AdviceActionDispatch?
-    var homeAdviceDispatch: AdviceActionDispatch {
-        if let d = homeAdviceDispatchStorage { return d }
-        let d = AdviceActionDispatch(model: self)
-        homeAdviceDispatchStorage = d
-        return d
-    }
+    /// HIDDEN-CONTENT-WORK: Home's attention-card action state (`AdviceActionDispatch`, a Views type) must outlive the
+    /// card, because Home is unmounted while a page is open and an empty-Trash may still be running in Finder; the model
+    /// gives it this lifetime. The typed accessor `homeAdviceDispatch` is an extension in Views/AdviceActionDispatch.swift
+    /// so this file names no Views type (ARCH-ENGINE-GUARD). Storage keeps its own per-card dispatch.
+    @ObservationIgnored var homeAdviceDispatchStorage: AnyObject?
 
     /// Paths of orphaned launchd plists currently being deleted (Автозагрузка card's
     /// "check for outdated" flow) — lets a per-row delete button show a spinner and
@@ -353,24 +351,16 @@ final class DashboardModel {
     /// for no benefit.
     private let smartRefreshInterval: Duration = .seconds(300)
 
-    /// Set whenever there is no effectively visible, non-panel window on a frontmost
-    /// app, so the live loop can skip the (relatively heavy — spawns `top` twice)
-    /// collect() call and just keep sleeping, per SPEC §1.4 "pause timer when window
-    /// closed / app hidden to save energy". Derived by `recomputeIsPaused()` from
-    /// `NSApp.isActive` plus `NSApp.windows` visibility/occlusion state (excluding
-    /// `NSPanel`s such as `HoverTip`'s tooltip panels, which should never keep the
-    /// app un-paused). Recomputed on app activate/resign, window close (deferred one
-    /// runloop turn since the closing window is still in `NSApp.windows` and still
-    /// reports `isVisible == true` at the moment `willCloseNotification` fires),
-    /// miniaturize/deminiaturize, and occlusion-state change. Registered once, from
-    /// start(), directly on NSApplication's / NSWindow's notification center — this
-    /// needs no changes to MacDashboardApp.swift / no ScenePhase plumbing.
-    /// Read only inside this model (the collector loops skip their work while it is true).
+    /// Set by `AppActivityMonitor` (AppShell.swift) through `setPaused(_:)` whenever there is no effectively visible,
+    /// non-panel window on a frontmost app, so the live loop can skip the (relatively heavy — spawns `top` twice)
+    /// collect() call and just keep sleeping, per SPEC §1.4. Read only inside this model (the collector loops skip
+    /// their work while it is true).
     private(set) var isPaused = false
-    private var activityObservers: [NSObjectProtocol] = []
+    private let actions: AppActions
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
-    init(dataDirectory: URL? = nil) {
+    init(dataDirectory: URL? = nil, actions: AppActions = .none) {
+        self.actions = actions
         cpuHistory = []
         report = FullReport()
         assessment = Assessment()
@@ -603,7 +593,6 @@ final class DashboardModel {
 
     func start() {
         guard fastTask == nil else { return }
-        observeActivity()
         // REDESIGN-NOTIFY: banners only while the app is not frontmost (D13); a click parks a destination for the view (R5).
         NotificationCenterClient.shared.shouldPresentBanner = { [weak self] in self?.isPaused ?? true }
         NotificationCenterClient.shared.onOpen = { [weak self] page in self?.requestNavigation(to: Destination(page)) }
@@ -815,10 +804,6 @@ final class DashboardModel {
         sizeCountGeneration += 1; isCountingSizes = false
         for watchdog in blockWatchdogs.values { watchdog.cancel() }
         blockWatchdogs.removeAll()
-        for observer in activityObservers {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        activityObservers.removeAll()
     }
 
     /// Public entry. `.button` only from the «Обновить отчёт» button.
@@ -1172,7 +1157,7 @@ final class DashboardModel {
     /// `tmutil status` only for the first probe, while a backup runs, or while a start/stop is in flight,
     /// and never while the window is hidden (`isPaused`). 2 s between samples.
     func observeTimeMachineStatus() async {
-        guard !VisualFixture.isRequested else { return }   // fixture data only; never spawn tmutil (HIDDEN-CONTENT-WORK, as BatteryPage.swift:64)
+        guard !VisualFixture.isRequested else { return }   // fixture data only; never spawn tmutil (HIDDEN-CONTENT-WORK, as runBatteryLoop)
         defer {
             tmBackup = nil
             if case .failed = tmAction { tmAction = .idle }
@@ -1356,7 +1341,18 @@ final class DashboardModel {
     /// REDESIGN-STORAGE D14: opens the Full Disk Access pane; busy until the app is re-activated.
     func openFullDiskAccessSettings() {
         fdaAwaitingReturn = true
-        AdviceActionRunner.openPane(AdvicePanes.fullDiskAccess)
+        actions.openSettingsPane(AdvicePanes.fullDiskAccess)
+    }
+
+    /// REDESIGN-BATTERY: the Battery page's ioreg loop, awaited by the page's `.task` and cancelled by SwiftUI when the
+    /// page unmounts. Never under the visual fixture: it would overwrite the fixture detail with live data
+    /// (HIDDEN-CONTENT-WORK; the guard used to sit in BatteryPage).
+    func runBatteryLoop() async {
+        guard !VisualFixture.isRequested else { return }
+        while !Task.isCancelled {
+            await readBatteryNow()
+            try? await Task.sleep(for: .seconds(BatteryPageModel.refreshSeconds))
+        }
     }
 
     /// REDESIGN-BATTERY: one ioreg read for the Battery page (the page's `.task` calls it every
@@ -1861,62 +1857,30 @@ final class DashboardModel {
         }
     }
 
-    // MARK: - App-activity pause/resume (SPEC §1.4)
+    // MARK: - App-activity pause/resume (SPEC §1.4) — fed by AppActivityMonitor (AppShell.swift)
 
-    /// Recomputes `isPaused` from `NSApp.isActive` plus whether at least one relevant
-    /// (non-`NSPanel`) window is effectively visible (`isVisible` and occlusion state
-    /// contains `.visible`). See doc comment on `isPaused` for the full rationale.
-    private func recomputeIsPaused() {
-        let hasVisibleWindow = NSApp.windows.contains { window in
-            !(window is NSPanel) && window.isVisible && window.occlusionState.contains(.visible)
-        }
-        let paused = !(NSApp.isActive && hasVisibleWindow)
+    /// The monitor's verdict: true when the app is not frontmost or has no effectively visible non-panel window.
+    func setPaused(_ paused: Bool) {
         if isPaused != paused { isPaused = paused }
     }
 
-    private func observeActivity() {
-        guard activityObservers.isEmpty else { return }
-        let resign = NotificationCenter.default.addObserver(
-            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.recomputeIsPaused() }
-        }
-        let become = NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.recomputeIsPaused()
-                self?.fdaAwaitingReturn = false
-                self?.reprobeProtectedLocations()
-            }
-        }
-        let willClose = NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                // Deferred one runloop turn: at the moment this notification fires,
-                // the closing window is still in NSApp.windows and still reports
-                // isVisible == true, so a synchronous recompute here would see stale
-                // state.
-                DispatchQueue.main.async { self?.recomputeIsPaused() }
-            }
-        }
-        let miniaturize = NotificationCenter.default.addObserver(
-            forName: NSWindow.didMiniaturizeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.recomputeIsPaused() }
-        }
-        let deminiaturize = NotificationCenter.default.addObserver(
-            forName: NSWindow.didDeminiaturizeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.recomputeIsPaused() }
-        }
-        let occlusion = NotificationCenter.default.addObserver(
-            forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.recomputeIsPaused() }
-        }
-        activityObservers = [resign, become, willClose, miniaturize, deminiaturize, occlusion]
+    /// App became active: the Full Disk Access wait ends and protected locations are re-probed (REDESIGN-STORAGE D14).
+    func appDidBecomeActive() {
+        fdaAwaitingReturn = false
+        reprobeProtectedLocations()
+    }
+
+    // MARK: - Process actions (ARCH-ENGINE-GUARD: moved from ProcessCards)
+
+    /// D8/D15/D16 of REDESIGN-CPU: the full signal flow off the main actor (a privileged retry blocks on the
+    /// administrator dialog); the pid-reuse guard compares `expectedPath` with the pid's current executable.
+    func signalProcess(_ sig: Int32, pid: Int32, expectedPath: String?) async -> ProcessInspector.SignalOutcome {
+        await Task.detached { ProcessInspector.signal(sig, pid: pid, expectedPath: expectedPath) }.value
+    }
+
+    /// proc_pidpath and the owner sysctl are cheap syscalls, but nothing here may ever block the UI.
+    func processDetail(pid: Int32) async -> ProcDetail {
+        await Task.detached { ProcessInspector.detail(pid: pid) }.value
     }
 
     // MARK: - Report path
@@ -1961,8 +1925,7 @@ final class DashboardModel {
     func requestNavigation(to destination: Destination) {
         externalDestination = destination
         externalDestinationSerial += 1
-        let hasWindow = NSApp.windows.contains { !($0 is NSPanel) && $0.isVisible }
-        if !hasWindow { NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: .init()) }
+        actions.ensureWindowShown()
     }
     func consumeExternalDestination() -> Destination? { defer { externalDestination = nil }; return externalDestination }
 

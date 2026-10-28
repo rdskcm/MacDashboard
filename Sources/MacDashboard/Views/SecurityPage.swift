@@ -61,7 +61,7 @@ private func securityInput(_ model: DashboardModel, fileVaultOpened: Bool = fals
     .init(security: model.report.security, action: model.securityAction, fileVaultOpened: fileVaultOpened,
           updates: model.report.updates, updatesCheckedAt: model.report.updatesCheckedAt,
           checkingUpdates: model.isCheckingUpdates, crashes: model.report.crashes,
-          openedReportPath: openedReportPath, now: model.fixtureNow ?? Date(), hiddenCrashes: model.report.crashesHidden, crashAction: model.crashAction)
+          openedReportPath: openedReportPath, now: model.now(), hiddenCrashes: model.report.crashesHidden, crashAction: model.crashAction)
 }
 
 private func toneColor(_ t: SecurityTone) -> Color {

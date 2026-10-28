@@ -7,15 +7,16 @@ import SwiftUI
 struct MacDashboardApp: App {
     @State private var model: DashboardModel
     @State private var glass: GlassSettings
+    @State private var activity: AppActivityMonitor?
 
     init() {
-        _model = State(wrappedValue: DashboardModel())
-        _glass = State(wrappedValue: GlassSettings())
+        _model = State(wrappedValue: DashboardModel(actions: .live))
+        _glass = State(wrappedValue: GlassSettings(fixture: VisualFixture.isRequested))
         SettingsWindowController.shared.configure(model: _model.wrappedValue, glass: _glass.wrappedValue)
         AppSettings.shared.appearance.apply()
         // Forces the launch-language capture now, before any UI can switch it.
         _ = L10nStore.launchLanguage
-        syncAppleLanguages()
+        AppLifecycle.syncAppleLanguages(for: L10nStore.shared.choice)
     }
 
     var body: some Scene {
@@ -30,6 +31,7 @@ struct MacDashboardApp: App {
                         _ = FixtureAppearance.shared
                     } else {
                         model.start()
+                        if activity == nil { activity = AppActivityMonitor(model: model) }
                         IPhoneModel.shared.start()
                         if ProcessInfo.processInfo.arguments.contains("-notifyProbe") { NotificationCenterClient.shared.runProbe() }
                     }
@@ -42,24 +44,6 @@ struct MacDashboardApp: App {
                 Button(L.settingsMenuItem) { SettingsWindowController.shared.show() }
                     .keyboardShortcut(",", modifiers: .command)
             }
-        }
-    }
-}
-
-/// Menus are built by AppKit at launch from the app-domain `AppleLanguages`
-/// default; this write only affects the NEXT launch. Instant in-app strings are
-/// handled by L10n — system chrome (menu bar, standard dialogs) catches up on
-/// relaunch only.
-private func syncAppleLanguages() {
-    switch L10nStore.shared.choice {
-    case .system:
-        if UserDefaults.standard.object(forKey: "AppleLanguages") != nil {
-            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
-        }
-    case .en, .ru:
-        let want = [L10nStore.shared.choice.rawValue]
-        if UserDefaults.standard.stringArray(forKey: "AppleLanguages") != want {
-            UserDefaults.standard.set(want, forKey: "AppleLanguages")
         }
     }
 }

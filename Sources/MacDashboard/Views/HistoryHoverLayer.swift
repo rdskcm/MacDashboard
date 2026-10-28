@@ -449,7 +449,7 @@ final class HistoryHoverView: NSView {
 
     private func tooltipCentre(_ i: Int) -> CGPoint {
         guard let f = frameData else { return .zero }
-        let o = IPhoneData.tooltipOrigin(point: CGPoint(x: f.xs[i] - f.plot.minX, y: f.ys[i] - f.plot.minY), plot: f.plot.size,
+        let o = ChartGeometry.tooltipOrigin(point: CGPoint(x: f.xs[i] - f.plot.minX, y: f.ys[i] - f.plot.minY), plot: f.plot.size,
                                          size: boxSize, gap: HistoryHoverArt.gap)
         return CGPoint(x: f.plot.minX + o.x + boxSize.width / 2, y: f.plot.minY + o.y + boxSize.height / 2)
     }
