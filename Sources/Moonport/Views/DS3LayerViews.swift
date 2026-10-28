@@ -20,6 +20,37 @@ func ds3Resolve(_ color: Color, in appearance: NSAppearance) -> CGColor {
 
 // MARK: - Rim
 
+/// RIM-HOVER-COST: the eight disjoint rectangles (card-local points, y down) that hold every pixel the 1.2 pt ring
+/// can touch: four corner patches and four edge strips. Inner edges lie on whole points; outer edges sit 1 pt outside
+/// the card, so the ring mask's own bounds, not the band clip, stay the outer clip (spec D5-D7).
+/// Order: top-left, top, top-right, left, right, bottom-left, bottom, bottom-right.
+enum RimBands {
+    /// Corner patch depth = ceil(cornerFactor * cornerRadius) + cornerPad: the continuous corner curve leaves the
+    /// straight edge about 1.53 r from the corner; + 2 pt keeps the anti-aliased edge inside the patch.
+    static let cornerFactor: CGFloat = 1.6
+    static let cornerPad: CGFloat = 2
+    /// Edge strip thickness: the straight ring occupies 0-1.2 pt from the edge, plus one pixel of anti-aliasing.
+    static let strip: CGFloat = 3
+
+    static func rects(size: CGSize, cornerRadius: CGFloat) -> [CGRect] {
+        let w = max(size.width, 0), h = max(size.height, 0)
+        let halfW = (w / 2).rounded(.down), halfH = (h / 2).rounded(.down)
+        let k = max((cornerFactor * cornerRadius).rounded(.up) + cornerPad, strip)
+        let kx = min(k, halfW), ky = min(k, halfH)
+        let s = min(strip, halfW, halfH)
+        let xR = (w - kx).rounded(.down), yB = (h - ky).rounded(.down)
+        let xS = (w - s).rounded(.down), yS = (h - s).rounded(.down)
+        func r(_ x0: CGFloat, _ y0: CGFloat, _ x1: CGFloat, _ y1: CGFloat) -> CGRect {
+            CGRect(x: x0, y: y0, width: max(x1 - x0, 0), height: max(y1 - y0, 0))
+        }
+        return [
+            r(-1, -1, kx, ky), r(kx, -1, xR, s), r(xR, -1, w + 1, ky),
+            r(-1, ky, s, yB), r(xS, ky, w + 1, yB),
+            r(-1, yB, kx, h + 1), r(kx, yS, xR, h + 1), r(xR, yB, w + 1, h + 1),
+        ]
+    }
+}
+
 struct DS3RimLayer: NSViewRepresentable {
     let cornerRadius: CGFloat
     let model: DS3RimModel
@@ -49,8 +80,7 @@ struct DS3RimLayer: NSViewRepresentable {
     }
 }
 
-/// RIM-GLOW-OPTICS: the 1.2 pt ring of a glass card, masked; inside it the static ambient layer and the pointer light
-/// sprite, both composited `plusL` (spec §3.2, §3.3, D8). Per pointer event: one `position` set and one fixed-key animation.
+/// RIM-GLOW-OPTICS look, RIM-HOVER-COST structure: the 1.2 pt ring of a glass card as eight clipped bands (RimBands), each a full copy of the ring group (ring mask, static ambient layer, pointer-light sprite, all composited plusL as in spec §3.2, §3.3, D8), so a moving light repaints only the bands. Per pointer event: one presentation read, one position set and one fixed-key animation per band, in one transaction.
 final class DS3RimView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -60,10 +90,18 @@ final class DS3RimView: NSView {
     }
     private(set) var isStatic = false
 
-    private let ring = CALayer()
-    private let ringMask = CAShapeLayer()
-    private let ambient = CALayer()
-    private let spot = CALayer()
+    /// One clipped copy of the old card-sized ring group. `clip`: band rect, `masksToBounds`, ring mask, plusL.
+    /// `shift`: plain, card-sized, so `ambient` and `spot` keep card-local geometry in every band (spec D3).
+    private struct Band {
+        let clip = CALayer()
+        let mask = CAShapeLayer()
+        let shift = CALayer()
+        let ambient = CALayer()
+        let spot = CALayer()
+    }
+    /// Invariant: every sprite gets the same model values and the same animations in the same transaction, so
+    /// `bands[0].spot` stands for all of them when reading the presentation.
+    private let bands: [Band] = (0..<8).map { _ in Band() }
     private var shadeRing: CALayer?
     private var shadeMask: CAShapeLayer?
     private var h: Double
@@ -87,19 +125,23 @@ final class DS3RimView: NSView {
         let off = NSNull()
         let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden",
                     "compositingFilter", "opacity", "backgroundColor"]
-        for l in [ring, ringMask, ambient, spot] as [CALayer] {
-            l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
+        for b in bands {
+            for l in [b.clip, b.mask, b.shift, b.ambient, b.spot] as [CALayer] {
+                l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
+            }
+            b.mask.fillColor = CGColor(gray: 0, alpha: 1)
+            b.clip.mask = b.mask
+            b.clip.masksToBounds = true
+            b.ambient.contentsGravity = .resize
+            b.spot.contentsGravity = .resize
+            b.spot.opacity = 0
+            b.spot.compositingFilter = "plusL"
+            b.clip.compositingFilter = "plusL"
+            b.shift.addSublayer(b.ambient)
+            b.shift.addSublayer(b.spot)
+            b.clip.addSublayer(b.shift)
+            layer?.addSublayer(b.clip)
         }
-        ringMask.fillColor = CGColor(gray: 0, alpha: 1)
-        ring.mask = ringMask
-        ambient.contentsGravity = .resize
-        spot.contentsGravity = .resize
-        spot.opacity = 0
-        spot.compositingFilter = "plusL"
-        ring.compositingFilter = "plusL"
-        ring.addSublayer(ambient)
-        ring.addSublayer(spot)
-        layer?.addSublayer(ring)
         RimSettingsObserver.shared.register(self)
     }
 
@@ -110,17 +152,23 @@ final class DS3RimView: NSView {
         super.layout()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        ring.frame = bounds
-        ringMask.frame = ring.bounds
-        ringMask.path = Self.ringPath(bounds.size, cornerRadius)
+        let size = bounds.size
+        let path = Self.ringPath(size, cornerRadius)
+        let r = CGFloat(RimLight.range(h: h))
+        for (b, rect) in zip(bands, RimBands.rects(size: size, cornerRadius: cornerRadius)) {
+            let card = CGRect(x: -rect.minX, y: -rect.minY, width: size.width, height: size.height)
+            b.clip.frame = rect
+            b.mask.frame = card
+            b.mask.path = path
+            b.shift.frame = card
+            b.ambient.frame = CGRect(x: 0, y: 0, width: size.width, height: cornerRadius)
+            b.spot.bounds = CGRect(x: 0, y: 0, width: 2 * r, height: 2 * r)
+        }
         if let shadeRing, let shadeMask {
             shadeRing.frame = bounds
             shadeMask.frame = shadeRing.bounds
-            shadeMask.path = ringMask.path
+            shadeMask.path = path
         }
-        ambient.frame = CGRect(x: 0, y: 0, width: bounds.width, height: cornerRadius)
-        let r = CGFloat(RimLight.range(h: h))
-        spot.bounds = CGRect(x: 0, y: 0, width: 2 * r, height: 2 * r)
         CATransaction.commit()
         renderIfNeeded()
     }
@@ -168,7 +216,7 @@ final class DS3RimView: NSView {
         if !isDark && RimLight.lightMode == .none {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            ring.isHidden = true
+            for b in bands { b.clip.isHidden = true }
             shadeRing?.isHidden = true
             CATransaction.commit()
             renderedKey = nil
@@ -192,7 +240,7 @@ final class DS3RimView: NSView {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        ring.isHidden = false
+        for b in bands { b.clip.isHidden = false }
         if shaded {
             if shadeRing == nil, let host = layer {
                 let sr = CALayer()
@@ -202,7 +250,7 @@ final class DS3RimView: NSView {
                 for l in [sr, sm] as [CALayer] { l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) }) }
                 sm.fillColor = CGColor(gray: 0, alpha: 1)
                 sr.mask = sm
-                host.insertSublayer(sr, below: ring)
+                host.insertSublayer(sr, below: bands[0].clip)
                 shadeRing = sr
                 shadeMask = sm
                 needsLayout = true
@@ -212,10 +260,12 @@ final class DS3RimView: NSView {
         } else {
             shadeRing?.isHidden = true
         }
-        if let sprite { spot.contents = sprite }
-        if let amb { ambient.contents = amb }
-        spot.contentsScale = scale
-        ambient.contentsScale = scale
+        for b in bands {
+            if let sprite { b.spot.contents = sprite }
+            if let amb { b.ambient.contents = amb }
+            b.spot.contentsScale = scale
+            b.ambient.contentsScale = scale
+        }
         CATransaction.commit()
     }
 
@@ -223,11 +273,11 @@ final class DS3RimView: NSView {
         guard s != isStatic else { return }
         isStatic = s
         if s {
-            spot.removeAllAnimations()
+            for b in bands { b.spot.removeAllAnimations() }
             spotVisible = false
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            spot.opacity = 0
+            for b in bands { b.spot.opacity = 0 }
             CATransaction.commit()
         }
     }
@@ -244,36 +294,38 @@ final class DS3RimView: NSView {
             spotVisible = true
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            spot.position = local
+            for b in bands { b.spot.position = local }
             CATransaction.commit()
-            spot.removeAnimation(forKey: "pos")
+            for b in bands { b.spot.removeAnimation(forKey: "pos") }
             fade(to: 1)
             return
         }
-        let from = spot.presentation()?.position ?? spot.position
+        let lead = bands[0].spot
+        let from = lead.presentation()?.position ?? lead.position
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        spot.position = local
+        for b in bands { b.spot.position = local }
         CATransaction.commit()
         let a = CABasicAnimation(keyPath: "position")
         a.fromValue = NSValue(point: from)
         a.toValue = NSValue(point: local)
         a.duration = DS3Motion.rimFollow
         a.timingFunction = CAMediaTimingFunction(name: .linear)
-        spot.add(a, forKey: "pos")
+        for b in bands { b.spot.add(a, forKey: "pos") }
     }
 
     private func fade(to value: Float) {
-        let from = spot.presentation()?.opacity ?? spot.opacity
+        let lead = bands[0].spot
+        let from = lead.presentation()?.opacity ?? lead.opacity
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        spot.opacity = value
+        for b in bands { b.spot.opacity = value }
         CATransaction.commit()
         let a = CABasicAnimation(keyPath: "opacity")
         a.fromValue = from
         a.toValue = value
         a.duration = DS3Motion.rimFade
-        spot.add(a, forKey: "fade")
+        for b in bands { b.spot.add(a, forKey: "fade") }
     }
 }
 

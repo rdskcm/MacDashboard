@@ -312,8 +312,8 @@ struct DS3GlassBar: View {
 // MARK: - Rim
 
 /// Pointer light on the card edge (RIM-GLOW-OPTICS): a point light at height h over the glass. One pre-rendered
-/// sprite layer per card (`DS3RimLayer`) is moved by the tracker imperatively, only when the pointer location
-/// changes (D7) and once after a scroll ends; a static sublayer holds the ambient light from above. No body here
+/// sprite per card, drawn in eight thin edge bands (`DS3RimLayer`, RIM-HOVER-COST), is moved by the tracker imperatively,
+/// only when the pointer location changes (D7) and once after a scroll ends; a static sublayer holds the ambient light from above. No body here
 /// reads the pointer (D6). Without a tracker (offscreen harness renders) it is the static ambient stroke.
 @MainActor
 struct DS3Rim: View {
