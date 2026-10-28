@@ -49,7 +49,7 @@ extension HomeInput {
                          hasBattery: battery != nil, battery: model.battery,
                          system: model.headerSystem, claudeBackup: model.claudeBackup,
                          backupStaleHours: AppSettings.shared.backupStaleHours,
-                         history: [], now: model.fixtureNow ?? Date(),
+                         history: [], now: model.now(),
                          historyDigest: model.homeHistoryDigest)
     }
 
@@ -63,7 +63,7 @@ extension HomeInput {
                          load: nil, ncpu: model.ncpu, processCount: nil, mem: nil, swap: nil, disk: model.disk,
                          hasBattery: false, battery: model.battery, system: nil, claudeBackup: nil,
                          backupStaleHours: AppSettings.shared.backupStaleHours,
-                         history: [], now: model.fixtureNow ?? Date())
+                         history: [], now: model.now())
     }
 
     /// The eight section tiles (seven without a battery) for the current model state.

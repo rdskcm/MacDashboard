@@ -379,10 +379,10 @@ extension SerialTests {
             #expect(IPhoneData.chartTicks(from: utcDay(2026, 3, 27), to: utcDay(2026, 10, 12), calendar: utc).map(\.tick)
                   == [.month(4), .month(5), .month(6), .month(7), .month(8), .month(9), .month(10)], "iPhone chart: monthly ticks for seven months")
             let plot = CGSize(width: 600, height: 194)
-            #expect(IPhoneData.tooltipOrigin(point: CGPoint(x: 10, y: 100), plot: plot).x == 0, "iPhone chart: tooltip clamped at the left edge")
-            #expect(IPhoneData.tooltipOrigin(point: CGPoint(x: 590, y: 100), plot: plot).x == 432, "iPhone chart: tooltip clamped at the right edge")
-            #expect(abs(IPhoneData.tooltipOrigin(point: CGPoint(x: 300, y: 73.72), plot: plot).y - 85.72) < 1e-6, "iPhone chart: tooltip below at the 38 % line")
-            #expect(abs(IPhoneData.tooltipOrigin(point: CGPoint(x: 300, y: 75.66), plot: plot).y - (-10.34)) < 1e-6, "iPhone chart: tooltip above just past 38 %")
+            #expect(ChartGeometry.tooltipOrigin(point: CGPoint(x: 10, y: 100), plot: plot).x == 0, "iPhone chart: tooltip clamped at the left edge")
+            #expect(ChartGeometry.tooltipOrigin(point: CGPoint(x: 590, y: 100), plot: plot).x == 432, "iPhone chart: tooltip clamped at the right edge")
+            #expect(abs(ChartGeometry.tooltipOrigin(point: CGPoint(x: 300, y: 73.72), plot: plot).y - 85.72) < 1e-6, "iPhone chart: tooltip below at the 38 % line")
+            #expect(abs(ChartGeometry.tooltipOrigin(point: CGPoint(x: 300, y: 75.66), plot: plot).y - (-10.34)) < 1e-6, "iPhone chart: tooltip above just past 38 %")
         }
     }
 }

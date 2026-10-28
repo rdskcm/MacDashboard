@@ -2,7 +2,7 @@
 // REDESIGN-NOTIFY: the app's one UNUserNotificationCenter client (authorization, posting, delegate). Everything that decides
 // WHAT to post is pure and lives in NotificationEngine.swift; this file only talks to the system. Never touched under
 // -visualFixture or in `swift test`: UNUserNotificationCenter.current() traps in a process without a bundle.
-import AppKit
+import Foundation
 import UserNotifications
 
 /// App-side view of the system status (pure enum so views and the fixture can hold it without the framework).
@@ -11,8 +11,14 @@ enum NotificationAuthorization: Equatable { case notDetermined, authorized, deni
 @MainActor
 final class NotificationCenterClient: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationCenterClient()
-    /// Snapshot tests / -visualFixture: when set, `status` answers this without touching the system.
-    static var fixtureStatus: NotificationAuthorization? = nil
+    /// Snapshot tests / -visualFixture: when non-nil, `status` answers this without touching the system. Unset under
+    /// fixture means `.authorized` (ARCH-ENGINE-GUARD: the branch left SettingsView; ContentSnapshotTests sets
+    /// `.denied` for one state and nil to restore).
+    static var fixtureStatus: NotificationAuthorization? {
+        get { fixtureStatusOverride ?? (VisualFixture.isRequested ? .authorized : nil) }
+        set { fixtureStatusOverride = newValue }
+    }
+    private static var fixtureStatusOverride: NotificationAuthorization?
 
     /// Set by DashboardModel.start(): banner allowed iff the app is "paused" (not frontmost with a visible window).
     var shouldPresentBanner: () -> Bool = { true }
@@ -40,6 +46,7 @@ final class NotificationCenterClient: NSObject, UNUserNotificationCenterDelegate
     }
 
     func requestAuthorization(_ completion: @escaping @MainActor (Bool) -> Void) {
+        if Self.fixtureStatus != nil { completion(false); return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error { NSLog("notify: requestAuthorization error: %@", error.localizedDescription) }
             Task { @MainActor in completion(granted) }

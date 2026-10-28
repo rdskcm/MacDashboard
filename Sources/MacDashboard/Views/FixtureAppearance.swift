@@ -1,4 +1,4 @@
-// Engine/FixtureAppearance.swift
+// Views/FixtureAppearance.swift
 // HARNESS-REDESIGN-RETARGET: under -visualFixture the app's appearance follows the fixture-only key
 // `visualAppearance` ("dark" | "light"; anything else = follow the system) in the app's own defaults domain,
 // so tools/visual/smoke.sh switches dark/light live without touching the system setting. Created only in fixture mode.

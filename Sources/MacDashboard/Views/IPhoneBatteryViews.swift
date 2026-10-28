@@ -247,7 +247,7 @@ struct IPhoneBatteryHistoryCard: View {
     }
 
     private var tableHeader: some View {
-        IPhoneFractionRow {
+        FractionRow {
             Text(L.iphoneHistoryColDate).frame(maxWidth: .infinity, alignment: .leading)
             Text(L.iphoneHistoryColHealth).frame(maxWidth: .infinity, alignment: .trailing)
             Text(L.iphoneHistoryColCycles).frame(maxWidth: .infinity, alignment: .trailing)
@@ -269,7 +269,7 @@ private struct IPhoneHistoryTableRow: View {
 
     var body: some View {
         let live = point.source == "live"
-        IPhoneFractionRow {
+        FractionRow {
             Text(IPhoneData.historyDate(point.day).map(fmtDisplayDay) ?? point.day)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(point.healthPercent.map { "\($0) %" } ?? "—")
@@ -478,7 +478,7 @@ private struct IPhoneHealthChart: View {
                 if let i = hovered, i < pts.count, let a = proxy.plotFrame,
                    let px = proxy.position(forX: pts[i].date), let py = proxy.position(forY: pts[i].health) {
                     let plot = geo[a]
-                    let o = IPhoneData.tooltipOrigin(point: CGPoint(x: px, y: py), plot: plot.size)
+                    let o = ChartGeometry.tooltipOrigin(point: CGPoint(x: px, y: py), plot: plot.size)
                     tooltip(pts[i])
                         // Same mechanism as HOVER-TEXT-JITTER (`DSHoverLift`): the day, percent and cycles Texts change
                         // in the same transaction as the animated offset, so without a geometry group they cross-fade
@@ -522,31 +522,6 @@ private struct IPhoneHealthChart: View {
             .background(shape.fill(DS3.overlay))
             .ds3InsetRims(shape, top: DS3.rimMid, ring: DS3.lineStrong)
             .ds3Elevation(.pop, in: shape)
-        }
-    }
-}
-
-/// IPHONE-DESIGN: history table columns 1.2 : 1 : 1 : 1.4 with 12 pt gaps.
-/// REDESIGN-HISTORY: the History table uses it with equal fractions and 16 pt spacing.
-struct IPhoneFractionRow: Layout {
-    var fractions: [CGFloat] = [1.2, 1, 1, 1.4]
-    var spacing: CGFloat = 12
-    private func widths(_ w: CGFloat) -> [CGFloat] {
-        let avail = max(0, w - spacing * CGFloat(fractions.count - 1))
-        let total = fractions.reduce(0, +)
-        return fractions.map { avail * $0 / total }
-    }
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let w = proposal.width ?? 600
-        let ws = widths(w)
-        let h = zip(subviews, ws).map { $0.sizeThatFits(ProposedViewSize(width: $1, height: nil)).height }.max() ?? 0
-        return CGSize(width: w, height: h)
-    }
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        for (s, w) in zip(subviews, widths(bounds.width)) {
-            s.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: w, height: bounds.height))
-            x += w + spacing
         }
     }
 }

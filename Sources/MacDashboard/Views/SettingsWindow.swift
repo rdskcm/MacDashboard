@@ -60,15 +60,3 @@ final class SettingsWindowController {
         return w
     }
 }
-
-extension AppAppearance {
-    /// D5: app-wide; under -visualFixture `FixtureAppearance` owns NSApp.appearance and this is a no-op.
-    @MainActor func apply() {
-        guard !VisualFixture.isRequested else { return }
-        switch self {
-        case .system: NSApplication.shared.appearance = nil
-        case .light: NSApplication.shared.appearance = NSAppearance(named: .aqua)
-        case .dark: NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
-        }
-    }
-}

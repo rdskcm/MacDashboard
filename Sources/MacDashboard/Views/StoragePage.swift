@@ -216,7 +216,7 @@ struct StorageFoldersCard: View {
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
-            card(now: model.fixtureNow ?? ctx.date)
+            card(now: model.now(or: ctx.date))
         }
     }
 

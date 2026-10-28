@@ -58,15 +58,7 @@ struct BatteryPage: View {
                 try? await Task.sleep(for: .seconds(3))
                 pulse = nil
             }
-            .task {
-                // The 3 s ioreg loop lives with the page: cancelled by SwiftUI when the page unmounts. Never under the
-                // visual fixture (it would overwrite the fixture detail with live data).
-                guard !VisualFixture.isRequested else { return }
-                while !Task.isCancelled {
-                    await model.readBatteryNow()
-                    try? await Task.sleep(for: .seconds(BatteryPageModel.refreshSeconds))
-                }
-            }
+            .task { await model.runBatteryLoop() }
         }
         .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
     }

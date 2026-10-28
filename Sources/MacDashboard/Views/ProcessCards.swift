@@ -2,7 +2,7 @@
 // Processes card (LIVE), DS3 §8 Proc block (REDESIGN-CPU): a compact clickable process list, switchable
 // between CPU and memory ranking via a sliding segmented control, with a single-expansion accordion
 // (only rows with a known PID are expandable). Expanding a row fetches on-demand detail (PID, owner,
-// path) via ProcessInspector and offers Quit (SIGTERM) / Force quit… (SIGKILL after an inline confirm;
+// path) via the model and offers Quit (SIGTERM) / Force quit… (SIGKILL after an inline confirm;
 // another user's process asks for administrator authentication). No energy metric anywhere — CPU/mem only.
 
 import SwiftUI
@@ -194,7 +194,7 @@ struct ProcessListCard: View {
                         // expandedPID)`, matching `QuietStripRow`.
                         if !memoryPage {
                             ProcessDetailView(
-                                row: row, isOpen: isOpen,
+                                model: model, row: row, isOpen: isOpen,
                                 fixture: rowFixture?.pid == row.pid ? rowFixture : nil,
                                 onConfirmShown: onConfirmShown,
                                 onSignalSent: { model.refreshProcessesNow() }
@@ -395,6 +395,7 @@ private struct ProcessRowView: View {
 // MARK: - Expanded detail panel
 
 private struct ProcessDetailView: View {
+    let model: DashboardModel
     let row: ProcEntry
     let isOpen: Bool
     /// Visual fixture only: a fixed detail and phase, no fetch (`ProcessRowFixture`).
@@ -404,8 +405,9 @@ private struct ProcessDetailView: View {
     /// A signal was delivered: the card re-samples the process list.
     let onSignalSent: () -> Void
 
-    init(row: ProcEntry, isOpen: Bool, fixture: ProcessRowFixture?,
+    init(model: DashboardModel, row: ProcEntry, isOpen: Bool, fixture: ProcessRowFixture?,
          onConfirmShown: @escaping (Bool) -> Void, onSignalSent: @escaping () -> Void) {
+        self.model = model
         self.row = row
         self.isOpen = isOpen
         self.fixture = fixture
@@ -561,7 +563,7 @@ private struct ProcessDetailView: View {
         let expected = detail?.path
         let p = pid
         Task { @MainActor in
-            let outcome = await Task.detached { ProcessInspector.signal(sig, pid: p, expectedPath: expected) }.value
+            let outcome = await model.signalProcess(sig, pid: p, expectedPath: expected)
             switch outcome {
             case .sent, .gone:
                 try? await Task.sleep(for: .seconds(1))
@@ -714,9 +716,9 @@ private struct ProcessDetailView: View {
             pendingDetail = nil
             // Off the main actor: proc_pidpath and the owner sysctl are cheap syscalls, but
             // nothing here may ever block the UI.
-            let fetched = await Task.detached { ProcessInspector.detail(pid: pid) }.value
+            let fetched = await model.processDetail(pid: pid)
             // `.task(id:)` cancels the previous task the instant `isOpen`
-            // flips (id includes it) — but `Task.detached` above is
+            // flips (id includes it) — but the detached work inside `model.processDetail` is
             // unstructured and keeps running regardless, so without this
             // check a row closed mid-fetch would still land its result here
             // once the detached work finishes.

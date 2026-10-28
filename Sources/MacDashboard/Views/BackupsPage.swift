@@ -107,7 +107,7 @@ struct BackupsPageBar: View {
     let onBack: () -> Void
 
     var body: some View {
-        let m = BackupsPageModel.make(backupsInput(model, now: model.fixtureNow ?? Date()))
+        let m = BackupsPageModel.make(backupsInput(model, now: model.now()))
         SectionPageBar(symbol: Page.backups.symbol, title: Page.backups.title, sub: m.sub, onBack: onBack) {
             DS3Tag(tone: tagTone(m.tag), text: m.tagText).help(m.tagText)
         } trailing: {
@@ -126,7 +126,7 @@ struct BackupsTimeMachineCard: View {
     /// The ageing texts («50 min ago», «in 10 min») re-render once a minute (`gpu-per-frame`).
     var body: some View {
         TimelineView(.everyMinute) { ctx in
-            card(now: model.fixtureNow ?? ctx.date)
+            card(now: model.now(or: ctx.date))
         }
     }
 
@@ -242,7 +242,7 @@ struct BackupsClaudeCard: View {
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in
-            card(now: model.fixtureNow ?? ctx.date)
+            card(now: model.now(or: ctx.date))
         }
     }
 
