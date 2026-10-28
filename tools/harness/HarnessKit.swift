@@ -91,12 +91,15 @@ func harnessRender<Content: View>(width: CGFloat = 460, appearance: HarnessAppea
         .background(Color(nsColor: .windowBackgroundColor))
         .transaction { $0.disablesAnimations = true }
 
-    // Host in a borderless window that is never ordered front: a window-less NSHostingView reports displayScale 1 and
-    // snaps frames to whole points while the capture bitmap is 2x. A window gets the main screen's backing scale
-    // (nothing can force 2 on another screen), so a non-2 main screen is a hard failure.
+    // Host in a borderless window that is never ordered in (nothing shows on screen): a window-less NSHostingView reports
+    // displayScale 1 and snaps frames to whole points while the capture is 2x. A window gets the main screen's backing
+    // scale (nothing can force 2 on another screen), so a non-2 main screen is a hard failure. The PNG is a window-server
+    // capture of this window (captureWindowPNG, SNAPSHOT-DARK-OFFSCREEN), not cacheDisplay, so blur and blend modes
+    // render as in the real window.
     let hosting = NSHostingView(rootView: rootView)
     let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
+    window.hasShadow = false   // a window capture would include the shadow
     window.contentView = NSView(frame: .zero)
     window.contentView?.addSubview(hosting)
     guard window.backingScaleFactor == 2 else {
@@ -113,19 +116,22 @@ func harnessRender<Content: View>(width: CGFloat = 460, appearance: HarnessAppea
 
     // Settle before capture: let a measured-thumb control (DSSlidingSegmented's
     // `onGeometryChange`) and Charts finish their layout pass before we re-measure
-    // and cache — otherwise an offscreen render can catch the thumb/chart mid-layout.
+    // and capture — otherwise an offscreen render can catch the thumb/chart mid-layout.
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0))
     place(hosting.fittingSize)
 
-    guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-        FileHandle.standardError.write(Data("ERROR: bitmapImageRepForCachingDisplay returned nil\n".utf8))
-        exit(1)
-    }
-    rep.size = hosting.bounds.size
-    hosting.cacheDisplay(in: hosting.bounds, to: rep)
-
-    guard let pngData = rep.representation(using: .png, properties: [:]) else {
-        FileHandle.standardError.write(Data("ERROR: PNG conversion failed\n".utf8))
+    // Proven capture recipe (findings C6): frame on the main display, final layout committed before the capture.
+    window.setFrameOrigin(NSPoint(x: 50, y: 50))
+    // System indeterminate bars animate in the presentation tree; the model state is what cacheDisplay drew.
+    removeAllLayerAnimations(window.contentView!.layer!)
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+    let pngData: Data
+    do {
+        pngData = try captureWindowPNG(windowNumber: window.windowNumber,
+                                       pixelWidth: Int((window.frame.width * window.backingScaleFactor).rounded()),
+                                       pixelHeight: Int((window.frame.height * window.backingScaleFactor).rounded()))
+    } catch {
+        FileHandle.standardError.write(Data("ERROR: \(error)\n".utf8))
         exit(1)
     }
 
@@ -140,4 +146,75 @@ func harnessRender<Content: View>(width: CGFloat = 460, appearance: HarnessAppea
         FileHandle.standardError.write(Data("ERROR: write failed: \(error)\n".utf8))
         exit(1)
     }
+}
+
+/// Removes every CA animation from `layer` and all its descendants (SNAPSHOT-DARK-OFFSCREEN amendment 1).
+/// Copy of Tests/MacDashboardTests/SnapshotSupport.swift `removeAllLayerAnimations` (the harness cannot compile test-target files); keep the two in step.
+fileprivate func removeAllLayerAnimations(_ layer: CALayer) {
+    layer.removeAllAnimations()
+    for sub in layer.sublayers ?? [] { removeAllLayerAnimations(sub) }
+}
+
+/// A window capture that produced no usable image (SNAPSHOT-DARK-OFFSCREEN R4/R5).
+struct WindowCaptureError: Error, CustomStringConvertible {
+    let description: String
+}
+
+/// PNG bytes of a window captured by the window server: `/usr/sbin/screencapture -x -l <windowNumber>`
+/// (SNAPSHOT-DARK-OFFSCREEN, findings C6). It renders a window that was never ordered in exactly like the real
+/// on-screen window and shows nothing on screen. Throws instead of returning a blank, partial or wrong-size image.
+/// Copy of Tests/MacDashboardTests/SnapshotSupport.swift `captureWindowPNG` (the harness cannot compile test-target files); keep the two in step.
+func captureWindowPNG(windowNumber: Int, pixelWidth: Int, pixelHeight: Int) throws -> Data {
+    guard CGPreflightScreenCaptureAccess() else {
+        throw WindowCaptureError(description: "Screen Recording permission is missing for the app that started this run "
+            + "(Terminal, iTerm, Xcode, ...). Turn it on in System Settings > Privacy & Security > "
+            + "Screen & System Audio Recording, quit and reopen that app, then run again.")
+    }
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("md-wincap-\(UUID().uuidString).png")
+    defer { try? FileManager.default.removeItem(at: tmp) }
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+    proc.arguments = ["-x", "-l", String(windowNumber), tmp.path]
+    let output = Pipe()
+    proc.standardOutput = output
+    proc.standardError = output
+    do { try proc.run() } catch {
+        throw WindowCaptureError(description: "cannot launch /usr/sbin/screencapture: \(error)")
+    }
+    proc.waitUntilExit()
+    let toolText = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard proc.terminationStatus == 0 else {
+        throw WindowCaptureError(description: "screencapture -l \(windowNumber) exited \(proc.terminationStatus): \(toolText)")
+    }
+    guard let png = try? Data(contentsOf: tmp), let image = NSBitmapImageRep(data: png)?.cgImage else {
+        throw WindowCaptureError(description: "screencapture -l \(windowNumber) wrote no readable image")
+    }
+    guard abs(image.width - pixelWidth) <= 1, abs(image.height - pixelHeight) <= 1 else {
+        throw WindowCaptureError(description: "capture of window \(windowNumber) is \(image.width)x\(image.height) px, "
+            + "the window is \(pixelWidth)x\(pixelHeight) px")
+    }
+    guard !cgImageIsUniform(image) else {
+        throw WindowCaptureError(description: "capture of window \(windowNumber) is one flat colour (blank)")
+    }
+    return png
+}
+
+/// True when every pixel of `image` has the same RGBA value, i.e. a blank capture. A real state differs within its
+/// first rows (text after 20 pt padding), so the scan stops early; only a blank image is scanned whole.
+func cgImageIsUniform(_ image: CGImage) -> Bool {
+    let w = image.width, h = image.height
+    guard w > 0, h > 0 else { return true }
+    var pixels = [UInt32](repeating: 0, count: w * h)
+    let drawn = pixels.withUnsafeMutableBytes { raw -> Bool in
+        guard let ctx = CGContext(data: raw.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+        ctx.setBlendMode(.copy)
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return true
+    }
+    guard drawn else { return true }
+    let first = pixels[0]
+    return !pixels.contains { $0 != first }
 }
