@@ -50,7 +50,7 @@ extension SerialTests {
                 tweak(m)
                 return m
             }
-            let ivan = IPhoneModel.fixtureIvanKey
+            let alex = IPhoneModel.fixtureAlexKey
             // Live-tile variants of the fixture snapshot (battery-tone coverage).
             func liveSnapshot(_ ip: IPhoneModel, _ key: String, percent: Int, external: Bool, temp: Double, cycles: Int,
                               productType: String) -> IPhoneSnapshot {
@@ -63,7 +63,7 @@ extension SerialTests {
                 s.battery!.cycleCount = cycles
                 return s
             }
-            let vic = IPhoneModel.fixtureVictoriaKey
+            let sam = IPhoneModel.fixtureSamKey
             let longArchive = "sysdiagnose_2026.01.15_09-15-02+0300_iPhone-OS_iPhone_23E254.tar.gz"
             // NEWMAC-HISTORY-EMPTY: the same fixture with only `history` replaced. One model per
             // state, because a view reads `model.history` when it renders, not when the closure is
@@ -898,12 +898,12 @@ extension SerialTests {
                 }
                 run.snap("content-iphone-tiles", mode, width: 1134) {
                     let ip = fixtureIPhone()
-                    let ivanRecord = ip.devices.first { $0.id == ivan }!
+                    let alexRecord = ip.devices.first { $0.id == alex }!
                     HarnessSection(label: "iPhone tiles: reading / needs trust / read failed / pending") {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
-                            IPhoneTileView(record: ivanRecord, status: .reading, snapshot: nil, storage: nil) {}
-                            IPhoneTileView(record: ivanRecord, status: .needsTrust, snapshot: nil, storage: nil) {}
-                            IPhoneTileView(record: ivanRecord, status: .readFailed(L.iphoneStatusFailed),
+                            IPhoneTileView(record: alexRecord, status: .reading, snapshot: nil, storage: nil) {}
+                            IPhoneTileView(record: alexRecord, status: .needsTrust, snapshot: nil, storage: nil) {}
+                            IPhoneTileView(record: alexRecord, status: .readFailed(L.iphoneStatusFailed),
                                            snapshot: nil, storage: nil) {}
                             IPhonePendingTileView(status: .needsTrust) {}
                             IPhonePendingTileView(status: .readFailed(L.iphoneStatusFailed)) {}
@@ -922,9 +922,9 @@ extension SerialTests {
                 }
                 run.snap("content-iphone-battery", mode, width: 1134) {
                     let ip = fixtureIPhone()
-                    let rec = ip.devices.first { $0.id == ivan }
+                    let rec = ip.devices.first { $0.id == alex }
                     let noBattery: IPhoneSnapshot = {
-                        var s = ip.lastSnapshot[ivan]!
+                        var s = ip.lastSnapshot[alex]!
                         s.battery = nil
                         return s
                     }()
@@ -939,13 +939,13 @@ extension SerialTests {
                             IPhoneBatteryCard(record: rec, snapshot: noBattery)
                         }
                         HarnessSection(label: "iPhone battery: live tiles, no tones") {
-                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, ivan, percent: 64, external: false, temp: 30.1, cycles: 412, productType: "iPhone16,2"))
+                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, alex, percent: 64, external: false, temp: 30.1, cycles: 412, productType: "iPhone16,2"))
                         }
                         HarnessSection(label: "iPhone battery: live tiles, amber tones") {
-                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, ivan, percent: 18, external: false, temp: 41.0, cycles: 850, productType: "iPhone18,2"))
+                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, alex, percent: 18, external: false, temp: 41.0, cycles: 850, productType: "iPhone18,2"))
                         }
                         HarnessSection(label: "iPhone battery: live tiles, hot tones") {
-                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, ivan, percent: 9, external: false, temp: 46.0, cycles: 1000, productType: "iPhone18,2"))
+                            IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, alex, percent: 9, external: false, temp: 46.0, cycles: 1000, productType: "iPhone18,2"))
                         }
                     }
                 }
@@ -953,10 +953,10 @@ extension SerialTests {
                     let ip = fixtureIPhone()
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone history: chart with the hover tooltip") {
-                            IPhoneBatteryHistoryCard(points: ip.devices.first { $0.id == ivan }!.battery, initialHover: 100)
+                            IPhoneBatteryHistoryCard(points: ip.devices.first { $0.id == alex }!.battery, initialHover: 100)
                         }
                         HarnessSection(label: "iPhone history: table") {
-                            IPhoneBatteryHistoryCard(points: ip.devices.first { $0.id == vic }!.battery, initialView: .table)
+                            IPhoneBatteryHistoryCard(points: ip.devices.first { $0.id == sam }!.battery, initialView: .table)
                         }
                         HarnessSection(label: "iPhone history: empty") {
                             IPhoneBatteryHistoryCard(points: [])
@@ -966,29 +966,29 @@ extension SerialTests {
                 run.snap("content-iphone-logs", mode, width: 1134) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone logs: from archive") {
-                            IPhoneLogsCard(model: fixtureIPhone(), deviceKey: ivan, initialSource: .archive)
+                            IPhoneLogsCard(model: fixtureIPhone(), deviceKey: alex, initialSource: .archive)
                         }
                         HarnessSection(label: "iPhone logs: loading") {
                             IPhoneLogsCard(model: fixtureIPhone {
-                                $0.logs[ivan] = nil
-                                _ = $0.logsLoading.begin(ivan, handle: IPhoneHandle(raw: 1))
-                            }, deviceKey: ivan)
+                                $0.logs[alex] = nil
+                                _ = $0.logsLoading.begin(alex, handle: IPhoneHandle(raw: 1))
+                            }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone logs: failed") {
                             IPhoneMessagePanel(text: L.iphoneSectionReadFailed, tone: .error)
                         }
                         HarnessSection(label: "iPhone logs: disconnected") {
                             IPhoneLogsCard(model: fixtureIPhone {
-                                $0.logs[ivan] = nil
-                                $0.connected[ivan] = nil
+                                $0.logs[alex] = nil
+                                $0.connected[alex] = nil
                                 $0.archiveLogs = [:]
-                            }, deviceKey: ivan)
+                            }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone logs: empty") {
                             IPhoneLogsCard(model: fixtureIPhone {
-                                $0.logs[ivan] = []
+                                $0.logs[alex] = []
                                 $0.archiveLogs = [:]
-                            }, deviceKey: ivan)
+                            }, deviceKey: alex)
                         }
                     }
                 }
@@ -996,10 +996,10 @@ extension SerialTests {
                 let keptRoot = FileManager.default.temporaryDirectory
                     .appendingPathComponent("md-visual-kept-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
                 defer { try? FileManager.default.removeItem(at: keptRoot) }
-                let keptName = IPhoneModel.fixtureIvanKeptArchive
-                try FileManager.default.createDirectory(at: keptRoot.appendingPathComponent(ivan, isDirectory: true),
+                let keptName = IPhoneModel.fixtureAlexKeptArchive
+                try FileManager.default.createDirectory(at: keptRoot.appendingPathComponent(alex, isDirectory: true),
                                                         withIntermediateDirectories: true)
-                FileManager.default.createFile(atPath: keptRoot.appendingPathComponent(ivan).appendingPathComponent(keptName).path,
+                FileManager.default.createFile(atPath: keptRoot.appendingPathComponent(alex).appendingPathComponent(keptName).path,
                                                contents: Data())
                 run.snap("content-iphone-import", mode, width: 1134) {
                     VStack(alignment: .leading, spacing: 24) {
@@ -1007,52 +1007,52 @@ extension SerialTests {
                             IPhoneImportCard(model: fixtureIPhone(archiveRoot: keptRoot) {
                                 // A second kept name with no file: must stay hidden.
                                 $0.devices[0].keptArchives.append("sysdiagnose_missing_file.tar.gz")
-                                $0.importing[ivan] = .copying(done: 125_000_000, total: 298_000_000)
-                            }, deviceKey: ivan)
+                                $0.importing[alex] = .copying(done: 125_000_000, total: 298_000_000)
+                            }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone import: extracting") {
-                            IPhoneImportCard(model: fixtureIPhone { $0.importing[ivan] = .extracting }, deviceKey: ivan)
+                            IPhoneImportCard(model: fixtureIPhone { $0.importing[alex] = .extracting }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone import: success") {
                             IPhoneImportCard(model: fixtureIPhone {
-                                $0.importResult[ivan] = .success((name: longArchive, summary: ImportSummary(
+                                $0.importResult[alex] = .success((name: longArchive, summary: ImportSummary(
                                     batteryPoints: 12, skippedRows: 0, logFiles: 37,
                                     keptPath: URL(fileURLWithPath: "/tmp/kept.tar.gz"))))
-                            }, deviceKey: ivan)
+                            }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone import: failure") {
                             IPhoneImportCard(model: fixtureIPhone {
-                                $0.importResult[ivan] = .failure(.tarFailed(.exitCode(1)))
-                            }, deviceKey: ivan)
+                                $0.importResult[alex] = .failure(.tarFailed(.exitCode(1)))
+                            }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone import: cancelled") {
-                            IPhoneImportCard(model: fixtureIPhone { $0.importResult[ivan] = .failure(.cancelled) }, deviceKey: ivan)
+                            IPhoneImportCard(model: fixtureIPhone { $0.importResult[alex] = .failure(.cancelled) }, deviceKey: alex)
                         }
                     }
                 }
                 run.snap("content-iphone-identity", mode, width: 1264) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone identity: wide, one serial revealed, one copied") {
-                            IPhoneIdentityCard(model: fixtureIPhone(), deviceKey: ivan, wide: true,
+                            IPhoneIdentityCard(model: fixtureIPhone(), deviceKey: alex, wide: true,
                                                initiallyRevealed: ["serial"], initiallyCopied: "imei")
                         }
                         HarnessSection(label: "iPhone identity: narrow") {
-                            IPhoneIdentityCard(model: fixtureIPhone(), deviceKey: ivan, wide: false)
+                            IPhoneIdentityCard(model: fixtureIPhone(), deviceKey: alex, wide: false)
                         }
                         HarnessSection(label: "iPhone identity: loading") {
                             IPhoneIdentityCard(model: fixtureIPhone {
-                                $0.identity[ivan] = nil
-                                _ = $0.identityLoading.begin(ivan, handle: IPhoneHandle(raw: 1))
-                            }, deviceKey: ivan)
+                                $0.identity[alex] = nil
+                                _ = $0.identityLoading.begin(alex, handle: IPhoneHandle(raw: 1))
+                            }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone identity: failed") {
                             IPhoneMessagePanel(text: L.iphoneSectionReadFailed, tone: .error)
                         }
                         HarnessSection(label: "iPhone identity: disconnected") {
                             IPhoneIdentityCard(model: fixtureIPhone {
-                                $0.identity[ivan] = nil
-                                $0.connected[ivan] = nil
-                            }, deviceKey: ivan)
+                                $0.identity[alex] = nil
+                                $0.connected[alex] = nil
+                            }, deviceKey: alex)
                         }
                     }
                 }
@@ -1063,12 +1063,12 @@ extension SerialTests {
                         }
                         HarnessSection(label: "iPhone dialogs: parse choice") {
                             IPhoneImportChoiceSheet(
-                                title: L.iphoneImportConfirmTitle(longArchive, into: "Ivan’s iPhone"),
+                                title: L.iphoneImportConfirmTitle(longArchive, into: "Alex’s iPhone"),
                                 keepDefault: true,
                                 onCancel: {}, onParse: {}, onKeep: {})
                                 .background(DS3.overlay)
                             IPhoneImportChoiceSheet(
-                                title: L.iphoneImportConfirmTitle(longArchive, into: "Ivan’s iPhone"),
+                                title: L.iphoneImportConfirmTitle(longArchive, into: "Alex’s iPhone"),
                                 keepDefault: false,
                                 onCancel: {}, onParse: {}, onKeep: {})
                                 .background(DS3.overlay)
@@ -1077,8 +1077,8 @@ extension SerialTests {
                             IPhoneMismatchSheet(
                                 q: ImportIdentityQuestion(
                                     archiveName: "sysdiagnose_2026.01.11_20-55-10+0300_iPhone-OS_iPhone_23D60.tar.gz",
-                                    archiveMAh: [4441], deviceMAh: 5030, targetName: "Ivan’s iPhone",
-                                    ownerName: "Victoria’s iPhone"),
+                                    archiveMAh: [4441], deviceMAh: 5030, targetName: "Alex’s iPhone",
+                                    ownerName: "Sam’s iPhone"),
                                 onProceed: {}, onCancel: {})
                                 .background(DS3.overlay)
                         }

@@ -275,8 +275,7 @@ from open-source prior art:
   The technique itself — the specific private `IOHIDEventSystemClient*`
   symbols that IOKit.framework exports but doesn't declare in its public
   headers — comes from there; the implementation here (runtime `dlopen`/`dlsym`
-  symbol resolution, plus a small C spike in `tools/thermal_probe.c`) was
-  written independently for this codebase.
+  symbol resolution) was written independently for this codebase.
 
 ---
 
