@@ -18,7 +18,7 @@
 # Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed
 #       during the run | 5 ERROR: at least one scenario not measured (an AX element was still missing after one
 #       retry, or a trace or analysis step of one run failed; the other scenarios ran and are reported) | 64 usage |
-#       65 precondition refused | 70 runtime error (setup, app launch or window pin, fixture, final verdict).
+#       65 precondition refused | 70 runtime error (setup, app launch or window pin, fixture, final verdict) or a shell error (exit 1 before the verdict is reported as 70).
 #       When several apply: 3 over 4 over 5 over 1.
 #       Last line: GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1> error=<e>
 # Data safety: runs bench copies (bundle id com.rdskcm.mac-dashboard.bench); synthetic fixtures only; never touches ~/Library/Application Support/MacDashboard;
@@ -39,7 +39,7 @@ OUT=""
 KEEP=0
 G1_MAX="5.6"
 
-NPASS=0; NFAIL=0; NNOISY=0; INVALID=0; NERROR=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0
+NPASS=0; NFAIL=0; NNOISY=0; INVALID=0; NERROR=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0; VERDICT_DONE=0
 PIDS=""; HOMEDIR=""; BIN=""; PID=""; CAND_APP=""; BASE_APP=""; CUR_PREFIX=""
 
 usage() { sed -n '2,/^[^#]/{/^#/p;}' "$0" | sed 's/^# \{0,1\}//'; }
@@ -73,6 +73,11 @@ kill_tracked() {
 on_exit() {
   local rc=$?
   trap - EXIT INT TERM
+  # A shell error (e.g. a `set -u` abort) exits 1 like a measured FAIL; only the final verdict may exit 1 (NIGHT-QUEUE).
+  if [ "$rc" = 1 ] && [ "$VERDICT_DONE" = 0 ]; then
+    echo "gate: shell error: exit 1 before the verdict (a set -u abort or a failed builtin); reported as 70" >&2
+    rc=70
+  fi
   [ "$QUIET_EXIT" = 1 ] && exit "$rc"
   kill_tracked
   [ -n "${OUT:-}" ] && rm -rf "$OUT/apps"
@@ -686,4 +691,5 @@ if [ "$DEFAULTS_CHANGED" = 1 ]; then
 fi
 echo "report: $OUT/report.md"
 echo "summary: $OUT/summary.tsv"
+VERDICT_DONE=1
 exit "$FINAL"
