@@ -13,7 +13,7 @@ Two tools, run in this order for a GUI block:
 
 ## 2. Offscreen snapshots (`tools/visual/snapshots.sh`)
 
-Every screen part that renders offscreen is drawn inside `swift test`, dark and light, and compared with a reference picture. No window opens, so the Mac can be used during the run. The states are the `run.snap` calls in `Tests/MacDashboardTests/ContentSnapshotTests.swift`.
+Every screen part that renders offscreen is drawn inside `swift test`, dark and light, and compared with a reference picture. No window opens, so the Mac can be used during the run. The states are the `run.snap` calls in `Tests/MacDashboardTests/ContentSnapshotTests.swift`. The pictures are window-server captures of windows that are never shown (`screencapture -l`), so the terminal running the tool needs Screen Recording permission; without it the run stops at the first state and exits 70 with a message saying so.
 
 - Run: `tools/visual/snapshots.sh [--out DIR]`. About 1.5 min on a warm build (rendering ~80 s of it; the comparison runs in `vbtool snap-compare`, built with `-O`, ~5 s; `timing.txt` in the run directory shows the split). The run directory (`tools/visual/out/snap-<time>/`) holds `results.tsv`, `rendered.tsv` (what the test rendered), `timing.txt`, `current/` (the new PNGs), `diff/` (masks of changed pixels), `build-info.txt` and, when anything differs, `contact-sheet.png` (before / after / difference).
 - Exit codes: 0 every state same; 2 any CHANGED, SIZE-CHANGED, NO-REF or ORPHAN-REF; usage, main display not 2x (references are 2x bitmaps) and build/test/runtime errors have their own codes, listed in the header of the script.

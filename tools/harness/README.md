@@ -70,13 +70,13 @@ same command checks a different theme on a different day. Pin it:
 - `NavigationSplitView` sidebars render as an EMPTY white panel offscreen (the
   List needs a real window/appearance context) — the detail pane renders fine.
   Verify sidebars in the real app (System Events menu click + screencapture).
-- **Layout-and-appearance verifier, not a rendering verifier.** The PNG comes from
-  `cacheDisplay(in:to:)`: the views draw straight into a bitmap — no window, no
-  window server, no Core Animation compositing. Geometry, text, colors and which
-  state shows what are trustworthy; anything that exists only when layers are
-  composited on screen (content escaping its row during scroll or animation,
-  material/translucency blending, between-frame artefacts) never appears here,
-  so a clean PNG is no evidence against it (the row-escape defect was in this
-  class). Same root cause as the blank sidebar above. Verify that class in the
-  real app: `tools/visual/smoke.sh` or a live screencapture.
+- **Window-server capture of a window that is never shown.** The PNG comes from
+  `screencapture -x -l` of a borderless window that is never ordered in
+  (SNAPSHOT-DARK-OFFSCREEN): the window server composites blur, blend modes and
+  materials as in the real window, and nothing appears on screen. The terminal
+  that runs `render.sh` needs Screen Recording permission; without it the render
+  exits 1 and says so. Still never visible here: anything that exists only while a
+  window is live on screen (content escaping its row during scroll or animation,
+  hover, between-frame artefacts) — verify that class in the real app:
+  `tools/visual/smoke.sh` or a live screencapture.
 - Window chrome (titlebar, translucency, traffic lights, alpha holes) is invisible here — use `tools/visual/smoke.sh` (real windows on a bench copy, reference diff); per-view pictures are checked by `tools/visual/snapshots.sh`.
