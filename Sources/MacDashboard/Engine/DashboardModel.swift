@@ -138,6 +138,16 @@ final class DashboardModel {
     /// failed; cleared at the start of the next run. Shown as an inline error on
     /// the Рекомендации card.
     var adviceActionError: String? = nil
+    /// HIDDEN-CONTENT-WORK: confirmations, busy and done state of Home's attention-card verbs. Owned here, not by the
+    /// card, because Home is unmounted while a page is open: the state (and an empty-Trash still running in Finder)
+    /// must outlive the card. Created on first use; Storage keeps its own per-card dispatch.
+    @ObservationIgnored private var homeAdviceDispatchStorage: AdviceActionDispatch?
+    var homeAdviceDispatch: AdviceActionDispatch {
+        if let d = homeAdviceDispatchStorage { return d }
+        let d = AdviceActionDispatch(model: self)
+        homeAdviceDispatchStorage = d
+        return d
+    }
 
     /// Paths of orphaned launchd plists currently being deleted (Автозагрузка card's
     /// "check for outdated" flow) — lets a per-row delete button show a spinner and
@@ -359,7 +369,8 @@ final class DashboardModel {
     private(set) var isPaused = false
     private var activityObservers: [NSObjectProtocol] = []
 
-    init() {
+    /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
+    init(dataDirectory: URL? = nil) {
         cpuHistory = []
         report = FullReport()
         assessment = Assessment()
@@ -367,7 +378,7 @@ final class DashboardModel {
         isCollectingReport = false
         lastError = nil
 
-        let url = Self.defaultReportURL()
+        let url = dataDirectory.map { $0.appendingPathComponent("mac_report.txt") } ?? Self.defaultReportURL()
         reportURL = url
         historyURL = url.deletingLastPathComponent().appendingPathComponent("mac_check_state.json")
         // Load synchronously so the История card has data as soon as the window
@@ -1161,6 +1172,7 @@ final class DashboardModel {
     /// `tmutil status` only for the first probe, while a backup runs, or while a start/stop is in flight,
     /// and never while the window is hidden (`isPaused`). 2 s between samples.
     func observeTimeMachineStatus() async {
+        guard !VisualFixture.isRequested else { return }   // fixture data only; never spawn tmutil (HIDDEN-CONTENT-WORK, as BatteryPage.swift:64)
         defer {
             tmBackup = nil
             if case .failed = tmAction { tmAction = .idle }

@@ -2,7 +2,8 @@
 // Stateful counterpart to `AdviceActionRunner` (stateless system calls, reused
 // as-is): confirmations, busy/done bookkeeping and the `AdviceAction` switch,
 // moved verbatim out of the legacy Рекомендации card (Block V2-SUMMARY) so the
-// Home attention card (HomeAttentionCard) owns no dialog logic of its own.
+// Home attention card (HomeAttentionCard) owns no dialog logic of its own; Home's instance is owned by
+// `DashboardModel.homeAdviceDispatch` (HIDDEN-CONTENT-WORK).
 //
 // Shaped as an `@Observable` reference type (the codebase's established idiom
 // for shared mutable UI state — see DashboardModel/AppSettings/L10nStore)
@@ -158,6 +159,15 @@ final class AdviceActionDispatch {
         showTrashConfirm = false
         guard !trashEmptying else { return }
         trashTargetID = nil
+    }
+
+    /// HIDDEN-CONTENT-WORK: the view presenting the dialogs left the hierarchy (Home unmounted, or the card replaced).
+    /// The dispatch outlives it, so a dialog flag left true would re-present the dialog on the next mount. Done state,
+    /// errors and an empty-Trash already in flight are kept (`cancelEmptyTrash` leaves an in-flight target alone).
+    func dismissConfirmations() {
+        cancelEmptyTrash()
+        showFirewallConfirm = false
+        showBrewConfirm = false
     }
 
     func busy(for action: AdviceAction?) -> Bool {

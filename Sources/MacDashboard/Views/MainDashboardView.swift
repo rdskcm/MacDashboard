@@ -1,8 +1,9 @@
 // Views/MainDashboardView.swift
 // One window chrome for both modes (REDESIGN-HOME, 01-window-chrome.md): the header (title block, mode switch,
 // per-mode actions) and the single background (`DS3.ground` + `DS3OrbField`). Under the header the This Mac
-// content is the Home page (HomeView.swift) with section pages shown in place over it (the real CPU, Memory,
-// Storage, Battery, Security, Backups, System and History pages); the Report
+// content is the Home page (HomeView.swift) or one section page in place of it (the real CPU, Memory,
+// Storage, Battery, Security, Backups, System and History pages); only the shown page is mounted
+// (HIDDEN-CONTENT-WORK). The Report
 // sheet is presented over both while `router.isReportShown`.
 
 import SwiftUI
@@ -57,7 +58,7 @@ struct MainDashboardView: View {
                 // Only the content branches; the mode switch lives in `toolbar` outside this branch
                 // (control-identity-branch).
                 if router.mode == .mac {
-                    content
+                    MacContentView(model: model, router: router, width: liveWidth, tier: tier, breakpoints: breakpoints)
                 } else {
                     IPhoneModeView(model: iphone)
                 }
@@ -91,46 +92,6 @@ struct MainDashboardView: View {
         .sheet(isPresented: $router.isReportShown) { ReportSheet(model: model) { router.isReportShown = false } }
         .ds3PointerTracking(pointer)
     }
-
-    /// This Mac content. Home stays mounted under an open page or report (opacity 0, no hits, hidden from
-    /// accessibility) so Back does not replay its entrance (REDESIGN-HOME D7). `body` reads no live model field:
-    /// `HomeView` and its slots do the reading (the Now card and the tiles keep the rule of reading live fields in their own structs).
-    private var content: some View {
-        ZStack {
-            HomeView(model: model, router: router, width: liveWidth, tier: tier)
-                .opacity(homeVisible ? 1 : 0)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: homeVisible)   // opacity only — no size depends on it
-                .allowsHitTesting(homeVisible)
-                .accessibilityHidden(!homeVisible)
-            if router.destination.page == .cpu {
-                CPUPage(model: model, router: router)
-                    .id(router.destination.page)
-            } else if router.destination.page == .memory {
-                MemoryPage(model: model, router: router, narrow: breakpoints.narrow)
-                    .id(router.destination.page)
-            } else if router.destination.page == .storage {
-                StoragePage(model: model, router: router, breakpoints: breakpoints)
-                    .id(router.destination.page)
-            } else if router.destination.page == .battery {
-                BatteryPage(model: model, router: router, narrow: breakpoints.narrow)
-                    .id(router.destination.page)
-            } else if router.destination.page == .security {
-                SecurityPage(model: model, router: router, narrow: breakpoints.narrow)
-                    .id(router.destination.page)
-            } else if router.destination.page == .backups {
-                BackupsPage(model: model, router: router, narrow: breakpoints.narrow)
-                    .id(router.destination.page)
-            } else if router.destination.page == .system {
-                SystemPage(model: model, router: router)
-                    .id(router.destination.page)
-            } else if router.destination.page == .history {
-                HistoryPage(model: model, router: router, narrow: breakpoints.narrow)
-                    .id(router.destination.page)
-            }
-        }
-    }
-
-    private var homeVisible: Bool { router.destination.page == .home }
 
     // MARK: Toolbar (single row: title block · mode switch · flexible gap · per-mode actions)
 
@@ -303,6 +264,74 @@ struct MainDashboardView: View {
                 m == .mac ? L.mainModeMac : L.mainModeDevices
             }
         }
+    }
+}
+
+/// This Mac content (HIDDEN-CONTENT-WORK): exactly one page is in the hierarchy — Home or the open section page.
+/// Hidden content does no work (user rule 2026-10-28), so Home is unmounted while a page is open and rebuilt on
+/// Back, where its entrance replays. Home owns no loader: a rebuild re-renders model state, and the attention card's
+/// action state lives on the model (`DashboardModel.homeAdviceDispatch`). `body` reads no live model field:
+/// `HomeView` and its slots do the reading. Internal (not private) so HiddenContentTests can host it.
+@MainActor
+struct MacContentView: View {
+    let model: DashboardModel
+    let router: NavigationRouter
+    let width: LiveWindowWidth
+    let tier: WidthTier
+    let breakpoints: PageBreakpoints
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            if router.destination.page == .home {
+                HomeView(model: model, router: router, width: width, tier: tier)
+                    .zIndex(0)   // default (opacity) transition: fades out under an opening page and in on Back
+            }
+            if router.destination.page == .cpu {
+                CPUPage(model: model, router: router)
+                    .id(router.destination.page)
+                    .transition(.identity)   // pages have no fade of their own (as before)
+                    .zIndex(1)               // a removing Home stays under the incoming page
+            } else if router.destination.page == .memory {
+                MemoryPage(model: model, router: router, narrow: breakpoints.narrow)
+                    .id(router.destination.page)
+                    .transition(.identity)
+                    .zIndex(1)
+            } else if router.destination.page == .storage {
+                StoragePage(model: model, router: router, breakpoints: breakpoints)
+                    .id(router.destination.page)
+                    .transition(.identity)
+                    .zIndex(1)
+            } else if router.destination.page == .battery {
+                BatteryPage(model: model, router: router, narrow: breakpoints.narrow)
+                    .id(router.destination.page)
+                    .transition(.identity)
+                    .zIndex(1)
+            } else if router.destination.page == .security {
+                SecurityPage(model: model, router: router, narrow: breakpoints.narrow)
+                    .id(router.destination.page)
+                    .transition(.identity)
+                    .zIndex(1)
+            } else if router.destination.page == .backups {
+                BackupsPage(model: model, router: router, narrow: breakpoints.narrow)
+                    .id(router.destination.page)
+                    .transition(.identity)
+                    .zIndex(1)
+            } else if router.destination.page == .system {
+                SystemPage(model: model, router: router)
+                    .id(router.destination.page)
+                    .transition(.identity)
+                    .zIndex(1)
+            } else if router.destination.page == .history {
+                HistoryPage(model: model, router: router, narrow: breakpoints.narrow)
+                    .id(router.destination.page)
+                    .transition(.identity)
+                    .zIndex(1)
+            }
+        }
+        // The transaction form this file used before; nil under Reduce Motion / frozen = instant swap.
+        .animation((reduceMotion || DS3Motion.isFrozen) ? nil : .easeOut(duration: 0.25),
+                   value: router.destination.page == .home)
     }
 }
 
