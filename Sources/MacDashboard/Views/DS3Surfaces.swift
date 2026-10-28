@@ -40,6 +40,8 @@ final class DS3PointerTracker {
         if !isScrolling { m.aim(at: location) }
     }
     func unregister(_ m: DS3RimModel) { rims[ObjectIdentifier(m)] = nil }
+    /// Rims currently registered (HiddenContentTests: only the shown page's rims may be here).
+    var registeredCount: Int { rims.count }
 
     /// Reports the pointer; re-aims only when the location actually changed (D7) and no scroll is in flight.
     func pointer(_ p: CGPoint?) {

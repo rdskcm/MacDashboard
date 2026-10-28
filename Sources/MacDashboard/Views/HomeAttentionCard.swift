@@ -119,16 +119,15 @@ struct HomeAttentionCard: View {
     let router: NavigationRouter
     let width: LiveWindowWidth
 
-    /// Owns confirmations / busy state for the rows' verb buttons (AdviceActionDispatch). `@State` so the
-    /// `@Observable` instance survives body re-evaluations.
-    @State private var dispatch: AdviceActionDispatch
+    /// The model-owned dispatch for the rows' verb buttons (HIDDEN-CONTENT-WORK: Home is unmounted while a page is
+    /// open, so this state must not live in the card). Internal so HomeAdviceDispatchTests can check the sharing.
+    var dispatch: AdviceActionDispatch { model.homeAdviceDispatch }
     @State private var showAll: Bool
 
     init(model: DashboardModel, router: NavigationRouter, width: LiveWindowWidth, initialShowAll: Bool = false) {
         self.model = model
         self.router = router
         self.width = width
-        _dispatch = State(wrappedValue: AdviceActionDispatch(model: model))
         _showAll = State(initialValue: initialShowAll)
     }
 
@@ -151,6 +150,7 @@ struct HomeAttentionCard: View {
         .ds3GlassCard(cornerRadius: 30)
         .homeHotRing(anyHot)
         .adviceActionDialogs(dispatch)
+        .onDisappear { dispatch.dismissConfirmations() }   // a confirmation must not reappear on remount
     }
 
     // MARK: Hero
