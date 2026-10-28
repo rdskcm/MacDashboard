@@ -26,7 +26,7 @@ enum VisualFixture {
 
     /// REDESIGN-CPU: fixed process details for the expanded-row states (fixture pids: WindowServer 101, Xcode 103).
     static let procDetailWindowServer = ProcDetail(path: "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer", owner: "_windowserver")
-    static let procDetailXcode = ProcDetail(path: "/Applications/Xcode.app/Contents/MacOS/Xcode", owner: "ivan")
+    static let procDetailXcode = ProcDetail(path: "/Applications/Xcode.app/Contents/MacOS/Xcode", owner: "alex")
 
     private static let GiB: Int64 = 1 << 30
     /// REDESIGN-STORAGE: decimal gigabytes (what `fmtCapacity` shows).

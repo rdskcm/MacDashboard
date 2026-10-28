@@ -1,0 +1,34 @@
+name: Public hygiene
+
+# PUBLIC-REPO-CLEANUP: no session links, personal paths or addresses, and no new
+# non-app folders in this public repo. `edited` re-runs the check when the PR title
+# or body changes; closed PRs are skipped.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  public-hygiene:
+    if: github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: No session links, personal paths or new non-app folders
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: >-
+          .github/scripts/public-hygiene.sh
+          "${{ github.event.pull_request.base.sha }}"
+          "${{ github.event.pull_request.head.sha }}"

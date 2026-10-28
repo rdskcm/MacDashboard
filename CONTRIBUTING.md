@@ -44,6 +44,14 @@ asks Apple's catalogue, ipsw.me and the Apple firmware CDN (a HEAD, no download)
 test --filter sysdiagnoseProbe` runs the sysdiagnose extractor on a real archive. No other
 test uses the network.
 
+## Fixture and demo data
+
+Test fixtures, the visual fixture, screenshots and examples in the docs use only
+synthetic data: invented names («Alex», «Sam»), placeholder serials and IMEIs,
+fixture home folders such as `/Users/u`. Never a real person's name, a real device's
+identifiers or a real home-folder path. The `public-hygiene` check on every pull
+request rejects the generic forms of these.
+
 ## Code style
 
 Code and comments: English only, regardless of UI language.

@@ -4,9 +4,9 @@
 import Foundation
 
 extension IPhoneModel {
-    static let fixtureIvanKey = IPhoneData.deviceKey(udid: "fixture-ivan")
-    static let fixtureIvanKeptArchive = "sysdiagnose_2026.01.09_01-34-55+0300_iPhone-OS_iPhone_23E254.tar.gz"
-    static let fixtureVictoriaKey = IPhoneData.deviceKey(udid: "fixture-victoria")
+    static let fixtureAlexKey = IPhoneData.deviceKey(udid: "fixture-alex")
+    static let fixtureAlexKeptArchive = "sysdiagnose_2026.01.09_01-34-55+0300_iPhone-OS_iPhone_23E254.tar.gz"
+    static let fixtureSamKey = IPhoneData.deviceKey(udid: "fixture-sam")
 
     func applyVisualFixture() {
         let now = VisualFixture.referenceDate
@@ -32,14 +32,14 @@ extension IPhoneModel {
 
         devices = [
             IPhoneDeviceRecord(
-                id: Self.fixtureIvanKey, name: "Ivan’s iPhone", marketingName: "iPhone 17 Pro Max",
+                id: Self.fixtureAlexKey, name: "Alex’s iPhone", marketingName: "iPhone 17 Pro Max",
                 productType: "iPhone18,2", enclosureColor: "2", osVersion: "26.4.1", lastSeen: now,
                 battery: history(n: 180, endBack: 0, steps: [(0.5, 101), (0.627, 100), (0.874, 99)], last: 98,
                                  c0: 70, c1: 269, design: 5030, live: 2),
-                keptArchives: [Self.fixtureIvanKeptArchive]
+                keptArchives: [Self.fixtureAlexKeptArchive]
             ),
             IPhoneDeviceRecord(
-                id: Self.fixtureVictoriaKey, name: "Victoria’s iPhone", marketingName: "iPhone 15 Pro Max",
+                id: Self.fixtureSamKey, name: "Sam’s iPhone", marketingName: "iPhone 15 Pro Max",
                 productType: "iPhone16,2", enclosureColor: "1", osVersion: "26.3.1", lastSeen: day(1),
                 battery: history(n: 120, endBack: 1,
                                  steps: [(0.25, 100), (0.4, 99), (0.52, 98), (0.68, 96), (0.82, 94), (0.93, 93), (0.995, 92)],
@@ -48,16 +48,16 @@ extension IPhoneModel {
             ),
         ]
         transportAvailable = true
-        connected = [Self.fixtureIvanKey: IPhoneHandle(raw: 1)]
-        status = [Self.fixtureIvanKey: .connected, Self.fixtureVictoriaKey: .remembered]
+        connected = [Self.fixtureAlexKey: IPhoneHandle(raw: 1)]
+        status = [Self.fixtureAlexKey: .connected, Self.fixtureSamKey: .remembered]
         pendingHandles = []
         pendingStatus = [:]
         restartingService = false
         restartError = nil
         selectedDeviceKey = nil
 
-        lastSnapshot = [Self.fixtureIvanKey: IPhoneSnapshot(
-            udid: "fixture-ivan", name: "Ivan’s iPhone", marketingName: "iPhone 17 Pro Max",
+        lastSnapshot = [Self.fixtureAlexKey: IPhoneSnapshot(
+            udid: "fixture-alex", name: "Alex’s iPhone", marketingName: "iPhone 17 Pro Max",
             productType: "iPhone18,2", osVersion: "26.4.1", build: "23E254", enclosureColor: "2",
             battery: BatteryDetail(
                 percent: 34, voltageMV: 3930, amperageMA: 1200, powerW: nil, temperatureC: 40.6,
@@ -95,7 +95,7 @@ extension IPhoneModel {
             path: "/DiagnosticLogs/sysdiagnose/sysdiagnose_2026.01.15_09-15-02+0300_iPhone-OS_iPhone_23E254.tar.gz",
             size: 298_000_000, modified: now, bugType: nil, category: .other, source: .live
         ))
-        logs = [Self.fixtureIvanKey: entries]
+        logs = [Self.fixtureAlexKey: entries]
         logsFailed = []
 
         let archiveName = "sysdiagnose_2025.12.15_10-02-11+0300_iPhone-OS_iPhone_22E240.tar.gz"
@@ -104,7 +104,7 @@ extension IPhoneModel {
             ("Notes-2025-12-02-090455.ips", 139_000, 44, .appCrash),
             ("JetsamEvent-2025-12-10-231105.ips", 492_000, 36, .jetsam),
         ]
-        archiveLogs = [Self.fixtureIvanKey: archived.map {
+        archiveLogs = [Self.fixtureAlexKey: archived.map {
             IPhoneLogEntry(path: "/" + $0.0, size: $0.1, modified: day($0.2), bugType: nil,
                            category: $0.3, source: .archive(name: archiveName))
         }]
@@ -112,14 +112,14 @@ extension IPhoneModel {
         let values: [IdentityLabel: String] = [
             .marketingName: "iPhone 17 Pro Max", .modelNumber: "MFXG4 LL/A", .regulatoryModel: "A3257",
             .hardwareModel: "V54AP", .ios: "26.4.1 (23E254)", .storage: fmtCapacity(256_000_000_000), .colorCode: "2",
-            .serial: "D7LXK24PYM", .logicBoard: "F3Y52830M1T0YE6", .imei: "350917284615406",
-            .imei2: "350917284627747", .battery: "FQ14231D6K15Y0", .displayPanel: "GVC4282PL7Z0BBA",
-            .displayRawPanel: "GVC4282PL7Z0BBA", .coverGlass: "FX94271R2Q0000", .backGlass: "0904119357110",
-            .nova: "LCS43017HB12WY", .ambientLight: "9714480021276", .backCamera: "DNM4311XE40RYP",
-            .backSuperWide: "GCF4302LW0R9R", .backTele: "F0W4307QK0JS7", .frontCamera: "GCF4319MD0NGT",
-            .frontIR: "HNQ4316AV0P8L", .faceIDProjector: "A0742218J95A2",
+            .serial: "SYN0000001", .logicBoard: "SYN000000000002", .imei: "000000000000003",
+            .imei2: "000000000000004", .battery: "SYN00000000005", .displayPanel: "SYN000000000006",
+            .displayRawPanel: "SYN000000000006", .coverGlass: "SYN00000000007", .backGlass: "SYN0000000008",
+            .nova: "SYN00000000009", .ambientLight: "SYN0000000010", .backCamera: "SYN00000000011",
+            .backSuperWide: "SYN0000000012", .backTele: "SYN0000000013", .frontCamera: "SYN0000000014",
+            .frontIR: "SYN0000000015", .faceIDProjector: "SYN0000000016",
         ]
-        identity = [Self.fixtureIvanKey: IdentityLabel.allCases.map {
+        identity = [Self.fixtureAlexKey: IdentityLabel.allCases.map {
             IPhoneIdentityField(id: $0.rawValue, label: $0, value: values[$0]!, isSecret: $0.isSecret)
         }]
         identityFailed = []
