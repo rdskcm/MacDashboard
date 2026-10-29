@@ -408,7 +408,7 @@ private struct WakeIgnoreMenu: ViewModifier {
             content.contextMenu {
                 ForEach(keys, id: \.self) { key in
                     let title = L.attnWakeIgnore(WakeHolders.label(for: key))
-                    Button(title) { model.setWakeHolderIgnored(key, ignored: true) }
+                    Button(title) { model.settings.setWakeHolderIgnored(key, ignored: true) }
                         .accessibilityLabel(title)
                 }
             }

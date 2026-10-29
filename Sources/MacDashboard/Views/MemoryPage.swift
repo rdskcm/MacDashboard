@@ -364,5 +364,5 @@ private struct StackLegendLayout: Layout {
 private func memoryPageInput(_ model: DashboardModel, narrow: Bool) -> MemoryPageModel.Input {
     MemoryPageModel.Input(mem: model.mem, swap: model.swap, pressure: model.memPressure,
                           installedBytes: model.headerSystem?.memBytes, block: model.memoryBlock.phase,
-                          intervalSeconds: AppSettings.shared.fastIntervalSeconds, narrow: narrow)
+                          intervalSeconds: model.settings.fastIntervalSeconds, narrow: narrow)
 }

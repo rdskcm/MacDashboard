@@ -57,7 +57,7 @@ struct BackupsPage: View {
 private func backupsInput(_ model: DashboardModel, now: Date) -> BackupsPageModel.Input {
     .init(tmDest: model.report.tmDest, snapshots: model.report.snapshots, backup: model.tmBackup,
           action: model.tmAction, updatedAt: model.tmUpdatedAt, claudeBackup: model.claudeBackup,
-          claudeLogPath: model.claudeLogPath, warnAfterHours: AppSettings.shared.backupStaleHours, now: now)
+          claudeLogPath: model.claudeLogPath, warnAfterHours: model.settings.backupStaleHours, now: now)
 }
 
 private func toneColor(_ t: BackupsTone) -> Color {

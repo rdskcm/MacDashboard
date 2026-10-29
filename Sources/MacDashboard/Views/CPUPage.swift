@@ -122,5 +122,5 @@ struct CPUUsageCard: View {
 private func cpuPageInput(_ model: DashboardModel) -> CPUPageModel.Input {
     CPUPageModel.Input(cpu: model.cpu, load: model.load, ncpu: model.ncpu, chip: model.headerSystem?.chip,
                        socTempC: model.socTempC, block: model.cpuBlock.phase, highSince: model.cpuHighSince,
-                       now: model.lastSampleAt, intervalSeconds: AppSettings.shared.fastIntervalSeconds)
+                       now: model.lastSampleAt, intervalSeconds: model.settings.fastIntervalSeconds)
 }

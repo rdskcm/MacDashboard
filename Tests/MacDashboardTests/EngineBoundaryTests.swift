@@ -131,4 +131,50 @@ struct EngineBoundaryTests {
         }
         #expect(offenders.isEmpty, "views get the clock from model.now() and never read the harness flag (ARCH-ENGINE-GUARD): \(offenders)")
     }
+
+    // MARK: - ARCH-SETTINGS-PATH
+
+    /// Views files that keep `AppSettings.shared`, with the reason (D11).
+    static let viewsSharedSettingsExceptions: [String: String] = [
+        "DS3Surfaces.swift": "orb backdrop modifier: no DashboardModel in scope; display-only preference",
+        "IPhoneImportCard.swift": "iPhone feature: IPhoneModel owns its settings reads (ARCH-MODEL-SPLIT)",
+    ]
+
+    @Test func assessedReadsSettingsOnlyThroughAssessmentSettings() throws {
+        let file = sourcesRoot.appendingPathComponent("Engine/DashboardModel.swift")
+        let all = try lines(of: file)
+        let start = try #require(all.firstIndex { $0.contains("func assessed(_ r: FullReport)") }, "assessed(_:) not found in DashboardModel.swift")
+        var body: [String] = []
+        for line in all[(start + 1)...] {
+            if line == "    }" { break }
+            body.append(codeOnly(line))
+        }
+        let code = body.joined(separator: "\n")
+        let marker = "settings.assessmentSettings"
+        #expect(code.components(separatedBy: marker).count - 1 == 1,
+                "R3: assessed(_:) in DashboardModel.swift must read settings exactly once, through \(marker)")
+        let rest = code.replacingOccurrences(of: marker, with: "")
+        #expect(rest.range(of: #"\bsettings\b"#, options: .regularExpression) == nil && !rest.contains("AppSettings"),
+                "R3: assessed(_:) in DashboardModel.swift reads a setting outside settings.assessmentSettings")
+    }
+
+    @Test func dashboardModelHasNoSharedSettings() throws {
+        var offenders: [String] = []
+        for file in try swiftFiles("Engine") where file.lastPathComponent.hasPrefix("DashboardModel") {
+            for (i, line) in try lines(of: file).enumerated() where codeOnly(line).contains("AppSettings.shared") {
+                offenders.append("\(file.lastPathComponent):\(i + 1)")
+            }
+        }
+        #expect(offenders.isEmpty, "R5: DashboardModel takes its settings through init (model.settings), never AppSettings.shared: \(offenders)")
+    }
+
+    @Test func viewsReadSettingsThroughTheModel() throws {
+        var users: Set<String> = []
+        for file in try swiftFiles("Views") {
+            if try lines(of: file).contains(where: { codeOnly($0).contains("AppSettings.shared") }) { users.insert(file.lastPathComponent) }
+        }
+        let allowed = Set(Self.viewsSharedSettingsExceptions.keys)
+        #expect(users.subtracting(allowed).isEmpty, "R6: views read settings through model.settings; AppSettings.shared found in \(users.subtracting(allowed).sorted())")
+        #expect(allowed.subtracting(users).isEmpty, "R6: stale viewsSharedSettingsExceptions entries: \(allowed.subtracting(users).sorted())")
+    }
 }

@@ -44,6 +44,21 @@ let apiFixturesRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()   // Tests
     .appendingPathComponent("APIFixtures", isDirectory: true)
 
+/// ARCH-SETTINGS-PATH: a fresh, empty `UserDefaults` suite for one test. The name always starts with
+/// `MacDashboardTests.`, so `removeIsolatedDefaults` can never remove a real domain (the app's is
+/// `com.rdskcm.mac-dashboard`). Callers: `let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }`.
+func makeIsolatedDefaults() -> (UserDefaults, String) {
+    let name = "MacDashboardTests.settings.\(ProcessInfo.processInfo.processIdentifier).\(UUID().uuidString)"
+    let d = UserDefaults(suiteName: name)!
+    d.removePersistentDomain(forName: name)
+    return (d, name)
+}
+
+func removeIsolatedDefaults(_ d: UserDefaults, _ name: String) {
+    precondition(name.hasPrefix("MacDashboardTests."), "refusing to remove a non-test defaults domain: \(name)")
+    d.removePersistentDomain(forName: name)
+}
+
 let GIB: Int64 = 1 << 30
 let MIB: Int64 = 1 << 20
 
