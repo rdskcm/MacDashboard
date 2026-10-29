@@ -224,7 +224,7 @@ struct HomeAttentionCard: View {
             .ds3InsetRims(RoundedRectangle(cornerRadius: 22, style: .continuous), ring: DS3.line)
 
             if !chips.isEmpty { youCan(chips) }
-            if let e = model.adviceActionError {
+            if let e = model.security.adviceError {
                 Text(e).font(.system(size: 12.5)).foregroundStyle(DS3.hotInk)
             }
             if let e = model.brew.upgradeError {

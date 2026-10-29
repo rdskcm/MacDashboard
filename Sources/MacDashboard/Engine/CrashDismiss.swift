@@ -38,12 +38,12 @@ struct CrashDeleteResult: Equatable, Sendable {
 }
 
 /// CRASH-REPORT-DISMISS fix wave 2: the ordering rule of every crash re-scan outside a pass (hide, unhide, delete,
-/// Security Refresh, pass-end rerun). Pure; `DashboardModel` owns one and asks it before each scan and each write.
+/// Security Refresh, pass-end rerun). Pure; `CrashReportsController` owns one and asks it before each scan and each write.
 /// Rule: a request is made AFTER its input changed (hidden list written, files deleted), so its scan is fresh; only
 /// the scan of the newest request may write, so the last write is always the freshest. A request or a landing while
 /// a pass collects is parked and requested again when the pass ends (D10).
 struct CrashScanSequencer: Equatable, Sendable {
-    /// What one finished scan may do: write the crash section, and set `crashAction` to `outcome` when non-nil.
+    /// What one finished scan may do: write the crash section, and set the controller's `action` to `outcome` when non-nil.
     struct Landing: Equatable, Sendable {
         var write: Bool
         var outcome: CrashActionState?

@@ -265,20 +265,20 @@ extension SerialTests {
             @MainActor func security(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
             let secFirewallOff = security()
             let secAllOn = security { $0.report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true); $0.report.crashes = [] }
-            let secEnabling = security { $0.applyFixtureSecurity(action: .enabling(.firewall)) }
-            let secTimeout = security { $0.applyFixtureSecurity(action: .failed(.firewall, .timedOut)) }
-            let secCancelled = security { $0.report.security = SecurityState(fileVault: true, gatekeeper: false, sip: true, firewall: true); $0.applyFixtureSecurity(action: .failed(.gatekeeper, .cancelled)) }
+            let secEnabling = security { $0.security.applyFixture(action: .enabling(.firewall)) }
+            let secTimeout = security { $0.security.applyFixture(action: .failed(.firewall, .timedOut)) }
+            let secCancelled = security { $0.report.security = SecurityState(fileVault: true, gatekeeper: false, sip: true, firewall: true); $0.security.applyFixture(action: .failed(.gatekeeper, .cancelled)) }
             let secOffStates = security { $0.report.security = SecurityState(fileVault: false, gatekeeper: true, sip: false, firewall: true) }
             let secUnknown = security { $0.report.security = SecurityState() }
             let secCollecting = security { $0.report.security = nil; $0.report.crashes = nil }
             let secUpdates = security { $0.report.updates = VisualFixture.securityUpdates }
-            let secChecking = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil; $0.applyFixtureSecurity(action: .idle, checkingUpdates: true) }
+            let secChecking = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil; $0.applyFixtureCheckingUpdates(true) }
             let secCheckFailed = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil }
             let secCrashes = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef) }
             let secCrashActions = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.report.crashesHidden = VisualFixture.securityHiddenCrashes(home: secHome, now: homeRef) }
-            let secCrashFailed = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.applyFixtureCrashAction(.failed(.cancelled)) }
-            let secCrashWorking = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.applyFixtureCrashAction(.working(.delete, groupID: "Kernel")) }
-            let secRefreshing = security { $0.applyFixtureSecurity(action: .idle, refreshing: true) }
+            let secCrashFailed = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.crashReports.applyFixture(.failed(.cancelled)) }
+            let secCrashWorking = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.crashReports.applyFixture(.working(.delete, groupID: "Kernel")) }
+            let secRefreshing = security { $0.security.applyFixture(action: .idle, refreshing: true) }
             // REDESIGN-BACKUPS: Backups page states. Reference instants are relative to the fixture clock (2026-01-15 10:30).
             @MainActor func backups(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
             func bkDest(last: Date?, mounted: Bool, schedule: TMSchedule? = .automatic(intervalSeconds: 3600)) -> TMDestination {

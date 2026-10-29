@@ -53,9 +53,9 @@ extension SerialTests {
         }
 
         /// Suspected defect 1 (ARCH-MODEL-SPLIT, 2026-10-29): the wait gives up after 15 s with the pass still in
-        /// flight and the caller's write lands in the partial `report`. refreshSecurityNow /
-        /// enableProtectionNow then assess `self.report` — a partial (assessment-complete-collect)
-        /// (TimeMachineController.refreshNow re-assesses through host.reassess since ARCH-MODEL-SPLIT block 4). This test pins
+        /// flight and the caller's write lands in the partial `report`. Every controller that writes after this wait
+        /// (TimeMachineController since block 4, SecurityController and CrashReportsController since block 6) re-assesses
+        /// through host.reassess, so the partial is never assessed; the write itself still lands in it (PASS-WAIT-PARTIAL). This test pins
         /// the seam's current contract; the fix row adds the assess-site test and flips the expectations below.
         @Test func awaitPassEndGivesUpAfter15s() async {
             let (m, _, clock, cleanup) = makeModel(); defer { cleanup() }
