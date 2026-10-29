@@ -58,10 +58,10 @@ struct SecurityPage: View {
 @MainActor
 private func securityInput(_ model: DashboardModel, fileVaultOpened: Bool = false,
                            openedReportPath: String? = nil) -> SecurityPageModel.Input {
-    .init(security: model.report.security, action: model.securityAction, fileVaultOpened: fileVaultOpened,
+    .init(security: model.report.security, action: model.security.action, fileVaultOpened: fileVaultOpened,
           updates: model.report.updates, updatesCheckedAt: model.report.updatesCheckedAt,
           checkingUpdates: model.isCheckingUpdates, crashes: model.report.crashes,
-          openedReportPath: openedReportPath, now: model.now(), hiddenCrashes: model.report.crashesHidden, crashAction: model.crashAction)
+          openedReportPath: openedReportPath, now: model.now(), hiddenCrashes: model.report.crashesHidden, crashAction: model.crashReports.action)
 }
 
 private func toneColor(_ t: SecurityTone) -> Color {
@@ -114,8 +114,8 @@ struct SecurityPageBar: View {
 
     /// Opacity ZStack: «Refresh» ↔ «Refreshing…» without a width change (`swap-in-place`).
     private var refresh: some View {
-        let busy = model.securityRefreshing || model.isCheckingUpdates
-        return Button { model.refreshSecurityNow() } label: {
+        let busy = model.security.refreshing || model.isCheckingUpdates
+        return Button { model.security.refreshNow() } label: {
             ZStack {
                 Text(L.commonRefresh).opacity(busy ? 0 : 1)
                 Text(L.commonRefreshing).opacity(busy ? 1 : 0)
@@ -167,7 +167,7 @@ struct SecurityProtectionCard: View {
     private func run(_ t: SecurityTileModel) {
         switch t.button {
         case .enable?:
-            model.enableProtectionNow(t.protection)
+            model.security.enableNow(t.protection)
         case .openSettings?:
             AdviceActionRunner.openPane(AdvicePanes.fileVault)
             fileVaultOpened = true
@@ -369,7 +369,7 @@ struct SecurityCrashesCard: View {
                                                  AdviceActionRunner.openInConsole(p)
                                                  openedReportPath = p
                                              },
-                                             hide: { model.hideCrashGroup(r.id) },
+                                             hide: { model.crashReports.hide(r.id) },
                                              delete: { withAnimation(confirmCurve) { pendingDelete = r.id } })
                                 }
                             }
@@ -415,7 +415,7 @@ struct SecurityCrashesCard: View {
             busy: false,
             onCancel: { withAnimation(confirmCurve) { pendingDelete = nil } },
             onConfirm: {
-                model.deleteCrashGroup(r.id)
+                model.crashReports.delete(r.id)
                 withAnimation(confirmCurve) { pendingDelete = nil }
             })
         .transition(.opacity)
@@ -429,7 +429,7 @@ struct SecurityCrashesCard: View {
                 VStack(spacing: 4) {
                     ForEach(m.crashHiddenRows, id: \.id) { r in
                         SectionRowsRow(name: r.name, sub: r.sub) {
-                            Button { model.unhideCrashGroup(r.id) } label: {
+                            Button { model.crashReports.unhide(r.id) } label: {
                                 Text(L.secCrashUnhide).dsSwapInPlace(r.working) { DS3Spinner(role: .track, size: 13) }
                             }
                             .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 28, hPad: 12, fontSize: 12.5,

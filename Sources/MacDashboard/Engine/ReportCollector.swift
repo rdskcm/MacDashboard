@@ -479,7 +479,7 @@ final class ReportCollector {
     }
 
     /// The actual security-state collection logic, factored out of `collectSecurity()`
-    /// so a manual re-check (DashboardModel's `enableFirewallNow()`, AR wave 2) can call
+    /// so a manual re-check (`SecurityController.enableNow(_:)`, AR wave 2) can call
     /// it directly without going through the `Outcome` plumbing, mirroring
     /// `collectSmartDisks()`/`collectBrewInfo()` above.
     func collectSecurityInfo() async -> SecurityState {

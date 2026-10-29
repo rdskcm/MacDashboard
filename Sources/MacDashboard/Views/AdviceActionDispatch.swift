@@ -87,7 +87,7 @@ final class AdviceActionDispatch {
             trashTargetID = id
             showTrashConfirm = true
         case .enableFirewall: showFirewallConfirm = true
-        case .enableGatekeeper: model.enableProtectionNow(.gatekeeper)   // no dialog: the Touch ID prompt is the confirmation
+        case .enableGatekeeper: model.security.enableNow(.gatekeeper)   // no dialog: the Touch ID prompt is the confirmation
         }
     }
 
@@ -173,8 +173,8 @@ final class AdviceActionDispatch {
     func busy(for action: AdviceAction?) -> Bool {
         switch action {
         case .brewUpgrade: return model.brew.upgrading
-        case .enableFirewall: return model.firewallApplying
-        case .enableGatekeeper: return model.gatekeeperApplying
+        case .enableFirewall: return model.security.firewallApplying
+        case .enableGatekeeper: return model.security.gatekeeperApplying
         case .emptyTrash: return trashEmptying || trashCounting
         default: return false
         }
@@ -204,7 +204,7 @@ private struct AdviceActionDialogs: ViewModifier {
                 get: { dispatch.showFirewallConfirm },
                 set: { dispatch.showFirewallConfirm = $0 }
             )) {
-                Button(L.adviceFirewallConfirmButton) { dispatch.model.enableFirewallNow() }
+                Button(L.adviceFirewallConfirmButton) { dispatch.model.security.enableNow(.firewall) }
                 Button(L.adviceCancel, role: .cancel) {}
             } message: {
                 Text(L.adviceFirewallConfirmMessage)

@@ -204,7 +204,7 @@ final class AppSettings {
     }
 
     /// CRASH-REPORT-DISMISS: crash report files hidden on the Security page. Mutate through
-    /// `DashboardModel.hideCrashGroup` / `unhideCrashGroup` so the list and the assessment update.
+    /// `CrashReportsController.hide(_:)` / `unhide(_:)` so the list and the assessment update.
     var hiddenCrashReports: [HiddenCrashReport] {
         didSet { defaults.set(CrashDismiss.encode(hiddenCrashReports), forKey: Self.hiddenCrashReportsKey) }
     }
