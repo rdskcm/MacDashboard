@@ -82,36 +82,13 @@ final class DashboardModel {
     /// refresh is in flight — mirrors `smartRefreshing`.
     var processesRefreshing = false
 
-    /// Re-entrancy guard for `upgradeBrewNow()`, true while an in-app `brew upgrade`
-    /// is in flight — mirrors `smartRefreshing`.
-    var brewUpgrading = false
-
-    /// Set when the last `upgradeBrewNow()` run failed; cleared at the start of the
-    /// next run. Shown as an inline error under the Homebrew sub-section of the
-    /// Обслуживание card and in the Рекомендации (Advice) card's error area.
-    var brewUpgradeError: String? = nil
-
-    /// Live `brew upgrade` progress while `brewUpgrading` is true; nil otherwise.
-    var brewProgress: BrewProgress? = nil
-
-    /// True only while the `brew upgrade` process itself runs (BREW-CANCEL): the one window in
-    /// which Stop can act. False during the re-check that follows.
-    var brewUpgradeStoppable = false
-
-    /// Set by `stopBrewUpgrade()`; cleared when the run ends.
-    var brewStopRequested = false
-
-    /// Neutral outcome line of the last run the user stopped (BREW-CANCEL); cleared at the next
-    /// run's start. Not an error: shown in muted ink under the Homebrew section.
-    var brewUpgradeNotice: String? = nil
-
     /// Whether the SMART CLI toolchain (`smartctl`) is installed, installable via
     /// Homebrew, or blocked on Homebrew itself missing (Block N8). Recomputed
     /// whenever a fresh report lands and again after `installSmartmontoolsNow()`.
     var smartToolsState: ReportCollector.SmartToolsAvailability = .needsHomebrew
 
     /// Re-entrancy guard for `installSmartmontoolsNow()`, true while an in-app
-    /// `brew install smartmontools` is in flight — mirrors `brewUpgrading`.
+    /// `brew install smartmontools` is in flight — mirrors `brew.upgrading`.
     var smartInstalling = false
 
     /// Set when the last `installSmartmontoolsNow()` run failed; cleared at the
@@ -290,20 +267,8 @@ final class DashboardModel {
     private var slowTask: Task<Void, Never>?
     private var reportTask: Task<Void, Never>?
     private var smartTask: Task<Void, Never>?
-    private var brewUpgradeTask: Task<Void, Never>?
-    private var brewUpgradeRun: Task<String?, Never>?   // the `brew upgrade` step only; user Stop cancels this
     /// One watchdog per armed block (`beginBlock`); cancelled when the block gets a verdict.
     @ObservationIgnored private var blockWatchdogs: [BlockID: Task<Void, Never>] = [:]
-
-    /// Session cache for the brew section (Block N5): last collected
-    /// snapshot (status, outdated, versions, count) and when. Reused by refreshReport() within
-    /// ReportCollector.brewCacheWindow so a manual «Обновить отчёт» doesn't pay
-    /// the `brew update` + `brew outdated` cost every time. In-memory only.
-    private var lastBrewInfo: BrewSnapshot?
-    /// When the cache was filled; also the System page's «Checked today at HH:MM».
-    private(set) var brewCheckedAt: Date?
-    /// True while `refreshBrewNow()` re-checks brew on its own (System page «Try again»).
-    private(set) var brewRefreshing = false
 
     /// Set when refreshReport() is requested while a collect is already in flight
     /// (e.g. a language switch during the launch collect). The in-flight pass kicks
@@ -362,6 +327,8 @@ final class DashboardModel {
     let reportHost: ReportHost
     /// ARCH-MODEL-SPLIT: the Energy (pmset) feature; views read `model.energy.<member>`.
     let energy: EnergyController
+    /// ARCH-MODEL-SPLIT: the Homebrew feature (upgrade, Stop, re-check, session cache); views read `model.brew.<member>`.
+    let brew: BrewController
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
     init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live) {
@@ -399,6 +366,7 @@ final class DashboardModel {
             awaitPassEnd: { await link.model?.waitForReportRefreshToFinish() ?? true },
             reassess: { link.model?.reassessCommitted() })
         energy = EnergyController(host: reportHost, time: time)
+        brew = BrewController(host: reportHost, time: time)
         smartToolsState = Self.recomputeSmartToolsState()
         if let countedAt = folderSizes?.countedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
         // ARCH-SETTINGS-PATH: the one write path — any change of an assessment setting re-assesses this model.
@@ -792,8 +760,7 @@ final class DashboardModel {
         reportTask = nil
         smartTask?.cancel()
         smartTask = nil
-        brewUpgradeTask?.cancel()
-        brewUpgradeTask = nil
+        brew.stop()
         energy.stop()
         updateCheckTask?.cancel()
         updateCheckTask = nil
@@ -842,9 +809,7 @@ final class DashboardModel {
                 }
             }
 
-            let cachedBrew: BrewSnapshot? =
-                ReportCollector.isBrewCacheFresh(collectedAt: self.brewCheckedAt, now: Date())
-                    ? self.lastBrewInfo : nil
+            let cachedBrew = self.brew.cachedSnapshot(now: self.time.now())
             let hiddenCrashes = self.hiddenCrashNames
             let collected = await CommandRunner.$qos.withValue(trigger.commandQoS) {
                 await ReportCollector(hiddenCrashReports: hiddenCrashes).collect(skipSlow: false, cachedBrew: cachedBrew) { partial in
@@ -881,20 +846,8 @@ final class DashboardModel {
             var final = collected
             self.applyBackground(to: &final)
 
-            if cachedBrew == nil {
-                // brew actually ran this pass — refill the session cache, but never with a failed brew
-                // check (BREW-OUTDATED-FAIL, BREW-VERSION-FAIL): the next refresh must retry it.
-                let failed = ReportCollector.brewCheckFailed(status: final.brewStatus, outdated: final.brewOutdated)
-                if !failed, let status = final.brewStatus {
-                    self.lastBrewInfo = BrewSnapshot(status: status, outdated: final.brewOutdated,
-                                                     outdatedDetail: final.brewOutdatedDetail,
-                                                     installedCount: final.brewInstalledCount)
-                    self.brewCheckedAt = Date()
-                } else {
-                    self.lastBrewInfo = nil
-                    self.brewCheckedAt = nil
-                }
-            }
+            // brew actually ran this pass — refill the session cache (never with a failed check; see BrewController.record).
+            if cachedBrew == nil { self.brew.record(final) }
 
             let snapshotNow = Date()
             if SnapshotSchedule.isDue(now: snapshotNow, last: self.settings.lastSnapshotAt,
@@ -1340,114 +1293,13 @@ final class DashboardModel {
         }
     }
 
-    /// In-app Homebrew package upgrade, triggered by the «Обновить пакеты» button
-    /// on the Обслуживание системы card. Runs `brew upgrade` off-main, then
-    /// re-collects a fresh Homebrew snapshot so the card reflects the outcome
-    /// regardless of success or failure. Mirrors `refreshSmartNow()`.
-    /// The `brew upgrade` step runs in its own Task so Stop (`stopBrewUpgrade()`) can end just that process; the re-check still runs.
-    func upgradeBrewNow() {
-        guard !brewUpgrading else { return }
-        brewUpgrading = true
-        brewUpgradeError = nil
-        brewUpgradeNotice = nil
-        brewStopRequested = false
-        brewProgress = nil
-
-        let before = report.brewOutdated ?? []
-        let total = before.count
-
-        let run = Task {
-            await BrewUpgrader.upgradeAll(totalOutdated: total, onProgress: { progress in
-                DispatchQueue.main.async { [weak self] in self?.brewProgress = progress }
-            })
-        }
-        brewUpgradeRun = run
-        brewUpgradeStoppable = true
-
-        brewUpgradeTask = Task { [weak self] in
-            guard let self else { run.cancel(); return }
-            defer {
-                self.brewUpgrading = false
-                self.brewProgress = nil
-                self.brewStopRequested = false
-                self.brewUpgradeStoppable = false
-                self.brewUpgradeRun = nil
-            }
-
-            // stop() cancels this task; forward that to the brew step (the user's Stop cancels only `run`).
-            let error = await withTaskCancellationHandler { await run.value } onCancel: { run.cancel() }
-            self.brewUpgradeStoppable = false
-            // A Stop counts only if brew had not already exited 0 before the signal landed.
-            let stoppedByUser = self.brewStopRequested && error != nil
-            guard !Task.isCancelled else { return }        // global teardown: no re-check, no write-back
-
-            guard let info = await self.recollectBrew() else { return }
-            self.brewUpgradeError = stoppedByUser ? nil : error
-            self.brewUpgradeNotice = stoppedByUser
-                ? BrewUpgrader.stoppedNotice(before: before, after: info.outdated) : nil
-        }
-    }
-
-    /// Re-checks brew on its own (System page «Try again» after a failed check), without a full report
-    /// pass: `refreshReport()` rebuilds every section blank for 10-30 s (assessment-complete-collect).
-    func refreshBrewNow() {
-        guard !brewUpgrading, !brewRefreshing else { return }
-        brewRefreshing = true
-        Task { [weak self] in
-            guard let self else { return }
-            defer { self.brewRefreshing = false }
-            _ = await self.recollectBrew()
-        }
-    }
-
-    /// The re-check tail shared by `upgradeBrewNow()` and `refreshBrewNow()`: collect a fresh brew
-    /// snapshot (no index update), wait for any report pass, write the four report fields and refill
-    /// the session cache. nil = cancelled (teardown): nothing written.
-    private func recollectBrew() async -> BrewSnapshot? {
-        let collectorBox = UncheckedSendableBox(ReportCollector())
-        let info = await collectorBox.value.collectBrewInfo(refreshIndex: false)
-        guard !Task.isCancelled else { return nil }
-
-        // The collect that starts while `brew upgrade` runs captures the PRE-upgrade
-        // cachedBrew and would write it over these values (`self.report = final`).
-        // Same reason the three sibling updaters wait — see
-        // waitForReportRefreshToFinish()'s doc comment.
-        await waitForReportRefreshToFinish()
-        guard !Task.isCancelled else { return nil }
-
-        report.brewStatus = info.status
-        report.brewOutdated = info.outdated
-        report.brewOutdatedDetail = info.outdatedDetail
-        report.brewInstalledCount = info.installedCount
-        let failed = ReportCollector.brewCheckFailed(status: info.status, outdated: info.outdated)
-        lastBrewInfo = failed ? nil : info
-        brewCheckedAt = failed ? nil : Date()
-        return info
-    }
-
-    /// Visual fixture only (REDESIGN-SYSTEM): the Homebrew card's transient state.
-    func applyFixtureBrew(checkedAt: Date?, upgrading: Bool, progress: BrewProgress?, error: String?,
-                          notice: String?, stoppable: Bool) {
-        brewCheckedAt = checkedAt; brewUpgrading = upgrading; brewProgress = progress
-        brewUpgradeError = error; brewUpgradeNotice = notice; brewUpgradeStoppable = stoppable
-    }
-
-    /// User Stop (BREW-CANCEL). Interrupts only the running `brew upgrade`: SIGINT to its process
-    /// group, SIGKILL after BrewUpgrader's grace. `upgradeBrewNow()`'s flow then re-checks brew so
-    /// the card shows what really changed. No-op outside the brew step or after a first press.
-    func stopBrewUpgrade() {
-        guard brewUpgradeStoppable, !brewStopRequested, let run = brewUpgradeRun else { return }
-        brewStopRequested = true
-        run.cancel()
-    }
-
     /// In-app `smartmontools` install, triggered by the install button on the Диски
     /// card when Homebrew is present but `smartctl` isn't (Block N8). Runs
     /// `brew install smartmontools` off-main (unprivileged — brew runs as the user,
     /// never via PrivilegedRunner), then re-probes `findSmartctl()`: on success,
     /// flips `smartToolsState` to `.installed` and re-collects external SMART via
     /// `refreshSmartNow()`; on failure, records a typed `SmartInstallFailure` (exit code, 300 s timeout, no brew).
-    /// Mirrors `upgradeBrewNow()`.
+    /// Mirrors `brew.upgradeNow()`.
     func installSmartmontoolsNow() {
         guard !smartInstalling else { return }
         smartInstalling = true
@@ -1494,7 +1346,7 @@ final class DashboardModel {
     /// `socketfilterfw --setglobalstate on` via `PrivilegedRunner` (Touch ID / admin
     /// password) off-main, then re-collects security state so the row disappears the
     /// instant success lands, without waiting for the next fast tick. Mirrors
-    /// `refreshSmartNow()`/`upgradeBrewNow()`.
+    /// `refreshSmartNow()`/`brew.upgradeNow()`.
     func enableFirewallNow() { enableProtectionNow(.firewall) }
 
     /// REDESIGN-SECURITY: the same flow for the firewall and Gatekeeper (Touch ID, 30 s budget). The outcome is

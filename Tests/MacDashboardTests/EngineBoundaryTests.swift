@@ -165,7 +165,7 @@ struct EngineBoundaryTests {
         name.hasPrefix("DashboardModel") || name.hasSuffix("Controller.swift")
             || ["ReportHost.swift", "TimeSource.swift"].contains(name)
     }
-    static let modelFilesMustInclude: Set<String> = ["DashboardModel.swift", "EnergyController.swift", "ReportHost.swift", "TimeSource.swift"]
+    static let modelFilesMustInclude: Set<String> = ["DashboardModel.swift", "BrewController.swift", "EnergyController.swift", "ReportHost.swift", "TimeSource.swift"]
 
     @Test func dashboardModelHasNoSharedSettings() throws {
         var offenders: [String] = []
@@ -178,6 +178,21 @@ struct EngineBoundaryTests {
         }
         #expect(matched.isSuperset(of: Self.modelFilesMustInclude), "R5 guard lost a file it must cover: \(matched.sorted())")
         #expect(offenders.isEmpty, "R5: the coordinator and its controllers take settings through init (model.settings), never AppSettings.shared: \(offenders)")
+    }
+
+    /// ARCH-MODEL-SPLIT: the coordinator's stop() fans out to every controller's stop() (blocks append theirs).
+    @Test func coordinatorStopFansOutToControllers() throws {
+        let file = try swiftFiles("Engine").first { $0.lastPathComponent == "DashboardModel.swift" }
+        let all = try lines(of: try #require(file)).map(codeOnly)
+        let start = try #require(all.firstIndex { $0.contains("func stop() {") })
+        var body: [String] = []
+        for line in all[(start + 1)...] {
+            if line.hasPrefix("    }") { break }
+            body.append(line)
+        }
+        for call in ["energy.stop()", "brew.stop()"] {
+            #expect(body.contains { $0.contains(call) }, "DashboardModel.stop() must call \(call)")
+        }
     }
 
     @Test func viewsReadSettingsThroughTheModel() throws {

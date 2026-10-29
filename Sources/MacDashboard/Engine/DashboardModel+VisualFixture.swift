@@ -74,7 +74,7 @@ extension DashboardModel {
         // startup list never checked, no energy apply in flight.
         applyFixtureWakeHolders(user: [WakeHolder(owner: "caffeinate", requester: "Terminal", ageSeconds: 5400)],
                                 system: VisualFixture.systemWakeHolders, sampled: true)
-        applyFixtureBrew(checkedAt: ref, upgrading: false, progress: nil, error: nil, notice: nil, stoppable: false)
+        brew.applyFixture(checkedAt: ref, upgrading: false, progress: nil, error: nil, notice: nil, stoppable: false)
         applyFixtureStartup(checkedAt: nil, removed: 0, checking: false, deleting: [], failure: nil)
         energy.applyFixture(.idle)
     }

@@ -172,7 +172,7 @@ final class AdviceActionDispatch {
 
     func busy(for action: AdviceAction?) -> Bool {
         switch action {
-        case .brewUpgrade: return model.brewUpgrading
+        case .brewUpgrade: return model.brew.upgrading
         case .enableFirewall: return model.firewallApplying
         case .enableGatekeeper: return model.gatekeeperApplying
         case .emptyTrash: return trashEmptying || trashCounting
@@ -181,7 +181,7 @@ final class AdviceActionDispatch {
     }
 
     func busyDetail(for action: AdviceAction?) -> String? {
-        action == .brewUpgrade && model.brewUpgrading ? model.brewProgress.map(brewProgressText) : nil
+        action == .brewUpgrade && model.brew.upgrading ? model.brew.progress.map(brewProgressText) : nil
     }
 
     func done(_ id: String) -> Bool { completedAdviceIDs.contains(Self.adviceKey(id)) }
