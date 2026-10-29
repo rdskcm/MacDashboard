@@ -227,7 +227,7 @@ struct HomeAttentionCard: View {
             if let e = model.adviceActionError {
                 Text(e).font(.system(size: 12.5)).foregroundStyle(DS3.hotInk)
             }
-            if let e = model.brewUpgradeError {
+            if let e = model.brew.upgradeError {
                 Text(e).font(.system(size: 12.5)).foregroundStyle(DS3.hotInk)
             }
         }

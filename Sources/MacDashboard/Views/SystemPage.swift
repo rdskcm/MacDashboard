@@ -71,8 +71,8 @@ private func systemInput(_ model: DashboardModel, pending: [EnergyChange] = [], 
           deletingPaths: model.deletingPlistPaths, plistFailure: model.plistDeleteFailure,
           brewStatus: model.report.brewStatus, brewOutdated: model.report.brewOutdated,
           brewDetail: model.report.brewOutdatedDetail, brewInstalled: model.report.brewInstalledCount,
-          brewCheckedAt: model.brewCheckedAt, brewUpgrading: model.brewUpgrading, brewProgress: model.brewProgress,
-          brewError: model.brewUpgradeError, brewNotice: model.brewUpgradeNotice, brewRefreshing: model.brewRefreshing,
+          brewCheckedAt: model.brew.checkedAt, brewUpgrading: model.brew.upgrading, brewProgress: model.brew.progress,
+          brewError: model.brew.upgradeError, brewNotice: model.brew.upgradeNotice, brewRefreshing: model.brew.refreshing,
           energy: model.report.energy, energyPending: pending, energyApply: model.energy.applyState, now: now)
 }
 
@@ -522,7 +522,7 @@ struct SystemBrewCard: View {
             SectionNote(tone: DS3.green, text: m.brewNoteText)
         case .checkFailed:
             SectionNote(tone: DS3.amber, text: L.sysBrewCheckFailed,
-                        button: (L.commonTryAgain, L.commonTryAgain, m.brewRefreshing, { model.refreshBrewNow() }),
+                        button: (L.commonTryAgain, L.commonTryAgain, m.brewRefreshing, { model.brew.refreshNow() }),
                         buttonIdentifier: "system-brew-recheck")
         case .upgradeFailed(let msg):
             VStack(alignment: .leading, spacing: 16) {
@@ -550,8 +550,8 @@ struct SystemBrewCard: View {
     /// Spinner, status line, `brew upgrade` in small mono, Stop, and the indeterminate bar (a system control, so
     /// Reduce Motion keeps it).
     private func updatingPanel(_ m: SystemPageModel) -> some View {
-        let status: String = model.brewStopRequested
-            ? (model.brewUpgradeStoppable ? L.maintenanceBrewStopping : L.maintenanceBrewRechecking)
+        let status: String = model.brew.stopRequested
+            ? (model.brew.upgradeStoppable ? L.maintenanceBrewStopping : L.maintenanceBrewRechecking)
             : m.brewProgressText
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
@@ -568,9 +568,9 @@ struct SystemBrewCard: View {
                     .foregroundStyle(DS3.muted)
                     .lineLimit(1)
                 // Not in the mockup: the app can stop a running upgrade, so Stop stays (kept from the earlier build).
-                Button { model.stopBrewUpgrade() } label: { Text(L.maintenanceBrewStopButton) }
+                Button { model.brew.stopUpgrade() } label: { Text(L.maintenanceBrewStopButton) }
                     .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
-                    .disabled(!model.brewUpgradeStoppable || model.brewStopRequested)
+                    .disabled(!model.brew.upgradeStoppable || model.brew.stopRequested)
                     .accessibilityLabel(L.maintenanceBrewStopA11y)
                     .accessibilityIdentifier("system-brew-stop")
             }

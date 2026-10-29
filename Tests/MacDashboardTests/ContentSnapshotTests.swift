@@ -339,18 +339,18 @@ extension SerialTests {
             let sysFailError = sysFailed(.error("permission denied"))
             let sysFailCancelled = sysFailed(.cancelled)
             let sysFailTimedOut = sysFailed(.timedOut)
-            let sysBrewUpdating = system { $0.applyFixtureBrew(checkedAt: homeRef, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true) }
+            let sysBrewUpdating = system { $0.brew.applyFixture(checkedAt: homeRef, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true) }
             let sysBrewOK = system { $0.report.brewOutdated = []; $0.report.brewOutdatedDetail = [] }
             let sysBrewNone = system { $0.report.brewStatus = .notInstalled }
             let sysBrewCheckFailed = system { $0.report.brewOutdated = nil; $0.report.brewOutdatedDetail = nil }
             let sysBrewUpgradeFailed = system {
-                $0.applyFixtureBrew(checkedAt: homeRef, upgrading: false, progress: nil,
+                $0.brew.applyFixture(checkedAt: homeRef, upgrading: false, progress: nil,
                                     error: "Update failed: Error: node: checksum mismatch", notice: nil, stoppable: false)
             }
             let sysBrewStopped = system {
                 $0.report.brewOutdated = ["node", "python@3.13"]
                 $0.report.brewOutdatedDetail = Array(($0.report.brewOutdatedDetail ?? []).dropFirst())
-                $0.applyFixtureBrew(checkedAt: homeRef, upgrading: false, progress: nil, error: nil,
+                $0.brew.applyFixture(checkedAt: homeRef, upgrading: false, progress: nil, error: nil,
                                     notice: "Upgrade stopped: 1 of 3 packages upgraded", stoppable: false)
             }
             let sysEnergyApplied = system { $0.energy.applyFixture(.applied) }
@@ -365,7 +365,7 @@ extension SerialTests {
             }
             let sysBarUpdating = system {
                 $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
-                $0.applyFixtureBrew(checkedAt: homeRef, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true)
+                $0.brew.applyFixture(checkedAt: homeRef, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true)
             }
             let sysBarApplyFailed = system { $0.energy.applyFixture(.failed(.error("code 1"))) }
             let sysBarClear = system {

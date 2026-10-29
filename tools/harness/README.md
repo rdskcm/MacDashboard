@@ -20,7 +20,7 @@ MainActor.assumeIsolated {
 
     let m = DashboardModel()                  // init is side-effect-free; NEVER call start()
     m.report.brewStatus = .installed(version: "Homebrew 4.x")
-    m.brewUpgrading = true                    // inject any state directly
+    m.brew.applyFixture(checkedAt: nil, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true)   // controller state: through its fixture setter
 
     harnessRender(width: 460) {               // width per card column; omit `to:` —
         HarnessSection(label: "A: my state") {//   output path arrives as argv[1]
@@ -60,7 +60,7 @@ same command checks a different theme on a different day. Pin it:
   statements are only legal under that exact filename.
 - Everything app-side is `@MainActor` → wrap the scenario body in
   `MainActor.assumeIsolated { ... }`.
-- Never call model methods that spawn work (`start()`, `upgradeBrewNow()`,
+- Never call model methods that spawn work (`start()`, `brew.upgradeNow()`,
   `refreshReport()`, …) — inject fields instead.
 - Do not link `-framework Observation` (render.sh already knows).
 - Injected `Assessment`/`Tip` etc. work fine: build the value, assign to

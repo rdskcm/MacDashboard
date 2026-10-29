@@ -34,7 +34,7 @@ private struct BrewUpgradeConfirmDialog: ViewModifier {
             L.maintenanceBrewConfirmTitle(outdated.count),
             isPresented: $isPresented
         ) {
-            Button(L.maintenanceBrewConfirmButton) { model.upgradeBrewNow() }
+            Button(L.maintenanceBrewConfirmButton) { model.brew.upgradeNow() }
             Button(L.adviceCancel, role: .cancel) {}
         } message: {
             Text(BrewUpgradeConfirm.message(outdated))
@@ -43,7 +43,7 @@ private struct BrewUpgradeConfirmDialog: ViewModifier {
 }
 
 extension View {
-    /// Gates `DashboardModel.upgradeBrewNow()` behind an informative confirmation:
+    /// Gates `BrewController.upgradeNow()` behind an informative confirmation:
     /// how many packages, and which ones.
     func brewUpgradeConfirm(isPresented: Binding<Bool>, model: DashboardModel) -> some View {
         modifier(BrewUpgradeConfirmDialog(isPresented: isPresented, model: model))
