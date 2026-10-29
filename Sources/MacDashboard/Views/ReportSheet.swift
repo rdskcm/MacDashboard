@@ -14,7 +14,7 @@ struct ReportSheetState: Equatable {
     var updatedAt: Date?     // time of `text`; nil when text is nil
     var now: Date            // for reportUpdatedTimeString
 
-    @MainActor static func make(_ model: DashboardModel) -> ReportSheetState {
+    @MainActor static func make(_ model: AppModel) -> ReportSheetState {
         let phase: Phase
         if model.isCollectingReport { phase = .generating }
         else if case .failed(let f, _) = HomeModel.scan(model.blockState(.scan)) { phase = .failed(f) }
@@ -26,7 +26,7 @@ struct ReportSheetState: Equatable {
 
 /// Thin wrapper: reads the model, hands values to the content view.
 @MainActor struct ReportSheet: View {
-    let model: DashboardModel
+    let model: AppModel
     let onDone: () -> Void
     var body: some View {
         ReportSheetContent(state: .make(model), reportURL: model.reportURL,

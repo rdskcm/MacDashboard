@@ -1,13 +1,13 @@
 // Views/SecurityPage.swift
 // REDESIGN-SECURITY: the Security section page (handoff 07-security) on the shared §8 blocks. Every text, tone and
-// row comes from the pure SecurityPageModel; this file only draws them and forwards actions to DashboardModel.
+// row comes from the pure SecurityPageModel; this file only draws them and forwards actions to AppModel.
 // No live loop: the data arrives with the report pass, the page's Refresh and the privileged enable flow.
 
 import SwiftUI
 
 @MainActor
 struct SecurityPage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let narrow: Bool
 
@@ -56,7 +56,7 @@ struct SecurityPage: View {
 // MARK: - Input and mapping helpers
 
 @MainActor
-private func securityInput(_ model: DashboardModel, fileVaultOpened: Bool = false,
+private func securityInput(_ model: AppModel, fileVaultOpened: Bool = false,
                            openedReportPath: String? = nil) -> SecurityPageModel.Input {
     .init(security: model.report.security, action: model.security.action, fileVaultOpened: fileVaultOpened,
           updates: model.report.updates, updatesCheckedAt: model.report.updatesCheckedAt,
@@ -100,7 +100,7 @@ private func tagTone(_ t: SecurityTone) -> DS3Tag.Tone {
 /// Internal (not private): the visual fixture renders it.
 @MainActor
 struct SecurityPageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
@@ -132,11 +132,11 @@ struct SecurityPageBar: View {
 
 @MainActor
 struct SecurityProtectionCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let narrow: Bool
     @State private var fileVaultOpened: Bool
 
-    init(model: DashboardModel, narrow: Bool, initialFileVaultOpened: Bool = false) {
+    init(model: AppModel, narrow: Bool, initialFileVaultOpened: Bool = false) {
         self.model = model
         self.narrow = narrow
         _fileVaultOpened = State(initialValue: initialFileVaultOpened)
@@ -282,7 +282,7 @@ private struct SecurityBanner: View {
 
 @MainActor
 struct SecurityUpdatesCard: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         let m = SecurityPageModel.make(securityInput(model))
@@ -327,7 +327,7 @@ struct SecurityUpdatesCard: View {
 /// the snapshots only).
 @MainActor
 struct SecurityCrashesCard: View {
-    let model: DashboardModel
+    let model: AppModel
     /// Reports the delete confirm's visibility to the page (`router.isInlineConfirmOpen`); nil in snapshots.
     let onConfirmShown: ((Bool) -> Void)?
     @State private var openedReportPath: String?
@@ -336,7 +336,7 @@ struct SecurityCrashesCard: View {
     @State private var hiddenOpen: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(model: DashboardModel, initialOpenedReport: String? = nil, initialConfirm: String? = nil,
+    init(model: AppModel, initialOpenedReport: String? = nil, initialConfirm: String? = nil,
          initialHiddenOpen: Bool = false, onConfirmShown: ((Bool) -> Void)? = nil) {
         self.model = model
         self.onConfirmShown = onConfirmShown

@@ -8,7 +8,7 @@ import SwiftUI
 
 @MainActor
 struct CPUPage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
 
     @State private var pulse: CardID? = nil
@@ -54,7 +54,7 @@ struct CPUPage: View {
 /// Internal (not private): the visual fixture renders it (tools/visual/content_states.swift).
 @MainActor
 struct CPUPageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
@@ -82,7 +82,7 @@ struct CPUPageBar: View {
 /// Internal: the visual fixture renders it.
 @MainActor
 struct CPUUsageCard: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         let m = CPUPageModel.make(cpuPageInput(model))
@@ -119,7 +119,7 @@ struct CPUUsageCard: View {
 }
 
 @MainActor
-private func cpuPageInput(_ model: DashboardModel) -> CPUPageModel.Input {
+private func cpuPageInput(_ model: AppModel) -> CPUPageModel.Input {
     CPUPageModel.Input(cpu: model.cpu, load: model.load, ncpu: model.ncpu, chip: model.headerSystem?.chip,
                        socTempC: model.socTempC, block: model.cpuBlock.phase, highSince: model.cpuHighSince,
                        now: model.lastSampleAt, intervalSeconds: model.settings.fastIntervalSeconds)

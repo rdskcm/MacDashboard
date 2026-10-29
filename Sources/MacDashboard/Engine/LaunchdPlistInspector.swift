@@ -15,7 +15,7 @@ struct LaunchdPlistInfo: Equatable {
     var description: String?
 }
 
-/// Outcome of one plist delete attempt. Hoisted out of `DashboardModel` (where
+/// Outcome of one plist delete attempt. Hoisted out of `AppModel` (where
 /// it used to be declared twice, locally inside two `Task` bodies) so the
 /// "which paths must come back" rule below is pure and Checks-covered.
 enum PlistDeleteOutcome: Equatable {

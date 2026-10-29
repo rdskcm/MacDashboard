@@ -1,6 +1,6 @@
 // Engine/BlockState.swift
 // REDESIGN-FOUNDATION: per-block loading / ok / failed state (handoff 00 §4.16). Pure value
-// logic; DashboardModel owns one state per block, arms the watchdogs and feeds the results.
+// logic; AppModel owns one state per block, arms the watchdogs and feeds the results.
 import Foundation
 
 /// Data blocks with their own load state. A block is added here by the stage that wires its source.

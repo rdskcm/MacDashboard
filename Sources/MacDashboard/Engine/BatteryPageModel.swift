@@ -40,7 +40,7 @@ struct BatteryPageModel: Equatable {
         var detail: BatteryDetail?        // model.batteryDetail — the last good read, kept through failures (D5)
         var condition: String?            // model.report.battery?.condition ?? model.battery?.condition
         var block: BlockPhase             // model.batteryBlock.phase
-        var history: [MacHistoryEntry]    // model.history.mac_history (chronological, as stored)
+        var history: [MacHistoryEntry]    // model.history.state.mac_history (chronological, as stored)
     }
     static let refreshSeconds = 3
 

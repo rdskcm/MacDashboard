@@ -221,7 +221,7 @@ extension SerialTests {
             defer { removeIsolatedDefaults(d, name); try? FileManager.default.removeItem(at: dir) }
             let s = AppSettings(defaults: d)
             let clock = VirtualClock()
-            let m = DashboardModel(dataDirectory: dir, settings: s, time: clock.source)
+            let m = AppModel(dataDirectory: dir, settings: s, time: clock.source)
             s.hiddenCrashReports = [HiddenCrashReport(name: "x.ips", hiddenAt: clock.now)]
             #expect(m.crashReports.hiddenNames == ["x.ips"])
         }

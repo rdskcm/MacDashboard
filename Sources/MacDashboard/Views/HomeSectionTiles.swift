@@ -6,7 +6,7 @@ import SwiftUI
 
 @MainActor
 struct HomeSectionsHeader: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         // Seven tiles on a Mac without a battery, eight otherwise (`HomeModel.tiles`).
@@ -23,7 +23,7 @@ struct HomeSectionsHeader: View {
 
 @MainActor
 struct HomeSectionsGrid: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let tier: WidthTier
     /// `false` only in the offscreen visual harness (see `homeEntrance`).

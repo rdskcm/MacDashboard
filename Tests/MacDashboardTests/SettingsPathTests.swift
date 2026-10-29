@@ -9,16 +9,16 @@ import Testing
 extension SerialTests {
     @MainActor struct SettingsPathTests {
         /// A model over an isolated settings instance and a fresh temp data directory.
-        private func makeModel() -> (DashboardModel, AppSettings, () -> Void) {
+        private func makeModel() -> (AppModel, AppSettings, () -> Void) {
             let (d, name) = makeIsolatedDefaults()
             let dir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("md-settings-path-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)", isDirectory: true)
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let s = AppSettings(defaults: d)
-            let m = DashboardModel(dataDirectory: dir, settings: s)
+            let m = AppModel(dataDirectory: dir, settings: s)
             return (m, s, { removeIsolatedDefaults(d, name); try? FileManager.default.removeItem(at: dir) })
         }
-        private func kinds(_ m: DashboardModel) -> Set<AttentionKind> { Set(m.assessment.items.map(\.kind)) }
+        private func kinds(_ m: AppModel) -> Set<AttentionKind> { Set(m.assessment.items.map(\.kind)) }
 
         private let ref = Date(timeIntervalSince1970: 1_800_000_000)
 

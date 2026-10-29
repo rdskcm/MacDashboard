@@ -17,10 +17,10 @@ final class SettingsWindowController {
     static let shared = SettingsWindowController()
     let state = SettingsWindowState()
     private var window: NSWindow?
-    private var model: DashboardModel?
+    private var model: AppModel?
     private var glass: GlassSettings?
 
-    func configure(model: DashboardModel, glass: GlassSettings) { self.model = model; self.glass = glass }
+    func configure(model: AppModel, glass: GlassSettings) { self.model = model; self.glass = glass }
 
     func show(section: SettingsSection? = nil) {
         if let section { state.section = section }

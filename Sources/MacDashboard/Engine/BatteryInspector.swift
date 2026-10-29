@@ -179,7 +179,7 @@ enum BatteryInspector {
         return detail
     }
 
-    /// App path: runs ioreg (5 s deadline) and parses. `DashboardModel.readBatteryNow` consumes this.
+    /// App path: runs ioreg (5 s deadline) and parses. `AppModel.readBatteryNow` consumes this.
     static func read() async -> BatteryReadResult {
         let out = await CommandRunner.run("/usr/sbin/ioreg", ["-r", "-c", "AppleSmartBattery", "-a", "-l"], timeout: 5)
         if out.termination == .timedOut { return .timedOut }

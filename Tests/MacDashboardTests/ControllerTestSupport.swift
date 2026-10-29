@@ -42,6 +42,7 @@ import Testing
     }
     private(set) var mergeCalls = 0
     private(set) var blockCalls: [BlockCall] = []
+    private(set) var errors: [String] = []
     var host: ReportHost {
         ReportHost(read: { self.report },
                    update: { mutate in self.updateCalls += 1; mutate(&self.report) },
@@ -53,7 +54,8 @@ import Testing
                    mergeBackgroundIntoCommitted: { self.mergeCalls += 1 },
                    beginBlock: { id, loading, watchdog in self.blockCalls.append(.begin(id, showsLoading: loading, armsWatchdog: watchdog)) },
                    succeedBlock: { self.blockCalls.append(.succeed($0)) },
-                   failBlock: { self.blockCalls.append(.fail($0, $1)) })
+                   failBlock: { self.blockCalls.append(.fail($0, $1)) },
+                   reportError: { self.errors.append($0) })
     }
 }
 

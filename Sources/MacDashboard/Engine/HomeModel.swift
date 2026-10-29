@@ -62,7 +62,7 @@ enum HomeScan: Equatable {
 
 enum HomeStatus: Equatable { case checking, good, attention, critical }
 
-/// Built by the view from DashboardModel: values, no references.
+/// Built by the view from AppModel: values, no references.
 struct HomeInput {
     var assessment: Assessment
     var report: FullReport

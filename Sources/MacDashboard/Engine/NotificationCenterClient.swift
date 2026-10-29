@@ -20,9 +20,9 @@ final class NotificationCenterClient: NSObject, UNUserNotificationCenterDelegate
     }
     private static var fixtureStatusOverride: NotificationAuthorization?
 
-    /// Set by DashboardModel.start(): banner allowed iff the app is "paused" (not frontmost with a visible window).
+    /// Set by AppModel.start(): banner allowed iff the app is "paused" (not frontmost with a visible window).
     var shouldPresentBanner: () -> Bool = { true }
-    /// Set by DashboardModel.start(): a click on a notification carrying `page` lands here (Stage 2).
+    /// Set by AppModel.start(): a click on a notification carrying `page` lands here (Stage 2).
     var onOpen: (Page) -> Void = { _ in }
 
     private var installed = false

@@ -7,7 +7,7 @@ import SwiftUI
 
 @MainActor
 struct DiskTile: View {
-    let model: DashboardModel
+    let model: AppModel
 
     /// Block N7: internal (disk0) NVMe temperature from the last SMART collection
     /// (launch report / 5-min sampler / manual refresh). nil until SMART lands or

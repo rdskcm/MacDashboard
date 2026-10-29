@@ -1,15 +1,15 @@
 // HomeAdviceDispatchTests.swift
-// HIDDEN-CONTENT-WORK (R4, R9): Home's attention-card dispatch is owned by DashboardModel, so its state outlives
+// HIDDEN-CONTENT-WORK (R4, R9): Home's attention-card dispatch is owned by AppModel, so its state outlives
 // the card; dismissing confirmations keeps done state and errors. No GUI.
 
 import Foundation
 import Testing
 @testable import MacDashboard
 
-@MainActor private func tempModel() throws -> (DashboardModel, URL) {
+@MainActor private func tempModel() throws -> (AppModel, URL) {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("md-dispatch-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    return (DashboardModel(dataDirectory: dir), dir)
+    return (AppModel(dataDirectory: dir), dir)
 }
 
 @MainActor

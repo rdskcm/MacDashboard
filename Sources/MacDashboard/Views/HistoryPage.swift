@@ -6,7 +6,7 @@ import Charts
 
 @MainActor
 struct HistoryPage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let narrow: Bool
     @State private var pulse: CardID? = nil
@@ -44,12 +44,12 @@ struct HistoryPage: View {
 /// Internal (not private): the visual fixture renders it.
 @MainActor
 struct HistoryPageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
-        let b = HistoryPageModel.bar(entries: model.history.mac_history, unreadable: model.historyUnreadable,
-                                     refreshing: model.historyRefreshing, now: model.now())
+        let b = HistoryPageModel.bar(entries: model.history.state.mac_history, unreadable: model.history.unreadable,
+                                     refreshing: model.history.refreshing, now: model.now())
         SectionPageBar(symbol: Page.history.symbol, title: Page.history.title, sub: b.sub, onBack: onBack) {
             if !b.tag.isEmpty { DS3Tag(tone: tone(b.tone), text: b.tag).help(b.tag) }
         } trailing: {
@@ -67,8 +67,8 @@ struct HistoryPageBar: View {
 
     /// Opacity ZStack: «Refresh» ↔ «Refreshing…» without a width change (`swap-in-place`).
     private var refresh: some View {
-        let busy = model.historyRefreshing
-        return Button { model.refreshHistoryNow() } label: {
+        let busy = model.history.refreshing
+        return Button { model.history.refreshNow() } label: {
             ZStack {
                 Text(L.commonRefresh).opacity(busy ? 0 : 1)
                 Text(L.commonRefreshing).opacity(busy ? 1 : 0)
@@ -86,7 +86,7 @@ struct HistoryPageBar: View {
 /// Internal (not private): the visual fixture renders it with pinned states (`initial*`, D15).
 @MainActor
 struct HistoryCardView: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let narrow: Bool
     @State private var metric: HistoryMetric
@@ -97,7 +97,7 @@ struct HistoryCardView: View {
     @State private var switched = false
     private let initialHover: Int?
 
-    init(model: DashboardModel, router: NavigationRouter, narrow: Bool,
+    init(model: AppModel, router: NavigationRouter, narrow: Bool,
          initialMetric: HistoryMetric = .disk, initialRange: HistoryRange = .month,
          initialView: HistoryViewMode = .chart, initialShowAll: Bool = false, initialHover: Int? = nil) {
         self.model = model
@@ -111,10 +111,10 @@ struct HistoryCardView: View {
     }
 
     var body: some View {
-        let m = HistoryPageModel.make(.init(entries: model.history.mac_history, unreadable: model.historyUnreadable,
-                                            refreshing: model.historyRefreshing, metric: metric, range: range, view: view,
+        let m = HistoryPageModel.make(.init(entries: model.history.state.mac_history, unreadable: model.history.unreadable,
+                                            refreshing: model.history.refreshing, metric: metric, range: range, view: view,
                                             showAll: showAll, narrow: narrow, now: model.now(),
-                                            historyPath: model.historyFilePath))
+                                            historyPath: model.history.filePath))
         DS3Card(title: m.title, caption: m.caption, trailing: {
             HStack(spacing: 10) {
                 if m.showsMetricControl { metricControl }
@@ -122,7 +122,7 @@ struct HistoryCardView: View {
             }
         }) {
             VStack(alignment: .leading, spacing: 16) {
-                if let name = model.history.unreadable_backup { restartNote(name) }
+                if let name = model.history.state.unreadable_backup { restartNote(name) }
                 if m.showsRangeRow {
                     // The range row's branch depends only on unreadable/refreshing, never on range/metric/view,
                     // so the range control keeps its own slide (`control-identity-branch`).
@@ -246,7 +246,7 @@ struct HistoryCardView: View {
                     .textSelection(.enabled)
             }
             Spacer(minLength: 0)
-            Button(L.commonTryAgain) { model.refreshHistoryNow() }
+            Button(L.commonTryAgain) { model.history.refreshNow() }
                 .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
                 .accessibilityLabel(L.historyTryAgainA11y)
                 .accessibilityIdentifier("history-try-again")
@@ -270,11 +270,11 @@ struct HistoryCardView: View {
             Spacer(minLength: 8)
             HStack(spacing: 8) {
                 Button(L.historyRestartReveal) {
-                    if let p = model.historyRestartRevealPath { AdviceActionRunner.reveal(p) }
+                    if let p = model.history.restartRevealPath { AdviceActionRunner.reveal(p) }
                 }
                 .accessibilityLabel(L.historyRestartRevealA11y)
                 .accessibilityIdentifier("history-restart-reveal")
-                Button(L.historyRestartHide) { model.dismissHistoryRestartNotice() }
+                Button(L.historyRestartHide) { model.history.dismissRestartNotice() }
                     .accessibilityLabel(L.historyRestartHideA11y)
                     .accessibilityIdentifier("history-restart-hide")
             }

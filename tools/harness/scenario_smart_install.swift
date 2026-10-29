@@ -11,7 +11,7 @@ MainActor.assumeIsolated {
     L10nStore.shared.language = .ru
 
     // A: Homebrew present, smartctl missing -> install button.
-    let installable = DashboardModel()
+    let installable = AppModel()
     installable.smart.applyFixture(updatedAt: nil, tools: .installable, installing: false, failure: nil)
     installable.report.smartctlPresent = false
     installable.report.smart = [
@@ -20,7 +20,7 @@ MainActor.assumeIsolated {
     ]
 
     // B: Homebrew present, smartctl missing, previous install attempt failed -> button + error line.
-    let installableWithError = DashboardModel()
+    let installableWithError = AppModel()
     installableWithError.smart.applyFixture(updatedAt: nil, tools: .installable, installing: false, failure: .exitCode(1))
     installableWithError.report.smartctlPresent = false
     installableWithError.report.smart = [
@@ -28,7 +28,7 @@ MainActor.assumeIsolated {
     ]
 
     // C: Homebrew itself missing -> hint text only, no button.
-    let needsHomebrew = DashboardModel()
+    let needsHomebrew = AppModel()
     needsHomebrew.smart.applyFixture(updatedAt: nil, tools: .needsHomebrew, installing: false, failure: nil)
     needsHomebrew.report.smartctlPresent = false
     needsHomebrew.report.smart = [

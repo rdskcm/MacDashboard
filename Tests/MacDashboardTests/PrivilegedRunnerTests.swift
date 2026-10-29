@@ -26,7 +26,7 @@ private let prCorpus: [(label: String, value: String)] = [
     ("metachars", "a;b|c&d*e?f#g~h(i)j"),
 ]
 
-/// Verbatim copies of the expressions this block removed (DashboardModel delete sites and
+/// Verbatim copies of the expressions this block removed (AppModel delete sites and
 /// PrivilegedRunner.run's inline escaping) — the byte-identity oracle.
 private func prLegacyShellQuoted(_ path: String) -> String {
     "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"

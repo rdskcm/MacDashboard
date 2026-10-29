@@ -26,7 +26,7 @@ enum BrewUpgradeConfirm {
 
 private struct BrewUpgradeConfirmDialog: ViewModifier {
     @Binding var isPresented: Bool
-    let model: DashboardModel
+    let model: AppModel
 
     func body(content: Content) -> some View {
         let outdated = model.report.brewOutdated ?? []
@@ -45,7 +45,7 @@ private struct BrewUpgradeConfirmDialog: ViewModifier {
 extension View {
     /// Gates `BrewController.upgradeNow()` behind an informative confirmation:
     /// how many packages, and which ones.
-    func brewUpgradeConfirm(isPresented: Binding<Bool>, model: DashboardModel) -> some View {
+    func brewUpgradeConfirm(isPresented: Binding<Bool>, model: AppModel) -> some View {
         modifier(BrewUpgradeConfirmDialog(isPresented: isPresented, model: model))
     }
 }

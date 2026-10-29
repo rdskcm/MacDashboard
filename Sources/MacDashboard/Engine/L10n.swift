@@ -856,7 +856,7 @@ protocol AppStrings {
     var byteUnitKB: String { get }
     var byteUnitB: String { get }
 
-    // MARK: DashboardModel errors
+    // MARK: AppModel errors
     func errorHistorySaveFailed(_ msg: String) -> String
     func errorReportWriteFailed(_ msg: String) -> String
 

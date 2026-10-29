@@ -1,6 +1,6 @@
 // tools/harness/HarnessKit.swift
 // Reusable helpers for headless UI render harnesses (see tools/harness/README.md).
-// A "scenario" file composes app views with directly-injected DashboardModel state
+// A "scenario" file composes app views with directly-injected AppModel state
 // and calls `harnessRender(...)`; tools/harness/render.sh compiles scenario + this
 // file + the full app source tree (minus MacDashboardApp.swift) and runs it.
 //
@@ -9,10 +9,10 @@
 //   (top-level statements are only legal there); render.sh handles the copy.
 // - Do NOT link `-framework Observation` — Observation is an SDK Swift module,
 //   not a framework; linking it fails. AppKit + SwiftUI are enough.
-// - DashboardModel and all views are @MainActor; scenarios wrap their body in
+// - AppModel and all views are @MainActor; scenarios wrap their body in
 //   `MainActor.assumeIsolated { ... }` (plain main.swift top level is not
 //   implicitly isolated).
-// - `DashboardModel()` init is side-effect-free (loops start via `start()` —
+// - `AppModel()` init is side-effect-free (loops start via `start()` —
 //   never call it in a harness); inject state directly on fresh instances.
 // - Pin the language first (`L10nStore.shared.language = .ru`) or an EN-first
 //   system locale will render EN strings.

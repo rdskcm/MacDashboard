@@ -9,7 +9,7 @@ import SwiftUI
 
 @MainActor
 struct StoragePage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let breakpoints: PageBreakpoints
 
@@ -58,7 +58,7 @@ struct StoragePage: View {
 
 /// The page's low-space verdict: the one `StorageSpace.level` call site of the views (page bar + Disk card).
 @MainActor
-private func storageSpaceLevel(_ model: DashboardModel) -> SpaceLevel? {
+private func storageSpaceLevel(_ model: AppModel) -> SpaceLevel? {
     model.disk.flatMap { StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: model.settings.lowSpacePercent) }
 }
 
@@ -67,7 +67,7 @@ private func storageSpaceLevel(_ model: DashboardModel) -> SpaceLevel? {
 /// Internal (not private): the visual fixture renders it.
 @MainActor
 struct StoragePageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
@@ -115,7 +115,7 @@ struct StoragePageBar: View {
 /// Internal: the visual fixture renders it.
 @MainActor
 struct StorageDiskCard: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         let disk = model.disk
@@ -185,7 +185,7 @@ struct StorageTrashConfirmFixture {
 /// deep link).
 @MainActor
 struct StorageFoldersCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     @State private var segment: FoldersSegment
     /// End of the 0.9 s Counting wait a segment switch shows (D7); nil = none.
@@ -200,7 +200,7 @@ struct StorageFoldersCard: View {
     private let scrollTo: ((String) -> Void)?
     private static let confirmPanelID = "storage-trash-confirm"
 
-    init(model: DashboardModel, router: NavigationRouter, initialSegment: FoldersSegment = .home,
+    init(model: AppModel, router: NavigationRouter, initialSegment: FoldersSegment = .home,
          initialConfirm: StorageTrashConfirmFixture? = nil, initialCounting: Bool = false,
          scrollTo: ((String) -> Void)? = nil) {
         self.model = model
@@ -424,11 +424,11 @@ struct StorageFoldersCard: View {
 /// Internal: the visual fixture renders it (`initialSelection` exists for the snapshots only).
 @MainActor
 struct StorageSmartCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let breakpoints: PageBreakpoints
     @State private var selected: String?
 
-    init(model: DashboardModel, breakpoints: PageBreakpoints, initialSelection: String? = nil) {
+    init(model: AppModel, breakpoints: PageBreakpoints, initialSelection: String? = nil) {
         self.model = model
         self.breakpoints = breakpoints
         _selected = State(initialValue: initialSelection)
@@ -608,7 +608,7 @@ private struct DriveItem: View {
 /// needs Homebrew. Layout switches on the page breakpoint passed down (`PageBreakpoints.narrow`), never on a measured size (D23).
 @MainActor
 private struct StorageToolsNote: View {
-    let model: DashboardModel
+    let model: AppModel
     let narrow: Bool
 
     var body: some View {

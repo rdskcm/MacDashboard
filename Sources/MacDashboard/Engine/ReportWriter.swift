@@ -8,7 +8,7 @@
 
 import Foundation
 
-/// Everything the short report needs, as values. Built by DashboardModel (live pass) and VisualFixture.
+/// Everything the short report needs, as values. Built by AppModel (live pass) and VisualFixture.
 struct ReportSummaryInput {
     var generatedAt: Date
     var system: SystemInfo?

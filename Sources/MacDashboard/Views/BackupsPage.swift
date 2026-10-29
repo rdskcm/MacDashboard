@@ -8,7 +8,7 @@ import SwiftUI
 
 @MainActor
 struct BackupsPage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let narrow: Bool
 
@@ -54,7 +54,7 @@ struct BackupsPage: View {
 // MARK: - Input and mapping helpers
 
 @MainActor
-private func backupsInput(_ model: DashboardModel, now: Date) -> BackupsPageModel.Input {
+private func backupsInput(_ model: AppModel, now: Date) -> BackupsPageModel.Input {
     .init(tmDest: model.report.tmDest, snapshots: model.report.snapshots, backup: model.timeMachine.backup,
           action: model.timeMachine.action, updatedAt: model.timeMachine.updatedAt, claudeBackup: model.claudeBackup,
           claudeLogPath: model.claudeLogPath, warnAfterHours: model.settings.backupStaleHours, now: now)
@@ -103,7 +103,7 @@ private func backupsTileView(_ t: BackupsTile) -> some View {
 /// Internal (not private): the visual fixture renders it. No Refresh button on this page.
 @MainActor
 struct BackupsPageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
@@ -120,7 +120,7 @@ struct BackupsPageBar: View {
 
 @MainActor
 struct BackupsTimeMachineCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let narrow: Bool
 
     /// The ageing texts («50 min ago», «in 10 min») re-render once a minute (`gpu-per-frame`).
@@ -225,7 +225,7 @@ private struct BackupsProgressBlock: View {
 
 /// Reads the live `model.disk` itself, so the ~2 s live tick invalidates only this tile and not the whole card (D13).
 private struct BackupsPurgeableTile: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         let purgeable = model.disk?.purgeable
@@ -238,7 +238,7 @@ private struct BackupsPurgeableTile: View {
 
 @MainActor
 struct BackupsClaudeCard: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         TimelineView(.everyMinute) { ctx in

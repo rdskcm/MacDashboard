@@ -19,22 +19,26 @@ struct ReportHost {
     var awaitPassEnd: @MainActor () async -> Bool
     /// Re-assesses the committed report (`homeReport`), never a partial.
     var reassess: @MainActor () -> Void
-    /// True while no effectively visible window is frontmost (`DashboardModel.isPaused`, set by AppActivityMonitor):
+    /// True while no effectively visible window is frontmost (`AppModel.isPaused`, set by AppActivityMonitor):
     /// loops skip spawning commands (`no-unseen-work`).
     var isPaused: @MainActor () -> Bool
-    /// Re-reads the Claude backup log (`DashboardModel.refreshClaudeBackup()`); the Backups page shows both backups.
+    /// Re-reads the Claude backup log (`AppModel.refreshClaudeBackup()`); the Backups page shows both backups.
     var refreshClaudeBackup: @MainActor () async -> Void
 
     /// Re-applies the background overlays (update check, folder sizes) to the shown report — and, mid-pass, to the
-    /// committed one — and re-assesses the committed report (`DashboardModel.mergeBackgroundIntoCommitted()`, V2-HEADER-CHURN).
+    /// committed one — and re-assesses the committed report (`AppModel.mergeBackgroundIntoCommitted()`, V2-HEADER-CHURN).
     var mergeBackgroundIntoCommitted: @MainActor () -> Void
-    /// Starts an attempt of a data block (`DashboardModel.beginBlock`). `armsWatchdog`: arm the block's `id.timeout`
+    /// Starts an attempt of a data block (`AppModel.beginBlock`). `armsWatchdog`: arm the block's `id.timeout`
     /// watchdog; false = mark the attempt with no watchdog and leave an armed one alone (REDESIGN-STORAGE D5).
     var beginBlock: @MainActor (_ id: BlockID, _ showsLoading: Bool, _ armsWatchdog: Bool) -> Void
     /// Ends the attempt with a success now and disarms its watchdog.
     var succeedBlock: @MainActor (_ id: BlockID) -> Void
     /// Ends the attempt with `failure` and disarms its watchdog.
     var failBlock: @MainActor (_ id: BlockID, _ failure: BlockFailure) -> Void
+
+    /// Publishes a user-facing error message on the coordinator (`lastError`). The history save reports a failed write
+    /// through it (ARCH-MODEL-SPLIT block 8).
+    var reportError: @MainActor (String) -> Void
 
     /// Writes one field only when it differs from the current value, so an unchanged re-read costs no
     /// observation mutation (the guard every section writer has today, e.g. `if report.energy != settings`).
@@ -48,6 +52,6 @@ struct ReportHost {
 /// before every stored property is initialised, and the controllers are stored properties.
 @MainActor
 final class CoordinatorLink {
-    weak var model: DashboardModel?
+    weak var model: AppModel?
     init() {}
 }
