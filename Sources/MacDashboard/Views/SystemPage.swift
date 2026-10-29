@@ -65,7 +65,7 @@ struct SystemPage: View {
 private func systemInput(_ model: DashboardModel, pending: [EnergyChange] = [], ignored: [IgnoredWakeHolder]? = nil,
                          now: Date) -> SystemPageModel.Input {
     .init(wakeSampled: model.wakeSampled, wakeHolders: model.wakeHolders, systemWakeHolders: model.systemWakeHolders,
-          ignored: ignored ?? AppSettings.shared.ignoredWakeHolderEntries,
+          ignored: ignored ?? model.settings.ignoredWakeHolderEntries,
           autostart: model.report.autostart, startupChecking: model.startupChecking,
           startupCheckedAt: model.startupCheckedAt, startupRemoved: model.startupRemovedCount,
           deletingPaths: model.deletingPlistPaths, plistFailure: model.plistDeleteFailure,
@@ -142,7 +142,7 @@ struct SystemSleepCard: View {
                     SectionList(ring: true) {
                         ForEach(m.sleepRows) { row in
                             SleepRowView(row: row) {
-                                withAnimation(rowCurve) { model.setWakeHolderIgnored(row.key, ignored: true) }
+                                withAnimation(rowCurve) { model.settings.setWakeHolderIgnored(row.key, ignored: true) }
                             }
                             .transition(rowTransition)
                         }
@@ -156,7 +156,7 @@ struct SystemSleepCard: View {
                                 ForEach(m.hiddenRows) { r in
                                     SectionRowsRow(name: r.name, sub: r.sub) {
                                         Button {
-                                            withAnimation(rowCurve) { model.setWakeHolderIgnored(r.key, ignored: false) }
+                                            withAnimation(rowCurve) { model.settings.setWakeHolderIgnored(r.key, ignored: false) }
                                         } label: {
                                             Text(L.sysWarnAgain)
                                         }

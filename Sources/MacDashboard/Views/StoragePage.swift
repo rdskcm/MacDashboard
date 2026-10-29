@@ -59,7 +59,7 @@ struct StoragePage: View {
 /// The page's low-space verdict: the one `StorageSpace.level` call site of the views (page bar + Disk card).
 @MainActor
 private func storageSpaceLevel(_ model: DashboardModel) -> SpaceLevel? {
-    model.disk.flatMap { StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: AppSettings.shared.lowSpacePercent) }
+    model.disk.flatMap { StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: model.settings.lowSpacePercent) }
 }
 
 // MARK: - Page bar
@@ -136,7 +136,7 @@ struct StorageDiskCard: View {
         let health = model.homeReport.smart?.first { $0.device == "internal" }?.health
         let items = StoragePageModel.freeable(homeDirs: model.report.homeDirs, homeCaches: model.report.homeCaches,
                                               home: FileManager.default.homeDirectoryForCurrentUser.path)
-        let note = StoragePageModel.diskNote(level: level, lowPercent: AppSettings.shared.lowSpacePercent, items: items)
+        let note = StoragePageModel.diskNote(level: level, lowPercent: model.settings.lowSpacePercent, items: items)
         return VStack(alignment: .leading, spacing: 16) {
             HeroSplitLayout {
                 SectionHero(label: L.storageFree, value: fmtCapacity(disk.avail), fraction: disk.pct,

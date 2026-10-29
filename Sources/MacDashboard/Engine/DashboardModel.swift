@@ -356,10 +356,14 @@ final class DashboardModel {
     /// collect() call and just keep sleeping, per SPEC §1.4. Read only inside this model (the collector loops skip
     /// their work while it is true).
     private(set) var isPaused = false
+    /// ARCH-SETTINGS-PATH: the settings this model assesses with and its pages read (`model.settings`).
+    /// The app passes `.shared`; tests pass an isolated instance.
+    let settings: AppSettings
     private let actions: AppActions
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
-    init(dataDirectory: URL? = nil, actions: AppActions = .none) {
+    init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared) {
+        self.settings = settings
         self.actions = actions
         cpuHistory = []
         report = FullReport()
@@ -385,6 +389,8 @@ final class DashboardModel {
         folderSizes = FolderSizesCacheStore.load(from: folderSizesURL)
         smartToolsState = Self.recomputeSmartToolsState()
         if let countedAt = folderSizes?.countedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
+        // ARCH-SETTINGS-PATH: the one write path — any change of an assessment setting re-assesses this model.
+        settings.onAssessmentSettingsChange = { [weak self] old in self?.assessmentSettingsChanged(from: old) }
     }
 
     // MARK: - History restart notice (HISTORY-UNREADABLE-NOTICE)
@@ -431,49 +437,28 @@ final class DashboardModel {
 
     /// BACKUP-AGE: re-read the backup log off the main actor; guarded so an unchanged status notifies nobody.
     func refreshClaudeBackup() async {
-        let urls = BackupLog.resolvedURLs(custom: AppSettings.shared.claudeLogPath)
+        let urls = BackupLog.resolvedURLs(custom: settings.claudeLogPath)
         let s = await BackupLog.readStatus(logURL: urls.log, rotatedURL: urls.rotated)
         if claudeBackup != s { claudeBackup = s }
     }
 
     /// The Claude backup log currently read (the user's override or the default).
-    var claudeLogPath: String { BackupLog.resolvedURLs(custom: AppSettings.shared.claudeLogPath).log.path }
+    var claudeLogPath: String { BackupLog.resolvedURLs(custom: settings.claudeLogPath).log.path }
 
-    /// BACKUP-AGE: change the stale limit and re-assess now (same report choice as the fast tick).
-    func setBackupStaleDays(_ days: Int) {
-        guard AppSettings.backupStaleDaysRange.contains(days),
-              AppSettings.shared.backupStaleDays != days else { return }
-        AppSettings.shared.backupStaleDays = days
-        setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
-    }
-
-    /// REDESIGN-SETTINGS: change the low-space line and re-assess now.
-    func setLowSpacePercent(_ pct: Int) {
-        guard AppSettings.allowedLowSpacePercents.contains(pct),
-              AppSettings.shared.lowSpacePercent != pct else { return }
-        AppSettings.shared.lowSpacePercent = pct
-        setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
-    }
-
-    /// REDESIGN-SETTINGS: choose the Claude backup log (nil = default); re-read and re-assess.
-    func setClaudeLogPath(_ path: String?) {
-        AppSettings.shared.claudeLogPath = path
-        Task { await refreshClaudeBackup(); setAssessment(assessed(isCollectingReport ? lastCommittedReport : report)) }
-    }
-
-    /// SLEEP-IGNORE-APP: add (`ignored: true`) or remove a holder from the Sleep item's
-    /// ignore list and re-assess now rather than on the next fast tick (which does not run
-    /// while paused). Same report choice as the fast tick: never a partial (V2-HEADER-CHURN).
-    func setWakeHolderIgnored(_ key: WakeHolderKey, ignored: Bool) {
-        var list = AppSettings.shared.ignoredWakeHolderEntries
-        if ignored {
-            guard !list.contains(where: { $0.key == key }) else { return }
-            list.append(IgnoredWakeHolder(key: key, since: Date()))
-        } else {
-            guard list.contains(where: { $0.key == key }) else { return }
-            list.removeAll { $0.key == key }
+    /// ARCH-SETTINGS-PATH: the one reaction to a change of any assessment setting, called synchronously by
+    /// `AppSettings.assessmentSettings.didSet` whoever wrote it (a Settings binding, the System page, Home's menu,
+    /// a test). Re-assesses now, rather than on the next fast tick (which does not run while paused). A new Claude
+    /// log path is re-read first, so the assessment never pairs the new path with the old file's status.
+    private func assessmentSettingsChanged(from old: AssessmentSettings) {
+        if settings.assessmentSettings.claudeLogPath != old.claudeLogPath {
+            Task { await refreshClaudeBackup(); reassessCommitted() }
+            return
         }
-        AppSettings.shared.ignoredWakeHolderEntries = list
+        reassessCommitted()
+    }
+
+    /// Same report choice as the fast tick: never a partial (V2-HEADER-CHURN).
+    private func reassessCommitted() {
         setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
     }
 
@@ -615,7 +600,7 @@ final class DashboardModel {
                 guard let self else { return }
 
                 if self.isPaused {
-                    try? await Task.sleep(for: .seconds(AppSettings.shared.fastIntervalSeconds))
+                    try? await Task.sleep(for: .seconds(self.settings.fastIntervalSeconds))
                     continue
                 }
 
@@ -672,7 +657,7 @@ final class DashboardModel {
                 let assessedReport = self.isCollectingReport ? self.lastCommittedReport : self.report
                 self.setAssessment(self.assessed(assessedReport))
 
-                try? await Task.sleep(for: .seconds(AppSettings.shared.fastIntervalSeconds))
+                try? await Task.sleep(for: .seconds(self.settings.fastIntervalSeconds))
             }
         }
 
@@ -898,11 +883,11 @@ final class DashboardModel {
             }
 
             let snapshotNow = Date()
-            if SnapshotSchedule.isDue(now: snapshotNow, last: AppSettings.shared.lastSnapshotAt,
-                                      minutesAfterMidnight: AppSettings.shared.snapshotMinutes) {
+            if SnapshotSchedule.isDue(now: snapshotNow, last: self.settings.lastSnapshotAt,
+                                      minutesAfterMidnight: self.settings.snapshotMinutes) {
                 self.historyStore.upsertToday(from: final, live: self.live)
                 do { try self.historyStore.save() } catch { self.lastError = L.errorHistorySaveFailed(error.localizedDescription) }
-                AppSettings.shared.lastSnapshotAt = snapshotNow
+                self.settings.lastSnapshotAt = snapshotNow
             }
             self.history = self.historyStore.state
             self.historyUnreadable = self.historyStore.fileUnreadable
@@ -1245,13 +1230,13 @@ final class DashboardModel {
 
     // MARK: - Crash reports (CRASH-REPORT-DISMISS)
 
-    private var hiddenCrashNames: Set<String> { Set(AppSettings.shared.hiddenCrashReports.map(\.name)) }
+    private var hiddenCrashNames: Set<String> { Set(settings.hiddenCrashReports.map(\.name)) }
 
     /// «Hide» on a crash row: every report of the group joins the hidden list, then the folders are re-scanned.
     func hideCrashGroup(_ id: String) {
         guard !crashAction.isWorking, let g = report.crashes?.first(where: { $0.id == id }), !g.reportPaths.isEmpty
         else { return }
-        AppSettings.shared.hiddenCrashReports = CrashDismiss.hiding(g, in: AppSettings.shared.hiddenCrashReports, now: Date())
+        settings.hiddenCrashReports = CrashDismiss.hiding(g, in: settings.hiddenCrashReports, now: Date())
         crashAction = .working(.hide, groupID: id)
         requestCrashScan(completing: .idle)
     }
@@ -1259,7 +1244,7 @@ final class DashboardModel {
     /// «Show again» on a hidden row.
     func unhideCrashGroup(_ id: String) {
         guard !crashAction.isWorking, let g = report.crashesHidden?.first(where: { $0.id == id }) else { return }
-        AppSettings.shared.hiddenCrashReports = CrashDismiss.unhiding(g, in: AppSettings.shared.hiddenCrashReports, now: Date())
+        settings.hiddenCrashReports = CrashDismiss.unhiding(g, in: settings.hiddenCrashReports, now: Date())
         crashAction = .working(.unhide, groupID: id)
         requestCrashScan(completing: .idle)
     }
@@ -1898,7 +1883,7 @@ final class DashboardModel {
     private func setAssessment(_ n: Assessment) {
         if assessment != n { assessment = n }
         guard hasCompletedPass else { return }
-        let fresh = notifyEdges.update(items: n.items, enabled: AppSettings.shared.notifyEnabled)
+        let fresh = notifyEdges.update(items: n.items, enabled: settings.notifyEnabled)
         if !fresh.isEmpty { notify(fresh) }
     }
 
@@ -1931,14 +1916,15 @@ final class DashboardModel {
 
     /// The model's only way to build an `Assessment` (SLEEP-IGNORE-APP): every path passes
     /// the current ignore list, so an ignored wake holder cannot re-warn through a path that
-    /// forgot it.
+    /// forgot it. Reads settings ONLY through `settings.assessmentSettings` (ARCH-SETTINGS-PATH; EngineBoundaryTests enforces it).
     private func assessed(_ r: FullReport) -> Assessment {
-        Assess.assess(report: r, live: live, memPressure: memPressure, topApps: topApps,
-                      wakeHolders: wakeHolders, ignoredWakeHolders: AppSettings.shared.ignoredWakeHolders,
-                      claudeBackup: claudeBackup, backupStaleHours: AppSettings.shared.backupStaleHours,
-                      lowSpacePercent: AppSettings.shared.lowSpacePercent,
-                      claudeLogPath: claudeLogPath,
-                      now: fixtureNow ?? Date())
+        let s = settings.assessmentSettings
+        return Assess.assess(report: r, live: live, memPressure: memPressure, topApps: topApps,
+                             wakeHolders: wakeHolders, ignoredWakeHolders: s.ignoredWakeHolders,
+                             claudeBackup: claudeBackup, backupStaleHours: s.backupStaleHours,
+                             lowSpacePercent: s.lowSpacePercent,
+                             claudeLogPath: BackupLog.resolvedURLs(custom: s.claudeLogPath).log.path,
+                             now: fixtureNow ?? Date())
     }
 
     /// Probes `findSmartctl()`/`findBrew()` fresh (cheap `isExecutableFile` checks,

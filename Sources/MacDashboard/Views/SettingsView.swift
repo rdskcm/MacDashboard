@@ -204,6 +204,7 @@ struct SettingsView: View {
     @MainActor init(model: DashboardModel, state: SettingsWindowState, iphone: IPhoneModel? = nil,
          launchLanguage: AppLanguage = L10nStore.launchLanguage) {
         self.model = model
+        _settings = Bindable(model.settings)
         self.iphone = iphone ?? .shared
         self.state = state
         self.launchLanguage = launchLanguage
@@ -223,7 +224,7 @@ struct SettingsView: View {
     @Bindable var state: SettingsWindowState
     let launchLanguage: AppLanguage
     @Bindable private var store = L10nStore.shared
-    @Bindable private var settings = AppSettings.shared
+    @Bindable private var settings: AppSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var relaunchRowShown: Bool
     @State private var relaunching = false
@@ -485,7 +486,7 @@ struct SettingsView: View {
             SettingsRow(label: L.settingsLowSpaceLabel) {
                 DSSlidingSegmented(
                     options: AppSettings.allowedLowSpacePercents,
-                    selection: Binding(get: { settings.lowSpacePercent }, set: { model.setLowSpacePercent($0) }),
+                    selection: $settings.lowSpacePercent,
                     size: .settingsRow,
                     groupLabel: L.settingsLowSpaceLabel
                 ) { p in L.settingsLowSpaceOption(p) }
@@ -571,7 +572,7 @@ struct SettingsView: View {
     private var stepper: some View {
         let days = settings.backupStaleDays
         return HStack(spacing: 8) {
-            Button("−") { model.setBackupStaleDays(days - 1) }
+            Button("−") { settings.backupStaleDays = days - 1 }
                 .buttonStyle(DS3CircleButtonStyle(diameter: 28, ring: DS3.lineStrong, topRim: DS3.rimMid))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(DS3.ink)
@@ -582,7 +583,7 @@ struct SettingsView: View {
                 .monospacedDigit()
                 .foregroundStyle(DS3.ink)
                 .frame(minWidth: 64)
-            Button("+") { model.setBackupStaleDays(days + 1) }
+            Button("+") { settings.backupStaleDays = days + 1 }
                 .buttonStyle(DS3CircleButtonStyle(diameter: 28, ring: DS3.lineStrong, topRim: DS3.rimMid))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(DS3.ink)
@@ -622,7 +623,7 @@ struct SettingsView: View {
         p.directoryURL = URL(fileURLWithPath: model.claudeLogPath).deletingLastPathComponent()
         guard let w = NSApp.keyWindow else { return }
         p.beginSheetModal(for: w) { response in
-            if response == .OK, let url = p.url { model.setClaudeLogPath(url.path) }
+            if response == .OK, let url = p.url { settings.claudeLogPath = url.path }
         }
     }
 

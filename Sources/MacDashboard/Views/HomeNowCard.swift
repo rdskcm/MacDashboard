@@ -23,7 +23,7 @@ struct HomeNowCard: View {
         let cells = HomeModel.nowCells(input, tasks: tasks, memPressure: model.memPressure, socTempC: model.socTempC,
                                        cpu: model.cpu, short: short, narrow: narrow)
         let spark = HomeModel.sparkline(model.cpuHistory)
-        DS3Card(title: L.commonNow, caption: L.homeEverySeconds(AppSettings.shared.fastIntervalSeconds)) {
+        DS3Card(title: L.commonNow, caption: L.homeEverySeconds(model.settings.fastIntervalSeconds)) {
             EqualColumnsLayout(columns: columns, spacing: 8) {
                 ForEach(cells) { cell in
                     HomeNowCellView(cell: cell, sparkline: spark) { router.navigate(to: cell.destination) }

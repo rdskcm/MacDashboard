@@ -1,82 +1,119 @@
 // Tests/MacDashboardTests/AppSettingsTests.swift
-// Port of Checks/main.swift lines 1619-1660 (CHECKS-SWIFT-TESTING). AppSettings fast-loop polling interval persistence.
+// AppSettings persistence over isolated UserDefaults suites (ARCH-SETTINGS-PATH); never the app's standard defaults.
 import Foundation
 import Testing
 @testable import MacDashboard
 
 extension SerialTests {
     struct AppSettingsTests {
-        @Test func fastIntervalPersistence() async {
-            // =====================================================================
-            // MARK: - AppSettings (fast-loop polling interval)
-            // =====================================================================
-
-            do {
-                // UserDefaults hygiene: capture the pre-existing value (if any) and restore it
-                // afterwards — the Checks binary has its own defaults domain, but keep it clean.
-                let savedRaw = UserDefaults.standard.object(forKey: AppSettings.fastIntervalKey)
-
-                // 1. Fresh state: AppSettings.shared is a lazy singleton initialized ONCE (on
-                // first access anywhere in the process), so removeObject here can't force a
-                // re-init — we're asserting the INSTANCE's already-established value, which
-                // was clamped into allowedIntervals at first-touch time.
-                UserDefaults.standard.removeObject(forKey: AppSettings.fastIntervalKey)
-                #expect(AppSettings.allowedIntervals.contains(AppSettings.shared.fastIntervalSeconds),
-                      "AppSettings: shared.fastIntervalSeconds is a member of allowedIntervals")
-
-                // 2. Set → didSet persists to UserDefaults.
-                AppSettings.shared.fastIntervalSeconds = 5
-                #expect(UserDefaults.standard.integer(forKey: AppSettings.fastIntervalKey) == 5,
-                      "AppSettings: setting fastIntervalSeconds = 5 persists via didSet")
-
-                // 3. Clamp logic: the singleton can't be re-initialized mid-process, so the
-                // init-time clamp (raw defaults value → nearest-safe default of 2 when not in
-                // allowedIntervals) can't be re-exercised here. Asserting the rule's contract
-                // directly instead: the allowed set is exactly [2, 5, 10] as documented
-                // (and as read by both the init clamp and the SettingsView picker); the
-                // clamp-on-init behavior itself is enforced by code review of AppSettings.init.
-                #expect(AppSettings.allowedIntervals == [2, 5, 10],
-                      "AppSettings: allowedIntervals == [2, 5, 10] (init-clamp verified by code review)")
-
-                // 4. Restore/settle.
-                AppSettings.shared.fastIntervalSeconds = 2
-                #expect(UserDefaults.standard.integer(forKey: AppSettings.fastIntervalKey) == 2,
-                      "AppSettings: setting fastIntervalSeconds = 2 persists via didSet")
-
-                if let savedRaw {
-                    UserDefaults.standard.set(savedRaw, forKey: AppSettings.fastIntervalKey)
-                } else {
-                    UserDefaults.standard.removeObject(forKey: AppSettings.fastIntervalKey)
-                }
-            }
+        @Test func fastIntervalPersistence() {
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            #expect(AppSettings(defaults: d).fastIntervalSeconds == 2, "empty suite -> default interval 2")
+            // The init clamp: a stored value outside allowedIntervals resolves to 2.
+            d.set(7, forKey: AppSettings.fastIntervalKey)
+            #expect(AppSettings(defaults: d).fastIntervalSeconds == 2, "stored 7 is clamped to 2 by init")
+            let s = AppSettings(defaults: d)
+            s.fastIntervalSeconds = 5
+            #expect(d.integer(forKey: AppSettings.fastIntervalKey) == 5, "setting fastIntervalSeconds = 5 persists via didSet")
+            #expect(AppSettings(defaults: d).fastIntervalSeconds == 5, "a second instance reads the stored 5")
+            #expect(AppSettings.allowedIntervals == [2, 5, 10], "allowedIntervals == [2, 5, 10]")
         }
 
         @Test func rimProfilePersistence() {
-            let d = UserDefaults.standard
-            let saved = d.object(forKey: AppSettings.rimProfileKey)
-            let savedSetting = AppSettings.shared.rimProfile
-            defer {
-                AppSettings.shared.rimProfile = savedSetting
-                if let saved { d.set(saved, forKey: AppSettings.rimProfileKey) } else { d.removeObject(forKey: AppSettings.rimProfileKey) }
-            }
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
             #expect(AppSettings.resolveRimProfile(raw: nil) == .medium)
             #expect(AppSettings.resolveRimProfile(raw: "1") == .narrow)
             #expect(AppSettings.resolveRimProfile(raw: "3") == .wide)
             #expect(AppSettings.resolveRimProfile(raw: "9") == .medium)
-            AppSettings.shared.rimProfile = .wide
+            let s = AppSettings(defaults: d)
+            s.rimProfile = .wide
             #expect(d.string(forKey: AppSettings.rimProfileKey) == "3")
-            AppSettings.shared.rimProfile = .narrow
+            #expect(AppSettings(defaults: d).rimProfile == .wide)
+            s.rimProfile = .narrow
             #expect(d.string(forKey: AppSettings.rimProfileKey) == "1")
             #expect(RimProfile.allCases.allSatisfy { RimLight.heights[$0.rawValue] != nil })
         }
 
         @Test func notifyEnabledPersistence() {
-            let saved = AppSettings.shared.notifyEnabled
-            defer { AppSettings.shared.notifyEnabled = saved }
-            AppSettings.shared.notifyEnabled = [.disk]
-            #expect(UserDefaults.standard.bool(forKey: NotifyCategory.disk.defaultsKey) == true)
-            #expect(UserDefaults.standard.object(forKey: NotifyCategory.crashes.defaultsKey) as? Bool == false)
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            let s = AppSettings(defaults: d)
+            s.notifyEnabled = [.disk]
+            #expect(d.bool(forKey: NotifyCategory.disk.defaultsKey) == true)
+            #expect(d.object(forKey: NotifyCategory.crashes.defaultsKey) as? Bool == false)
+            #expect(AppSettings(defaults: d).notifyEnabled == [.disk])
         }
+
+        @Test func assessmentSettingsPersistAndReload() {
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            let a = AppSettings(defaults: d)
+            let k = WakeHolderKey(owner: "caffeinate", requester: "Terminal")
+            a.lowSpacePercent = 15
+            a.backupStaleDays = 7
+            a.claudeLogPath = "/tmp/md-test/claude-backup.log"
+            a.setWakeHolderIgnored(k, ignored: true, now: Date(timeIntervalSince1970: 1_000_000))
+            let b = AppSettings(defaults: d)
+            #expect(b.assessmentSettings == a.assessmentSettings, "a second instance reloads all four assessment settings")
+            a.claudeLogPath = ""
+            #expect(a.claudeLogPath == nil, "empty log path is stored as nil")
+            #expect(d.object(forKey: AppSettings.claudeLogPathKey) == nil, "empty log path removes the key")
+            a.backupStaleDays = 0
+            a.backupStaleDays = 31
+            a.lowSpacePercent = 25
+            #expect(a.backupStaleDays == 7 && a.lowSpacePercent == 15, "out-of-range writes are ignored")
+            #expect(d.integer(forKey: AppSettings.backupStaleDaysKey) == 7)
+            #expect(d.integer(forKey: AppSettings.lowSpacePercentKey) == 15)
+        }
+
+        @MainActor @Test func assessmentHookFiresOncePerChange() {
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            final class Box { var calls: [AssessmentSettings] = [] }
+            let box = Box()
+            let s = AppSettings(defaults: d)
+            s.onAssessmentSettingsChange = { box.calls.append($0) }
+            let k = WakeHolderKey(owner: "caffeinate", requester: "Terminal")
+            let writes: [(String, () -> Void)] = [
+                ("lowSpacePercent", { s.lowSpacePercent = 10 }),
+                ("backupStaleDays", { s.backupStaleDays = 5 }),
+                ("claudeLogPath", { s.claudeLogPath = "/tmp/x.log" }),
+                ("wakeHolder", { s.setWakeHolderIgnored(k, ignored: true) }),
+            ]
+            for (label, write) in writes {
+                let before = s.assessmentSettings
+                let n = box.calls.count
+                write()
+                #expect(box.calls.count == n + 1, "\(label): exactly one hook call")
+                #expect(box.calls.last == before, "\(label): the hook receives the state before the write")
+            }
+            let noOps: [(String, () -> Void)] = [
+                ("same lowSpacePercent", { s.lowSpacePercent = 10 }),
+                ("same backupStaleDays", { s.backupStaleDays = 5 }),
+                ("same claudeLogPath", { s.claudeLogPath = "/tmp/x.log" }),
+                ("lowSpacePercent 25", { s.lowSpacePercent = 25 }),
+                ("backupStaleDays 31", { s.backupStaleDays = 31 }),
+                ("wake holder again", { s.setWakeHolderIgnored(k, ignored: true) }),
+                ("fastIntervalSeconds", { s.fastIntervalSeconds = 5 }),
+            ]
+            for (label, write) in noOps {
+                let n = box.calls.count
+                write()
+                #expect(box.calls.count == n, "\(label): no hook call")
+            }
+        }
+
+        @Test func assessmentSettingsFieldsAreCovered() {
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            let labels = Mirror(reflecting: AppSettings(defaults: d).assessmentSettings).children.compactMap(\.label)
+            #expect(labels == ["ignoredWakeHolderEntries", "backupStaleDays", "lowSpacePercent", "claudeLogPath"],
+                    "a new AssessmentSettings field needs a persistence line, a load line, and cases in assessmentSettingsPersistAndReload, assessmentHookFiresOncePerChange and SettingsPathTests")
+        }
+
+        /// P3: the test process must not share the app's defaults domain.
+        @Test func testProcessIsNotTheAppDomain() {
+            let id = Bundle.main.bundleIdentifier
+            print("P3: test process bundle id = \(id ?? "nil")")
+            #expect(id != "com.rdskcm.mac-dashboard")
+        }
+
 
         @Test func fastIntervalResolution() {
             for v in [2, 5, 10] {
@@ -170,12 +207,15 @@ extension SerialTests {
         }
 
         @Test func keepImportedArchivesDefault() {
-            #expect(AppSettings.shared.keepImportedArchives, "keepImportedArchives defaults to true")
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            #expect(AppSettings(defaults: d).keepImportedArchives, "keepImportedArchives defaults to true")
         }
 
         @Test func iphoneAutoReadDefault() {
-            #expect(AppSettings.shared.iphoneAutoRead, "iphoneAutoRead defaults to true")
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            #expect(AppSettings(defaults: d).iphoneAutoRead, "iphoneAutoRead defaults to true")
         }
+
 
         @Test func archiveFolderResolve() {
             let def = URL(fileURLWithPath: "/tmp/md-default", isDirectory: true)

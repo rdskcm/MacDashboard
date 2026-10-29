@@ -1,6 +1,7 @@
 // Engine/AppSettings.swift
 // Non-language app settings (interval, wake-holder ignore list, hidden crash reports, backup-stale days, low-space %, notify categories, appearance, orbs,
 // keep-archives, iPhone auto-read, archive folder, snapshot time, claude log path). Foundation + Observation only — covered by Tests/MacDashboardTests.
+// `init(defaults:)` is injectable; the four assessment inputs live in `AssessmentSettings` (ARCH-SETTINGS-PATH).
 import Foundation
 import Observation
 
@@ -9,10 +10,28 @@ enum AppAppearance: String, CaseIterable { case system, light, dark }
 /// RIM-GLOW-OPTICS: edge-light height. Raw values are the `RimLight.heights` keys (narrow 40 / medium 70 / wide 110 pt).
 enum RimProfile: String, CaseIterable { case narrow = "1", medium = "2", wide = "3" }
 
+/// ARCH-SETTINGS-PATH: every setting `Assess.assess` reads, stored as ONE value in `AppSettings` so one `didSet`
+/// persists it and tells the owning model to re-assess, however it was written (binding, view action, code).
+/// A setting that feeds the assessment is added HERE (a field, its key, its persistence line in `didSet`, its
+/// load line in `init(defaults:)`, a case in SettingsPathTests) — never as a separate stored property.
+/// EngineBoundaryTests and AppSettingsTests.assessmentSettingsFieldsAreCovered enforce it.
+struct AssessmentSettings: Equatable {
+    var ignoredWakeHolderEntries: [IgnoredWakeHolder]
+    var backupStaleDays: Int
+    var lowSpacePercent: Int
+    /// nil = the default log; never an empty string.
+    var claudeLogPath: String?
+
+    var ignoredWakeHolders: [WakeHolderKey] { ignoredWakeHolderEntries.map(\.key) }
+    var backupStaleHours: Int { backupStaleDays * 24 }
+}
+
 /// User-tunable settings backed by UserDefaults. Mirrors L10nStore's pattern.
 @Observable
 final class AppSettings {
-    static let shared = AppSettings()
+    static let shared = AppSettings(defaults: .standard)
+    /// The store every `didSet` writes to: `.standard` for `shared`, an isolated suite in tests.
+    private let defaults: UserDefaults
     static let fastIntervalKey = "fastIntervalSeconds"
     /// Allowed fast-loop polling intervals, seconds (handoff 11:23). 1 and 3 were retired in
     /// REDESIGN-FOUNDATION; `migrateLegacyValues` moves a stored 1 or 3 to the default.
@@ -114,89 +133,133 @@ final class AppSettings {
     /// gauges). Read by the loop on every iteration, so a change applies on the
     /// next tick without restarting the task.
     var fastIntervalSeconds: Int {
-        didSet { UserDefaults.standard.set(fastIntervalSeconds, forKey: Self.fastIntervalKey) }
+        didSet { defaults.set(fastIntervalSeconds, forKey: Self.fastIntervalKey) }
     }
 
-    /// Wake holders the Sleep attention item no longer warns about (SLEEP-IGNORE-APP),
-    /// in the order the user added them, each with the date it was added (nil for legacy entries).
-    /// Mutate through `DashboardModel.setWakeHolderIgnored` so the assessment updates at once.
+    /// ARCH-SETTINGS-PATH: the four assessment inputs. Written only through the forwarders below (or
+    /// `setWakeHolderIgnored`), so a whole-struct write cannot skip their validation.
+    private(set) var assessmentSettings: AssessmentSettings {
+        didSet {
+            let new = assessmentSettings
+            guard new != oldValue else { return }
+            if new.ignoredWakeHolderEntries != oldValue.ignoredWakeHolderEntries {
+                defaults.set(Self.encodeIgnoredWakeHolders(new.ignoredWakeHolderEntries), forKey: Self.ignoredWakeHoldersKey)
+            }
+            if new.backupStaleDays != oldValue.backupStaleDays { defaults.set(new.backupStaleDays, forKey: Self.backupStaleDaysKey) }
+            if new.lowSpacePercent != oldValue.lowSpacePercent { defaults.set(new.lowSpacePercent, forKey: Self.lowSpacePercentKey) }
+            if new.claudeLogPath != oldValue.claudeLogPath {
+                if let p = new.claudeLogPath { defaults.set(p, forKey: Self.claudeLogPathKey) }
+                else { defaults.removeObject(forKey: Self.claudeLogPathKey) }
+            }
+            if let hook = onAssessmentSettingsChange { MainActor.assumeIsolated { hook(oldValue) } }
+        }
+    }
+
+    /// Called synchronously, on the main actor, after any change of `assessmentSettings`, with the OLD value.
+    /// One slot: `DashboardModel.init` installs it (the app has one model); a later model on the same instance
+    /// replaces it. Writing an assessment setting off the main thread while a hook is installed traps.
+    @ObservationIgnored var onAssessmentSettingsChange: (@MainActor (AssessmentSettings) -> Void)?
+
+    /// Wake holders the Sleep attention item no longer warns about (SLEEP-IGNORE-APP), in the order the user
+    /// added them, each with the date it was added (nil for legacy entries).
     var ignoredWakeHolderEntries: [IgnoredWakeHolder] {
-        didSet { UserDefaults.standard.set(Self.encodeIgnoredWakeHolders(ignoredWakeHolderEntries), forKey: Self.ignoredWakeHoldersKey) }
+        get { assessmentSettings.ignoredWakeHolderEntries }
+        set { assessmentSettings.ignoredWakeHolderEntries = newValue }
     }
     /// Read-only keys of the entries, for the assessment and Home.
-    var ignoredWakeHolders: [WakeHolderKey] { ignoredWakeHolderEntries.map(\.key) }
+    var ignoredWakeHolders: [WakeHolderKey] { assessmentSettings.ignoredWakeHolders }
+
+    /// Adds (`ignored: true`, dated `now`) or removes a holder; a no-op when it is already in that state.
+    func setWakeHolderIgnored(_ key: WakeHolderKey, ignored: Bool, now: Date = Date()) {
+        var list = ignoredWakeHolderEntries
+        if ignored {
+            guard !list.contains(where: { $0.key == key }) else { return }
+            list.append(IgnoredWakeHolder(key: key, since: now))
+        } else {
+            guard list.contains(where: { $0.key == key }) else { return }
+            list.removeAll { $0.key == key }
+        }
+        ignoredWakeHolderEntries = list
+    }
+
+    /// BACKUP-AGE: warn when the newest Claude backup is older than this many days. Values outside
+    /// `backupStaleDaysRange` are ignored.
+    var backupStaleDays: Int {
+        get { assessmentSettings.backupStaleDays }
+        set { if Self.backupStaleDaysRange.contains(newValue) { assessmentSettings.backupStaleDays = newValue } }
+    }
+    /// Read-only bridge for the hour-based consumers (assessment, Backups page model).
+    var backupStaleHours: Int { assessmentSettings.backupStaleHours }
+
+    /// nil = the default `~/Library/Logs/claude-backup.log`; an empty string is stored as nil.
+    var claudeLogPath: String? {
+        get { assessmentSettings.claudeLogPath }
+        set { assessmentSettings.claudeLogPath = (newValue?.isEmpty ?? true) ? nil : newValue }
+    }
+
+    /// REDESIGN-STORAGE: amber low-space line, % free. Values outside `allowedLowSpacePercents` are ignored.
+    var lowSpacePercent: Int {
+        get { assessmentSettings.lowSpacePercent }
+        set { if Self.allowedLowSpacePercents.contains(newValue) { assessmentSettings.lowSpacePercent = newValue } }
+    }
 
     /// CRASH-REPORT-DISMISS: crash report files hidden on the Security page. Mutate through
     /// `DashboardModel.hideCrashGroup` / `unhideCrashGroup` so the list and the assessment update.
     var hiddenCrashReports: [HiddenCrashReport] {
-        didSet { UserDefaults.standard.set(CrashDismiss.encode(hiddenCrashReports), forKey: Self.hiddenCrashReportsKey) }
+        didSet { defaults.set(CrashDismiss.encode(hiddenCrashReports), forKey: Self.hiddenCrashReportsKey) }
     }
-
-    /// BACKUP-AGE: warn when the newest Claude backup is older than this many days.
-    /// Mutate through `DashboardModel.setBackupStaleDays` so the assessment updates at once.
-    var backupStaleDays: Int {
-        didSet { UserDefaults.standard.set(backupStaleDays, forKey: Self.backupStaleDaysKey) }
-    }
-    /// Read-only bridge for the hour-based consumers (assessment, Backups page model).
-    var backupStaleHours: Int { backupStaleDays * 24 }
 
     var appearance: AppAppearance {
-        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: Self.appearanceKey) }
+        didSet { defaults.set(appearance.rawValue, forKey: Self.appearanceKey) }
     }
     var orbsEnabled: Bool {
-        didSet { UserDefaults.standard.set(orbsEnabled, forKey: Self.orbsEnabledKey) }
+        didSet { defaults.set(orbsEnabled, forKey: Self.orbsEnabledKey) }
     }
     var rimProfile: RimProfile {
-        didSet { UserDefaults.standard.set(rimProfile.rawValue, forKey: Self.rimProfileKey) }
+        didSet { defaults.set(rimProfile.rawValue, forKey: Self.rimProfileKey) }
     }
     /// REDESIGN-IPHONE: default of the import choice sheet (parse and keep when true).
     var keepImportedArchives: Bool {
-        didSet { UserDefaults.standard.set(keepImportedArchives, forKey: Self.keepImportedArchivesKey) }
+        didSet { defaults.set(keepImportedArchives, forKey: Self.keepImportedArchivesKey) }
     }
     var iphoneAutoRead: Bool {
-        didSet { UserDefaults.standard.set(iphoneAutoRead, forKey: Self.iphoneAutoReadKey) }
+        didSet { defaults.set(iphoneAutoRead, forKey: Self.iphoneAutoReadKey) }
     }
     /// nil = the default archive folder; an empty string is stored as nil (same contract as `claudeLogPath`).
     var iphoneArchiveFolder: String? {
         didSet {
-            if let p = iphoneArchiveFolder, !p.isEmpty { UserDefaults.standard.set(p, forKey: Self.iphoneArchiveFolderKey) }
-            else { UserDefaults.standard.removeObject(forKey: Self.iphoneArchiveFolderKey); if iphoneArchiveFolder == "" { iphoneArchiveFolder = nil } }
+            if let p = iphoneArchiveFolder, !p.isEmpty { defaults.set(p, forKey: Self.iphoneArchiveFolderKey) }
+            else { defaults.removeObject(forKey: Self.iphoneArchiveFolderKey); if iphoneArchiveFolder == "" { iphoneArchiveFolder = nil } }
         }
     }
     var snapshotMinutes: Int {
-        didSet { UserDefaults.standard.set(snapshotMinutes, forKey: Self.snapshotMinutesKey) }
+        didSet { defaults.set(snapshotMinutes, forKey: Self.snapshotMinutesKey) }
     }
     var lastSnapshotAt: Date? {
         didSet {
-            if let d = lastSnapshotAt { UserDefaults.standard.set(d, forKey: Self.lastSnapshotAtKey) }
-            else { UserDefaults.standard.removeObject(forKey: Self.lastSnapshotAtKey) }
+            if let d = lastSnapshotAt { defaults.set(d, forKey: Self.lastSnapshotAtKey) }
+            else { defaults.removeObject(forKey: Self.lastSnapshotAtKey) }
         }
-    }
-    /// nil = the default `~/Library/Logs/claude-backup.log`; an empty string is stored as nil.
-    var claudeLogPath: String? {
-        didSet {
-            if let p = claudeLogPath, !p.isEmpty { UserDefaults.standard.set(p, forKey: Self.claudeLogPathKey) }
-            else { UserDefaults.standard.removeObject(forKey: Self.claudeLogPathKey); if claudeLogPath == "" { claudeLogPath = nil } }
-        }
-    }
-
-    /// REDESIGN-STORAGE: amber low-space line, % free. The Settings control arrives in REDESIGN-SETTINGS.
-    var lowSpacePercent: Int {
-        didSet { UserDefaults.standard.set(lowSpacePercent, forKey: Self.lowSpacePercentKey) }
     }
 
     /// REDESIGN-NOTIFY: categories whose attention kinds may post a macOS notification (read by the edge detector at every commit).
     var notifyEnabled: Set<NotifyCategory> {
-        didSet { for c in NotifyCategory.allCases { UserDefaults.standard.set(notifyEnabled.contains(c), forKey: c.defaultsKey) } }
+        didSet { for c in NotifyCategory.allCases { defaults.set(notifyEnabled.contains(c), forKey: c.defaultsKey) } }
     }
 
-    private init() {
-        Self.migrateLegacyValues(in: .standard)
-        fastIntervalSeconds = Self.resolveFastInterval(raw: UserDefaults.standard.integer(forKey: Self.fastIntervalKey)) // 0 if unset
-        ignoredWakeHolderEntries = Self.decodeIgnoredWakeHolders(UserDefaults.standard.data(forKey: Self.ignoredWakeHoldersKey))
-        hiddenCrashReports = CrashDismiss.decode(UserDefaults.standard.data(forKey: Self.hiddenCrashReportsKey))
-        let d = UserDefaults.standard
-        backupStaleDays = Self.resolveBackupStaleDays(raw: d.integer(forKey: Self.backupStaleDaysKey))
+    /// `shared` passes `.standard`; tests pass an isolated suite (TestSupport `makeIsolatedDefaults`).
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+        Self.migrateLegacyValues(in: defaults)
+        let d = defaults
+        fastIntervalSeconds = Self.resolveFastInterval(raw: d.integer(forKey: Self.fastIntervalKey)) // 0 if unset
+        hiddenCrashReports = CrashDismiss.decode(d.data(forKey: Self.hiddenCrashReportsKey))
+        let storedPath = d.string(forKey: Self.claudeLogPathKey)
+        assessmentSettings = AssessmentSettings(
+            ignoredWakeHolderEntries: Self.decodeIgnoredWakeHolders(d.data(forKey: Self.ignoredWakeHoldersKey)),
+            backupStaleDays: Self.resolveBackupStaleDays(raw: d.integer(forKey: Self.backupStaleDaysKey)),
+            lowSpacePercent: Self.resolveLowSpacePercent(raw: d.integer(forKey: Self.lowSpacePercentKey)), // 0 if unset
+            claudeLogPath: (storedPath?.isEmpty ?? true) ? nil : storedPath)
         appearance = Self.resolveAppearance(raw: d.string(forKey: Self.appearanceKey))
         orbsEnabled = d.object(forKey: Self.orbsEnabledKey) as? Bool ?? true
         rimProfile = Self.resolveRimProfile(raw: d.string(forKey: Self.rimProfileKey))
@@ -206,9 +269,6 @@ final class AppSettings {
         iphoneArchiveFolder = (storedFolder?.isEmpty ?? true) ? nil : storedFolder
         snapshotMinutes = Self.resolveSnapshotMinutes(raw: d.object(forKey: Self.snapshotMinutesKey) as? Int)
         lastSnapshotAt = d.object(forKey: Self.lastSnapshotAtKey) as? Date
-        let storedPath = d.string(forKey: Self.claudeLogPathKey)
-        claudeLogPath = (storedPath?.isEmpty ?? true) ? nil : storedPath
-        lowSpacePercent = Self.resolveLowSpacePercent(raw: UserDefaults.standard.integer(forKey: Self.lowSpacePercentKey)) // 0 if unset
         notifyEnabled = Self.resolveNotifyEnabled(in: d)
     }
 }
