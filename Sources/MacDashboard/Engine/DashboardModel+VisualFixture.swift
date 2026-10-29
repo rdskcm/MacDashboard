@@ -27,7 +27,6 @@ extension DashboardModel {
         claudeBackup = d.claudeBackup
         fixtureNow = VisualFixture.referenceDate
         reportUpdatedAt = VisualFixture.referenceDate
-        smartUpdatedAt = VisualFixture.referenceDate
         lastSampleAt = VisualFixture.referenceDate
         isCollectingReport = false
         // REDESIGN-HOME: Home's CPU tile «Processes» and the scan state («checked at 10:30»).
@@ -48,7 +47,7 @@ extension DashboardModel {
             return s
         }(), highSince: nil)
         // REDESIGN-STORAGE: smartmontools present (the SMART card shows its tiles) and an ok folder-count block.
-        applyFixtureSmartTools(.installed, installing: false, failure: nil)
+        smart.applyFixture(updatedAt: ref, tools: .installed, installing: false, failure: nil)
         applyFixtureFolders(VisualFixture.folderSizes(), block: {
             var s = BlockState(.folders, createdAt: ref.addingTimeInterval(-14))
             s.begin(at: ref.addingTimeInterval(-12), showsLoading: false)

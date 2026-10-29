@@ -163,7 +163,7 @@ final class TimeMachineController {
     /// The coordinator's report pass landed its Time Machine section (the pass writes `report` itself): stamp «updated».
     func markUpdated() { updatedAt = time.now() }
 
-    /// A destination read outside a pass (the 300 s SMART sampler, `refreshSmartNow`): write it when it changed, stamp.
+    /// A destination read outside a pass (SmartToolsController's 300 s sampler and `refreshNow()`): write it when it changed, stamp.
     /// A nil read is written as read — what those paths have always done (unlike `refreshNow()`'s keep-old rule).
     func recordDestination(_ dest: TMDestination??) {
         host.write(\.tmDest, dest)

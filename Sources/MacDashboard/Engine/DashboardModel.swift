@@ -50,11 +50,6 @@ final class DashboardModel {
     private(set) var batteryReading = false
     let ncpu = ProcessInfo.processInfo.activeProcessorCount   // constant → not tracked
 
-    /// Timestamp of the last SMART collection — launch report, manual refresh, or the
-    /// periodic sampler, whichever most recently landed a `.smart` section — so the
-    /// Диски card can show "обновлено HH:MM" from app start onward.
-    var smartUpdatedAt: Date? = nil
-
     /// BACKUP-AGE: newest successful Claude backup per its log; nil = no log on this Mac (show nothing). Refreshed on the SMART cadence.
     var claudeBackup: ClaudeBackupStatus? = nil
 
@@ -66,26 +61,9 @@ final class DashboardModel {
     /// `fixtureNow` themselves (ARCH-ENGINE-GUARD, EngineBoundaryTests).
     func now(or fallback: Date = Date()) -> Date { fixtureNow ?? fallback }
 
-    /// Re-entrancy guard for `refreshSmartNow()` (SPEC Block H follow-up): true while a
-    /// SMART re-check is in flight, so two ReportCollector instances never overlap.
-    var smartRefreshing = false
-
     /// Re-entrancy guard for `refreshProcessesNow()`, true while a manual process-list
-    /// refresh is in flight — mirrors `smartRefreshing`.
+    /// refresh is in flight — mirrors `smart.refreshNow()`'s guard.
     var processesRefreshing = false
-
-    /// Whether the SMART CLI toolchain (`smartctl`) is installed, installable via
-    /// Homebrew, or blocked on Homebrew itself missing (Block N8). Recomputed
-    /// whenever a fresh report lands and again after `installSmartmontoolsNow()`.
-    var smartToolsState: ReportCollector.SmartToolsAvailability = .needsHomebrew
-
-    /// Re-entrancy guard for `installSmartmontoolsNow()`, true while an in-app
-    /// `brew install smartmontools` is in flight — mirrors `brew.upgrading`.
-    var smartInstalling = false
-
-    /// Set when the last `installSmartmontoolsNow()` run failed; cleared at the
-    /// start of the next run. Typed so the page words it (exit code, language) at render time.
-    private(set) var smartInstallFailure: SmartInstallFailure? = nil
 
     /// REDESIGN-SECURITY: the one in-flight or last-failed privileged enable (firewall / Gatekeeper).
     /// One state is also the re-entrancy guard of `enableProtectionNow(_:)`.
@@ -234,7 +212,6 @@ final class DashboardModel {
     private var fastTask: Task<Void, Never>?
     private var slowTask: Task<Void, Never>?
     private var reportTask: Task<Void, Never>?
-    private var smartTask: Task<Void, Never>?
     /// One watchdog per armed block (`beginBlock`); cancelled when the block gets a verdict.
     @ObservationIgnored private var blockWatchdogs: [BlockID: Task<Void, Never>] = [:]
 
@@ -272,12 +249,6 @@ final class DashboardModel {
     /// a relaunch makes one fresh attempt. Cleared by a successful count.
     private var sizeCountFailedAt: Date?
 
-    /// SMART re-check cadence (SPEC Block H): SMART attrs change slowly (wear level,
-    /// reallocated sectors), so this is far slower than the fast (~2s) / slow (~6s)
-    /// live gauges — a real-time refresh here would just spawn diskutil/smartctl
-    /// for no benefit.
-    private let smartRefreshInterval: Duration = .seconds(300)
-
     /// Set by `AppActivityMonitor` (AppShell.swift) through `setPaused(_:)` whenever there is no effectively visible,
     /// non-panel window on a frontmost app, so the live loop can skip the (relatively heavy — spawns `top` twice)
     /// collect() call and just keep sleeping, per SPEC §1.4. Read only inside this model (the collector loops skip
@@ -303,6 +274,9 @@ final class DashboardModel {
     /// ARCH-MODEL-SPLIT block 4: the Time Machine feature (status poll, Back up now / Stop, destination re-read,
     /// «updated» stamp); views read `model.timeMachine.<member>`.
     let timeMachine: TimeMachineController
+    /// ARCH-MODEL-SPLIT block 5: the disk-health feature (300 s SMART sampler, smartmontools install, tools state,
+    /// «updated» stamp); views read `model.smart.<member>`.
+    let smart: SmartToolsController
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
     init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live) {
@@ -344,8 +318,11 @@ final class DashboardModel {
         energy = EnergyController(host: reportHost, time: time)
         brew = BrewController(host: reportHost, time: time)
         startupItems = StartupItemsController(host: reportHost, time: time)
-        timeMachine = TimeMachineController(host: reportHost, time: time)
-        smartToolsState = Self.recomputeSmartToolsState()
+        let tm = TimeMachineController(host: reportHost, time: time)
+        timeMachine = tm
+        // Controller→controller write (series convention): SMART's destination reads stamp Time Machine.
+        smart = SmartToolsController(host: reportHost, time: time,
+                                     deps: .live(markTMUpdated: { tm.recordDestination($0) }))
         if let countedAt = folderSizes?.countedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
         // ARCH-SETTINGS-PATH: the one write path — any change of an assessment setting re-assesses this model.
         settings.onAssessmentSettingsChange = { [weak self] old in self?.assessmentSettingsChanged(from: old) }
@@ -473,11 +450,6 @@ final class DashboardModel {
     }
     /// CRASH-REPORT-DISMISS: snapshot states (spinner, failure note).
     func applyFixtureCrashAction(_ action: CrashActionState) { crashAction = action }
-
-    /// Visual fixture only (REDESIGN-STORAGE): smartmontools state, install-in-flight flag and typed failure.
-    func applyFixtureSmartTools(_ state: ReportCollector.SmartToolsAvailability, installing: Bool, failure: SmartInstallFailure?) {
-        smartToolsState = state; smartInstalling = installing; smartInstallFailure = failure
-    }
 
     /// Visual fixture only (REDESIGN-STORAGE): the folder-count result and its block, re-applied to the shown report
     /// (nil sizes = no count yet, the Folders card shows its Wait / error state).
@@ -651,44 +623,8 @@ final class DashboardModel {
             }
         }
 
-        // SMART task (~5 min): periodic re-check of disk health, independent of the
-        // report/fast/slow cadences. Own ReportCollector instance — collectors aren't
-        // shared across tasks (see fastBox/procBox comment above).
-        let smartBox = UncheckedSendableBox(ReportCollector())
-        smartTask = Task(priority: .utility) { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-
-                // The launch report (refreshReport(), called below) just collected SMART,
-                // so sleep first rather than re-checking immediately on start().
-                try? await Task.sleep(for: self.smartRefreshInterval)
-                guard !Task.isCancelled else { return }
-
-                if self.isPaused {
-                    try? await Task.sleep(for: .seconds(2))
-                    continue
-                }
-
-                let (disks, tmDest) = await CommandRunner.$qos.withValue(.utility) {
-                    let disks = await smartBox.value.collectSmartDisks()
-                    let tmDest = await smartBox.value.collectTMDestInfo()
-                    return (disks, tmDest)
-                }
-                guard !Task.isCancelled else { return }
-
-                // Assessment (smartSev) is recomputed every ~2s by the fast task above,
-                // which assesses `lastCommittedReport` while a collect is in flight (:290) —
-                // so `report.smart` must already be committed before that next tick, which
-                // is why this path awaits `waitForReportRefreshToFinish()` first. No
-                // explicit setAssessment() call needed here.
-                await self.waitForReportRefreshToFinish()
-                guard !Task.isCancelled else { return }
-                if self.report.smart != disks { self.report.smart = disks }
-                self.timeMachine.recordDestination(tmDest)
-                await self.refreshClaudeBackup()
-                self.smartUpdatedAt = Date()
-            }
-        }
+        // SMART sampler (~5 min): SmartToolsController owns it (ARCH-MODEL-SPLIT block 5).
+        smart.startSampling()
 
         loadCachedReportFromDisk()
         reprobeProtectedLocations()
@@ -732,8 +668,7 @@ final class DashboardModel {
         slowTask = nil
         reportTask?.cancel()
         reportTask = nil
-        smartTask?.cancel()
-        smartTask = nil
+        smart.stop()
         brew.stop()
         energy.stop()
         startupItems.stop()
@@ -791,10 +726,10 @@ final class DashboardModel {
                 await ReportCollector(hiddenCrashReports: hiddenCrashes).collect(skipSlow: false, cachedBrew: cachedBrew) { partial in
                     // onSection is @MainActor; we're already isolated here. Detect the
                     // .smart section's arrival by its progress-flag transition (false/absent
-                    // -> true) BEFORE overwriting self.report, so smartUpdatedAt reflects the
+                    // -> true) BEFORE overwriting self.report, so `smart.updatedAt` reflects the
                     // launch/manual report too, not only the periodic sampler.
                     if partial.progress["smart"] == true, self.report.progress["smart"] != true {
-                        self.smartUpdatedAt = Date()
+                        self.smart.markUpdated()
                     }
                     // REDESIGN-BACKUPS: the Time Machine destination section's arrival stamps the Backups card's «updated HH:MM».
                     let tmKey = ReportSection.tmDest.rawValue
@@ -815,7 +750,7 @@ final class DashboardModel {
                     // a collect, so assessing it makes "not collected yet" and "nothing is
                     // wrong" the same value and the header thrashes between them. The verdict
                     // updates once the pass completes, at the `final` assessment below.
-                    self.smartToolsState = Self.recomputeSmartToolsState()
+                    self.smart.recomputeToolsState()
                 }
             }
             guard !Task.isCancelled else { return }
@@ -846,7 +781,7 @@ final class DashboardModel {
                 self.commitReportText(self.reportSummaryInput(report: final, generatedAt: final.createdAt ?? now))
                 self.reportUpdatedAt = now
             }
-            self.smartToolsState = Self.recomputeSmartToolsState()
+            self.smart.recomputeToolsState()
         }
     }
 
@@ -967,32 +902,6 @@ final class DashboardModel {
             await time.sleep(.milliseconds(200))
         }
         return !isCollectingReport
-    }
-
-    /// On-demand SMART re-check, run by `installSmartmontoolsNow()` right after smartmontools is installed (the
-    /// Диски card's «Обновить» button was removed in REFRESH-BUTTONS-AUDIT: the 300 s smartTask re-reads the same
-    /// data). Independent of the periodic smartTask sampler — a fresh ReportCollector instance is created per call,
-    /// never shared with a concurrent sampler pass (see the fastBox/procBox/smartBox comment above).
-    func refreshSmartNow() {
-        guard !smartRefreshing else { return }
-        smartRefreshing = true
-
-        Task { [weak self] in
-            guard let self else { return }
-            defer { self.smartRefreshing = false }
-
-            let collectorBox = UncheckedSendableBox(ReportCollector())
-            let disks = await collectorBox.value.collectSmartDisks()
-            let tmDest = await collectorBox.value.collectTMDestInfo()
-            guard !Task.isCancelled else { return }
-
-            await self.waitForReportRefreshToFinish()
-            guard !Task.isCancelled else { return }
-            if self.report.smart != disks { self.report.smart = disks }
-            self.timeMachine.recordDestination(tmDest)
-            await self.refreshClaudeBackup()
-            self.smartUpdatedAt = Date()
-        }
     }
 
     /// REDESIGN-STORAGE D22: Storage page Refresh = a folder recount with the `.button` trigger. Live disk figures
@@ -1157,7 +1066,7 @@ final class DashboardModel {
     /// the «Применить» button of the retired process-limit setting was removed in
     /// REDESIGN-FOUNDATION. One-shot, independent of the periodic slowTask sampler — a fresh
     /// LiveCollector instance is created per call, never shared with a concurrent
-    /// sampler pass (see the fastBox/procBox/smartBox comment in start()). Because
+    /// sampler pass (see the fastBox/procBox comment in start()). Because
     /// this path builds a fresh LiveCollector (and therefore a fresh ProcessSampler)
     /// per press, its CPU% is measured over the sampler's 0.6 s priming window
     /// rather than the periodic ~6 s one; that is deliberate (a manual re-sample
@@ -1183,60 +1092,12 @@ final class DashboardModel {
         }
     }
 
-    /// In-app `smartmontools` install, triggered by the install button on the Диски
-    /// card when Homebrew is present but `smartctl` isn't (Block N8). Runs
-    /// `brew install smartmontools` off-main (unprivileged — brew runs as the user,
-    /// never via PrivilegedRunner), then re-probes `findSmartctl()`: on success,
-    /// flips `smartToolsState` to `.installed` and re-collects external SMART via
-    /// `refreshSmartNow()`; on failure, records a typed `SmartInstallFailure` (exit code, 300 s timeout, no brew).
-    /// Mirrors `brew.upgradeNow()`.
-    func installSmartmontoolsNow() {
-        guard !smartInstalling else { return }
-        smartInstalling = true
-        smartInstallFailure = nil
-
-        Task { [weak self] in
-            guard let self else { return }
-            defer { self.smartInstalling = false }
-
-            guard let brew = ReportCollector.findBrew() else {
-                self.smartInstallFailure = .noBrew
-                return
-            }
-
-            // brew is a Homebrew-prefix script that shells out to its own helper
-            // binaries (ruby, git, curl, …) inside that prefix — same reason
-            // BrewUpgrader.upgradeAll and collectBrewInfo() build this env
-            // (V2-POLISH B1). `brew install` is the heaviest of the three and was
-            // the one call site that never got it.
-            var installEnv = CommandRunner.environment(
-                prependingPATH: [(brew as NSString).deletingLastPathComponent])
-            // Formerly `/usr/bin/env HOMEBREW_NO_AUTO_UPDATE=1 brew …`; same variable, set directly (R0(c)).
-            installEnv["HOMEBREW_NO_AUTO_UPDATE"] = "1"
-            let outcome = await CommandRunner.run(brew, ["install", "smartmontools"], timeout: 300,
-                                                  environment: installEnv)
-            guard !Task.isCancelled else { return }
-
-            if ReportCollector.findSmartctl() != nil {
-                self.smartToolsState = .installed
-                self.smartInstallFailure = nil
-                self.refreshSmartNow()
-            } else {
-                switch outcome.termination {
-                case .timedOut: self.smartInstallFailure = .timedOut
-                case .exited(let code): self.smartInstallFailure = .exitCode(code)
-                case .signaled, .launchFailed, .cancelled: self.smartInstallFailure = .exitCode(-1)
-                }
-            }
-        }
-    }
-
     /// In-app firewall enable, triggered by the confirmation dialog on the
     /// Рекомендации card's `.enableFirewall` advice row. Runs
     /// `socketfilterfw --setglobalstate on` via `PrivilegedRunner` (Touch ID / admin
     /// password) off-main, then re-collects security state so the row disappears the
     /// instant success lands, without waiting for the next fast tick. Mirrors
-    /// `refreshSmartNow()`/`brew.upgradeNow()`.
+    /// `smart.refreshNow()`/`brew.upgradeNow()`.
     func enableFirewallNow() { enableProtectionNow(.firewall) }
 
     /// REDESIGN-SECURITY: the same flow for the firewall and Gatekeeper (Touch ID, 30 s budget). The outcome is
@@ -1362,13 +1223,6 @@ final class DashboardModel {
                              lowSpacePercent: s.lowSpacePercent,
                              claudeLogPath: BackupLog.resolvedURLs(custom: s.claudeLogPath).log.path,
                              now: fixtureNow ?? Date())
-    }
-
-    /// Probes `findSmartctl()`/`findBrew()` fresh (cheap `isExecutableFile` checks,
-    /// no process spawn) and maps them through `ReportCollector.smartToolsAvailability`.
-    private static func recomputeSmartToolsState() -> ReportCollector.SmartToolsAvailability {
-        ReportCollector.smartToolsAvailability(smartctl: ReportCollector.findSmartctl(),
-                                                brew: ReportCollector.findBrew())
     }
 
     private static func defaultReportURL() -> URL {
