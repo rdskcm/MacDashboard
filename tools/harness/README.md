@@ -1,6 +1,6 @@
 # Headless UI render harness (reusable)
 
-Renders app views offscreen with directly-injected `DashboardModel` state and
+Renders app views offscreen with directly-injected `AppModel` state and
 writes a PNG — no window, no interaction, no system mutation, no collectors.
 Used to verify UI states that are hard to reach live (busy/error/progress states).
 
@@ -18,7 +18,7 @@ import SwiftUI
 MainActor.assumeIsolated {
     L10nStore.shared.language = .ru          // pin language FIRST
 
-    let m = DashboardModel()                  // init is side-effect-free; NEVER call start()
+    let m = AppModel()                  // init is side-effect-free; NEVER call start()
     m.report.brewStatus = .installed(version: "Homebrew 4.x")
     m.brew.applyFixture(checkedAt: nil, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true)   // controller state: through its fixture setter
 

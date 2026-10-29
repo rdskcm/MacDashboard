@@ -6,7 +6,7 @@ import Charts
 
 @MainActor
 struct HistoryPage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let narrow: Bool
     @State private var pulse: CardID? = nil
@@ -44,7 +44,7 @@ struct HistoryPage: View {
 /// Internal (not private): the visual fixture renders it.
 @MainActor
 struct HistoryPageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
@@ -86,7 +86,7 @@ struct HistoryPageBar: View {
 /// Internal (not private): the visual fixture renders it with pinned states (`initial*`, D15).
 @MainActor
 struct HistoryCardView: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let narrow: Bool
     @State private var metric: HistoryMetric
@@ -97,7 +97,7 @@ struct HistoryCardView: View {
     @State private var switched = false
     private let initialHover: Int?
 
-    init(model: DashboardModel, router: NavigationRouter, narrow: Bool,
+    init(model: AppModel, router: NavigationRouter, narrow: Bool,
          initialMetric: HistoryMetric = .disk, initialRange: HistoryRange = .month,
          initialView: HistoryViewMode = .chart, initialShowAll: Bool = false, initialHover: Int? = nil) {
         self.model = model

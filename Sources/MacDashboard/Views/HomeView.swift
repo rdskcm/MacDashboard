@@ -40,7 +40,7 @@ extension HomeInput {
     /// Everything the tiles and the page bars derive from. Reads the live fields, so only the views
     /// that render tiles may call it.
     @MainActor
-    static func make(_ model: DashboardModel) -> HomeInput {
+    static func make(_ model: AppModel) -> HomeInput {
         let report = model.homeReport
         let battery = model.battery ?? report.battery
         return HomeInput(assessment: model.assessment, report: report, scan: model.blockState(.scan),
@@ -57,7 +57,7 @@ extension HomeInput {
     /// the two live values the task wording uses. The Now/tile-only live fields (`load`, `mem`, `swap`,
     /// `processCount`) are left empty so a 2 s tick does not re-run the attention card.
     @MainActor
-    static func attention(_ model: DashboardModel) -> HomeInput {
+    static func attention(_ model: AppModel) -> HomeInput {
         let report = model.homeReport
         return HomeInput(assessment: model.assessment, report: report, scan: model.blockState(.scan),
                          load: nil, ncpu: model.ncpu, processCount: nil, mem: nil, swap: nil, disk: model.disk,
@@ -68,7 +68,7 @@ extension HomeInput {
 
     /// The eight section tiles (seven without a battery) for the current model state.
     @MainActor
-    static func tiles(_ model: DashboardModel) -> [HomeTile] {
+    static func tiles(_ model: AppModel) -> [HomeTile] {
         let input = make(model)
         let scan = HomeModel.scan(input.scan)
         let tasks = HomeModel.tasks(input.assessment, report: input.report, disk: input.disk, battery: model.battery)
@@ -87,7 +87,7 @@ extension View {
 
 @MainActor
 struct HomeView: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let width: LiveWindowWidth
     let tier: WidthTier

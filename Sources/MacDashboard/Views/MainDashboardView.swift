@@ -22,7 +22,7 @@ private let headerTrafficLightBand: CGFloat = 21
 
 @MainActor
 struct MainDashboardView: View {
-    var model: DashboardModel
+    var model: AppModel
     var iphone: IPhoneModel = .shared
 
     /// REDESIGN-FOUNDATION: mode, report tab and (later) pages go through the router.
@@ -270,11 +270,11 @@ struct MainDashboardView: View {
 /// This Mac content (HIDDEN-CONTENT-WORK): exactly one page is in the hierarchy — Home or the open section page.
 /// Hidden content does no work (user rule 2026-10-28), so Home is unmounted while a page is open and rebuilt on
 /// Back, where its entrance replays. Home owns no loader: a rebuild re-renders model state, and the attention card's
-/// action state lives on the model (`DashboardModel.homeAdviceDispatch`). `body` reads no live model field:
+/// action state lives on the model (`AppModel.homeAdviceDispatch`). `body` reads no live model field:
 /// `HomeView` and its slots do the reading. Internal (not private) so HiddenContentTests can host it.
 @MainActor
 struct MacContentView: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let width: LiveWindowWidth
     let tier: WidthTier
@@ -364,7 +364,7 @@ private struct BackShortcuts: View {
 /// Status pill · Report · Refresh report (01-window-chrome, «This Mac actions»).
 @MainActor
 struct MacHeaderActions: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     /// The committed form (RESIZE-MOTION C2, `HeaderActionsForm`): compact below the tier boundary and whenever the
     /// full row would not fit with the margin to spare, decided at the window root inside the tier transaction so

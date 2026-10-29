@@ -160,7 +160,7 @@ extension SerialTests {
             let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
             let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
             write(Self.twoDays, dir.appendingPathComponent(fileName))
-            let m = DashboardModel(dataDirectory: dir, settings: AppSettings(defaults: d), time: VirtualClock().source)
+            let m = AppModel(dataDirectory: dir, settings: AppSettings(defaults: d), time: VirtualClock().source)
             #expect(m.history.state.mac_history.count == 2)
             #expect(m.history.filePath.hasSuffix(dir.lastPathComponent + "/mac_check_state.json"))
             m.reportHost.reportError("x")

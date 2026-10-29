@@ -43,7 +43,7 @@ private final class Host {
 
 /// Each page alone; no `default:`, so a new `Page` case fails to compile until this test is extended.
 @MainActor @ViewBuilder
-private func pageAlone(_ p: Page, _ m: DashboardModel, _ r: NavigationRouter) -> some View {
+private func pageAlone(_ p: Page, _ m: AppModel, _ r: NavigationRouter) -> some View {
     switch p {
     case .home: HomeView(model: m, router: r, width: width, tier: tier)
     case .cpu: CPUPage(model: m, router: r)
@@ -75,7 +75,7 @@ extension SerialTests {
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("md-hidden-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             defer { try? FileManager.default.removeItem(at: dir) }
-            let m = DashboardModel(dataDirectory: dir)
+            let m = AppModel(dataDirectory: dir)
             m.applyVisualFixture()
 
             // 1. Expected counts: each page hosted alone.

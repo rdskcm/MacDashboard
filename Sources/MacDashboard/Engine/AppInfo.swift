@@ -21,6 +21,6 @@ enum AppInfo {
     static var versionText: String { versionText(short: shortVersion, build: build) }
     /// Build suffix only when the short string does not already start with the build string (build_app.sh writes the same number into both).
     static func versionText(short: String, build: String) -> String { build.isEmpty || short.hasPrefix(build) ? short : "\(short) (\(build))" }
-    /// ~/Library/Application Support/MacDashboard — the report, history and caches folder (same derivation as `DashboardModel.defaultReportURL()` / `IPhoneStore.defaultURL()`, without creating it).
+    /// ~/Library/Application Support/MacDashboard — the report, history and caches folder (same derivation as `AppModel.defaultReportURL()` / `IPhoneStore.defaultURL()`, without creating it).
     static var supportFolderURL: URL { ((try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false)) ?? FileManager.default.homeDirectoryForCurrentUser).appendingPathComponent("MacDashboard", isDirectory: true) }
 }

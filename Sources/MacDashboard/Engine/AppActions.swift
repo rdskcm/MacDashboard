@@ -1,5 +1,5 @@
 // Engine/AppActions.swift
-// ARCH-ENGINE-GUARD: the AppKit-side actions DashboardModel needs, as closures, so Engine stays Foundation-only.
+// ARCH-ENGINE-GUARD: the AppKit-side actions AppModel needs, as closures, so Engine stays Foundation-only.
 // The app passes `AppActions.live` (AppShell.swift); tests and the harness scenarios keep the default `.none`.
 import Foundation
 

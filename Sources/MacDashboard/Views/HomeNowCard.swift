@@ -7,7 +7,7 @@
 import SwiftUI
 
 struct HomeNowCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let tier: WidthTier
     /// `false` only in the offscreen visual harness (see `homeEntrance`).

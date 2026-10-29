@@ -10,8 +10,8 @@ MainActor.assumeIsolated {
     let env = ProcessInfo.processInfo.environment
     L10nStore.shared.language = env["BACKUPS_LANG"] == "en" ? .en : .ru
 
-    @MainActor func model(_ tweak: (DashboardModel) -> Void) -> DashboardModel {
-        let m = DashboardModel()
+    @MainActor func model(_ tweak: (AppModel) -> Void) -> AppModel {
+        let m = AppModel()
         m.applyVisualFixture()
         tweak(m)
         return m
@@ -22,7 +22,7 @@ MainActor.assumeIsolated {
                       quotaBytes: nil, lastBackup: last.map { Parsers.formatTMBackupDate($0) },
                       lastBackupDate: last, freeBytes: mounted ? 612_000_000_000 : nil, schedule: schedule)
     }
-    @MainActor func tm(_ d: TMDestination, backup: TMBackupProgress? = nil, action: TMActionState = .idle) -> DashboardModel {
+    @MainActor func tm(_ d: TMDestination, backup: TMBackupProgress? = nil, action: TMActionState = .idle) -> AppModel {
         model { $0.report.tmDest = .some(d); $0.timeMachine.applyFixture(updatedAt: ref, backup: backup, action: action) }
     }
     let sample = TMBackupProgress(running: true, stopping: false, phase: "Copying", percent: 0.140625,
@@ -41,7 +41,7 @@ MainActor.assumeIsolated {
     let preparing = tm(backingDest, backup: TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes"))
     let findingChanges = tm(backingDest, backup: TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53))
     let failed = tm(dest(last: ref - 9 * 86_400, mounted: true), action: .failed(L.bkStartDidNotBegin))
-    @MainActor func claude(_ s: ClaudeBackupStatus?) -> DashboardModel { model { $0.claudeBackup = s } }
+    @MainActor func claude(_ s: ClaudeBackupStatus?) -> AppModel { model { $0.claudeBackup = s } }
 
     if env["BACKUPS_VIEW"] == "narrow" {
         harnessRender(width: 904) {

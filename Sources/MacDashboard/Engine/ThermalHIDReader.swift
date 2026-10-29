@@ -23,7 +23,7 @@
 //
 // Cost: one full create+match+read pass measured at 46.5-60.0 ms (n=15) on the
 // target M3 Air — cheap enough for the fast (~2 s) live tick; called off-main by
-// DashboardModel's fast task. The one-time dlopen+6x dlsym adds microseconds, on the
+// AppModel's fast task. The one-time dlopen+6x dlsym adds microseconds, on the
 // first pass only.
 
 import Foundation

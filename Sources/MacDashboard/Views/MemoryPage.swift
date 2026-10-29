@@ -8,7 +8,7 @@ import SwiftUI
 
 @MainActor
 struct MemoryPage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let narrow: Bool
 
@@ -59,7 +59,7 @@ struct MemoryPage: View {
 /// Internal (not private): the visual fixture renders it.
 @MainActor
 struct MemoryPageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
@@ -88,7 +88,7 @@ struct MemoryPageBar: View {
 /// Internal: the visual fixture renders it.
 @MainActor
 struct MemoryUsageCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let narrow: Bool
 
     var body: some View {
@@ -145,7 +145,7 @@ struct MemoryUsageCard: View {
 /// Internal: the visual fixture renders it (`initialView` exists for the snapshot test only).
 @MainActor
 struct MemoryCompositionCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let narrow: Bool
     @State private var view: MemoryCompView
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -154,7 +154,7 @@ struct MemoryCompositionCard: View {
     @State private var barHoverKey: String?
     @State private var legendHoverKey: String?
 
-    init(model: DashboardModel, narrow: Bool, initialView: MemoryCompView = .chart) {
+    init(model: AppModel, narrow: Bool, initialView: MemoryCompView = .chart) {
         self.model = model
         self.narrow = narrow
         _view = State(initialValue: initialView)
@@ -361,7 +361,7 @@ private struct StackLegendLayout: Layout {
 }
 
 @MainActor
-private func memoryPageInput(_ model: DashboardModel, narrow: Bool) -> MemoryPageModel.Input {
+private func memoryPageInput(_ model: AppModel, narrow: Bool) -> MemoryPageModel.Input {
     MemoryPageModel.Input(mem: model.mem, swap: model.swap, pressure: model.memPressure,
                           installedBytes: model.headerSystem?.memBytes, block: model.memoryBlock.phase,
                           intervalSeconds: model.settings.fastIntervalSeconds, narrow: narrow)

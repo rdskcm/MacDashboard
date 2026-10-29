@@ -201,7 +201,7 @@ private struct SettingsGroup<Content: View>: View {
 }
 
 struct SettingsView: View {
-    @MainActor init(model: DashboardModel, state: SettingsWindowState, iphone: IPhoneModel? = nil,
+    @MainActor init(model: AppModel, state: SettingsWindowState, iphone: IPhoneModel? = nil,
          launchLanguage: AppLanguage = L10nStore.launchLanguage) {
         self.model = model
         _settings = Bindable(model.settings)
@@ -214,12 +214,12 @@ struct SettingsView: View {
 
     // Harness-only init param so offscreen renders can show any section without
     // clicks (same precedent as MemoryCompositionCard.initialView).
-    @MainActor init(model: DashboardModel, startSection: SettingsSection = .general, iphone: IPhoneModel? = nil,
+    @MainActor init(model: AppModel, startSection: SettingsSection = .general, iphone: IPhoneModel? = nil,
          launchLanguage: AppLanguage = L10nStore.launchLanguage) {
         self.init(model: model, state: SettingsWindowState(section: startSection), iphone: iphone, launchLanguage: launchLanguage)
     }
 
-    var model: DashboardModel
+    var model: AppModel
     var iphone: IPhoneModel
     @Bindable var state: SettingsWindowState
     let launchLanguage: AppLanguage

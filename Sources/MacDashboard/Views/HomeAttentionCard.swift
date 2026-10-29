@@ -58,7 +58,7 @@ extension View {
 
 @MainActor
 struct HomeScanBannerSlot: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         if case .failed(let failure, let lastGood) = HomeModel.scan(model.blockState(.scan)) {
@@ -84,7 +84,7 @@ struct HomeScanBannerSlot: View {
 /// Chooses between the First-scan card, the attention card, the All-good line and nothing.
 @MainActor
 struct HomeAttentionSlot: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let width: LiveWindowWidth
     /// `false` only in the offscreen visual harness (see `homeEntrance`).
@@ -115,7 +115,7 @@ struct HomeAttentionSlot: View {
 
 @MainActor
 struct HomeAttentionCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let width: LiveWindowWidth
 
@@ -124,7 +124,7 @@ struct HomeAttentionCard: View {
     var dispatch: AdviceActionDispatch { model.homeAdviceDispatch }
     @State private var showAll: Bool
 
-    init(model: DashboardModel, router: NavigationRouter, width: LiveWindowWidth, initialShowAll: Bool = false) {
+    init(model: AppModel, router: NavigationRouter, width: LiveWindowWidth, initialShowAll: Bool = false) {
         self.model = model
         self.router = router
         self.width = width
@@ -309,7 +309,7 @@ struct HomeShowAllButton: View {
 @MainActor
 private struct HomeTaskRow: View {
     let task: HomeTask
-    let model: DashboardModel
+    let model: AppModel
     let dispatch: AdviceActionDispatch
     let onOpen: () -> Void
 
@@ -399,7 +399,7 @@ private struct VerbAccessibilityAction: ViewModifier {
 /// the branch cannot flip for a mounted row because a `.wakeHolders` item always names ≥ 1.
 private struct WakeIgnoreMenu: ViewModifier {
     let keys: [WakeHolderKey]
-    let model: DashboardModel
+    let model: AppModel
 
     func body(content: Content) -> some View {
         if keys.isEmpty {
@@ -420,7 +420,7 @@ private struct WakeIgnoreMenu: ViewModifier {
 
 @MainActor
 struct HomeAllGoodLine: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         HStack(spacing: 12) {

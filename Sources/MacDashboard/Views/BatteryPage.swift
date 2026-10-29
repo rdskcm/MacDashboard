@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor
 struct BatteryPage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     let narrow: Bool
 
@@ -67,7 +67,7 @@ struct BatteryPage: View {
 // MARK: - Input and mapping helpers
 
 @MainActor
-private func batteryPageInput(_ model: DashboardModel) -> BatteryPageModel.Input {
+private func batteryPageInput(_ model: AppModel) -> BatteryPageModel.Input {
     .init(detail: model.batteryDetail, condition: model.report.battery?.condition ?? model.battery?.condition,
           block: model.batteryBlock.phase, history: model.history.state.mac_history)
 }
@@ -136,7 +136,7 @@ private func hero(_ h: BatteryHeroModel) -> some View {
 /// Internal (not private): the visual fixture renders it. No Refresh: readings update every 3 s.
 @MainActor
 struct BatteryPageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
@@ -154,7 +154,7 @@ struct BatteryPageBar: View {
 
 @MainActor
 struct BatteryNowCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let narrow: Bool
 
     var body: some View {
@@ -185,7 +185,7 @@ struct BatteryNowCard: View {
 
 @MainActor
 struct BatteryHealthCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let narrow: Bool
 
     var body: some View {
@@ -217,7 +217,7 @@ struct BatteryHealthCard: View {
 
 @MainActor
 struct BatteryChargingCard: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         let m = BatteryPageModel.make(batteryPageInput(model))
@@ -237,7 +237,7 @@ struct BatteryChargingCard: View {
 
 @MainActor
 struct BatteryLifetimeCard: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         let m = BatteryPageModel.make(batteryPageInput(model))
@@ -257,7 +257,7 @@ struct BatteryLifetimeCard: View {
 
 @MainActor
 struct BatteryPassportCard: View {
-    let model: DashboardModel
+    let model: AppModel
 
     var body: some View {
         let m = BatteryPageModel.make(batteryPageInput(model))
@@ -277,7 +277,7 @@ struct BatteryPassportCard: View {
 
 @MainActor
 struct BatteryHistoryCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
 
     var body: some View {

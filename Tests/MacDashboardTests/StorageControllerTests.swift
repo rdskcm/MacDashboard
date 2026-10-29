@@ -350,7 +350,7 @@ extension SerialTests {
             try? FolderSizesCacheStore.save(VisualFixture.folderSizes(), to: dir.appendingPathComponent("folder_sizes_cache.json"))
             try? UpdatesCacheStore.save(UpdatesCache(items: [], checkedAt: ref, durationSeconds: 4),
                                         to: dir.appendingPathComponent("updates_cache.json"))
-            let m = DashboardModel(dataDirectory: dir, settings: AppSettings(defaults: d), time: VirtualClock().source)
+            let m = AppModel(dataDirectory: dir, settings: AppSettings(defaults: d), time: VirtualClock().source)
             #expect(m.storage.folderSizesCountedAt == ref)
             #expect(m.blockState(.folders).phase == .ok(at: ref))
             m.report = FullReport()

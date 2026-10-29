@@ -33,7 +33,7 @@ struct ProcessRowFixture {
 /// never snapshotted into `@State` — so whichever metric is selected keeps
 /// ticking live.
 struct ProcessListCard: View {
-    let model: DashboardModel
+    let model: AppModel
 
     @State private var procMetric: Metric
     private let memoryPage: Bool
@@ -46,7 +46,7 @@ struct ProcessListCard: View {
     /// `memoryPage`: the Memory page's fixed «Processes by memory» list (REDESIGN-MEMORY) — memory ranking only,
     /// no metric control, rows do not open, no foot line.
     /// `onConfirmShown` reports the inline force-quit confirm to the page (it owns Esc while open).
-    init(model: DashboardModel, initialMetric: Metric = .cpu, memoryPage: Bool = false, rowFixture: ProcessRowFixture? = nil,
+    init(model: AppModel, initialMetric: Metric = .cpu, memoryPage: Bool = false, rowFixture: ProcessRowFixture? = nil,
          onConfirmShown: @escaping (Bool) -> Void = { _ in }) {
         self.model = model
         self.memoryPage = memoryPage
@@ -395,7 +395,7 @@ private struct ProcessRowView: View {
 // MARK: - Expanded detail panel
 
 private struct ProcessDetailView: View {
-    let model: DashboardModel
+    let model: AppModel
     let row: ProcEntry
     let isOpen: Bool
     /// Visual fixture only: a fixed detail and phase, no fetch (`ProcessRowFixture`).
@@ -405,7 +405,7 @@ private struct ProcessDetailView: View {
     /// A signal was delivered: the card re-samples the process list.
     let onSignalSent: () -> Void
 
-    init(model: DashboardModel, row: ProcEntry, isOpen: Bool, fixture: ProcessRowFixture?,
+    init(model: AppModel, row: ProcEntry, isOpen: Bool, fixture: ProcessRowFixture?,
          onConfirmShown: @escaping (Bool) -> Void, onSignalSent: @escaping () -> Void) {
         self.model = model
         self.row = row

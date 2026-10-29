@@ -1,11 +1,11 @@
-// Engine/DashboardModel+VisualFixture.swift
+// Engine/AppModel+VisualFixture.swift
 // VISUAL-COVERAGE: applies the fixed VisualFixture dataset to a fresh
-// DashboardModel instead of starting live collection. App-only (not covered by
-// Tests/MacDashboardTests — DashboardModel is @MainActor/@Observable, out of scope there).
+// AppModel instead of starting live collection. App-only (not covered by
+// Tests/MacDashboardTests — AppModel is @MainActor/@Observable, out of scope there).
 
 import Foundation
 
-extension DashboardModel {
+extension AppModel {
     /// Fills every field the live loop would normally produce, from the fixed
     /// fixture dataset, and starts no background task.
     func applyVisualFixture() {

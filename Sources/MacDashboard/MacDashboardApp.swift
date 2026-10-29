@@ -5,12 +5,12 @@ import SwiftUI
 
 @main
 struct MacDashboardApp: App {
-    @State private var model: DashboardModel
+    @State private var model: AppModel
     @State private var glass: GlassSettings
     @State private var activity: AppActivityMonitor?
 
     init() {
-        _model = State(wrappedValue: DashboardModel(actions: .live))
+        _model = State(wrappedValue: AppModel(actions: .live))
         _glass = State(wrappedValue: GlassSettings(fixture: VisualFixture.isRequested))
         SettingsWindowController.shared.configure(model: _model.wrappedValue, glass: _glass.wrappedValue)
         AppSettings.shared.appearance.apply()

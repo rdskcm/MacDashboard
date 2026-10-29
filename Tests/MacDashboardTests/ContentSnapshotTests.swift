@@ -14,7 +14,7 @@ extension SerialTests {
     struct SnapshotTests {
         @Test @MainActor func contentStates() throws {
             let outDir = try #require(SnapshotEnv.outDir)
-            // D7: never against the real home (DashboardModel() reads the history file at init).
+            // D7: never against the real home (AppModel() reads the history file at init).
             let realHome = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? ""
             try #require(!realHome.isEmpty && NSHomeDirectory() != realHome,
                          "run through tools/visual/snapshots.sh (CFFIXED_USER_HOME bench home)")
@@ -35,7 +35,7 @@ extension SerialTests {
             defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleDays, settings.lowSpacePercent, settings.appearance, settings.orbsEnabled, settings.snapshotMinutes, settings.claudeLogPath, settings.notifyEnabled) = saved }
             L10nStore.shared.language = .en
             let run = try SnapshotRun(out: outDir)
-            let m = DashboardModel()
+            let m = AppModel()
             m.applyVisualFixture()
 
             let ipStore = FileManager.default.temporaryDirectory
@@ -67,17 +67,17 @@ extension SerialTests {
             let longArchive = "sysdiagnose_2026.01.15_09-15-02+0300_iPhone-OS_iPhone_23E254.tar.gz"
             // NEWMAC-HISTORY-EMPTY: the same fixture with only `history` replaced. One model per
             // state, because a view reads `model.history.state` when it renders, not when the closure is
-            // built. `DashboardModel()` only reads the real history file at init; nothing is written.
-            @MainActor func fixtureHistory(_ entries: [MacHistoryEntry], backup: String? = nil) -> DashboardModel {
-                let h = DashboardModel()
+            // built. `AppModel()` only reads the real history file at init; nothing is written.
+            @MainActor func fixtureHistory(_ entries: [MacHistoryEntry], backup: String? = nil) -> AppModel {
+                let h = AppModel()
                 h.applyVisualFixture()
                 h.history.applyFixture(HistoryState(last_run: entries.last?.date, mac_history: entries, unreadable_backup: backup))
                 h.fixtureNow = VisualFixture.referenceDate   // History year labels must not follow the wall clock
                 return h
             }
             // REDESIGN-HOME: the same fixture with one thing changed per Home state (one model per state).
-            @MainActor func fixtureHome(_ tweak: (DashboardModel) -> Void) -> DashboardModel {
-                let h = DashboardModel()
+            @MainActor func fixtureHome(_ tweak: (AppModel) -> Void) -> AppModel {
+                let h = AppModel()
                 h.applyVisualFixture()
                 tweak(h)
                 return h
@@ -149,14 +149,14 @@ extension SerialTests {
                 DiskInfo(size: 256_000_000_000, avail: Int64(2_560_000_000 * freePercent),
                          dataUsed: 160_000_000_000, sysUsed: 18_000_000_000, purgeable: 3_100_000_000)
             }
-            @MainActor func reassess(_ h: DashboardModel) {
+            @MainActor func reassess(_ h: AppModel) {
                 h.assessment = Assess.assess(report: h.report,
                                              live: LiveSnapshot(t: homeRef, load: h.load, cpu: h.cpu, mem: h.mem,
                                                                 swap: h.swap, disk: h.disk, battery: h.battery),
                                              memPressure: .normal, now: homeRef)
             }
             /// Folder count done, no home folder refused (the plain `ok` page).
-            @MainActor func storageOK(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel {
+            @MainActor func storageOK(_ tweak: (AppModel) -> Void = { _ in }) -> AppModel {
                 fixtureHome {
                     $0.applyFixtureFolders(VisualFixture.folderSizes(unreadable: []), block: stBlockOK)
                     tweak($0)
@@ -197,7 +197,7 @@ extension SerialTests {
             }
             /// smartmontools missing: no health anywhere, every drive «no data».
             @MainActor func storageTools(_ state: ReportCollector.SmartToolsAvailability, installing: Bool = false,
-                                         failure: SmartInstallFailure? = nil) -> DashboardModel {
+                                         failure: SmartInstallFailure? = nil) -> AppModel {
                 storageOK {
                     $0.report.smartctlPresent = false
                     $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED"),
@@ -232,7 +232,7 @@ extension SerialTests {
                 return s
             }()
             @MainActor func battery(_ tweak: (inout BatteryDetail) -> Void = { _ in }, condition: String = "Normal",
-                                    block: BlockState? = nil) -> DashboardModel {
+                                    block: BlockState? = nil) -> AppModel {
                 fixtureHome {
                     var d = VisualFixture.batteryDetail
                     tweak(&d)
@@ -262,7 +262,7 @@ extension SerialTests {
             }()) }
             // REDESIGN-SECURITY: Security page states. Fixture = FV/GK/SIP on, firewall off, no updates (checked 5 min ago), one Xcode crash.
             let secHome = FileManager.default.homeDirectoryForCurrentUser.path
-            @MainActor func security(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
+            @MainActor func security(_ tweak: (AppModel) -> Void = { _ in }) -> AppModel { fixtureHome(tweak) }
             let secFirewallOff = security()
             let secAllOn = security { $0.report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true); $0.report.crashes = [] }
             let secEnabling = security { $0.security.applyFixture(action: .enabling(.firewall)) }
@@ -280,7 +280,7 @@ extension SerialTests {
             let secCrashWorking = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.crashReports.applyFixture(.working(.delete, groupID: "Kernel")) }
             let secRefreshing = security { $0.security.applyFixture(action: .idle, refreshing: true) }
             // REDESIGN-BACKUPS: Backups page states. Reference instants are relative to the fixture clock (2026-01-15 10:30).
-            @MainActor func backups(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
+            @MainActor func backups(_ tweak: (AppModel) -> Void = { _ in }) -> AppModel { fixtureHome(tweak) }
             func bkDest(last: Date?, mounted: Bool, schedule: TMSchedule? = .automatic(intervalSeconds: 3600)) -> TMDestination {
                 TMDestination(name: "Backup SSD", kind: "Local", mountPoint: mounted ? "/Volumes/Backup SSD" : nil,
                               quotaBytes: nil, lastBackup: last.map { Parsers.formatTMBackupDate($0) },
@@ -316,7 +316,7 @@ extension SerialTests {
             let bkClaudeUnreadable = backups { $0.claudeBackup = .unreadable }
             let bkWait = backups { $0.report.tmDest = nil }
             // REDESIGN-SYSTEM: System page states. Fixture = caffeinate (amber) + backupd (system), brew outdated (3), nothing checked.
-            @MainActor func system(_ tweak: (DashboardModel) -> Void = { _ in }) -> DashboardModel { fixtureHome(tweak) }
+            @MainActor func system(_ tweak: (AppModel) -> Void = { _ in }) -> AppModel { fixtureHome(tweak) }
             let sysHome = FileManager.default.homeDirectoryForCurrentUser.path
             let sysFixtureAutostart = VisualFixture.autostart(home: sysHome)
             let sysOrphanPaths = (sysFixtureAutostart.userAgents + sysFixtureAutostart.systemAgents + sysFixtureAutostart.systemDaemons)
@@ -333,7 +333,7 @@ extension SerialTests {
                 $0.report.autostart = a
                 $0.startupItems.applyFixture(checkedAt: sysChecked20, removed: 2, checking: false, deleting: [], failure: nil)
             }
-            func sysFailed(_ f: PrivilegedActionFailure) -> DashboardModel {
+            func sysFailed(_ f: PrivilegedActionFailure) -> AppModel {
                 system { $0.startupItems.applyFixture(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: f) }
             }
             let sysFailError = sysFailed(.error("permission denied"))
@@ -1132,7 +1132,7 @@ extension SerialTests {
                     }
                 }
                 // Settings states: the window frame (680 x 420) is owned by the test, not by SettingsView.
-                func settingsState(_ name: String, _ section: SettingsSection, _ model: DashboardModel, launch: AppLanguage = .en,
+                func settingsState(_ name: String, _ section: SettingsSection, _ model: AppModel, launch: AppLanguage = .en,
                                    iphone: IPhoneModel? = nil) {
                     run.snap(name, mode, width: 680) {
                         SettingsView(model: model, startSection: section, iphone: iphone, launchLanguage: launch).frame(width: 680, height: 420)
@@ -1140,8 +1140,8 @@ extension SerialTests {
                 }
                 // REDESIGN-ORBS: the main window's backdrop alone, at the perf bench size (orbs: Stage 1; H1 profile: Stage 2 — invisible offscreen, see spec §5).
                 run.snap("content-backdrop-window", mode, width: 1000) { Color.clear.frame(width: 1000, height: 733).ds3Backdrop(orbs: DS3OrbSpec.window) }
-                let mMissing = DashboardModel(); mMissing.applyVisualFixture(); mMissing.claudeBackup = nil
-                let mPerm = DashboardModel(); mPerm.applyVisualFixture(); mPerm.claudeBackup = .unreadable
+                let mMissing = AppModel(); mMissing.applyVisualFixture(); mMissing.claudeBackup = nil
+                let mPerm = AppModel(); mPerm.applyVisualFixture(); mPerm.claudeBackup = .unreadable
                 settingsState("content-settings-general", .general, m)
                 settingsState("content-settings-general-relaunch", .general, m, launch: .ru)
                 settingsState("content-settings-monitoring", .monitoring, m)

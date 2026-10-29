@@ -136,14 +136,14 @@ struct EngineBoundaryTests {
 
     /// Views files that keep `AppSettings.shared`, with the reason (D11).
     static let viewsSharedSettingsExceptions: [String: String] = [
-        "DS3Surfaces.swift": "orb backdrop modifier: no DashboardModel in scope; display-only preference",
+        "DS3Surfaces.swift": "orb backdrop modifier: no AppModel in scope; display-only preference",
         "IPhoneImportCard.swift": "iPhone feature: IPhoneModel owns its settings reads (ARCH-MODEL-SPLIT)",
     ]
 
     @Test func assessedReadsSettingsOnlyThroughAssessmentSettings() throws {
-        let file = sourcesRoot.appendingPathComponent("Engine/DashboardModel.swift")
+        let file = sourcesRoot.appendingPathComponent("Engine/AppModel.swift")
         let all = try lines(of: file)
-        let start = try #require(all.firstIndex { $0.contains("func assessed(_ r: FullReport)") }, "assessed(_:) not found in DashboardModel.swift")
+        let start = try #require(all.firstIndex { $0.contains("func assessed(_ r: FullReport)") }, "assessed(_:) not found in AppModel.swift")
         var body: [String] = []
         for line in all[(start + 1)...] {
             if line == "    }" { break }
@@ -152,22 +152,22 @@ struct EngineBoundaryTests {
         let code = body.joined(separator: "\n")
         let marker = "settings.assessmentSettings"
         #expect(code.components(separatedBy: marker).count - 1 == 1,
-                "R3: assessed(_:) in DashboardModel.swift must read settings exactly once, through \(marker)")
+                "R3: assessed(_:) in AppModel.swift must read settings exactly once, through \(marker)")
         let rest = code.replacingOccurrences(of: marker, with: "")
         #expect(rest.range(of: #"\bsettings\b"#, options: .regularExpression) == nil && !rest.contains("AppSettings"),
-                "R3: assessed(_:) in DashboardModel.swift reads a setting outside settings.assessmentSettings")
+                "R3: assessed(_:) in AppModel.swift reads a setting outside settings.assessmentSettings")
     }
 
     /// Files that take settings through the coordinator's init (ARCH-SETTINGS-PATH R5): the coordinator, every
     /// feature controller of the ARCH-MODEL-SPLIT series and the seam files. Every block of the series appends
     /// its controller file to `modelFilesMustInclude`.
     static func isModelFile(_ name: String) -> Bool {
-        name.hasPrefix("DashboardModel") || name.hasSuffix("Controller.swift")
+        name.hasPrefix("AppModel") || name.hasSuffix("Controller.swift")
             || ["ReportHost.swift", "TimeSource.swift"].contains(name)
     }
-    static let modelFilesMustInclude: Set<String> = ["DashboardModel.swift", "BrewController.swift", "EnergyController.swift", "StartupItemsController.swift", "TimeMachineController.swift", "SmartToolsController.swift", "CrashReportsController.swift", "SecurityController.swift", "StorageController.swift", "HistoryController.swift", "ReportHost.swift", "TimeSource.swift"]
+    static let modelFilesMustInclude: Set<String> = ["AppModel.swift", "BrewController.swift", "EnergyController.swift", "StartupItemsController.swift", "TimeMachineController.swift", "SmartToolsController.swift", "CrashReportsController.swift", "SecurityController.swift", "StorageController.swift", "HistoryController.swift", "ReportHost.swift", "TimeSource.swift"]
 
-    @Test func dashboardModelHasNoSharedSettings() throws {
+    @Test func appModelHasNoSharedSettings() throws {
         var offenders: [String] = []
         var matched: Set<String> = []
         for file in try swiftFiles("Engine") where Self.isModelFile(file.lastPathComponent) {
@@ -183,7 +183,7 @@ struct EngineBoundaryTests {
     /// ARCH-MODEL-SPLIT: the coordinator's stop() fans out to every controller's stop() (blocks append theirs).
     /// HistoryController (block 8) owns no Task and has no stop(), so it is not in the list.
     @Test func coordinatorStopFansOutToControllers() throws {
-        let file = try swiftFiles("Engine").first { $0.lastPathComponent == "DashboardModel.swift" }
+        let file = try swiftFiles("Engine").first { $0.lastPathComponent == "AppModel.swift" }
         let all = try lines(of: try #require(file)).map(codeOnly)
         let start = try #require(all.firstIndex { $0.contains("func stop() {") })
         var body: [String] = []
@@ -192,7 +192,7 @@ struct EngineBoundaryTests {
             body.append(line)
         }
         for call in ["energy.stop()", "brew.stop()", "startupItems.stop()", "timeMachine.stop()", "smart.stop()", "crashReports.stop()", "security.stop()", "storage.stop()"] {
-            #expect(body.contains { $0.contains(call) }, "DashboardModel.stop() must call \(call)")
+            #expect(body.contains { $0.contains(call) }, "AppModel.stop() must call \(call)")
         }
     }
 

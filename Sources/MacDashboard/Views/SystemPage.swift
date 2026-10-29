@@ -1,13 +1,13 @@
 // Views/SystemPage.swift
 // REDESIGN-SYSTEM: the System section page (handoff 09-system) on the shared §8 blocks. Every text, tone, row and
-// state comes from the pure SystemPageModel; this file only draws them and forwards actions to DashboardModel.
+// state comes from the pure SystemPageModel; this file only draws them and forwards actions to AppModel.
 // No pulse on any button (user decision 2026-10-22): the attention cues are the tag, the dots and the primary button.
 
 import SwiftUI
 
 @MainActor
 struct SystemPage: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
 
     @State private var pulse: CardID? = nil
@@ -62,7 +62,7 @@ struct SystemPage: View {
 
 /// `ignored` overrides the stored ignore list (visual fixture only); `pending` is the Energy card's edit state.
 @MainActor
-private func systemInput(_ model: DashboardModel, pending: [EnergyChange] = [], ignored: [IgnoredWakeHolder]? = nil,
+private func systemInput(_ model: AppModel, pending: [EnergyChange] = [], ignored: [IgnoredWakeHolder]? = nil,
                          now: Date) -> SystemPageModel.Input {
     .init(wakeSampled: model.wakeSampled, wakeHolders: model.wakeHolders, systemWakeHolders: model.systemWakeHolders,
           ignored: ignored ?? model.settings.ignoredWakeHolderEntries,
@@ -91,7 +91,7 @@ private func tagTone(_ t: SystemTone) -> DS3Tag.Tone {
 /// Internal (not private): the visual fixture renders it. No Refresh button on this page.
 @MainActor
 struct SystemPageBar: View {
-    let model: DashboardModel
+    let model: AppModel
     let onBack: () -> Void
 
     var body: some View {
@@ -109,12 +109,12 @@ struct SystemPageBar: View {
 /// Internal: the visual fixture renders it (`initialHidden` / `initialHiddenOpen` exist for the snapshots only).
 @MainActor
 struct SystemSleepCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let initialHidden: [IgnoredWakeHolder]?
     @State private var hiddenOpen: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(model: DashboardModel, initialHidden: [IgnoredWakeHolder]? = nil, initialHiddenOpen: Bool = false) {
+    init(model: AppModel, initialHidden: [IgnoredWakeHolder]? = nil, initialHiddenOpen: Bool = false) {
         self.model = model
         self.initialHidden = initialHidden
         _hiddenOpen = State(initialValue: initialHiddenOpen)
@@ -218,7 +218,7 @@ private struct SleepRowView: View {
 /// Internal: the visual fixture renders it (`initialOpen` / `initialConfirm` exist for the snapshots only).
 @MainActor
 struct SystemStartupCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     /// Reports the confirm's visibility to the page (which ORs both cards); nil = set the router flag directly.
     let onConfirmShown: ((Bool) -> Void)?
@@ -232,7 +232,7 @@ struct SystemStartupCard: View {
 
     private enum PendingDelete: Equatable { case one(StaleRow), all }
 
-    init(model: DashboardModel, router: NavigationRouter, initialOpen: Set<StartupGroupID>? = nil,
+    init(model: AppModel, router: NavigationRouter, initialOpen: Set<StartupGroupID>? = nil,
          initialConfirm: Bool = false, onConfirmShown: ((Bool) -> Void)? = nil) {
         self.model = model
         self.router = router
@@ -460,7 +460,7 @@ struct SystemStartupCard: View {
 /// Internal: the visual fixture renders it.
 @MainActor
 struct SystemBrewCard: View {
-    let model: DashboardModel
+    let model: AppModel
     @State private var showConfirm = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -590,7 +590,7 @@ struct SystemBrewCard: View {
 /// Internal: the visual fixture renders it (`initial*` parameters exist for the snapshots only).
 @MainActor
 struct SystemEnergyCard: View {
-    let model: DashboardModel
+    let model: AppModel
     let router: NavigationRouter
     /// Reports the confirm's visibility to the page (which ORs both cards); nil = set the router flag directly.
     let onConfirmShown: ((Bool) -> Void)?
@@ -599,7 +599,7 @@ struct SystemEnergyCard: View {
     @State private var showConfirm: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(model: DashboardModel, router: NavigationRouter, initialPending: [EnergyChange] = [],
+    init(model: AppModel, router: NavigationRouter, initialPending: [EnergyChange] = [],
          initialInfoKey: String? = nil, initialConfirm: Bool = false,
          onConfirmShown: ((Bool) -> Void)? = nil) {
         self.model = model

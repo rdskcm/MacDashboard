@@ -733,7 +733,7 @@ final class IPhoneStore {
         AppInfo.supportFolderURL.appendingPathComponent("iphones", isDirectory: true)
     }
 
-    /// App Support/MacDashboard/iphones.json, built like `DashboardModel.defaultReportURL()`.
+    /// App Support/MacDashboard/iphones.json, built like `AppModel.defaultReportURL()`.
     static func defaultURL() -> URL {
         let fm = FileManager.default
         let base = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,

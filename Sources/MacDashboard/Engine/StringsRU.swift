@@ -866,7 +866,7 @@ struct StringsRU: AppStrings {
     var byteUnitKB: String { "КБ" }
     var byteUnitB: String { "Б" }
 
-    // MARK: DashboardModel errors
+    // MARK: AppModel errors
     func errorHistorySaveFailed(_ msg: String) -> String { "Не удалось сохранить историю: \(msg)" }
     func errorReportWriteFailed(_ msg: String) -> String { "Не удалось записать отчёт: \(msg)" }
 

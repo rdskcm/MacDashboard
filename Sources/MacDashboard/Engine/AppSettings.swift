@@ -129,7 +129,7 @@ final class AppSettings {
         return try? encoder.encode(list)
     }
 
-    /// Sleep interval of DashboardModel's fast task (native CPU/RAM/disk/battery
+    /// Sleep interval of AppModel's fast task (native CPU/RAM/disk/battery
     /// gauges). Read by the loop on every iteration, so a change applies on the
     /// next tick without restarting the task.
     var fastIntervalSeconds: Int {
@@ -156,7 +156,7 @@ final class AppSettings {
     }
 
     /// Called synchronously, on the main actor, after any change of `assessmentSettings`, with the OLD value.
-    /// One slot: `DashboardModel.init` installs it (the app has one model); a later model on the same instance
+    /// One slot: `AppModel.init` installs it (the app has one model); a later model on the same instance
     /// replaces it. Writing an assessment setting off the main thread while a hook is installed traps.
     @ObservationIgnored var onAssessmentSettingsChange: (@MainActor (AssessmentSettings) -> Void)?
 

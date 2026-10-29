@@ -1,6 +1,6 @@
 // AppShell.swift
 // ARCH-ENGINE-GUARD: process-level AppKit glue that is neither a view nor Engine — the live `AppActions`, the
-// app-activity monitor behind DashboardModel's pause/resume, relaunch, the `AppleLanguages` write and the appearance
+// app-activity monitor behind AppModel's pause/resume, relaunch, the `AppleLanguages` write and the appearance
 // apply. This file may read `VisualFixture.isRequested`; views may not (EngineBoundaryTests).
 import AppKit
 
@@ -14,16 +14,16 @@ extension AppActions {
         })
 }
 
-/// The AppKit side of DashboardModel's pause/resume (SPEC §1.4). Observes app activate/resign and window
+/// The AppKit side of AppModel's pause/resume (SPEC §1.4). Observes app activate/resign and window
 /// close/miniaturize/deminiaturize/occlusion and tells the model two Foundation-only facts: `setPaused(_:)` and
 /// `appDidBecomeActive()`. `NSPanel`s (HoverTip's tooltip panels) never keep the app un-paused. Created once per
 /// process by MacDashboardApp right after `model.start()`, never under -visualFixture; lives as long as the process.
 @MainActor
 final class AppActivityMonitor {
-    private let model: DashboardModel
+    private let model: AppModel
     private var observers: [NSObjectProtocol] = []
 
-    init(model: DashboardModel) {
+    init(model: AppModel) {
         self.model = model
         let center = NotificationCenter.default
         observers = [

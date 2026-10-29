@@ -1,4 +1,4 @@
-// Engine/DashboardModel.swift
+// Engine/AppModel.swift
 // Integration phase (SPEC §3, §4): wires the real collectors (LiveCollector,
 // ReportCollector, Assess, ReportWriter, HistoryStore) behind the observable
 // contract the UI depends on. Starts empty/honest — no fabricated data — and
@@ -10,7 +10,7 @@ import Observation
 
 @MainActor
 @Observable
-final class DashboardModel {
+final class AppModel {
     // Per-field observable state (replaces the monolithic `live` snapshot). Each is
     // assigned under an equality guard in the live loop so a card reading only one
     // field doesn't re-render when an unrelated field changed — @Observable fires a
@@ -337,7 +337,7 @@ final class DashboardModel {
         }
     }
 
-    /// Visual fixture only (DashboardModel+VisualFixture, tools/visual/content_states.swift): sets the scan block directly; live code never calls this.
+    /// Visual fixture only (AppModel+VisualFixture, tools/visual/content_states.swift): sets the scan block directly; live code never calls this.
     func applyFixtureScan(_ state: BlockState) { scanBlock = state }
 
     /// Visual fixture only: sets the CPU block and the high-load start.

@@ -3,8 +3,8 @@
 // timeout; a section that fails leaves its field nil and still marks progress done,
 // so a denied permission or absent tool never blocks the rest. All sections run in one
 // concurrent group; the macOS update check is not part of the pass (it lives in
-// `checkUpdates()`, which DashboardModel runs in the background). Folder sizes are also
-// not part of the pass (SIZES-BACKGROUND): `countFolderSizes()`, run by DashboardModel
+// `checkUpdates()`, which AppModel runs in the background). Folder sizes are also
+// not part of the pass (SIZES-BACKGROUND): `countFolderSizes()`, run by AppModel
 // in the background.
 // SPEC §5.2. Nothing here modifies the system.
 //
@@ -94,7 +94,7 @@ enum ReportSection: String, CaseIterable {
 
 final class ReportCollector {
     /// Report file names the user hid on the Security page (CRASH-REPORT-DISMISS); the crash scan lists them
-    /// apart. Captured once per collector — DashboardModel builds one per pass.
+    /// apart. Captured once per collector — AppModel builds one per pass.
     let hiddenCrashReports: Set<String>
 
     init(hiddenCrashReports: Set<String> = []) { self.hiddenCrashReports = hiddenCrashReports }
@@ -524,7 +524,7 @@ final class ReportCollector {
     }
 
     /// The actual Time Machine destination collection logic, factored out of
-    /// `collectTMDest()` so the live SMART refresh loop (DashboardModel) can call it
+    /// `collectTMDest()` so the live SMART refresh loop (AppModel) can call it
     /// directly without going through the `Outcome` plumbing (which mutates a
     /// `FullReport` rather than returning a value), mirroring `collectSmartDisks()` above.
     ///
@@ -744,7 +744,7 @@ final class ReportCollector {
     }
 
     /// The actual SMART/disks collection logic, factored out of `collectSmart()` so the
-    /// live SMART refresh loop (DashboardModel) can call it directly without going through
+    /// live SMART refresh loop (AppModel) can call it directly without going through
     /// the `Outcome` plumbing (which mutates a `FullReport` rather than returning a value).
     func collectSmartDisks() async -> [SmartDisk] {
         await smartDisksReporting().disks
@@ -1057,7 +1057,7 @@ final class ReportCollector {
     }
 
     /// The actual pmset-custom collection logic, factored out of `collectEnergy()` so
-    /// the manual energy refresh (DashboardModel, after a batched pmset apply) can call
+    /// the manual energy refresh (AppModel, after a batched pmset apply) can call
     /// it directly without going through the `Outcome` plumbing (mirrors
     /// `collectSmartDisks()` above).
     func collectEnergySettings() async -> EnergySettings? {
@@ -1243,7 +1243,7 @@ final class ReportCollector {
     }
 
     /// The actual Homebrew collection logic, factored out of `collectBrew()` so the
-    /// in-app upgrade flow (DashboardModel) can re-collect a fresh snapshot after
+    /// in-app upgrade flow (AppModel) can re-collect a fresh snapshot after
     /// `brew upgrade` without going through the `Outcome` plumbing.
     /// `refreshIndex` (BREW-OUTDATED-TIMEOUT): run `brew update` first, under its own timeout.
     /// Its outcome is ignored — if it fails or times out, `outdated` reads the previous index.

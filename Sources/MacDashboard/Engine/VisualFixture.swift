@@ -1,6 +1,6 @@
 // Engine/VisualFixture.swift
 // VISUAL-COVERAGE: a pure, fixed dataset used both by the real app (via a launch
-// argument, `DashboardModel+VisualFixture.swift`) and by the offscreen content
+// argument, `AppModel+VisualFixture.swift`) and by the offscreen content
 // render stage (`tools/visual/content_states.swift`), so `main-*` and every
 // `content-*` visual reference is built from the same deterministic input
 // instead of live machine state. No `Date()`, no random — only the user's
@@ -184,7 +184,7 @@ enum VisualFixture {
             homeCaches: DirSize(path: home + "/Library/Caches", bytes: GB(4.2)))
     }
 
-    /// One fixed, pure snapshot of everything a `DashboardModel` normally
+    /// One fixed, pure snapshot of everything a `AppModel` normally
     /// collects live.
     struct Dataset {
         var load: [Double]
@@ -297,7 +297,7 @@ enum VisualFixture {
 
         // VISUAL-HARNESS-STALE: fresh Claude backup, 2 h before the reference date, so the
         // Settings Backups row and the Backups page's Claude card are in the baseline. Age is pinned by
-        // assessing at `now: referenceDate` here and by DashboardModel.fixtureNow in the views.
+        // assessing at `now: referenceDate` here and by AppModel.fixtureNow in the views.
         let claudeBackup = ClaudeBackupStatus.lastSuccess(referenceDate.addingTimeInterval(-2 * 3600))
 
         let live = LiveSnapshot(

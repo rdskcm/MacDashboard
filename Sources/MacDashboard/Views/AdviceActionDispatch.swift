@@ -3,10 +3,10 @@
 // as-is): confirmations, busy/done bookkeeping and the `AdviceAction` switch,
 // moved verbatim out of the legacy Рекомендации card (Block V2-SUMMARY) so the
 // Home attention card (HomeAttentionCard) owns no dialog logic of its own; Home's instance is owned by
-// `DashboardModel.homeAdviceDispatch` (HIDDEN-CONTENT-WORK).
+// `AppModel.homeAdviceDispatch` (HIDDEN-CONTENT-WORK).
 //
 // Shaped as an `@Observable` reference type (the codebase's established idiom
-// for shared mutable UI state — see DashboardModel/AppSettings/L10nStore)
+// for shared mutable UI state — see AppModel/AppSettings/L10nStore)
 // rather than a `ViewModifier` value type: the card needs to READ this state
 // (completedAdviceIDs/trashError) while laying out chips/plates,
 // not just have it silently attached — a ViewModifier's own @State isn't
@@ -18,9 +18,9 @@ import SwiftUI
 @MainActor
 @Observable
 final class AdviceActionDispatch {
-    let model: DashboardModel
+    let model: AppModel
 
-    init(model: DashboardModel) {
+    init(model: AppModel) {
         self.model = model
     }
 
@@ -223,8 +223,8 @@ extension View {
 }
 
 /// HIDDEN-CONTENT-WORK: Home's dispatch, created on first use and kept alive by the model (see
-/// `DashboardModel.homeAdviceDispatchStorage`); the same instance is returned for as long as the model lives.
-extension DashboardModel {
+/// `AppModel.homeAdviceDispatchStorage`); the same instance is returned for as long as the model lives.
+extension AppModel {
     var homeAdviceDispatch: AdviceActionDispatch {
         if let d = homeAdviceDispatchStorage as? AdviceActionDispatch { return d }
         let d = AdviceActionDispatch(model: self)

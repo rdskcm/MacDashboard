@@ -8,7 +8,7 @@ import Testing
 
 extension SerialTests {
     @MainActor struct ReportHostTests {
-        private func makeModel(configure: (AppSettings, URL) -> Void = { _, _ in }) -> (DashboardModel, AppSettings, VirtualClock, () -> Void) {
+        private func makeModel(configure: (AppSettings, URL) -> Void = { _, _ in }) -> (AppModel, AppSettings, VirtualClock, () -> Void) {
             let (d, name) = makeIsolatedDefaults()
             let dir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("md-report-host-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)", isDirectory: true)
@@ -16,7 +16,7 @@ extension SerialTests {
             let s = AppSettings(defaults: d)
             configure(s, dir)
             let clock = VirtualClock()
-            let m = DashboardModel(dataDirectory: dir, settings: s, time: clock.source)
+            let m = AppModel(dataDirectory: dir, settings: s, time: clock.source)
             return (m, s, clock, { removeIsolatedDefaults(d, name); try? FileManager.default.removeItem(at: dir) })
         }
         private let energy = EnergySettings(battery: [("displaysleep", "2")], ac: [("displaysleep", "10")])
