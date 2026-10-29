@@ -583,7 +583,14 @@ private struct ProcessDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             if loading {
                 HStack(spacing: 6) {
-                    DS3Spinner(role: .track, size: 13)
+                    // Spinner only while the panel is open or still closing (rule no-unseen-work, PULSE-COST): a collapsed
+                    // panel is height 0 / opacity 0 and keeps `loading` true, because the fetch runs only while open.
+                    // The clear 13 pt slot keeps the measured height identical either way.
+                    if isOpen || !disclosureSettled {
+                        DS3Spinner(role: .track, size: 13)
+                    } else {
+                        Color.clear.frame(width: 13, height: 13)
+                    }
                     Text(L.processLoadingDetails).font(.system(size: 12.5)).foregroundStyle(DS3.muted)
                 }
             } else {

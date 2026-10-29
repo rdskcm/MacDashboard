@@ -170,12 +170,6 @@ protocol AppStrings {
     var sharedUnavailable: String { get }
     var sharedCollectingData: String { get }
     var sharedEmpty: String { get }
-    var sharedToggleToChart: String { get }
-    var sharedToggleToTable: String { get }
-    var sharedToggleShowChart: String { get }
-    var sharedToggleShowTable: String { get }
-    var sharedInfoHide: String { get }
-    var sharedInfoShow: String { get }
     func sharedMoreN(_ n: Int) -> String
     var sharedCollapse: String { get }
 

@@ -424,7 +424,10 @@ struct HomeAllGoodLine: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            HomePulseDot(color: DS3.green, size: 9, haloWidth: 3, haloOpacity: 0.22)
+            // Static on purpose (PULSE-COST, user 2026-10-29): motion means «look here»; nothing needs a look when all is good.
+            Circle().fill(DS3.green)
+                .frame(width: 9, height: 9)
+                .background(Circle().fill(DS3.green.opacity(0.22)).frame(width: 15, height: 15))
             Text(L.commonAllGood)
                 .font(.system(size: 18, weight: .bold))
                 .tracking(-0.22)

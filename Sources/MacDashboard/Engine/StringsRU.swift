@@ -142,12 +142,6 @@ struct StringsRU: AppStrings {
     var sharedUnavailable: String { "(недоступно)" }
     var sharedCollectingData: String { "Собираем данные…" }
     var sharedEmpty: String { "пусто" }
-    var sharedToggleToChart: String { "График" }
-    var sharedToggleToTable: String { "Таблица" }
-    var sharedToggleShowChart: String { "Показать график" }
-    var sharedToggleShowTable: String { "Показать таблицу" }
-    var sharedInfoHide: String { "Скрыть пояснение" }
-    var sharedInfoShow: String { "Показать пояснение" }
     func sharedMoreN(_ n: Int) -> String { "Ещё \(n)" }
     var sharedCollapse: String { "Свернуть" }
 
