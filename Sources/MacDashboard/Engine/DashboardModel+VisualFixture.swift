@@ -76,6 +76,6 @@ extension DashboardModel {
                                 system: VisualFixture.systemWakeHolders, sampled: true)
         applyFixtureBrew(checkedAt: ref, upgrading: false, progress: nil, error: nil, notice: nil, stoppable: false)
         applyFixtureStartup(checkedAt: nil, removed: 0, checking: false, deleting: [], failure: nil)
-        applyFixtureEnergyApply(.idle)
+        energy.applyFixture(.idle)
     }
 }

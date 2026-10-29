@@ -158,14 +158,26 @@ struct EngineBoundaryTests {
                 "R3: assessed(_:) in DashboardModel.swift reads a setting outside settings.assessmentSettings")
     }
 
+    /// Files that take settings through the coordinator's init (ARCH-SETTINGS-PATH R5): the coordinator, every
+    /// feature controller of the ARCH-MODEL-SPLIT series and the seam files. Every block of the series appends
+    /// its controller file to `modelFilesMustInclude`.
+    static func isModelFile(_ name: String) -> Bool {
+        name.hasPrefix("DashboardModel") || name.hasSuffix("Controller.swift")
+            || ["ReportHost.swift", "TimeSource.swift"].contains(name)
+    }
+    static let modelFilesMustInclude: Set<String> = ["DashboardModel.swift", "EnergyController.swift", "ReportHost.swift", "TimeSource.swift"]
+
     @Test func dashboardModelHasNoSharedSettings() throws {
         var offenders: [String] = []
-        for file in try swiftFiles("Engine") where file.lastPathComponent.hasPrefix("DashboardModel") {
+        var matched: Set<String> = []
+        for file in try swiftFiles("Engine") where Self.isModelFile(file.lastPathComponent) {
+            matched.insert(file.lastPathComponent)
             for (i, line) in try lines(of: file).enumerated() where codeOnly(line).contains("AppSettings.shared") {
                 offenders.append("\(file.lastPathComponent):\(i + 1)")
             }
         }
-        #expect(offenders.isEmpty, "R5: DashboardModel takes its settings through init (model.settings), never AppSettings.shared: \(offenders)")
+        #expect(matched.isSuperset(of: Self.modelFilesMustInclude), "R5 guard lost a file it must cover: \(matched.sorted())")
+        #expect(offenders.isEmpty, "R5: the coordinator and its controllers take settings through init (model.settings), never AppSettings.shared: \(offenders)")
     }
 
     @Test func viewsReadSettingsThroughTheModel() throws {

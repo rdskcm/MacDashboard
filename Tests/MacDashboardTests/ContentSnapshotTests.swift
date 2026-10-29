@@ -353,10 +353,10 @@ extension SerialTests {
                 $0.applyFixtureBrew(checkedAt: homeRef, upgrading: false, progress: nil, error: nil,
                                     notice: "Upgrade stopped: 1 of 3 packages upgraded", stoppable: false)
             }
-            let sysEnergyApplied = system { $0.applyFixtureEnergyApply(.applied) }
-            let sysEnergyCancelled = system { $0.applyFixtureEnergyApply(.failed(.cancelled)) }
-            let sysEnergyTimedOut = system { $0.applyFixtureEnergyApply(.failed(.timedOut)) }
-            let sysEnergyError = system { $0.applyFixtureEnergyApply(.failed(.error("code 1"))) }
+            let sysEnergyApplied = system { $0.energy.applyFixture(.applied) }
+            let sysEnergyCancelled = system { $0.energy.applyFixture(.failed(.cancelled)) }
+            let sysEnergyTimedOut = system { $0.energy.applyFixture(.failed(.timedOut)) }
+            let sysEnergyError = system { $0.energy.applyFixture(.failed(.error("code 1"))) }
             let sysPending = [EnergyChange(bucket: .battery, key: "displaysleep", value: "5"),
                               EnergyChange(bucket: .ac, key: "powernap", value: "0")]
             let sysBarStale = system {
@@ -367,7 +367,7 @@ extension SerialTests {
                 $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
                 $0.applyFixtureBrew(checkedAt: homeRef, upgrading: true, progress: nil, error: nil, notice: nil, stoppable: true)
             }
-            let sysBarApplyFailed = system { $0.applyFixtureEnergyApply(.failed(.error("code 1"))) }
+            let sysBarApplyFailed = system { $0.energy.applyFixture(.failed(.error("code 1"))) }
             let sysBarClear = system {
                 $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
                 $0.report.brewOutdated = []; $0.report.brewOutdatedDetail = []

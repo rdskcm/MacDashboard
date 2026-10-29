@@ -78,12 +78,6 @@ final class DashboardModel {
     /// SMART re-check is in flight, so two ReportCollector instances never overlap.
     var smartRefreshing = false
 
-    /// Re-entrancy guard for `refreshEnergyNow()` (SPEC Block K), true while a
-    /// manual energy (pmset) refresh is in flight — mirrors `smartRefreshing`.
-    var energyRefreshing = false
-    /// Set by a `refreshEnergy()` call that arrives while a read is in flight; the in-flight call reads again.
-    private var energyReadNeeded = false
-
     /// Re-entrancy guard for `refreshProcessesNow()`, true while a manual process-list
     /// refresh is in flight — mirrors `smartRefreshing`.
     var processesRefreshing = false
@@ -360,11 +354,20 @@ final class DashboardModel {
     /// The app passes `.shared`; tests pass an isolated instance.
     let settings: AppSettings
     private let actions: AppActions
+    /// ARCH-MODEL-SPLIT: the clock/sleep the pass wait and the controllers use; tests inject a virtual one.
+    private let time: TimeSource
+    /// ARCH-MODEL-SPLIT: how controllers reach `report` / the pass / the assessment without a back-reference.
+    private let link = CoordinatorLink()
+    /// The one host every controller gets; tests drive it directly.
+    let reportHost: ReportHost
+    /// ARCH-MODEL-SPLIT: the Energy (pmset) feature; views read `model.energy.<member>`.
+    let energy: EnergyController
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
-    init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared) {
+    init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live) {
         self.settings = settings
         self.actions = actions
+        self.time = time
         cpuHistory = []
         report = FullReport()
         assessment = Assessment()
@@ -387,10 +390,20 @@ final class DashboardModel {
         updatesCache = UpdatesCacheStore.load(from: updatesCacheURL)
         folderSizesURL = url.deletingLastPathComponent().appendingPathComponent("folder_sizes_cache.json")
         folderSizes = FolderSizesCacheStore.load(from: folderSizesURL)
+        // ARCH-MODEL-SPLIT: controllers are built before `self` is usable; `link` is pointed at `self` last.
+        let link = self.link
+        reportHost = ReportHost(
+            read: { link.model?.report ?? FullReport() },
+            update: { mutate in if let m = link.model { mutate(&m.report) } },
+            isCollecting: { link.model?.isCollectingReport ?? false },
+            awaitPassEnd: { await link.model?.waitForReportRefreshToFinish() ?? true },
+            reassess: { link.model?.reassessCommitted() })
+        energy = EnergyController(host: reportHost, time: time)
         smartToolsState = Self.recomputeSmartToolsState()
         if let countedAt = folderSizes?.countedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
         // ARCH-SETTINGS-PATH: the one write path — any change of an assessment setting re-assesses this model.
         settings.onAssessmentSettingsChange = { [weak self] old in self?.assessmentSettingsChanged(from: old) }
+        link.model = self
     }
 
     // MARK: - History restart notice (HISTORY-UNREADABLE-NOTICE)
@@ -459,7 +472,7 @@ final class DashboardModel {
 
     /// Same report choice as the fast tick: never a partial (V2-HEADER-CHURN).
     private func reassessCommitted() {
-        setAssessment(assessed(isCollectingReport ? lastCommittedReport : report))
+        setAssessment(assessed(homeReport))
     }
 
     // MARK: - Block states (REDESIGN-FOUNDATION)
@@ -654,8 +667,8 @@ final class DashboardModel {
                 // together with the FRESH live snapshot: report-derived checks stay exactly
                 // as they were when the pass started, live-derived ones keep moving
                 // (V2-HONEST-READINGS, A11).
-                let assessedReport = self.isCollectingReport ? self.lastCommittedReport : self.report
-                self.setAssessment(self.assessed(assessedReport))
+                // `homeReport` is that choice (ARCH-MODEL-SPLIT, P5).
+                self.setAssessment(self.assessed(self.homeReport))
 
                 try? await Task.sleep(for: .seconds(self.settings.fastIntervalSeconds))
             }
@@ -781,6 +794,7 @@ final class DashboardModel {
         smartTask = nil
         brewUpgradeTask?.cancel()
         brewUpgradeTask = nil
+        energy.stop()
         updateCheckTask?.cancel()
         updateCheckTask = nil
         updateCheckGeneration += 1; isCheckingUpdates = false   // a cancelled check no longer counts as in flight
@@ -1015,13 +1029,15 @@ final class DashboardModel {
     /// Waits (cooperatively, polling) until no refreshReport() pass is in flight, so this
     /// updater's field write can't be clobbered by a subsequent onSection snapshot that
     /// hasn't collected this section in its own pass yet. Bounded so a stuck refresh can
-    /// never starve this updater forever.
-    private func waitForReportRefreshToFinish() async {
-        var waited = 0
-        while isCollectingReport && waited < 15_000 {
-            try? await Task.sleep(for: .milliseconds(200))
-            waited += 200
+    /// never starve this updater forever. Returns false when the bound expired with a pass
+    /// still in flight (ReportHost.awaitPassEnd; suspected defect 1, ReportHostTests).
+    @discardableResult
+    func waitForReportRefreshToFinish() async -> Bool {
+        let deadline = time.now().addingTimeInterval(15)
+        while isCollectingReport && !Task.isCancelled && time.now() < deadline {
+            await time.sleep(.milliseconds(200))
         }
+        return !isCollectingReport
     }
 
     /// On-demand SMART re-check, run by `installSmartmontoolsNow()` right after smartmontools is installed (the
@@ -1050,73 +1066,6 @@ final class DashboardModel {
             self.smartUpdatedAt = Date()
         }
     }
-
-    /// Manual, on-demand energy (pmset) re-check (SPEC Block K), triggered after a
-    /// batched `pmset` apply from the Energy card, so the table shows what the
-    /// system actually accepted rather than the values we merely requested.
-    /// Mirrors `refreshSmartNow()` exactly — a fresh ReportCollector instance is
-    /// created per call, one-shot only (no sampler loop).
-    func refreshEnergyNow() {
-        Task { [weak self] in await self?.refreshEnergy() }
-    }
-
-    /// The body of `refreshEnergyNow()`, awaitable so an apply can show its result only after the
-    /// table has been re-read. Guarded by `energyRefreshing`.
-    func refreshEnergy() async {
-        if energyRefreshing {
-            // A read is in flight and may have started before the caller's change: request one more
-            // read and return only once the loop below has finished it.
-            energyReadNeeded = true
-            while energyRefreshing { try? await Task.sleep(for: .milliseconds(50)) }
-            return
-        }
-        energyRefreshing = true
-        defer { energyRefreshing = false }
-
-        repeat {
-            energyReadNeeded = false
-            let collectorBox = UncheckedSendableBox(ReportCollector())
-            let settings = await collectorBox.value.collectEnergySettings()
-            guard !Task.isCancelled else { return }
-
-            await waitForReportRefreshToFinish()
-            guard !Task.isCancelled else { return }
-            if report.energy != settings { report.energy = settings }
-        } while energyReadNeeded
-    }
-
-    /// Last result of `applyEnergyChanges(_:)` (REDESIGN-SYSTEM); the page bar reads it for the tag.
-    private(set) var energyApply: EnergyApplyState = .idle
-
-    /// Applies the staged pmset edits through one privileged call (Touch ID / admin password, 30 s),
-    /// then re-reads the table. Outcomes: applied / failed(cancelled | timedOut | error).
-    func applyEnergyChanges(_ changes: [EnergyChange]) {
-        guard energyApply != .applying, let command = SystemPageModel.pmsetCommand(changes) else { return }
-        energyApply = .applying
-        Task { [weak self] in
-            let outcome = await Task.detached { PrivilegedRunner.run(command) }.value
-            guard let self else { return }
-            switch outcome {
-            case .success:
-                await self.refreshEnergy()
-                self.energyApply = .applied
-            case .cancelled: self.energyApply = .failed(.cancelled)
-            case .timedOut:
-                // `pmset -b … && pmset -c …` may have applied the first half: show what the system holds.
-                await self.refreshEnergy()
-                self.energyApply = .failed(.timedOut)
-            case .failed(let msg):
-                await self.refreshEnergy()
-                self.energyApply = .failed(.error(msg))
-            }
-        }
-    }
-
-    /// Clears the apply result (OK on the banner; also when the user edits again after «Applied ✓»).
-    func dismissEnergyApplyResult() { energyApply = .idle }
-
-    /// Visual fixture only (REDESIGN-SYSTEM): the Energy card's apply state.
-    func applyFixtureEnergyApply(_ s: EnergyApplyState) { energyApply = s }
 
     /// REDESIGN-BACKUPS: Time Machine destination + local snapshots now (after a backup ends; after Stop).
     func refreshTimeMachineNow() {
