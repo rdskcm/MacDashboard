@@ -32,7 +32,7 @@ struct BackupsPageModel: Equatable {
         var snapshots: [String]?             // nil = not collected / failed
         var backup: TMBackupProgress?        // last poll; nil = never probed on this visit
         var action: TMActionState
-        var updatedAt: Date?                 // model.tmUpdatedAt → «updated HH:MM»
+        var updatedAt: Date?                 // model.timeMachine.updatedAt → «updated HH:MM»
         var claudeBackup: ClaudeBackupStatus? // nil = log file absent
         var claudeLogPath: String            // BackupLog.logURL.path
         var warnAfterHours: Int
@@ -236,7 +236,7 @@ struct BackupsPageModel: Equatable {
         return parts.isEmpty ? updatedCaption(updatedAt) : parts.joined(separator: " · ")
     }
 
-    /// A failed start counts as idle for the button: the attempt may be retried (see startTimeMachineBackupNow).
+    /// A failed start counts as idle for the button: the attempt may be retried (see TimeMachineController.startBackupNow).
     static func overdueNote(dest: TMDestination, days: Int, hot: Bool, action: TMActionState = .idle) -> BackupsNote {
         let name = dest.name ?? L.bkTheBackupDisk
         let text: String

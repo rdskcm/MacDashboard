@@ -23,7 +23,7 @@ MainActor.assumeIsolated {
                       lastBackupDate: last, freeBytes: mounted ? 612_000_000_000 : nil, schedule: schedule)
     }
     @MainActor func tm(_ d: TMDestination, backup: TMBackupProgress? = nil, action: TMActionState = .idle) -> DashboardModel {
-        model { $0.report.tmDest = .some(d); $0.applyFixtureTimeMachine(backup: backup, action: action) }
+        model { $0.report.tmDest = .some(d); $0.timeMachine.applyFixture(updatedAt: ref, backup: backup, action: action) }
     }
     let sample = TMBackupProgress(running: true, stopping: false, phase: "Copying", percent: 0.140625,
                                   bytesDone: 1_800_000_000, bytesTotal: 12_800_000_000, secondsRemaining: 600,

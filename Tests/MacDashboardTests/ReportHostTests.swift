@@ -8,12 +8,13 @@ import Testing
 
 extension SerialTests {
     @MainActor struct ReportHostTests {
-        private func makeModel() -> (DashboardModel, AppSettings, VirtualClock, () -> Void) {
+        private func makeModel(configure: (AppSettings, URL) -> Void = { _, _ in }) -> (DashboardModel, AppSettings, VirtualClock, () -> Void) {
             let (d, name) = makeIsolatedDefaults()
             let dir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("md-report-host-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)", isDirectory: true)
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let s = AppSettings(defaults: d)
+            configure(s, dir)
             let clock = VirtualClock()
             let m = DashboardModel(dataDirectory: dir, settings: s, time: clock.source)
             return (m, s, clock, { removeIsolatedDefaults(d, name); try? FileManager.default.removeItem(at: dir) })
@@ -52,8 +53,9 @@ extension SerialTests {
         }
 
         /// Suspected defect 1 (ARCH-MODEL-SPLIT, 2026-10-29): the wait gives up after 15 s with the pass still in
-        /// flight and the caller's write lands in the partial `report`. refreshTimeMachineNow / refreshSecurityNow /
-        /// enableProtectionNow then assess `self.report` — a partial (assessment-complete-collect). This test pins
+        /// flight and the caller's write lands in the partial `report`. refreshSecurityNow /
+        /// enableProtectionNow then assess `self.report` — a partial (assessment-complete-collect)
+        /// (TimeMachineController.refreshNow re-assesses through host.reassess since ARCH-MODEL-SPLIT block 4). This test pins
         /// the seam's current contract; the fix row adds the assess-site test and flips the expectations below.
         @Test func awaitPassEndGivesUpAfter15s() async {
             let (m, _, clock, cleanup) = makeModel(); defer { cleanup() }
@@ -96,6 +98,23 @@ extension SerialTests {
             m.isCollectingReport = false
             m.reportHost.reassess()
             #expect(downloadsTip())
+        }
+
+        // 17 (ARCH-MODEL-SPLIT block 4, R6)
+        @Test func isPausedAndRefreshClaudeBackupReachTheCoordinator() async throws {
+            var log: URL!
+            let (m, _, _, cleanup) = makeModel { s, dir in
+                log = dir.appendingPathComponent("claude.log")
+                s.claudeLogPath = log.path
+            }
+            defer { cleanup() }
+            #expect(m.reportHost.isPaused() == false)
+            m.setPaused(true)
+            #expect(m.reportHost.isPaused() == true)
+            #expect(m.claudeBackup == nil)                        // no log file yet
+            try Data().write(to: log)                             // present, no successful run in it
+            await m.reportHost.refreshClaudeBackup()
+            #expect(m.claudeBackup == .noSuccessFound)
         }
     }
 }

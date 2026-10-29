@@ -1,7 +1,7 @@
 // Views/BackupsPage.swift
 // REDESIGN-BACKUPS: the Backups section page (handoff 08-backups) on the shared §8 blocks. Every text, tone and
-// tile comes from the pure BackupsPageModel; this file only draws them and forwards actions to DashboardModel.
-// The only live loop is `model.observeTimeMachineStatus()` (2 s `tmutil status` poll while a backup runs,
+// tile comes from the pure BackupsPageModel; this file only draws them and forwards actions to the model's TimeMachineController.
+// The only live loop is `model.timeMachine.observeStatus()` (2 s `tmutil status` poll while a backup runs,
 // awaited by this page's `.task`, so it stops when the page leaves).
 
 import SwiftUI
@@ -45,7 +45,7 @@ struct BackupsPage: View {
                 pulse = nil
             }
             // REDESIGN-BACKUPS D2: cancelled with the page, which is exactly the «only while on screen» rule.
-            .task { await model.observeTimeMachineStatus() }
+            .task { await model.timeMachine.observeStatus() }
         }
         .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
     }
@@ -55,8 +55,8 @@ struct BackupsPage: View {
 
 @MainActor
 private func backupsInput(_ model: DashboardModel, now: Date) -> BackupsPageModel.Input {
-    .init(tmDest: model.report.tmDest, snapshots: model.report.snapshots, backup: model.tmBackup,
-          action: model.tmAction, updatedAt: model.tmUpdatedAt, claudeBackup: model.claudeBackup,
+    .init(tmDest: model.report.tmDest, snapshots: model.report.snapshots, backup: model.timeMachine.backup,
+          action: model.timeMachine.action, updatedAt: model.timeMachine.updatedAt, claudeBackup: model.claudeBackup,
           claudeLogPath: model.claudeLogPath, warnAfterHours: model.settings.backupStaleHours, now: now)
 }
 
@@ -141,8 +141,8 @@ struct BackupsTimeMachineCard: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if let n = m.tmNote { note(n) }
                     if let p = m.tmProgress {
-                        BackupsProgressBlock(progress: p, stopBusy: model.tmAction == .stopping) {
-                            model.stopTimeMachineBackupNow()
+                        BackupsProgressBlock(progress: p, stopBusy: model.timeMachine.action == .stopping) {
+                            model.timeMachine.stopBackupNow()
                         }
                     }
                     if let f = m.tmFailure { SectionNote(tone: DS3.hot, text: f) }
@@ -169,7 +169,7 @@ struct BackupsTimeMachineCard: View {
                 return L.bkTheBackupDisk
             }()
             SectionNote(tone: toneColor(n.tone), text: n.text,
-                        button: (L.bkBackUpNow, L.bkBackUpNowA11y, model.tmAction == .starting, { model.startTimeMachineBackupNow() }),
+                        button: (L.bkBackUpNow, L.bkBackUpNowA11y, model.timeMachine.action == .starting, { model.timeMachine.startBackupNow() }),
                         buttonIdentifier: "backups-tm-backup-now", primary: true,
                         buttonDisabled: !enabled, buttonHelp: enabled ? nil : L.bkConnectFirst(disk))
         default:

@@ -19,6 +19,11 @@ struct ReportHost {
     var awaitPassEnd: @MainActor () async -> Bool
     /// Re-assesses the committed report (`homeReport`), never a partial.
     var reassess: @MainActor () -> Void
+    /// True while no effectively visible window is frontmost (`DashboardModel.isPaused`, set by AppActivityMonitor):
+    /// loops skip spawning commands (`no-unseen-work`).
+    var isPaused: @MainActor () -> Bool
+    /// Re-reads the Claude backup log (`DashboardModel.refreshClaudeBackup()`); the Backups page shows both backups.
+    var refreshClaudeBackup: @MainActor () async -> Void
 
     /// Writes one field only when it differs from the current value, so an unchanged re-read costs no
     /// observation mutation (the guard every section writer has today, e.g. `if report.energy != settings`).
