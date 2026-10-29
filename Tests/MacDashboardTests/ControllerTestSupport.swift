@@ -1,6 +1,6 @@
 // Tests/MacDashboardTests/ControllerTestSupport.swift
 // ARCH-MODEL-SPLIT: the fakes every controller test of the series shares — a virtual clock for TimeSource and a
-// four-line host over a FullReport value. Grown here, once, whenever ReportHost grows.
+// host over a FullReport value. Grown here, once, whenever ReportHost grows.
 import Foundation
 import Testing
 @testable import MacDashboard
@@ -29,15 +29,19 @@ import Testing
     var report = FullReport()
     var collecting = false
     var passEnds = true
+    var paused = false
     private(set) var updateCalls = 0
     private(set) var awaitCalls = 0
     private(set) var reassessCalls = 0
+    private(set) var claudeRefreshCalls = 0
     var host: ReportHost {
         ReportHost(read: { self.report },
                    update: { mutate in self.updateCalls += 1; mutate(&self.report) },
                    isCollecting: { self.collecting },
                    awaitPassEnd: { self.awaitCalls += 1; return self.passEnds },
-                   reassess: { self.reassessCalls += 1 })
+                   reassess: { self.reassessCalls += 1 },
+                   isPaused: { self.paused },
+                   refreshClaudeBackup: { self.claudeRefreshCalls += 1 })
     }
 }
 

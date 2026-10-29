@@ -296,19 +296,19 @@ extension SerialTests {
             let bkOverdue30 = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 34 * 86_400, mounted: false)) }
             let bkOverdue7Mounted = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 9 * 86_400, mounted: true)) }
             let bkBackingDest = bkDest(last: homeRef - 86_400 - 2 * 3600, mounted: true)
-            let bkBacking = backups { $0.report.tmDest = .some(bkBackingDest); $0.applyFixtureTimeMachine(backup: bkSample, action: .idle) }
-            let bkStopping = backups { $0.report.tmDest = .some(bkBackingDest); $0.applyFixtureTimeMachine(backup: bkSample, action: .stopping) }
+            let bkBacking = backups { $0.report.tmDest = .some(bkBackingDest); $0.timeMachine.applyFixture(updatedAt: homeRef, backup: bkSample, action: .idle) }
+            let bkStopping = backups { $0.report.tmDest = .some(bkBackingDest); $0.timeMachine.applyFixture(updatedAt: homeRef, backup: bkSample, action: .stopping) }
             let bkPreparing = backups {
                 $0.report.tmDest = .some(bkBackingDest)
-                $0.applyFixtureTimeMachine(backup: TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes"), action: .idle)
+                $0.timeMachine.applyFixture(updatedAt: homeRef, backup: TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes"), action: .idle)
             }
             let bkFindingChanges = backups {
                 $0.report.tmDest = .some(bkBackingDest)
-                $0.applyFixtureTimeMachine(backup: TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53), action: .idle)
+                $0.timeMachine.applyFixture(updatedAt: homeRef, backup: TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53), action: .idle)
             }
             let bkStartFailed = backups {
                 $0.report.tmDest = .some(bkDest(last: homeRef - 9 * 86_400, mounted: true))
-                $0.applyFixtureTimeMachine(backup: nil, action: .failed(L.bkStartDidNotBegin))
+                $0.timeMachine.applyFixture(updatedAt: homeRef, backup: nil, action: .failed(L.bkStartDidNotBegin))
             }
             let bkClaudeStale = backups { $0.claudeBackup = .lastSuccess(homeRef - 4 * 86_400) }
             let bkClaudeNone = backups { $0.claudeBackup = .noSuccessFound }

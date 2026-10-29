@@ -28,7 +28,6 @@ extension DashboardModel {
         fixtureNow = VisualFixture.referenceDate
         reportUpdatedAt = VisualFixture.referenceDate
         smartUpdatedAt = VisualFixture.referenceDate
-        tmUpdatedAt = VisualFixture.referenceDate
         lastSampleAt = VisualFixture.referenceDate
         isCollectingReport = false
         // REDESIGN-HOME: Home's CPU tile «Processes» and the scan state («checked at 10:30»).
@@ -77,5 +76,7 @@ extension DashboardModel {
         brew.applyFixture(checkedAt: ref, upgrading: false, progress: nil, error: nil, notice: nil, stoppable: false)
         startupItems.applyFixture(checkedAt: nil, removed: 0, checking: false, deleting: [], failure: nil)
         energy.applyFixture(.idle)
+        // REDESIGN-BACKUPS: destination collected at the reference time, no poll sample, no action in flight.
+        timeMachine.applyFixture(updatedAt: ref, backup: nil, action: .idle)
     }
 }
