@@ -73,7 +73,7 @@ private func systemInput(_ model: DashboardModel, pending: [EnergyChange] = [], 
           brewDetail: model.report.brewOutdatedDetail, brewInstalled: model.report.brewInstalledCount,
           brewCheckedAt: model.brewCheckedAt, brewUpgrading: model.brewUpgrading, brewProgress: model.brewProgress,
           brewError: model.brewUpgradeError, brewNotice: model.brewUpgradeNotice, brewRefreshing: model.brewRefreshing,
-          energy: model.report.energy, energyPending: pending, energyApply: model.energyApply, now: now)
+          energy: model.report.energy, energyPending: pending, energyApply: model.energy.applyState, now: now)
 }
 
 private func tagTone(_ t: SystemTone) -> DS3Tag.Tone {
@@ -610,7 +610,7 @@ struct SystemEnergyCard: View {
         _showConfirm = State(initialValue: initialConfirm)
     }
 
-    private var applying: Bool { model.energyApply == .applying }
+    private var applying: Bool { model.energy.applyState == .applying }
     private var curve: Animation { sectionRowAnimation(reduceMotion: reduceMotion) }
     private var confirmCurve: Animation { reduceMotion ? .easeOut(duration: 0.12) : DS3Motion.popIn }
 
@@ -619,7 +619,7 @@ struct SystemEnergyCard: View {
         DS3Card(title: L.sysEnergyTitle, caption: m.energyCaption) {
             content(m)
         }
-        .onChange(of: model.energyApply) { _, new in
+        .onChange(of: model.energy.applyState) { _, new in
             switch new {
             case .applied:
                 pending = []
@@ -646,7 +646,7 @@ struct SystemEnergyCard: View {
             SectionWait(text: L.commonCollectingData)
         } else if m.energyEmpty {
             SectionNote(tone: DS3.muted, text: L.sysEnergyEmpty,
-                        button: (L.commonTryAgain, L.commonTryAgain, model.energyRefreshing, { model.refreshEnergyNow() }),
+                        button: (L.commonTryAgain, L.commonTryAgain, model.energy.refreshing, { model.energy.refreshNow() }),
                         buttonIdentifier: "system-energy-retry")
         } else {
             // One mockup block: bar, banner, confirm and table are 8 pt apart.
@@ -670,7 +670,7 @@ struct SystemEnergyCard: View {
                 .foregroundStyle(DS3.hotInk)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
-            Button { model.dismissEnergyApplyResult() } label: { Text(L.sysOK) }
+            Button { model.energy.dismissApplyResult() } label: { Text(L.sysOK) }
                 .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
                 .accessibilityLabel(L.sysOK)
                 .accessibilityIdentifier("system-energy-ok")
@@ -708,7 +708,7 @@ struct SystemEnergyCard: View {
                 let new = SystemPageModel.resetChanges(energy: energy, pending: pending)
                 guard new != pending else { return }
                 withAnimation(curve) { pending = new }
-                if model.energyApply == .applied { model.dismissEnergyApplyResult() }
+                if model.energy.applyState == .applied { model.energy.dismissApplyResult() }
             } label: {
                 Text(L.sysEnergyReset)
             }
@@ -738,7 +738,7 @@ struct SystemEnergyCard: View {
             busy: applying,
             onCancel: { withAnimation(confirmCurve) { showConfirm = false } },
             onConfirm: {
-                model.applyEnergyChanges(pending)
+                model.energy.applyChanges(pending)
                 withAnimation(confirmCurve) { showConfirm = false }
             }
         )
@@ -866,7 +866,7 @@ struct SystemEnergyCard: View {
         let new = SystemPageModel.updatedPending(pending, bucket: bucket, key: key, value: value, original: original)
         guard new != pending else { return }
         withAnimation(curve) { pending = new }
-        if model.energyApply == .applied { model.dismissEnergyApplyResult() }
+        if model.energy.applyState == .applied { model.energy.dismissApplyResult() }
     }
 }
 
