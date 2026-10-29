@@ -165,7 +165,7 @@ struct EngineBoundaryTests {
         name.hasPrefix("DashboardModel") || name.hasSuffix("Controller.swift")
             || ["ReportHost.swift", "TimeSource.swift"].contains(name)
     }
-    static let modelFilesMustInclude: Set<String> = ["DashboardModel.swift", "BrewController.swift", "EnergyController.swift", "StartupItemsController.swift", "TimeMachineController.swift", "SmartToolsController.swift", "CrashReportsController.swift", "SecurityController.swift", "StorageController.swift", "ReportHost.swift", "TimeSource.swift"]
+    static let modelFilesMustInclude: Set<String> = ["DashboardModel.swift", "BrewController.swift", "EnergyController.swift", "StartupItemsController.swift", "TimeMachineController.swift", "SmartToolsController.swift", "CrashReportsController.swift", "SecurityController.swift", "StorageController.swift", "HistoryController.swift", "ReportHost.swift", "TimeSource.swift"]
 
     @Test func dashboardModelHasNoSharedSettings() throws {
         var offenders: [String] = []
@@ -181,6 +181,7 @@ struct EngineBoundaryTests {
     }
 
     /// ARCH-MODEL-SPLIT: the coordinator's stop() fans out to every controller's stop() (blocks append theirs).
+    /// HistoryController (block 8) owns no Task and has no stop(), so it is not in the list.
     @Test func coordinatorStopFansOutToControllers() throws {
         let file = try swiftFiles("Engine").first { $0.lastPathComponent == "DashboardModel.swift" }
         let all = try lines(of: try #require(file)).map(codeOnly)

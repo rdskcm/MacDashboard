@@ -69,7 +69,7 @@ struct BatteryPage: View {
 @MainActor
 private func batteryPageInput(_ model: DashboardModel) -> BatteryPageModel.Input {
     .init(detail: model.batteryDetail, condition: model.report.battery?.condition ?? model.battery?.condition,
-          block: model.batteryBlock.phase, history: model.history.mac_history)
+          block: model.batteryBlock.phase, history: model.history.state.mac_history)
 }
 
 private func panelTone(_ t: BatteryTone) -> (Color, Color) {

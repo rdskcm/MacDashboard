@@ -66,12 +66,12 @@ extension SerialTests {
             let sam = IPhoneModel.fixtureSamKey
             let longArchive = "sysdiagnose_2026.01.15_09-15-02+0300_iPhone-OS_iPhone_23E254.tar.gz"
             // NEWMAC-HISTORY-EMPTY: the same fixture with only `history` replaced. One model per
-            // state, because a view reads `model.history` when it renders, not when the closure is
+            // state, because a view reads `model.history.state` when it renders, not when the closure is
             // built. `DashboardModel()` only reads the real history file at init; nothing is written.
             @MainActor func fixtureHistory(_ entries: [MacHistoryEntry], backup: String? = nil) -> DashboardModel {
                 let h = DashboardModel()
                 h.applyVisualFixture()
-                h.history = HistoryState(last_run: entries.last?.date, mac_history: entries, unreadable_backup: backup)
+                h.history.applyFixture(HistoryState(last_run: entries.last?.date, mac_history: entries, unreadable_backup: backup))
                 h.fixtureNow = VisualFixture.referenceDate   // History year labels must not follow the wall clock
                 return h
             }
@@ -375,7 +375,7 @@ extension SerialTests {
             let sysBarNoneOutdated = system {
                 $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
             }
-            let fixtureDays = m.history.mac_history
+            let fixtureDays = m.history.state.mac_history
             let historyAll = fixtureHistory(fixtureDays)
             let historyNoDays = fixtureHistory([])
             let historyOneDay = fixtureHistory(Array(fixtureDays.suffix(1)))
@@ -383,8 +383,8 @@ extension SerialTests {
                                                   backup: "mac_check_state.json.unreadable-20260115-103000")
             let historyTwoDays = fixtureHistory(Array(fixtureDays.suffix(2)))
             let history122 = fixtureHistory(Array(fixtureDays.suffix(122)))
-            let historyUnreadable = fixtureHistory([]); historyUnreadable.applyFixtureHistory(unreadable: true, refreshing: false)
-            let historyReading = fixtureHistory([]); historyReading.applyFixtureHistory(unreadable: true, refreshing: true)
+            let historyUnreadable = fixtureHistory([]); historyUnreadable.history.applyFixture(unreadable: true, refreshing: false)
+            let historyReading = fixtureHistory([]); historyReading.history.applyFixture(unreadable: true, refreshing: true)
             let historyNoBattery = fixtureHistory(fixtureDays.map { var e = $0; e.battery_pct = nil; e.cycles = nil; return e })
             /// Index of the largest swap value inside the 1M window (the «top» tooltip pin).
             let swapTopIndex: Int = {

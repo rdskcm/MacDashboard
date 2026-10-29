@@ -50,7 +50,7 @@ extension HomeInput {
                          system: model.headerSystem, claudeBackup: model.claudeBackup,
                          backupStaleHours: model.settings.backupStaleHours,
                          history: [], now: model.now(),
-                         historyDigest: model.homeHistoryDigest)
+                         historyDigest: model.history.homeDigest)
     }
 
     /// What the attention slot needs (tasks and chips): the assessment, the report, the scan state and

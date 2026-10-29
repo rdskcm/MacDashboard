@@ -36,6 +36,10 @@ struct ReportHost {
     /// Ends the attempt with `failure` and disarms its watchdog.
     var failBlock: @MainActor (_ id: BlockID, _ failure: BlockFailure) -> Void
 
+    /// Publishes a user-facing error message on the coordinator (`lastError`). The history save reports a failed write
+    /// through it (ARCH-MODEL-SPLIT block 8).
+    var reportError: @MainActor (String) -> Void
+
     /// Writes one field only when it differs from the current value, so an unchanged re-read costs no
     /// observation mutation (the guard every section writer has today, e.g. `if report.energy != settings`).
     @MainActor

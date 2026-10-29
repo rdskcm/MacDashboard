@@ -22,7 +22,7 @@ extension DashboardModel {
         cpuHistory = d.cpuHistory
         report = d.report
         assessment = d.assessment
-        history = d.history
+        history.applyFixture(d.history)
         reportText = d.reportText
         claudeBackup = d.claudeBackup
         fixtureNow = VisualFixture.referenceDate

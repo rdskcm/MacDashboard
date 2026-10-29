@@ -161,17 +161,6 @@ final class DashboardModel {
     /// REDESIGN-NOTIFY: a destination requested from outside the view tree (a notification click); MainDashboardView consumes it.
     private(set) var externalDestination: Destination? = nil
     private(set) var externalDestinationSerial = 0
-    var history: HistoryState {
-        didSet { homeHistoryDigest = HomeModel.historyDigest(history.mac_history) }
-    }
-    /// History figures for the Home History tile, recomputed only when `history` changes (not on live ticks).
-    private(set) var homeHistoryDigest = HomeHistoryDigest.empty
-    /// REDESIGN-HISTORY: the last load found a file that exists but cannot be read as a history object
-    /// (`HistoryStore.fileUnreadable`); the History page shows its error block until a reload or a save clears it.
-    private(set) var historyUnreadable = false
-    /// REDESIGN-HISTORY: `refreshHistoryNow()` in flight (the read takes milliseconds; the flag exists for the
-    /// button's swap-in-place label and the visual fixture).
-    private(set) var historyRefreshing = false
     var reportText: String?           // rendered text report (for the Report sheet)
 
     /// Timestamp of the report currently shown in the Report sheet: the on-disk file's
@@ -182,12 +171,6 @@ final class DashboardModel {
     var reportURL: URL                // fixed file path
     var isCollectingReport: Bool
     var lastError: String?
-
-    /// Sibling of reportURL in the same App Support dir (SPEC §2).
-    private let historyURL: URL
-    /// The app is the only writer of the history file; this in-memory instance is loaded at init and
-    /// re-read only by `refreshHistoryNow()` (the History page's Refresh / Try again).
-    private let historyStore: HistoryStore
 
     // Two independent live cadences (SPEC §5.1 decoupling): the fast task samples the
     // all-native gauges (~2s) while the slow task samples the `top` process tables
@@ -240,6 +223,9 @@ final class DashboardModel {
     /// ARCH-MODEL-SPLIT block 7: the background update check, the folder-size count (schedule, Refresh / Try again,
     /// Trash bookkeeping) and the Full Disk Access state; views read `model.storage.<member>`.
     let storage: StorageController
+    /// ARCH-MODEL-SPLIT block 8: the History feature (history file, daily snapshot, History page Refresh, restart notice,
+    /// Home History digest); views read `model.history.<member>`.
+    let history: HistoryController
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
     init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live) {
@@ -255,15 +241,6 @@ final class DashboardModel {
 
         let url = dataDirectory.map { $0.appendingPathComponent("mac_report.txt") } ?? Self.defaultReportURL()
         reportURL = url
-        historyURL = url.deletingLastPathComponent().appendingPathComponent("mac_check_state.json")
-        // Load synchronously so the История card has data as soon as the window
-        // appears (empty HistoryState on first run is fine — HistoryStore.load()
-        // never throws).
-        historyStore = HistoryStore(url: historyURL)
-        let loadedHistory = historyStore.load()
-        history = loadedHistory
-        homeHistoryDigest = HomeModel.historyDigest(loadedHistory.mac_history)
-        historyUnreadable = historyStore.fileUnreadable
         // ARCH-MODEL-SPLIT: controllers are built before `self` is usable; `link` is pointed at `self` last.
         let link = self.link
         reportHost = ReportHost(
@@ -278,7 +255,8 @@ final class DashboardModel {
             beginBlock: { id, showsLoading, armsWatchdog in
                 link.model?.beginBlock(id, showsLoading: showsLoading, armsWatchdog: armsWatchdog) },
             succeedBlock: { link.model?.succeedBlock($0) },
-            failBlock: { link.model?.failBlock($0, $1) })
+            failBlock: { link.model?.failBlock($0, $1) },
+            reportError: { link.model?.lastError = $0 })
         energy = EnergyController(host: reportHost, time: time)
         brew = BrewController(host: reportHost, time: time)
         startupItems = StartupItemsController(host: reportHost, time: time)
@@ -297,53 +275,13 @@ final class DashboardModel {
         // check through Storage.
         security = SecurityController(host: reportHost, deps: .live(rescanCrashes: { crash.rescan() },
                                                                      checkUpdates: { st.startUpdateCheckIfNeeded(trigger: .button) }))
+        history = HistoryController(host: reportHost, time: time,
+                                    deps: .live(directory: url.deletingLastPathComponent(), settings: settings))
         if let countedAt = st.folderSizesCountedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
         // ARCH-SETTINGS-PATH: the one write path — any change of an assessment setting re-assesses this model.
         settings.onAssessmentSettingsChange = { [weak self] old in self?.assessmentSettingsChanged(from: old) }
         link.model = self
     }
-
-    // MARK: - History restart notice (HISTORY-UNREADABLE-NOTICE)
-
-    /// Where the notice's Finder button points: the kept unreadable file, or the folder it was
-    /// kept in if the user has since moved or deleted it. nil when there is no notice. Stats
-    /// the disk — call it from the button action only, never from a view body.
-    var historyRestartRevealPath: String? {
-        guard let name = history.unreadable_backup else { return nil }
-        let dir = historyURL.deletingLastPathComponent()
-        let file = dir.appendingPathComponent(name).path
-        return FileManager.default.fileExists(atPath: file) ? file : dir.path
-    }
-
-    /// The user hid the notice: forget it and persist that now, so it stays hidden after a
-    /// relaunch. If the write fails the notice is still hidden for this session, and the next
-    /// completed pass's save() persists the change.
-    func dismissHistoryRestartNotice() {
-        historyStore.clearUnreadableBackup()
-        do {
-            try historyStore.save()
-        } catch {
-            lastError = L.errorHistorySaveFailed(error.localizedDescription)
-        }
-        history = historyStore.state
-    }
-
-    /// REDESIGN-HISTORY: the History page's Refresh and the error block's Try again. Re-reads the file
-    /// synchronously (the store is main-actor state; the file is ~50 KB) — a file restored from a backup or
-    /// made readable again shows at once. Never writes.
-    func refreshHistoryNow() {
-        guard !historyRefreshing else { return }
-        historyRefreshing = true
-        history = historyStore.load()
-        historyUnreadable = historyStore.fileUnreadable
-        historyRefreshing = false
-    }
-
-    /// Display path of the history file for the error block («~/Library/Application Support/MacDashboard/mac_check_state.json»).
-    var historyFilePath: String { (historyURL.path as NSString).abbreviatingWithTildeInPath }
-
-    /// Visual fixture only (REDESIGN-HISTORY): the unreadable-file and reload-in-flight flags.
-    func applyFixtureHistory(unreadable: Bool, refreshing: Bool) { historyUnreadable = unreadable; historyRefreshing = refreshing }
 
     /// BACKUP-AGE: re-read the backup log off the main actor; guarded so an unchanged status notifies nobody.
     func refreshClaudeBackup() async {
@@ -715,15 +653,8 @@ final class DashboardModel {
             // brew actually ran this pass — refill the session cache (never with a failed check; see BrewController.record).
             if cachedBrew == nil { self.brew.record(final) }
 
-            let snapshotNow = Date()
-            if SnapshotSchedule.isDue(now: snapshotNow, last: self.settings.lastSnapshotAt,
-                                      minutesAfterMidnight: self.settings.snapshotMinutes) {
-                self.historyStore.upsertToday(from: final, live: self.live)
-                do { try self.historyStore.save() } catch { self.lastError = L.errorHistorySaveFailed(error.localizedDescription) }
-                self.settings.lastSnapshotAt = snapshotNow
-            }
-            self.history = self.historyStore.state
-            self.historyUnreadable = self.historyStore.fileUnreadable
+            // Daily History snapshot when due (REDESIGN-SETTINGS), from the committed report — before it is shown and assessed.
+            self.history.passCommitted(final, live: self.live)
 
             self.report = final
             if let sys = final.system { self.lastKnownSystem = sys }
