@@ -192,8 +192,10 @@ final class DS3SpinnerView: NSView {
         a.duration = Self.period
         a.repeatCount = .infinity
         a.timingFunction = CAMediaTimingFunction(name: .linear)
-        // 7.5° per frame at 60 Hz is smooth for a 12–20 pt ring; the cap halves WindowServer work on 120 Hz panels.
-        a.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        // No app-side frame-rate cap (PULSE-COST, user 2026-10-29): the spin runs at the display's own rate, 60 Hz on a
+        // 60 Hz panel and up to the panel's maximum on ProMotion / high-refresh displays. Every frame costs WindowServer
+        // time (~0.3 pp CPU per fps, PULSE-COST findings C2/C5); the user chose full-rate motion over a 30 or 20 fps cap.
+        a.preferredFrameRateRange = .default
         rotor.add(a, forKey: "spin")
     }
 

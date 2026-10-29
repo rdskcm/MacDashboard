@@ -140,12 +140,6 @@ struct StringsEN: AppStrings {
     var sharedUnavailable: String { "(unavailable)" }
     var sharedCollectingData: String { "Collecting data…" }
     var sharedEmpty: String { "empty" }
-    var sharedToggleToChart: String { "Chart" }
-    var sharedToggleToTable: String { "Table" }
-    var sharedToggleShowChart: String { "Show chart" }
-    var sharedToggleShowTable: String { "Show table" }
-    var sharedInfoHide: String { "Hide explanation" }
-    var sharedInfoShow: String { "Show explanation" }
     func sharedMoreN(_ n: Int) -> String { "\(n) more" }
     var sharedCollapse: String { "Collapse" }
 

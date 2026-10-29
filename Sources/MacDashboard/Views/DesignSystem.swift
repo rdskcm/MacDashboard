@@ -15,8 +15,8 @@ import SwiftUI
 // MARK: - Motion constants
 
 /// Named animation curves shared across the v2.0 UI so no later block re-derives
-/// timing. `rainbow` and `reduceMotionFallback` are plain durations (seconds) —
-/// callers pick their own curve for those two; the rest are ready-to-use `Animation`s.
+/// timing. `reduceMotionFallback` is a plain duration (seconds) — callers pick
+/// their own curve for it; the rest are ready-to-use `Animation`s.
 enum DSMotion {
     static let barRelayout = Animation.spring(response: 0.34, dampingFraction: 0.86)
     static let cardHover = Animation.easeOut(duration: 0.16)
@@ -28,23 +28,8 @@ enum DSMotion {
     /// Paired with `.dsDisclosure(reduceMotion:)`: the disclosed content rises by
     /// this many points while it fades in/out.
     static let discloseRiseY: CGFloat = -7
-    /// Rainbow ring rotation period, seconds/turn. Both prototypes and the shipping
-    /// default agree on 6 s; Spec §4's "~1.4 s" row is not authoritative — flip
-    /// here only, at acceptance, so it's a one-line edit (see SharedUI.swift Step 3a).
-    static let rainbow: Double = 6
     /// Reduce Motion fallback duration for color/opacity/border/shadow transitions.
     static let reduceMotionFallback: Double = 0.12
-    /// Hover transition for controls that ALSO carry a `.rainbowBorder()` glow
-    /// (e.g. a Reset button). `RainbowBorder` fades its own ring with
-    /// a hardcoded internal `.easeInOut(duration: 0.25)` (SharedUI.swift); a
-    /// caller-side hover animation on a *different* curve/duration (e.g. the
-    /// plain `cardHover` easeOut/0.16 s used by non-glow hover controls) settles
-    /// before the ring's own fade does, so the color and the glow visibly move
-    /// out of step — read as an abrupt, two-stage hover instead of one smooth
-    /// motion. Same 0.25 s response as the ring's fade keeps them in lockstep;
-    /// `dampingFraction: 0.86` reuses `barRelayout`'s established "smooth,
-    /// no-overshoot" damping instead of inventing a new ratio.
-    static let rainbowHover = Animation.spring(response: 0.25, dampingFraction: 0.86)
 }
 
 // MARK: - Disclosure transition
@@ -252,7 +237,7 @@ extension View {
 ///
 /// Use wherever a spinner or a ✓ takes a label's place mid-action. Mounting
 /// them as `HStack` siblings instead measured a +22 pt width jump on
-/// `RainbowCapsuleButton` and a −48 pt swing on the attention chip
+/// a capsule button (since removed) and a −48 pt swing on the attention chip
 /// (V2-FIX-OPTICAL, 2026-08-09) — enough to reflow the whole row around the
 /// control while a single action runs.
 struct DSSwapInPlace<Replacement: View>: ViewModifier {
@@ -579,8 +564,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
 // MARK: - Bleed-rect clip shape
 
 /// A clip shape that crops the edges an animation needs cropped while letting
-/// a rainbow ring's outer glow survive (19 pt bleed, see SharedUI.swift:825
-/// `RainbowRingLayer`'s `.overview` layer) on the edges left at their default 0.
+/// an outer glow or shadow survive on the edges left at their default 0.
 struct BleedRect: Shape {
     var top: CGFloat = 0
     var leading: CGFloat = 0

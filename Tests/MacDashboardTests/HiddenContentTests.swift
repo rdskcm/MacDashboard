@@ -1,7 +1,7 @@
 // HiddenContentTests.swift
 // HIDDEN-CONTENT-WORK (R1, R2, R8): only the shown page is mounted and registered with the pointer tracker.
 // Runs frozen (fixture mode), so every transition is `.identity` and no removing view is left in the tree.
-// Repeating animations are out of reach here (frozen runs create no pulse ring or shimmer); V6 / APP-WASTE-AUDIT cover them.
+// Repeating animations are out of reach here (frozen runs create no shimmer); EndlessAnimationTests covers the «All good» line and collapsed process rows.
 
 import SwiftUI
 import AppKit
