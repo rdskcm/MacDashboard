@@ -75,7 +75,7 @@ extension DashboardModel {
         applyFixtureWakeHolders(user: [WakeHolder(owner: "caffeinate", requester: "Terminal", ageSeconds: 5400)],
                                 system: VisualFixture.systemWakeHolders, sampled: true)
         brew.applyFixture(checkedAt: ref, upgrading: false, progress: nil, error: nil, notice: nil, stoppable: false)
-        applyFixtureStartup(checkedAt: nil, removed: 0, checking: false, deleting: [], failure: nil)
+        startupItems.applyFixture(checkedAt: nil, removed: 0, checking: false, deleting: [], failure: nil)
         energy.applyFixture(.idle)
     }
 }

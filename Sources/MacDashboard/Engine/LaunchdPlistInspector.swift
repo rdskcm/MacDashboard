@@ -28,8 +28,8 @@ enum PlistDeleteOutcome: Equatable {
 /// The Автозагрузка card collapses an orphan row the instant the user confirms,
 /// before the Trash/`rm` has run (deliberate — see `OrphanRow.onConfirm`). This
 /// is the counter-signal: paths whose delete did NOT happen, so the card can put
-/// exactly those rows back. ACCUMULATING: `DashboardModel` unions new paths in
-/// and the card drains them via `acknowledgePlistRestore(_:)`, so two deletes
+/// exactly those rows back. ACCUMULATING: `StartupItemsController` unions new paths in
+/// and the card drains them via `StartupItemsController.acknowledgeRestore(_:)`, so two deletes
 /// finishing inside one SwiftUI update cycle cannot lose each other's paths.
 /// `stamp` is bumped on every publish so two identical path sets in a row are
 /// still two distinct values for the card's `.onChange`.
@@ -164,7 +164,7 @@ enum LaunchdPlistInspector {
 
     // MARK: - F. Deletion-target validation
 
-    /// Defense-in-depth check before `deleteOrphanPlist` acts on `path`: it must be a
+    /// Defense-in-depth check before `StartupItemsController.deleteOrphan` acts on `path`: it must be a
     /// `.plist` file lexically inside the directory `isSystemLevel` claims it's in.
     /// Lexical only (no filesystem access, `.plist` and NSString path standardization
     /// only) so it stays pure and Checks-testable — the paths this app ever passes here

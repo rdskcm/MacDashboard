@@ -66,9 +66,9 @@ private func systemInput(_ model: DashboardModel, pending: [EnergyChange] = [], 
                          now: Date) -> SystemPageModel.Input {
     .init(wakeSampled: model.wakeSampled, wakeHolders: model.wakeHolders, systemWakeHolders: model.systemWakeHolders,
           ignored: ignored ?? model.settings.ignoredWakeHolderEntries,
-          autostart: model.report.autostart, startupChecking: model.startupChecking,
-          startupCheckedAt: model.startupCheckedAt, startupRemoved: model.startupRemovedCount,
-          deletingPaths: model.deletingPlistPaths, plistFailure: model.plistDeleteFailure,
+          autostart: model.report.autostart, startupChecking: model.startupItems.checking,
+          startupCheckedAt: model.startupItems.checkedAt, startupRemoved: model.startupItems.removedCount,
+          deletingPaths: model.startupItems.deletingPaths, plistFailure: model.startupItems.deleteFailure,
           brewStatus: model.report.brewStatus, brewOutdated: model.report.brewOutdated,
           brewDetail: model.report.brewOutdatedDetail, brewInstalled: model.report.brewInstalledCount,
           brewCheckedAt: model.brew.checkedAt, brewUpgrading: model.brew.upgrading, brewProgress: model.brew.progress,
@@ -256,7 +256,7 @@ struct SystemStartupCard: View {
     private func card(now: Date) -> some View {
         let m = SystemPageModel.make(systemInput(model, now: now))
         DS3Card(title: L.sysStartupTitle, caption: m.startupWait ? nil : m.startupCaption) {
-            Button { model.checkStaleStartupItemsNow() } label: {
+            Button { model.startupItems.checkStaleNow() } label: {
                 Text(L.sysCheckStale).dsSwapInPlace(m.startupChecking) {
                     HStack(spacing: 8) {
                         DS3Spinner(role: .track, size: 13)
@@ -389,13 +389,13 @@ struct SystemStartupCard: View {
         case .one(let r):
             if let live = m.staleRows.first(where: { $0.id == r.id }) {
                 bulkInFlight = false
-                model.deleteOrphanPlist(path: live.id, isSystemLevel: live.isSystemLevel)
+                model.startupItems.deleteOrphan(path: live.id, isSystemLevel: live.isSystemLevel)
             }
         case .all:
             let paths = m.staleRows.map(\.id)
             if !paths.isEmpty {
                 bulkInFlight = true
-                model.deleteOrphanPlists(paths: paths)
+                model.startupItems.deleteOrphans(paths: paths)
             }
         }
         withAnimation(confirmCurve) { pendingDelete = nil }
