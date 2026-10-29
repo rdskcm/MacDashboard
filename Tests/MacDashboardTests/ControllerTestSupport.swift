@@ -34,6 +34,14 @@ import Testing
     private(set) var awaitCalls = 0
     private(set) var reassessCalls = 0
     private(set) var claudeRefreshCalls = 0
+    /// One block-API call, in order.
+    enum BlockCall: Equatable {
+        case begin(BlockID, showsLoading: Bool, armsWatchdog: Bool)
+        case succeed(BlockID)
+        case fail(BlockID, BlockFailure)
+    }
+    private(set) var mergeCalls = 0
+    private(set) var blockCalls: [BlockCall] = []
     var host: ReportHost {
         ReportHost(read: { self.report },
                    update: { mutate in self.updateCalls += 1; mutate(&self.report) },
@@ -41,7 +49,11 @@ import Testing
                    awaitPassEnd: { self.awaitCalls += 1; return self.passEnds },
                    reassess: { self.reassessCalls += 1 },
                    isPaused: { self.paused },
-                   refreshClaudeBackup: { self.claudeRefreshCalls += 1 })
+                   refreshClaudeBackup: { self.claudeRefreshCalls += 1 },
+                   mergeBackgroundIntoCommitted: { self.mergeCalls += 1 },
+                   beginBlock: { id, loading, watchdog in self.blockCalls.append(.begin(id, showsLoading: loading, armsWatchdog: watchdog)) },
+                   succeedBlock: { self.blockCalls.append(.succeed($0)) },
+                   failBlock: { self.blockCalls.append(.fail($0, $1)) })
     }
 }
 

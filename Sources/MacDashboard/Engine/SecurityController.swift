@@ -15,7 +15,7 @@ final class SecurityController {
         var runPrivileged: @MainActor (_ command: String) async -> PrivilegedRunner.Outcome
         /// Re-scans the crash folders; the coordinator passes `crashReports.rescan()`.
         var rescanCrashes: @MainActor () -> Void
-        /// Forced update check; the coordinator passes its `startUpdateCheckIfNeeded(trigger: .button)` (block 7 moves it).
+        /// Forced update check; the coordinator passes `storage.startUpdateCheckIfNeeded(trigger: .button)`.
         var checkUpdates: @MainActor () -> Void
 
         /// A function, not a `static let`: the crash and update closures come from the coordinator.

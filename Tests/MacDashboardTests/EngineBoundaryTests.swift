@@ -165,7 +165,7 @@ struct EngineBoundaryTests {
         name.hasPrefix("DashboardModel") || name.hasSuffix("Controller.swift")
             || ["ReportHost.swift", "TimeSource.swift"].contains(name)
     }
-    static let modelFilesMustInclude: Set<String> = ["DashboardModel.swift", "BrewController.swift", "EnergyController.swift", "StartupItemsController.swift", "TimeMachineController.swift", "SmartToolsController.swift", "CrashReportsController.swift", "SecurityController.swift", "ReportHost.swift", "TimeSource.swift"]
+    static let modelFilesMustInclude: Set<String> = ["DashboardModel.swift", "BrewController.swift", "EnergyController.swift", "StartupItemsController.swift", "TimeMachineController.swift", "SmartToolsController.swift", "CrashReportsController.swift", "SecurityController.swift", "StorageController.swift", "ReportHost.swift", "TimeSource.swift"]
 
     @Test func dashboardModelHasNoSharedSettings() throws {
         var offenders: [String] = []
@@ -190,7 +190,7 @@ struct EngineBoundaryTests {
             if line.hasPrefix("    }") { break }
             body.append(line)
         }
-        for call in ["energy.stop()", "brew.stop()", "startupItems.stop()", "timeMachine.stop()", "smart.stop()", "crashReports.stop()", "security.stop()"] {
+        for call in ["energy.stop()", "brew.stop()", "startupItems.stop()", "timeMachine.stop()", "smart.stop()", "crashReports.stop()", "security.stop()", "storage.stop()"] {
             #expect(body.contains { $0.contains(call) }, "DashboardModel.stop() must call \(call)")
         }
     }
