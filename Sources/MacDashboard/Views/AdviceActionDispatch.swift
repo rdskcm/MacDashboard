@@ -134,7 +134,7 @@ final class AdviceActionDispatch {
                 if let id { self.completedAdviceIDs.insert(Self.adviceKey(id)) }
                 self.trashError = nil
                 self.trashErrorPane = nil
-                self.model.trashWasEmptied()
+                self.model.storage.trashWasEmptied()
             case .cancelled:
                 // Backing out is not a failure: leave the plate on its verb, say nothing.
                 self.trashError = nil

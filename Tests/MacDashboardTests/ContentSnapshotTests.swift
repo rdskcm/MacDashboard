@@ -179,7 +179,7 @@ extension SerialTests {
                 s.fail(.noReading)
                 $0.applyFixtureFolders(nil, block: s)
             }
-            let stFDA = storageOK { $0.applyFixtureFDA(denied: Array(ProtectedLocations.table.prefix(5))) }
+            let stFDA = storageOK { $0.storage.applyFixture(fdaDenied: Array(ProtectedLocations.table.prefix(5))) }
             let stWornHealth: SmartHealth = {
                 var h = VisualFixture.internalHealth
                 h.percentageUsed = 82
@@ -272,7 +272,7 @@ extension SerialTests {
             let secUnknown = security { $0.report.security = SecurityState() }
             let secCollecting = security { $0.report.security = nil; $0.report.crashes = nil }
             let secUpdates = security { $0.report.updates = VisualFixture.securityUpdates }
-            let secChecking = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil; $0.applyFixtureCheckingUpdates(true) }
+            let secChecking = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil; $0.storage.applyFixture(checkingUpdates: true) }
             let secCheckFailed = security { $0.report.updates = nil; $0.report.updatesCheckedAt = nil }
             let secCrashes = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef) }
             let secCrashActions = security { $0.report.crashes = VisualFixture.securityCrashes(home: secHome, now: homeRef); $0.report.crashesHidden = VisualFixture.securityHiddenCrashes(home: secHome, now: homeRef) }

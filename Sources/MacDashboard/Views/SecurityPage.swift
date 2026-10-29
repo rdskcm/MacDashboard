@@ -60,7 +60,7 @@ private func securityInput(_ model: DashboardModel, fileVaultOpened: Bool = fals
                            openedReportPath: String? = nil) -> SecurityPageModel.Input {
     .init(security: model.report.security, action: model.security.action, fileVaultOpened: fileVaultOpened,
           updates: model.report.updates, updatesCheckedAt: model.report.updatesCheckedAt,
-          checkingUpdates: model.isCheckingUpdates, crashes: model.report.crashes,
+          checkingUpdates: model.storage.isCheckingUpdates, crashes: model.report.crashes,
           openedReportPath: openedReportPath, now: model.now(), hiddenCrashes: model.report.crashesHidden, crashAction: model.crashReports.action)
 }
 
@@ -114,7 +114,7 @@ struct SecurityPageBar: View {
 
     /// Opacity ZStack: «Refresh» ↔ «Refreshing…» without a width change (`swap-in-place`).
     private var refresh: some View {
-        let busy = model.security.refreshing || model.isCheckingUpdates
+        let busy = model.security.refreshing || model.storage.isCheckingUpdates
         return Button { model.security.refreshNow() } label: {
             ZStack {
                 Text(L.commonRefresh).opacity(busy ? 0 : 1)

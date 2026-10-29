@@ -96,8 +96,8 @@ struct StoragePageBar: View {
 
     /// Opacity ZStack: «Refresh» ↔ «Refreshing…» without a width change (`swap-in-place`).
     private var refresh: some View {
-        let busy = model.isCountingSizes
-        return Button { model.refreshStorageNow() } label: {
+        let busy = model.storage.isCountingSizes
+        return Button { model.storage.refreshNow() } label: {
             ZStack {
                 Text(L.commonRefresh).opacity(busy ? 0 : 1)
                 Text(L.commonRefreshing).opacity(busy ? 1 : 0)
@@ -223,12 +223,12 @@ struct StorageFoldersCard: View {
     private func card(now: Date) -> some View {
         let report = model.report
         let phase = StoragePageModel.foldersPhase(block: model.foldersBlock.phase, hasCount: report.homeDirs != nil)
-        let names = StoragePageModel.hiddenNames(denied: model.fdaDenied, unreadableHome: report.homeDirsUnreadable,
+        let names = StoragePageModel.hiddenNames(denied: model.storage.fdaDenied, unreadableHome: report.homeDirsUnreadable,
                                                  russian: L10nStore.shared.language == .ru)
         let fda = StoragePageModel.fdaNote(names)
-        let caption = StoragePageModel.foldersCaption(phase: phase, counting: model.isCountingSizes,
+        let caption = StoragePageModel.foldersCaption(phase: phase, counting: model.storage.isCountingSizes,
                                                       countedAt: report.folderSizesCountedAt, now: now,
-                                                      trashFreed: model.trashFreedBytes, someHidden: fda != nil)
+                                                      trashFreed: model.storage.trashFreedBytes, someHidden: fda != nil)
         return DS3Card(title: L.storageFoldersTitle, caption: caption, trailing: { segmentControl }) {
             content(phase: phase, fda: fda)
         }
@@ -283,8 +283,8 @@ struct StorageFoldersCard: View {
             }
             if segment == .home, let fda {
                 SectionNote(tone: DS3.amber, text: fda,
-                            button: (L.commonOpenPrivacySettings, L.storageFDAButtonA11y, model.fdaAwaitingReturn,
-                                     { model.openFullDiskAccessSettings() }))
+                            button: (L.commonOpenPrivacySettings, L.storageFDAButtonA11y, model.storage.fdaAwaitingReturn,
+                                     { model.storage.openFullDiskAccessSettings() }))
             }
             if confirmShown {
                 confirmPanel(size: fmtCapacity(trashBytes))
@@ -300,7 +300,7 @@ struct StorageFoldersCard: View {
 
     private func failureNote(_ f: BlockFailure) -> some View {
         SectionNote(tone: DS3.hot, text: StoragePageModel.failureNote(f),
-                    button: (L.commonTryAgain, L.storageCountTryAgainA11y, false, { model.retryFolderCount() }))
+                    button: (L.commonTryAgain, L.storageCountTryAgainA11y, false, { model.storage.retryFolderCount() }))
     }
 
     private func automationButton(_ pane: String?) -> (title: String, a11y: String, busy: Bool, action: () -> Void)? {

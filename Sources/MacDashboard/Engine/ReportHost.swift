@@ -25,6 +25,17 @@ struct ReportHost {
     /// Re-reads the Claude backup log (`DashboardModel.refreshClaudeBackup()`); the Backups page shows both backups.
     var refreshClaudeBackup: @MainActor () async -> Void
 
+    /// Re-applies the background overlays (update check, folder sizes) to the shown report — and, mid-pass, to the
+    /// committed one — and re-assesses the committed report (`DashboardModel.mergeBackgroundIntoCommitted()`, V2-HEADER-CHURN).
+    var mergeBackgroundIntoCommitted: @MainActor () -> Void
+    /// Starts an attempt of a data block (`DashboardModel.beginBlock`). `armsWatchdog`: arm the block's `id.timeout`
+    /// watchdog; false = mark the attempt with no watchdog and leave an armed one alone (REDESIGN-STORAGE D5).
+    var beginBlock: @MainActor (_ id: BlockID, _ showsLoading: Bool, _ armsWatchdog: Bool) -> Void
+    /// Ends the attempt with a success now and disarms its watchdog.
+    var succeedBlock: @MainActor (_ id: BlockID) -> Void
+    /// Ends the attempt with `failure` and disarms its watchdog.
+    var failBlock: @MainActor (_ id: BlockID, _ failure: BlockFailure) -> Void
+
     /// Writes one field only when it differs from the current value, so an unchanged re-read costs no
     /// observation mutation (the guard every section writer has today, e.g. `if report.energy != settings`).
     @MainActor

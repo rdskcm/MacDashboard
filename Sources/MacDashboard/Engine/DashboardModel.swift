@@ -205,33 +205,6 @@ final class DashboardModel {
     /// `.button` wins when merged (CollectTrigger.merged).
     private var reportRefreshPending: CollectTrigger? = nil
 
-    /// Last successful macOS update check, persisted (COLLECT-FASTPATH). Source of truth for
-    /// report.updates/updatesCheckedAt/updatesCheckDuration — applied by applyUpdates(to:).
-    private var updatesCache: UpdatesCache?
-    private let updatesCacheURL: URL
-    private var updateCheckTask: Task<Void, Never>?
-    private(set) var isCheckingUpdates = false
-    private var updateCheckGeneration = 0
-    /// Last successful background folder-size count (SIZES-BACKGROUND). Source of truth for
-    /// report.homeDirs/serviceDirs/…Unreadable/folderSizesCountedAt — applied by applyFolderSizes(to:).
-    private var folderSizes: FolderSizes?
-    private let folderSizesURL: URL
-    private var sizeCountTask: Task<Void, Never>?
-    private var sizeScheduleTask: Task<Void, Never>?
-    private(set) var isCountingSizes = false
-    /// REDESIGN-STORAGE: set by `trashWasEmptied()`, cleared by the next successful count. The page caption reads them.
-    private(set) var trashFreedBytes: Int64?
-    private(set) var trashEmptiedAt: Date?
-    /// REDESIGN-STORAGE D13: protected locations the last probe found refused (no Full Disk Access).
-    private(set) var fdaDenied: [ProtectedLocation] = []
-    /// REDESIGN-STORAGE D14: «Open Privacy settings…» was pressed and the user has not come back yet.
-    private(set) var fdaAwaitingReturn = false
-    private var sizeCountGeneration = 0
-    /// Wall time the last folder-size count finished without a result (SIZES-FAIL-BACKOFF).
-    /// Automatic triggers wait the 1 h window after it; the button does not. In-memory only:
-    /// a relaunch makes one fresh attempt. Cleared by a successful count.
-    private var sizeCountFailedAt: Date?
-
     /// Set by `AppActivityMonitor` (AppShell.swift) through `setPaused(_:)` whenever there is no effectively visible,
     /// non-panel window on a frontmost app, so the live loop can skip the (relatively heavy — spawns `top` twice)
     /// collect() call and just keep sleeping, per SPEC §1.4. Read only inside this model (the collector loops skip
@@ -264,6 +237,9 @@ final class DashboardModel {
     let crashReports: CrashReportsController
     /// ARCH-MODEL-SPLIT block 6: the protections feature (Touch ID enable, page Refresh, advice error); views read `model.security.<member>`.
     let security: SecurityController
+    /// ARCH-MODEL-SPLIT block 7: the background update check, the folder-size count (schedule, Refresh / Try again,
+    /// Trash bookkeeping) and the Full Disk Access state; views read `model.storage.<member>`.
+    let storage: StorageController
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
     init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live) {
@@ -288,10 +264,6 @@ final class DashboardModel {
         history = loadedHistory
         homeHistoryDigest = HomeModel.historyDigest(loadedHistory.mac_history)
         historyUnreadable = historyStore.fileUnreadable
-        updatesCacheURL = url.deletingLastPathComponent().appendingPathComponent("updates_cache.json")
-        updatesCache = UpdatesCacheStore.load(from: updatesCacheURL)
-        folderSizesURL = url.deletingLastPathComponent().appendingPathComponent("folder_sizes_cache.json")
-        folderSizes = FolderSizesCacheStore.load(from: folderSizesURL)
         // ARCH-MODEL-SPLIT: controllers are built before `self` is usable; `link` is pointed at `self` last.
         let link = self.link
         reportHost = ReportHost(
@@ -301,7 +273,12 @@ final class DashboardModel {
             awaitPassEnd: { await link.model?.waitForReportRefreshToFinish() ?? true },
             reassess: { link.model?.reassessCommitted() },
             isPaused: { link.model?.isPaused ?? true },
-            refreshClaudeBackup: { await link.model?.refreshClaudeBackup() })
+            refreshClaudeBackup: { await link.model?.refreshClaudeBackup() },
+            mergeBackgroundIntoCommitted: { link.model?.mergeBackgroundIntoCommitted() },
+            beginBlock: { id, showsLoading, armsWatchdog in
+                link.model?.beginBlock(id, showsLoading: showsLoading, armsWatchdog: armsWatchdog) },
+            succeedBlock: { link.model?.succeedBlock($0) },
+            failBlock: { link.model?.failBlock($0, $1) })
         energy = EnergyController(host: reportHost, time: time)
         brew = BrewController(host: reportHost, time: time)
         startupItems = StartupItemsController(host: reportHost, time: time)
@@ -312,11 +289,15 @@ final class DashboardModel {
                                      deps: .live(markTMUpdated: { tm.recordDestination($0) }))
         let crash = CrashReportsController(host: reportHost, time: time, deps: .live(settings: settings))
         crashReports = crash
-        // Controller→controller (series convention): Security re-scans crashes through Crash; the update check stays
-        // coordinator state until block 7 re-points this closure.
+        let st = StorageController(host: reportHost, time: time,
+                                   deps: .live(directory: url.deletingLastPathComponent(),
+                                               openSettingsPane: actions.openSettingsPane))
+        storage = st
+        // Controller→controller (series convention): Security re-scans crashes through Crash and forces the update
+        // check through Storage.
         security = SecurityController(host: reportHost, deps: .live(rescanCrashes: { crash.rescan() },
-                                                                     checkUpdates: { link.model?.startUpdateCheckIfNeeded(trigger: .button) }))
-        if let countedAt = folderSizes?.countedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
+                                                                     checkUpdates: { st.startUpdateCheckIfNeeded(trigger: .button) }))
+        if let countedAt = st.folderSizesCountedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
         // ARCH-SETTINGS-PATH: the one write path — any change of an assessment setting re-assesses this model.
         settings.onAssessmentSettingsChange = { [weak self] old in self?.assessmentSettingsChanged(from: old) }
         link.model = self
@@ -437,23 +418,19 @@ final class DashboardModel {
         wakeHolders = user; systemWakeHolders = system; wakeSampled = sampled
     }
 
-    /// Visual fixture only (REDESIGN-SECURITY): the update-check flag the Security page's Refresh and Updates card read.
-    func applyFixtureCheckingUpdates(_ checking: Bool) { isCheckingUpdates = checking }
-
     /// Visual fixture only (REDESIGN-STORAGE): the folder-count result and its block, re-applied to the shown report
-    /// (nil sizes = no count yet, the Folders card shows its Wait / error state).
+    /// (nil sizes = no count yet, the Folders card shows its Wait / error state). The block is coordinator state;
+    /// the sizes are the storage controller's.
     func applyFixtureFolders(_ sizes: FolderSizes?, block: BlockState) {
-        folderSizes = sizes
         foldersBlock = block
-        applyFolderSizes(to: &report)
+        storage.applyFixture(folderSizes: sizes)
     }
 
-    /// Visual fixture only (REDESIGN-STORAGE): the protected locations the Full Disk Access probe found refused.
-    func applyFixtureFDA(denied: [ProtectedLocation]) { fdaDenied = denied }
-
-    /// Starts an attempt and arms its watchdog: still in flight after `id.timeout` → `.failed(.timedOut)`.
-    private func beginBlock(_ id: BlockID, showsLoading: Bool = false) {
+    /// Starts an attempt. `armsWatchdog` (default): still in flight after `id.timeout` → `.failed(.timedOut)`.
+    /// false: marks the attempt with no watchdog and leaves an armed one alone (the folder list stays visible, REDESIGN-STORAGE D5).
+    private func beginBlock(_ id: BlockID, showsLoading: Bool = false, armsWatchdog: Bool = true) {
         updateBlock(id) { $0.begin(at: Date(), showsLoading: showsLoading) }
+        guard armsWatchdog else { return }
         blockWatchdogs[id]?.cancel()
         let timeout = id.timeout
         blockWatchdogs[id] = Task { [weak self] in
@@ -616,20 +593,12 @@ final class DashboardModel {
         smart.startSampling()
 
         loadCachedReportFromDisk()
-        reprobeProtectedLocations()
+        storage.reprobeProtectedLocations()
         refreshReport(trigger: .automatic)
         Task { [weak self] in await self?.refreshClaudeBackup() }
 
-        // Hourly folder-size count (SIZES-BACKGROUND): a cheap poll; the 1 h rule inside
-        // startSizeCountIfNeeded decides (last success or last failed attempt, SIZES-FAIL-BACKOFF).
-        // Skipped while paused (SPEC §1.4 energy rule).
-        sizeScheduleTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                guard let self, !Task.isCancelled else { return }
-                if !self.isPaused { self.startSizeCountIfNeeded(trigger: .automatic) }
-            }
-        }
+        // Hourly folder-size count (SIZES-BACKGROUND): StorageController owns the 60 s poll; skipped while paused.
+        storage.startSizeSchedule()
     }
 
     /// Cold-launch disk cache (Block N5): if a report from a previous run exists on
@@ -664,12 +633,7 @@ final class DashboardModel {
         timeMachine.stop()
         crashReports.stop()
         security.stop()
-        updateCheckTask?.cancel()
-        updateCheckTask = nil
-        updateCheckGeneration += 1; isCheckingUpdates = false   // a cancelled check no longer counts as in flight
-        sizeCountTask?.cancel(); sizeCountTask = nil
-        sizeScheduleTask?.cancel(); sizeScheduleTask = nil
-        sizeCountGeneration += 1; isCountingSizes = false
+        storage.stop()
         for watchdog in blockWatchdogs.values { watchdog.cancel() }
         blockWatchdogs.removeAll()
     }
@@ -679,8 +643,8 @@ final class DashboardModel {
         // Fixture mode shows a fixed dataset and must write nothing: no pass, no update check,
         // no size count (the same predicate MacDashboardApp uses to skip start()).
         guard !VisualFixture.isRequested else { return }
-        startUpdateCheckIfNeeded(trigger: trigger)      // before the in-flight guard: a press mid-pass still gets a check
-        startSizeCountIfNeeded(trigger: trigger)        // before the in-flight guard
+        storage.startUpdateCheckIfNeeded(trigger: trigger)      // before the in-flight guard: a press mid-pass still gets a check
+        storage.startSizeCountIfNeeded(trigger: trigger)        // before the in-flight guard
         guard !isCollectingReport else {
             reportRefreshPending = CollectTrigger.merged(reportRefreshPending, trigger); return
         }
@@ -734,7 +698,7 @@ final class DashboardModel {
                         else { self.failBlock(.scan, .noReading) }
                     }
                     var shown = partial
-                    self.applyBackground(to: &shown)
+                    self.storage.applyBackground(to: &shown)
                     self.report = shown
                     if let sys = partial.system { self.lastKnownSystem = sys }
                     // Deliberately NOT recomputed here: `partial` has most sections nil during
@@ -746,7 +710,7 @@ final class DashboardModel {
             }
             guard !Task.isCancelled else { return }
             var final = collected
-            self.applyBackground(to: &final)
+            self.storage.applyBackground(to: &final)
 
             // brew actually ran this pass — refill the session cache (never with a failed check; see BrewController.record).
             if cachedBrew == nil { self.brew.record(final) }
@@ -776,102 +740,15 @@ final class DashboardModel {
         }
     }
 
-    /// Both background overlays; every report the model shows or commits goes through here.
-    private func applyBackground(to r: inout FullReport) {
-        applyUpdates(to: &r)
-        applyFolderSizes(to: &r)
-    }
-
-    /// Single overlay point for the update-check result: every report the model shows or
-    /// commits goes through here, so a check finishing mid-pass cannot be lost.
-    private func applyUpdates(to r: inout FullReport) {
-        r.updates = updatesCache?.items
-        r.updatesCheckedAt = updatesCache?.checkedAt
-        r.updatesCheckDuration = updatesCache?.durationSeconds
-        r.progress[ReportSection.updates.rawValue] = (updatesCache != nil) || !isCheckingUpdates
-    }
-
-    /// Single overlay point for the folder-size result (SIZES-BACKGROUND). No cache => nil
-    /// sizes (assessment skips them) and progress false while a count is running.
-    private func applyFolderSizes(to r: inout FullReport) {
-        r.homeDirs = folderSizes?.homeDirs
-        r.homeDirsUnreadable = folderSizes?.homeDirsUnreadable ?? []
-        r.serviceDirs = folderSizes?.serviceDirs
-        r.homeCaches = folderSizes?.homeCaches
-        r.serviceDirsUnreadable = folderSizes?.serviceDirsUnreadable ?? []
-        r.homeDirsNotMeasured = folderSizes?.homeDirsNotMeasured ?? []
-        r.serviceDirsNotMeasured = folderSizes?.serviceDirsNotMeasured ?? []
-        r.folderSizesCountedAt = folderSizes?.countedAt
-        r.folderSizesCountDuration = folderSizes?.durationSeconds
-        let done = (folderSizes != nil) || !isCountingSizes
-        r.progress[ReportSection.homeDirs.rawValue] = done
-        r.progress[ReportSection.serviceDirs.rawValue] = done
-    }
-
-    private func startUpdateCheckIfNeeded(trigger: CollectTrigger) {
-        guard ReportCollector.shouldStartUpdateCheck(trigger: trigger, checkedAt: updatesCache?.checkedAt,
-                                                     inFlight: isCheckingUpdates, now: Date()) else { return }
-        isCheckingUpdates = true
-        updateCheckGeneration += 1; let gen = updateCheckGeneration
-        applyUpdates(to: &report)                       // display only: spinner if no cache yet
-        updateCheckTask = Task(priority: .utility) { [weak self] in
-            let result = await CommandRunner.$qos.withValue(.utility) { await ReportCollector().checkUpdates() }
-            guard let self, gen == self.updateCheckGeneration else { return }   // superseded by stop(): touch nothing
-            self.isCheckingUpdates = false
-            guard !Task.isCancelled else { return }
-            if let result {
-                self.updatesCache = result
-                try? UpdatesCacheStore.save(result, to: self.updatesCacheURL)   // a failed write costs one re-check next launch; not surfaced
-            }
-            self.mergeBackgroundIntoCommitted()         // also on failure: spinner -> "unavailable"
-        }
-    }
-
-    /// `armsWatchdog`: Try again on a visible error — a Wait comes back, so the 10 s watchdog is armed even
-    /// though a count exists. With no count at all the Wait is on screen and the watchdog is always armed;
-    /// otherwise the list stays visible and no watchdog runs (REDESIGN-STORAGE D5).
-    private func startSizeCountIfNeeded(trigger: CollectTrigger, armsWatchdog: Bool = false) {
-        guard ReportCollector.shouldStartSizeCount(trigger: trigger, countedAt: folderSizes?.countedAt,
-                                                   failedAt: sizeCountFailedAt,
-                                                   inFlight: isCountingSizes, now: Date()) else { return }
-        isCountingSizes = true
-        if folderSizes == nil || armsWatchdog {
-            beginBlock(.folders, showsLoading: true)                       // a Wait is on screen: arm the 10 s watchdog (D5)
-        } else {
-            updateBlock(.folders) { $0.begin(at: Date(), showsLoading: false) }   // list stays visible; no watchdog
-        }
-        sizeCountGeneration += 1
-        let gen = sizeCountGeneration
-        applyFolderSizes(to: &report)                   // display only: spinner if no cache yet
-        sizeCountTask = Task(priority: trigger.taskPriority) { [weak self] in
-            let result = await CommandRunner.$qos.withValue(trigger.commandQoS) { await ReportCollector().countFolderSizes() }
-            guard let self, gen == self.sizeCountGeneration else { return }
-            self.isCountingSizes = false
-            guard !Task.isCancelled else { return }
-            if let result {
-                self.succeedBlock(.folders)
-                self.folderSizes = result
-                self.sizeCountFailedAt = nil
-                self.trashFreedBytes = nil; self.trashEmptiedAt = nil            // the new count includes the real Trash state
-                try? FolderSizesCacheStore.save(result, to: self.folderSizesURL)   // a failed write costs one recount next launch
-            } else {
-                self.failBlock(.folders, .noReading)
-                self.sizeCountFailedAt = Date()          // automatic triggers back off 1 h; the button still forces
-            }
-            self.mergeBackgroundIntoCommitted()         // also on failure: spinner -> "unavailable" when no cache
-            self.reprobeProtectedLocations()
-        }
-    }
-
     /// V2-HEADER-CHURN: assess only a committed report.
     private func mergeBackgroundIntoCommitted() {
         if isCollectingReport {
-            applyBackground(to: &lastCommittedReport)   // what the fast tick assesses mid-pass
-            applyBackground(to: &report)                // display of the partial; NOT assessed
+            storage.applyBackground(to: &lastCommittedReport)   // what the fast tick assesses mid-pass
+            storage.applyBackground(to: &report)                // display of the partial; NOT assessed
             setAssessment(assessed(lastCommittedReport))
-            // The pass commit calls applyBackground on `final`, so it picks this result up too.
+            // The pass commit calls storage.applyBackground on `final`, so it picks this result up too.
         } else {
-            applyBackground(to: &report)
+            storage.applyBackground(to: &report)
             setAssessment(assessed(report))
             // Re-render only when a report has been committed (a background result after a failed first pass
             // must not produce a summary of a half-collected report). reportUpdatedAt unchanged: it is the pass time.
@@ -893,51 +770,6 @@ final class DashboardModel {
             await time.sleep(.milliseconds(200))
         }
         return !isCollectingReport
-    }
-
-    /// REDESIGN-STORAGE D22: Storage page Refresh = a folder recount with the `.button` trigger. Live disk figures
-    /// already tick every interval; SMART has its own button.
-    func refreshStorageNow() { startSizeCountIfNeeded(trigger: .button) }
-
-    /// REDESIGN-STORAGE: Try again on the folder-count error. A count still in flight is not restarted: the Wait
-    /// and a fresh 10 s watchdog come back and the running count's result still lands.
-    func retryFolderCount() {
-        if isCountingSizes {
-            beginBlock(.folders, showsLoading: true)
-        } else {
-            startSizeCountIfNeeded(trigger: .button, armsWatchdog: true)
-        }
-    }
-
-    /// REDESIGN-STORAGE D12: the Trash was emptied through Finder. Drops the `.Trash` entry from the in-memory
-    /// count, records what it held, saves the cache (same write a count does) and re-assesses so Home's chip and
-    /// the Disk note lose the Trash too.
-    func trashWasEmptied() {
-        let trash = FileManager.default.homeDirectoryForCurrentUser.path + "/.Trash"
-        if var sizes = folderSizes {
-            if let entry = sizes.homeDirs.first(where: { $0.path == trash }) {
-                trashFreedBytes = entry.bytes
-                sizes.homeDirs.removeAll { $0.path == trash }
-                folderSizes = sizes
-                try? FolderSizesCacheStore.save(sizes, to: folderSizesURL)
-            }
-        }
-        trashEmptiedAt = Date()
-        mergeBackgroundIntoCommitted()
-    }
-
-    /// REDESIGN-STORAGE D13/D14: re-reads which protected locations are refused. If fewer are refused than
-    /// before (access was just granted), a `.button` recount starts so the sizes include the newly readable folders.
-    func reprobeProtectedLocations() {
-        let next = ProtectedLocations.denied(home: NSHomeDirectory(), probe: DirectoryAccess.probe)
-        if next.count < fdaDenied.count && !fdaDenied.isEmpty { startSizeCountIfNeeded(trigger: .button) }
-        if next != fdaDenied { fdaDenied = next }
-    }
-
-    /// REDESIGN-STORAGE D14: opens the Full Disk Access pane; busy until the app is re-activated.
-    func openFullDiskAccessSettings() {
-        fdaAwaitingReturn = true
-        actions.openSettingsPane(AdvicePanes.fullDiskAccess)
     }
 
     /// REDESIGN-BATTERY: the Battery page's ioreg loop, awaited by the page's `.task` and cancelled by SwiftUI when the
@@ -1009,10 +841,9 @@ final class DashboardModel {
         if isPaused != paused { isPaused = paused }
     }
 
-    /// App became active: the Full Disk Access wait ends and protected locations are re-probed (REDESIGN-STORAGE D14).
+    /// App became active: the storage controller ends the Full Disk Access wait and re-probes the protected locations (REDESIGN-STORAGE D14).
     func appDidBecomeActive() {
-        fdaAwaitingReturn = false
-        reprobeProtectedLocations()
+        storage.appDidBecomeActive()
     }
 
     // MARK: - Process actions (ARCH-ENGINE-GUARD: moved from ProcessCards)
