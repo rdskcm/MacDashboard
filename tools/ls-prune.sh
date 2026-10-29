@@ -1,11 +1,14 @@
 #!/bin/bash
 # tools/ls-prune.sh — keep the installed MacDashboard the only copy LaunchServices knows.
 #
-# LaunchServices remembers every bundle with CFBundleIdentifier com.rdskcm.mac-dashboard it
-# has seen: a dist.noindex/ build, a test copy in a scratchpad, a copy inside a backup snapshot or a
-# mounted Time Machine backup, a bundle in the Trash. Opening the app by bundle ID can then
-# launch any of them (APP-ID-DUPLICATES). This script unregisters every registration of that
-# ID except the install locations, and re-registers the installed copy as it is on disk.
+# LaunchServices remembers every app bundle it has seen: a dist.noindex/ build, a test copy in a
+# scratchpad, a copy inside a backup snapshot or a mounted Time Machine backup, a bundle in the
+# Trash, and every bench copy tools/bench-app.sh made (running a bundle's binary registers it).
+# Opening the app by bundle ID can then launch any copy with that ID (APP-ID-DUPLICATES); opening
+# it by name matches the bundle FILE name and preferred a bench copy named MacDashboard.app over
+# the installed one (LS-PRUNE-MISSES). This script unregisters every registration of
+# com.rdskcm.mac-dashboard and of the bench id com.rdskcm.mac-dashboard.bench except the install
+# locations, and re-registers the installed copy as it is on disk.
 # It never touches a file — only LaunchServices records.
 #
 # A copy that is running is left registered: unregistering it would make
@@ -21,10 +24,11 @@
 # Exit: 0 ok, 1 a registration survived unregistering, 2 lsregister or /usr/bin/perl missing,
 #       3 an lsregister call timed out (it and every process it started were killed after LSREG_TIMEOUT
 #         seconds; the script stopped there), 64 usage.
-# Callers (build_app.sh, tools/visual/run.sh, backup_auto.sh) treat non-zero as a warning.
+# Callers (build_app.sh, tools/visual/smoke.sh, tools/perf/gate.sh, backup_auto.sh) treat non-zero as a warning.
 set -uo pipefail
 
 BUNDLE_ID="com.rdskcm.mac-dashboard"
+BENCH_ID="com.rdskcm.mac-dashboard.bench"   # tools/bench-app.sh copies
 # The install locations README.md names; build_app.sh --install uses the first.
 INSTALLED=("$HOME/Applications/MacDashboard.app" "/Applications/MacDashboard.app")
 LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
@@ -75,13 +79,13 @@ timed_out() {
   exit 3
 }
 
-# Every registered path whose record carries $BUNDLE_ID, one per line. Dump records are
+# Every registered path whose record carries $BUNDLE_ID or $BENCH_ID, one per line. Dump records are
 # separated by lines of dashes; a "path:" or "identifier:" value may end in a
 # " (0x...)" record handle that is not part of the value.
 registered() {
-  lsreg -dump 2>/dev/null | awk -v want="$BUNDLE_ID" '
+  lsreg -dump 2>/dev/null | awk -v want="$BUNDLE_ID" -v bench="$BENCH_ID" '
     function val(s) { sub(/^[a-z]+:[ \t]+/, "", s); sub(/ \(0x[0-9a-fA-F]+\)$/, "", s); return s }
-    function flush() { if (id == want && path != "") print path; path = ""; id = "" }
+    function flush() { if ((id == want || id == bench) && path != "") print path; path = ""; id = "" }
     /^----------/ { flush(); next }
     /^path:/ { if (path == "") path = val($0); next }
     /^identifier:/ { if (id == "") id = val($0); next }
@@ -90,14 +94,14 @@ registered() {
 }
 
 # Stub records: a registration of a bundle with no Info.plist (an empty or half-copied
-# MacDashboard.app). It has no "identifier:" line, so registered() never sees it; its
-# "bundle id:" is the directory name. Matched on all three: bundle id MacDashboard.app, no
-# identifier, path ending in /MacDashboard.app. Never on the path alone.
+# MacDashboard.app or MacDashboardBench.app). It has no "identifier:" line, so registered() never
+# sees it; its "bundle id:" is the directory name. Matched on all three: bundle id equal to the
+# directory name, no identifier, path ending in /<that name>. Never on the path alone.
 stubs() {
   lsreg -dump 2>/dev/null | awk '
     function val(s) { sub(/^[a-z ]+:[ \t]+/, "", s); sub(/ \(0x[0-9a-fA-F]+\)$/, "", s); return s }
     function flush() {
-      if (bid == "MacDashboard.app" && id == "" && path ~ /\/MacDashboard\.app$/) print path
+      if (id == "" && ((bid == "MacDashboard.app" && path ~ /\/MacDashboard\.app$/) || (bid == "MacDashboardBench.app" && path ~ /\/MacDashboardBench\.app$/))) print path
       path = ""; id = ""; bid = ""
     }
     /^----------/ { flush(); next }
@@ -200,12 +204,8 @@ STB="$(stubs)"; [ $? -ne 124 ] || timed_out -dump
 unregister_all "$REG"
 unregister_stubs "$STB"
 LEFT="$(left)"; [ $? -ne 124 ] || timed_out -dump
-if grep -q '^STILL' <<< "$LEFT"; then
-  # A record for a path that no longer exists can survive -u; -gc drops such records.
-  lsreg -gc >/dev/null 2>&1
-  [ $? -ne 124 ] || timed_out -gc
-  LEFT="$(left)"; [ $? -ne 124 ] || timed_out -dump
-fi
+# No `lsregister -gc` retry: on macOS 27 -gc does not drop the record of a deleted path, while -u
+# above drops records of existing and deleted paths alike (LS-PRUNE-MISSES). A STILL line is a real failure.
 [ -z "$LEFT" ] || printf '%s\n' "$LEFT"
 if grep -q '^STILL' <<< "$LEFT"; then exit 1; fi
 exit 0

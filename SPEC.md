@@ -648,6 +648,7 @@ leaves the previous install in place, removes any stale bundle under an old app 
 Every build also runs `tools/ls-prune.sh` first and excludes `dist.noindex/` from Time Machine
 (`tmutil addexclusion`): LaunchServices keeps every bundle with this bundle ID it has seen, and
 opening the app by bundle ID must resolve to the installed copy (APP-ID-DUPLICATES).
+The prune also unregisters bench copies (`com.rdskcm.mac-dashboard.bench`), which `tools/bench-app.sh` names `MacDashboardBench.app`: opening the app by name matches the bundle file name and would otherwise prefer a bench copy (LS-PRUNE-MISSES).
 README-install note: on another Mac after copying, if Gatekeeper complains:
 `xattr -dr com.apple.quarantine "MacDashboard.app"` or right-click → Open.
 

@@ -422,6 +422,10 @@ run_jobs() {   # D4-D10: queue order, fit check, re-checks, one at a time
   done
 }
 
+# A finished night build: build.ok and the bench copy tools/bench-app.sh writes (MacDashboardBench.app since
+# LS-PRUNE-MISSES). A build directory from before holds MacDashboard.app and counts as unfinished: the candidate
+# is rebuilt, and such a directory is never a baseline and is removed by the bookkeeping prune.
+night_built() { [ -f "$1/build.ok" ] && [ -d "$1/MacDashboardBench.app" ]; }
 run_gate() {
   local OFFLINE="" SHA BASE="" BASE_SHA="" GOUT GRC GLINE NOISY NFAILG NERR PRUNE_OK PRUNE_NOTE="" VERDICT IDLE d l
   # 5. candidate
@@ -430,7 +434,7 @@ run_gate() {
   if [ -f "$NIGHT/state/last-measured-sha" ] && [ "$(awk '{print $1}' "$NIGHT/state/last-measured-sha")" = "$SHA" ]; then
     GATE_VERDICT="SKIPPED (main unchanged since $(awk '{print $2}' "$NIGHT/state/last-measured-sha"), $SHA)"; return
   fi
-  if [ ! -f "$NIGHT/builds/$SHA/build.ok" ]; then
+  if ! night_built "$NIGHT/builds/$SHA"; then
     SRC="$(mktemp -d "$NIGHT/src.XXXXXX")"
     git -C "$ROOT" archive --format=tar origin/main | tar -x -C "$SRC"
     if ! (cd "$SRC" && ./build_app.sh) > "$NIGHT/runs/$DATE/build.log" 2>&1; then
@@ -448,14 +452,14 @@ run_gate() {
   while IFS= read -r d; do   # one path per line: the project path contains spaces (S6)
     d="${d%/}"
     [ "$(basename "$d")" = "$SHA" ] && continue
-    [ -f "$d/build.ok" ] || continue
-    BASE="$d/MacDashboard.app"; BASE_SHA="$(basename "$d")"; break
+    night_built "$d" || continue
+    BASE="$d/MacDashboardBench.app"; BASE_SHA="$(basename "$d")"; break
   done < <(ls -1dt "$NIGHT"/builds/*/ 2>/dev/null)
 
   # 7. gate
   GOUT="$PERF/out/night-$DATE"
   [ ! -e "$GOUT" ] || GOUT="$GOUT-$(date +%H%M%S)"
-  "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MacDashboard.app" ${BASE:+--baseline "$BASE"} \
+  "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MacDashboardBench.app" ${BASE:+--baseline "$BASE"} \
     --scenarios "${LIST:-all}" --runs "${N:-3}" --out "$GOUT" > "$NIGHT/runs/$DATE/gate.out" 2>&1
   GRC=$?
   GLINE="$(grep '^GATE:' "$NIGHT/runs/$DATE/gate.out" | tail -1)"
@@ -472,7 +476,7 @@ run_gate() {
     if [ -z "$BASE_SHA" ]; then
       for d in "$NIGHT"/builds/*/; do
         d="${d%/}"
-        [ "$(basename "$d")" != "$SHA" ] && [ -f "$d/build.ok" ] && PRUNE_OK=0
+        [ "$(basename "$d")" != "$SHA" ] && night_built "$d" && PRUNE_OK=0
       done
     fi
     if [ "$PRUNE_OK" = 1 ]; then
