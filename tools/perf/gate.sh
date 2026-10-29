@@ -82,7 +82,7 @@ on_exit() {
   kill_tracked
   [ -n "${OUT:-}" ] && rm -rf "$OUT/apps"
   if [ "$LS_DIRTY" = 1 ]; then
-    # The run opened bundles by path; drop their LaunchServices registrations (tools/ls-prune.sh).
+    # Running a bench copy's binary registered it with LaunchServices (LS-PRUNE-MISSES); drop the records (tools/ls-prune.sh).
     local ls_out
     ls_out="$("$ROOT/tools/ls-prune.sh" 2>/dev/null)" || echo "gate: warning: ls-prune.sh exited non-zero" >&2
     if grep -q '^RUNNING' <<< "$ls_out"; then echo "gate: warning: a copy is still running (ls-prune RUNNING)" >&2; fi

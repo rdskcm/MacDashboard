@@ -332,6 +332,11 @@ cleanup() {
   fi
   defaults delete "$BENCH_ID" >/dev/null 2>&1 || true
   rm -rf "$BENCH_SAVED_STATE" "$OUT/app"
+  # Running the bench binary registered the copy with LaunchServices (LS-PRUNE-MISSES); drop the record of
+  # the copy just deleted. A prune failure only warns: it never changes this script's exit code.
+  if [ -n "$LAUNCHED_PID" ]; then
+    "$ROOT/tools/ls-prune.sh" >/dev/null 2>&1 || echo "WARNING: tools/ls-prune.sh exited $? — a bench copy may still be registered" >&2
+  fi
   IFS=' ' read -r cx0 cy0 <<< "$CURSOR0"
   "$CLICLICK" "m:${cx0%.*},${cy0%.*}" >/dev/null 2>&1 || true
   [ -n "$FRONT_BUNDLE0" ] && osascript -e "tell application id \"$FRONT_BUNDLE0\" to activate" >/dev/null 2>&1 || true

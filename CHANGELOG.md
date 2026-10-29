@@ -12,6 +12,10 @@ All notable changes to this project are documented in this file.
 - [feat] Battery tiles on the iPhone page show the charge, cycle and temperature tones.
 - [feat] iPhone firmware, engine only (nothing is visible in the app yet): on a click, Apple's catalogue gives the iOS build Apple restores the phone's model to; a separate, labelled click asks ipsw.me which builds are still signed (it sends the model identifier only). Apple's build can be downloaded to `~/Downloads` over https from Apple's firmware servers only, after size and free-space checks, verified against every checksum both sources publish, without ever replacing an existing file. The network is used only on these clicks; the hosts and what they receive are listed in the README.
 
+### Fixed
+
+- For contributors: test copies made by `tools/bench-app.sh` are named `MacDashboardBench.app`, and `tools/ls-prune.sh` also removes their LaunchServices registrations (including ones whose folder is already deleted), so opening the app by name (`open -a MacDashboard`, AppleScript) starts the installed copy instead of an old test copy. `tools/visual/smoke.sh` now runs the prune at exit, as `tools/perf/gate.sh` already did.
+
 ### Before you update
 
 - [major] macOS 26 (Tahoe) or later. Version 3.0 and later need macOS 26 Tahoe; on macOS 14 or 15, stay on version 2.3.x.
