@@ -118,30 +118,6 @@ final class DashboardModel {
     /// so this file names no Views type (ARCH-ENGINE-GUARD). Storage keeps its own per-card dispatch.
     @ObservationIgnored var homeAdviceDispatchStorage: AnyObject?
 
-    /// Paths of orphaned launchd plists currently being deleted (Автозагрузка card's
-    /// "check for outdated" flow) — lets a per-row delete button show a spinner and
-    /// stay disabled while its own delete is in flight, without blocking other rows.
-    var deletingPlistPaths: Set<String> = []
-
-    /// Set when the last `deleteOrphanPlist()` run failed, was cancelled or timed out; cleared at
-    /// the start of the next run. Shown as an inline note on the Startup items card.
-    private(set) var plistDeleteFailure: PrivilegedActionFailure? = nil
-
-    /// REDESIGN-SYSTEM «Check for stale»: a re-scan of the startup items is running.
-    private(set) var startupChecking = false
-    /// When the last «Check for stale» finished; stale marks are shown only once this is set.
-    private(set) var startupCheckedAt: Date? = nil
-    /// Items removed on the Startup items card since the last check.
-    private(set) var startupRemovedCount = 0
-
-    /// Paths whose most recent delete attempt did NOT remove the file — the user
-    /// dismissed the Touch ID/admin prompt, the file op failed, validation
-    /// rejected the path, or the outcome is simply unknown. The Автозагрузка card
-    /// collapses a row optimistically the instant the user confirms (see
-    /// `OrphanRow.onConfirm`); this is the ONLY signal that puts it back.
-    /// Accumulates until the card acknowledges — see `PlistDeleteRestoreSignal`.
-    private(set) var plistDeleteRestore = PlistDeleteRestoreSignal()
-
     /// Assembled on demand for the imperative report/assess/history code paths ONLY.
     /// MUST stay `private` — a VIEW reading this would re-register a dependency on every
     /// field and defeat the per-field observation split. (Views read the individual
@@ -329,6 +305,9 @@ final class DashboardModel {
     let energy: EnergyController
     /// ARCH-MODEL-SPLIT: the Homebrew feature (upgrade, Stop, re-check, session cache); views read `model.brew.<member>`.
     let brew: BrewController
+    /// ARCH-MODEL-SPLIT block 3: the Startup items feature («Check for stale», orphan-plist deletes);
+    /// views read `model.startupItems.<member>`.
+    let startupItems: StartupItemsController
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
     init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live) {
@@ -367,6 +346,7 @@ final class DashboardModel {
             reassess: { link.model?.reassessCommitted() })
         energy = EnergyController(host: reportHost, time: time)
         brew = BrewController(host: reportHost, time: time)
+        startupItems = StartupItemsController(host: reportHost, time: time)
         smartToolsState = Self.recomputeSmartToolsState()
         if let countedAt = folderSizes?.countedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
         // ARCH-SETTINGS-PATH: the one write path — any change of an assessment setting re-assesses this model.
@@ -762,6 +742,7 @@ final class DashboardModel {
         smartTask = nil
         brew.stop()
         energy.stop()
+        startupItems.stop()
         updateCheckTask?.cancel()
         updateCheckTask = nil
         updateCheckGeneration += 1; isCheckingUpdates = false   // a cancelled check no longer counts as in flight
@@ -1152,7 +1133,7 @@ final class DashboardModel {
     }
 
     /// «Delete» confirmed on a crash row. The delete blocks on Touch ID, so it runs on a GCD thread, never on the
-    /// cooperative pool (same as `deleteOrphanPlist`).
+    /// cooperative pool (same as `StartupItemsController.onUtilityThread`).
     func deleteCrashGroup(_ id: String) {
         guard !crashAction.isWorking, let g = report.crashes?.first(where: { $0.id == id }), !g.reportPaths.isEmpty
         else { return }
@@ -1386,260 +1367,6 @@ final class DashboardModel {
                 self.securityAction = .failed(p, .error(msg))
                 self.adviceActionError = p == .firewall ? L.adviceFirewallError : L.secGatekeeperError
             }
-        }
-    }
-
-    /// Removes `paths` from `report.autostart`'s three plist arrays in place,
-    /// WITHOUT a full `refreshReport()` recollect. `refreshReport()` rebuilds from
-    /// a blank `FullReport()` and streams sections
-    /// back in one by one, so calling it just to drop a deleted plist from the list
-    /// makes the whole Автозагрузка card (and every other section) flash through its
-    /// "collecting" placeholder before repopulating — a disproportionate, ugly
-    /// reset for a change this narrow. A local, targeted mutation lets SwiftUI's
-    /// own array diffing (and this card's `.animation(value: orphans)`) animate
-    /// just the removed row instead.
-    private func removeAutostartPlistsLocally(_ paths: Set<String>) {
-        guard var auto = report.autostart, !paths.isEmpty else { return }
-        let before = auto.userAgents.count + auto.systemAgents.count + auto.systemDaemons.count
-        auto.userAgents.removeAll { paths.contains($0.path) }
-        auto.systemAgents.removeAll { paths.contains($0.path) }
-        auto.systemDaemons.removeAll { paths.contains($0.path) }
-        startupRemovedCount += (before - (auto.userAgents.count + auto.systemAgents.count + auto.systemDaemons.count))
-        report.autostart = auto
-        // Deliberately NO setAssessment here: `report` is a PARTIAL for most of a collect
-        // and a partial must never be assessed (V2-HEADER-CHURN) — a delete landing
-        // mid-collect would recompute the verdict from mostly-nil sections and flash the
-        // header to "all good" until the next fast tick. Nothing is lost: `Assess.assess`
-        // reads nothing from `report.autostart` (verified — no `autostart` reference in
-        // Assessment.swift), so this recompute could never change the verdict anyway.
-    }
-
-    /// Publishes `paths` as "these were not deleted, put the rows back". Unions
-    /// into whatever the card has not drained yet and always bumps `stamp`, so an
-    /// identical failure set twice in a row is still two distinct signals.
-    private func signalPlistsNotDeleted(_ paths: Set<String>) {
-        guard !paths.isEmpty else { return }
-        plistDeleteRestore = PlistDeleteRestoreSignal(
-            paths: plistDeleteRestore.paths.union(paths),
-            stamp: plistDeleteRestore.stamp &+ 1)
-    }
-
-    /// Called by the Автозагрузка card once it has restored `paths` (or decided
-    /// they are genuinely gone). Draining here rather than clearing on publish is
-    /// what makes two deletes landing in one update cycle safe.
-    func acknowledgePlistRestore(_ paths: Set<String>) {
-        guard !paths.isEmpty, !plistDeleteRestore.paths.isEmpty else { return }
-        plistDeleteRestore = PlistDeleteRestoreSignal(
-            paths: plistDeleteRestore.paths.subtracting(paths),
-            stamp: plistDeleteRestore.stamp &+ 1)
-    }
-
-    /// Clears the delete banner. It is otherwise only ever cleared by STARTING the next
-    /// delete, so a failure message stayed pinned under the card long after the row it
-    /// referred to was gone.
-    func clearPlistDeleteFailure() { plistDeleteFailure = nil }
-
-    /// «Check for stale» (REDESIGN-SYSTEM): re-collects the autostart section, then reveals the stale marks.
-    /// A second press while a check runs is ignored.
-    func checkStaleStartupItemsNow() {
-        guard !startupChecking else { return }
-        startupChecking = true
-        Task { [weak self] in
-            guard let self else { return }
-            defer { self.startupChecking = false }
-            let info = await UncheckedSendableBox(ReportCollector()).value.collectAutostartInfo()
-            guard !Task.isCancelled else { return }
-            await self.waitForReportRefreshToFinish()
-            guard !Task.isCancelled else { return }
-            self.report.autostart = info
-            self.startupCheckedAt = Date()
-            self.startupRemovedCount = 0
-        }
-    }
-
-    /// Visual fixture only (REDESIGN-SYSTEM): the Startup items card's transient state.
-    func applyFixtureStartup(checkedAt: Date?, removed: Int, checking: Bool, deleting: Set<String>,
-                             failure: PrivilegedActionFailure?) {
-        startupCheckedAt = checkedAt; startupRemovedCount = removed; startupChecking = checking
-        deletingPlistPaths = deleting; plistDeleteFailure = failure
-    }
-
-    /// Deletes an orphaned launchd .plist detected by the System page's startup-items re-scan. `isSystemLevel` selects the deletion path:
-    /// user-level (~/Library/LaunchAgents) goes to Trash via FileManager (reversible);
-    /// system-level (/Library/LaunchAgents|LaunchDaemons) is a permanent `rm` via
-    /// PrivilegedRunner (Touch ID/admin password), since Trash semantics don't apply
-    /// across privilege boundaries. The system-level command first runs `launchctl bootout`
-    /// (errors ignored, see `PrivilegedRunner.removeStartupItemsCommand`) and then `rm`; the
-    /// user-level path only trashes the file and does not unload an already-loaded job,
-    /// which stays until relogin/reboot. Removes the deleted entry from
-    /// `report.autostart` locally on success (see `removeAutostartPlistsLocally`)
-    /// so it drops out of the list without a full report recollect.
-    func deleteOrphanPlist(path: String, isSystemLevel: Bool) {
-        // A delete for this path is already in flight and owns the outcome —
-        // signalling here would restore a row whose delete may still succeed.
-        guard !deletingPlistPaths.contains(path) else { return }
-        guard LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel) else {
-            plistDeleteFailure = .error(L.autostartDeleteInvalidPath)
-            signalPlistsNotDeleted([path])
-            return
-        }
-        deletingPlistPaths.insert(path)
-        plistDeleteFailure = nil
-
-        Task { [weak self] in
-            guard let self else { return }
-            defer { self.deletingPlistPaths.remove(path) }
-
-            let outcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .utility).async {
-                    if isSystemLevel {
-                        switch PrivilegedRunner.run(PrivilegedRunner.removeStartupItemsCommand(paths: [path], uid: getuid())) {
-                        case .success: continuation.resume(returning: .success)
-                        case .cancelled: continuation.resume(returning: .cancelled)
-                        case .failed(let msg): continuation.resume(returning: .failed(msg))
-                        case .timedOut: continuation.resume(returning: .timedOut)
-                        }
-                    } else {
-                        do {
-                            try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
-                            continuation.resume(returning: .success)
-                        } catch {
-                            continuation.resume(returning: .failed(error.localizedDescription))
-                        }
-                    }
-                }
-            }
-            // An unknown outcome must never read as "deleted": put the row back. If the
-            // file op did land, the next report refresh drops it again — showing a row
-            // that no longer exists is recoverable, hiding one that does is not.
-            guard !Task.isCancelled else {
-                self.signalPlistsNotDeleted([path])
-                return
-            }
-
-            switch outcome {
-            case .success:
-                self.removeAutostartPlistsLocally([path])
-            case .cancelled:
-                self.plistDeleteFailure = .cancelled
-                self.signalPlistsNotDeleted([path])
-            case .timedOut:
-                self.plistDeleteFailure = .timedOut
-                self.signalPlistsNotDeleted([path])
-            case .failed(let msg):
-                self.plistDeleteFailure = .error(msg)
-                self.signalPlistsNotDeleted([path])
-            }
-        }
-    }
-
-    /// Bulk variant of `deleteOrphanPlist` (Автозагрузка card's "select multiple,
-    /// delete all" flow). Deletes user-level (~/Library) plists first, each
-    /// independently via Trash, so one failure doesn't block the rest; THEN — if any
-    /// system-level (/Library) paths survive validation — issues exactly one
-    /// `PrivilegedRunner` call covering an `rm -f` of all of them together, so the
-    /// whole batch costs a single Touch ID/admin prompt instead of one per path. A
-    /// cancelled or failed system-level batch never overwrites or hides the outcome
-    /// of the user-level paths that already succeeded — every row's spinner is
-    /// cleared independently and a combined error (if any) is reported once.
-    func deleteOrphanPlists(paths: [String]) {
-        let batch = paths.filter { path in
-            guard !deletingPlistPaths.contains(path) else { return false }
-            let isSystemLevel = path.hasPrefix("/Library/")
-            return LaunchdPlistInspector.isValidDeletionTarget(path: path, isSystemLevel: isSystemLevel)
-        }
-        // Paths the card already collapsed that this call will never touch:
-        // validation rejected them. Paths excluded because a delete is already in
-        // flight are NOT signalled — that call owns their outcome.
-        let inFlight = paths.filter { deletingPlistPaths.contains($0) }
-        let rejected = Set(paths).subtracting(batch).subtracting(inFlight)
-        signalPlistsNotDeleted(rejected)
-        guard !batch.isEmpty else {
-            // Never a silent no-op: if nothing survived validation the button looked
-            // broken — rows flicked back and no message appeared (V2-POLISH B7). Paths
-            // skipped only because a delete is already in flight are NOT an error;
-            // that call owns their outcome, so a batch that is empty for that reason
-            // alone stays quiet and leaves any existing error text as it was.
-            if !rejected.isEmpty { plistDeleteFailure = .error(L.autostartDeleteInvalidPath) }
-            return
-        }
-
-        for path in batch { deletingPlistPaths.insert(path) }
-        plistDeleteFailure = nil
-
-        let userPaths = batch.filter { !$0.hasPrefix("/Library/") }
-        let systemPaths = batch.filter { $0.hasPrefix("/Library/") }
-
-        Task { [weak self] in
-            guard let self else { return }
-            defer {
-                for path in batch { self.deletingPlistPaths.remove(path) }
-            }
-
-            var results: [(path: String, outcome: PlistDeleteOutcome)] = []
-
-            // Everything in the batch whose delete is not a recorded success yet —
-            // an unknown outcome must not read as "deleted" (same reasoning as the
-            // single-path variant).
-            func notRecordedAsDeleted() -> Set<String> {
-                let succeeded = Set(results.compactMap { $0.outcome == .success ? $0.path : nil })
-                return Set(batch).subtracting(succeeded)
-            }
-
-            for path in userPaths {
-                let outcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
-                    DispatchQueue.global(qos: .utility).async {
-                        do {
-                            try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
-                            continuation.resume(returning: .success)
-                        } catch {
-                            continuation.resume(returning: .failed(error.localizedDescription))
-                        }
-                    }
-                }
-                guard !Task.isCancelled else { self.signalPlistsNotDeleted(notRecordedAsDeleted()); return }
-                results.append((path, outcome))
-            }
-
-            if !systemPaths.isEmpty {
-                let command = PrivilegedRunner.removeStartupItemsCommand(paths: systemPaths, uid: getuid())
-
-                let systemOutcome: PlistDeleteOutcome = await withCheckedContinuation { continuation in
-                    DispatchQueue.global(qos: .utility).async {
-                        switch PrivilegedRunner.run(command) {
-                        case .success: continuation.resume(returning: .success)
-                        case .cancelled: continuation.resume(returning: .cancelled)
-                        case .failed(let msg): continuation.resume(returning: .failed(msg))
-                        case .timedOut: continuation.resume(returning: .timedOut)
-                        }
-                    }
-                }
-                guard !Task.isCancelled else { self.signalPlistsNotDeleted(notRecordedAsDeleted()); return }
-                for path in systemPaths { results.append((path, systemOutcome)) }
-            }
-
-            let failures = results.compactMap { result -> String? in
-                if case .failed(let msg) = result.outcome { return msg }
-                return nil
-            }
-            if let firstFailure = failures.first {
-                self.plistDeleteFailure = .error(failures.count > 1
-                    ? L.autostartDeleteBulkFailure(failures.count, results.count, firstFailure)
-                    : firstFailure)
-            } else if results.contains(where: { $0.outcome == .timedOut }) {
-                self.plistDeleteFailure = .timedOut
-            } else if results.contains(where: { $0.outcome == .cancelled }) {
-                self.plistDeleteFailure = .cancelled
-            }
-
-            let succeededPaths = Set(results.compactMap { result -> String? in
-                if case .success = result.outcome { return result.path }
-                return nil
-            })
-            if !succeededPaths.isEmpty {
-                self.removeAutostartPlistsLocally(succeededPaths)
-            }
-            self.signalPlistsNotDeleted(LaunchdPlistInspector.pathsNotDeleted(results: results))
         }
     }
 

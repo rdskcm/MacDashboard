@@ -325,16 +325,16 @@ extension SerialTests {
             let sysDefault = system()
             let sysNone = system { $0.applyFixtureWakeHolders(user: [], system: [], sampled: true) }
             let sysWait = system { $0.applyFixtureWakeHolders(user: [], system: [], sampled: false) }
-            let sysChecked = system { $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: nil) }
-            let sysDeleting = system { $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 0, checking: false, deleting: Set(sysOrphanPaths), failure: nil) }
+            let sysChecked = system { $0.startupItems.applyFixture(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: nil) }
+            let sysDeleting = system { $0.startupItems.applyFixture(checkedAt: sysChecked20, removed: 0, checking: false, deleting: Set(sysOrphanPaths), failure: nil) }
             let sysRemoved = system {
                 var a = sysFixtureAutostart
                 a.userAgents.removeAll(where: \.isOrphan); a.systemAgents.removeAll(where: \.isOrphan)
                 $0.report.autostart = a
-                $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 2, checking: false, deleting: [], failure: nil)
+                $0.startupItems.applyFixture(checkedAt: sysChecked20, removed: 2, checking: false, deleting: [], failure: nil)
             }
             func sysFailed(_ f: PrivilegedActionFailure) -> DashboardModel {
-                system { $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: f) }
+                system { $0.startupItems.applyFixture(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: f) }
             }
             let sysFailError = sysFailed(.error("permission denied"))
             let sysFailCancelled = sysFailed(.cancelled)
@@ -361,7 +361,7 @@ extension SerialTests {
                               EnergyChange(bucket: .ac, key: "powernap", value: "0")]
             let sysBarStale = system {
                 $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
-                $0.applyFixtureStartup(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: nil)
+                $0.startupItems.applyFixture(checkedAt: sysChecked20, removed: 0, checking: false, deleting: [], failure: nil)
             }
             let sysBarUpdating = system {
                 $0.applyFixtureWakeHolders(user: [], system: [], sampled: true)
