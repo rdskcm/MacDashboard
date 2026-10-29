@@ -12,7 +12,7 @@ MainActor.assumeIsolated {
 
     // A: Homebrew present, smartctl missing -> install button.
     let installable = DashboardModel()
-    installable.smartToolsState = .installable
+    installable.smart.applyFixture(updatedAt: nil, tools: .installable, installing: false, failure: nil)
     installable.report.smartctlPresent = false
     installable.report.smart = [
         SmartDisk(device: "internal", title: "Внутренний SSD", status: "SMART: подтверждён", attrs: [], severity: .good),
@@ -21,8 +21,7 @@ MainActor.assumeIsolated {
 
     // B: Homebrew present, smartctl missing, previous install attempt failed -> button + error line.
     let installableWithError = DashboardModel()
-    installableWithError.smartToolsState = .installable
-    installableWithError.applyFixtureSmartTools(.installable, installing: false, failure: .exitCode(1))
+    installableWithError.smart.applyFixture(updatedAt: nil, tools: .installable, installing: false, failure: .exitCode(1))
     installableWithError.report.smartctlPresent = false
     installableWithError.report.smart = [
         SmartDisk(device: "internal", title: "Внутренний SSD", status: "SMART: подтверждён", attrs: [], severity: .good)
@@ -30,7 +29,7 @@ MainActor.assumeIsolated {
 
     // C: Homebrew itself missing -> hint text only, no button.
     let needsHomebrew = DashboardModel()
-    needsHomebrew.smartToolsState = .needsHomebrew
+    needsHomebrew.smart.applyFixture(updatedAt: nil, tools: .needsHomebrew, installing: false, failure: nil)
     needsHomebrew.report.smartctlPresent = false
     needsHomebrew.report.smart = [
         SmartDisk(device: "internal", title: "Внутренний SSD", status: "SMART: подтверждён", attrs: [], severity: .good)
@@ -40,7 +39,7 @@ MainActor.assumeIsolated {
         HarnessSection(label: "A: .installable (button)") {
             StorageSmartCard(model: installable, breakpoints: PageBreakpoints(width: 1150))
         }
-        HarnessSection(label: "B: .installable + smartInstallFailure") {
+        HarnessSection(label: "B: .installable + install failure") {
             StorageSmartCard(model: installableWithError, breakpoints: PageBreakpoints(width: 1150))
         }
         HarnessSection(label: "C: .needsHomebrew (hint, no button)") {

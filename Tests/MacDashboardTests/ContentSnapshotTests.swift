@@ -202,7 +202,7 @@ extension SerialTests {
                     $0.report.smartctlPresent = false
                     $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED"),
                                        SmartDisk(device: "/dev/disk4", title: "External SSD", status: "NO ACCESS")]
-                    $0.applyFixtureSmartTools(state, installing: installing, failure: failure)
+                    $0.smart.applyFixture(updatedAt: VisualFixture.referenceDate, tools: state, installing: installing, failure: failure)
                 }
             }
             let stInstallable = storageTools(.installable)

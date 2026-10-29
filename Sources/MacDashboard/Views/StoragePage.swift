@@ -439,7 +439,7 @@ struct StorageSmartCard: View {
         let present = report.smartctlPresent
         let failing = (report.smart ?? []).contains { StoragePageModel.driveState($0, smartctlPresent: present) == .failing }
         DS3Card(title: L.storageSmartCardTitle,
-                caption: model.smartUpdatedAt.map { L.storageSmartUpdatedCaption(HomeModel.hhmm($0)) }) {
+                caption: model.smart.updatedAt.map { L.storageSmartUpdatedCaption(HomeModel.hhmm($0)) }) {
             if let disks = report.smart {
                 if disks.isEmpty {
                     Text(L.sharedUnavailable)
@@ -500,7 +500,7 @@ struct StorageSmartCard: View {
     private func detail(_ disk: SmartDisk, present: Bool) -> some View {
         let state = StoragePageModel.driveState(disk, smartctlPresent: present)
         VStack(alignment: .leading, spacing: 8) {
-            if model.smartToolsState != .installed {
+            if model.smart.toolsState != .installed {
                 StorageToolsNote(model: model, narrow: breakpoints.narrow)
             } else {
                 if let line = StoragePageModel.statusLine(state) {
@@ -612,8 +612,8 @@ private struct StorageToolsNote: View {
     let narrow: Bool
 
     var body: some View {
-        let needsBrew = model.smartToolsState == .needsHomebrew
-        let failure = needsBrew ? nil : model.smartInstallFailure
+        let needsBrew = model.smart.toolsState == .needsHomebrew
+        let failure = needsBrew ? nil : model.smart.installFailure
         let text = failure.map { StoragePageModel.installFailureText($0) }
             ?? (needsBrew ? L.storageToolsNeedsBrew : L.storageToolsInstallable)
         let tone = failure != nil ? DS3.hot : DS3.muted
@@ -658,13 +658,13 @@ private struct StorageToolsNote: View {
             .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
             .accessibilityLabel(L.storageToolsHowToBrewA11y)
         } else if failed {
-            Button(L.commonTryAgain) { model.installSmartmontoolsNow() }
+            Button(L.commonTryAgain) { model.smart.installNow() }
                 .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
                 .accessibilityLabel(L.storageInstallRetryA11y)
         } else {
-            let installing = model.smartInstalling
+            let installing = model.smart.installing
             VStack(alignment: .trailing, spacing: 6) {
-                Button { model.installSmartmontoolsNow() } label: {
+                Button { model.smart.installNow() } label: {
                     Text(L.storageToolsInstall).dsSwapInPlace(installing) { DS3Spinner(role: .onSolid, size: 12) }
                 }
                 .buttonStyle(DS3ButtonStyle(kind: .primary, height: 30, hPad: 13, fontSize: 12.5))
