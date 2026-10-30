@@ -136,7 +136,7 @@ final class SmartToolsController {
         installFailure = nil
         installTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.installing = false }
+            defer { self.installing = false }   // also after a cancel (guard below): the button re-enables
             guard let brew = self.deps.findBrew() else { self.installFailure = .noBrew; return }
             let outcome = await self.deps.install(brew)
             guard !Task.isCancelled else { return }

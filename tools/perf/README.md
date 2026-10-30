@@ -3,7 +3,7 @@
 ## 1. Purpose
 
 `tools/perf/gate.sh` measures the main-thread, Core Animation and WindowServer cost of the real app
-(scenarios G1-G7, G9, G10 and GP:<page>; G8, the System page's breathing Outdated capsule, was retired in PERF-GATE-RETARGET because REDESIGN-SYSTEM removed that capsule) and compares it with absolute limits and, optionally, with a pre-block build. It
+(scenarios G1-G7, G9, G10 and GP:<page>) and compares it with absolute limits and, optionally, with a pre-block build. It
 exists because per-frame animation work cannot be seen by the offscreen harness or the visual baseline
 (rule `gpu-per-frame`). It runs nightly (`night.sh`) and at release prep; per block only when the queue row says perf: yes.
 
@@ -66,7 +66,8 @@ All run on the synthetic bench home with the window pinned to 1000x733 pt at (0,
 | G7 | This Mac scroll | Time Profiler, Hitches | hitches, ms, main busy total, `scrollable` |
 | GP:<page> | G7's scroll scenario on the page opened from `home-tile-<page>`; a page whose content fits the window is recorded as an idle page (`scrollable 0`, report heading "IDLE PAGE") | Time Profiler, Hitches | hitches, ms, main busy total, `scrollable` |
 | G9 | CPU page idle (Home → CPU tile), 22 s, then `top -l 41` | none | app %, WindowServer % |
-| G10 | Home, window width 1060 ↔ 940 twice at 60 Hz via AX (`drv resize`), four crossings of the 1000 pt tier | Time Profiler, Hitches | hitches, ms, main busy total; report-only `sweep_wall_s`, `app_cpu_s`, `ws_cpu_s` (the sweep call only, CPU-s = `top` mean % × wall) |
+| G10 | Home, window width 1060 ↔ 940 pt twice at 60 Hz via AX (`drv resize`), four crossings of the 1000 pt tier | Time Profiler, Hitches | hitches, ms, main busy total; report-only `sweep_wall_s`, `app_cpu_s`, `ws_cpu_s` (the sweep call only; approximate: CPU-s = `top` mean % × wall with `top` at 1 Hz; `n/a` when no sample of that process fell inside the window) |
+Retired: G8 (System page breathing Outdated capsule) — PERF-GATE-RETARGET, after REDESIGN-SYSTEM removed the capsule.
 
 Limits: G1 and G9 app % <= `--g1-max`; G3 median <= 25 ms/s; G4 hitches/s <= 3, median <= 400 ms/s; G5 `capsule` commits/s median <= 60 and
 `capsule` app % <= control + 3; G6 `shade_conic` = 0. Every metric is the median over the runs of an arm. Regression rule against `--baseline`:

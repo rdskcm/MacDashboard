@@ -1,7 +1,7 @@
-// tools/visual/vbtool.swift — pixel/window helper for tools/visual/run.sh.
+// tools/visual/vbtool.swift — pixel/window helper for tools/visual/smoke.sh and snapshots.sh.
 // Compiled fresh at the start of every run: `swiftc -O -o .bin/vbtool vbtool.swift -framework AppKit -framework Vision`.
 // Subcommands: preflight, windows, screen, cursor, park-point, alpha-check,
-// downscale, diff, text-diff, sheet, selftest. See tools/visual/README.md for the contract.
+// downscale, diff, text-diff, sheet, snap-compare, selftest. See tools/visual/README.md for the contract.
 
 import AppKit
 import CoreGraphics
@@ -19,6 +19,10 @@ enum LoadError: Error, CustomStringConvertible {
         case .cgError(let s): return s
         }
     }
+}
+
+struct SnapCompareError: Error, CustomStringConvertible {
+    let description: String
 }
 
 enum AlphaError: Error, CustomStringConvertible {
@@ -262,6 +266,8 @@ func printAlphaLine(_ r: AlphaResult) {
 
 // MARK: - Diff
 
+/// Alpha takes part in the max on purpose: tools/visual/README.md §Comparison documents R/G/B/A, and in smoke.sh
+/// captures alpha is the window shape. Snapshot captures are opaque, so it is inert there.
 func computeDiff(ref: PixelImage, cur: PixelImage, tol: Int) -> (pct: Double, sizeDiffers: Bool, mask: [UInt8]) {
     if ref.width != cur.width || ref.height != cur.height {
         return (100.0, true, [])
@@ -685,7 +691,7 @@ func cmdSheet(_ args: [String]) {
 
 func cmdSelftest() {
     var passed = 0
-    let total = 15
+    let total = 16
     func check(_ n: Int, _ cond: Bool, _ detail: @autoclosure () -> String = "") {
         if cond { passed += 1 } else { print("selftest case \(n) FAILED \(detail())") }
     }
@@ -760,6 +766,35 @@ func cmdSelftest() {
     let d15 = textMultisetDiff(ref: o22, cur: o232)
     check(15, !(d15.removed.isEmpty && d15.added.isEmpty), "ref=\(o22) cur=\(o232)")
 
+    // snap-compare verdicts on a temp run (HARNESS-REDESIGN-RETARGET; INTERNAL-LEFTOVERS)
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("vbtool-selftest-\(getpid())")
+    let run = tmp.appendingPathComponent("run"), ref = tmp.appendingPathComponent("ref")
+    try! FileManager.default.createDirectory(at: run.appendingPathComponent("current"), withIntermediateDirectories: true)
+    try! FileManager.default.createDirectory(at: ref, withIntermediateDirectories: true)
+    let base = makeSolid(w: 100, h: 100, r: 100, g: 100, b: 100, a: 255)
+    var moved = base
+    for y in 0..<10 { for x in 0..<10 { let o = (y * 100 + x) * 4; moved.pixels[o] = 200 } }
+    let small = makeSolid(w: 50, h: 50, r: 100, g: 100, b: 100, a: 255)
+    func put(_ img: PixelImage, _ dir: URL, _ name: String) {
+        try! writePNG(try! makeCGImage(from: img), to: dir.appendingPathComponent("\(name).png"))
+    }
+    put(base, run.appendingPathComponent("current"), "a"); put(base, ref, "a")          // same
+    put(moved, run.appendingPathComponent("current"), "b"); put(base, ref, "b")         // CHANGED
+    put(small, run.appendingPathComponent("current"), "c"); put(base, ref, "c")         // SIZE-CHANGED
+    put(base, run.appendingPathComponent("current"), "d")                               // NO-REF
+    put(base, ref, "f")                                                                 // ORPHAN-REF
+    try! "a\tok\nb\tok\nc\tok\nd\tok\ne\tfailed\n# complete 5\n"
+        .write(to: run.appendingPathComponent("rendered.tsv"), atomically: true, encoding: .utf8)
+    let r16 = try! snapCompareRows(out: run, refDir: ref)
+    func verdict(_ s: String) -> String? {
+        r16.rows.first { $0.hasPrefix(s + "\t") }?.split(separator: "\t").dropFirst(7).first.map(String.init)
+    }
+    check(16, r16.produced == 5 && verdict("a") == "same" && verdict("b") == "CHANGED" && verdict("c") == "SIZE-CHANGED"
+          && verdict("d") == "NO-REF" && verdict("e") == "RENDER-FAILED" && verdict("f") == "ORPHAN-REF"
+          && FileManager.default.fileExists(atPath: run.appendingPathComponent("diff/b.png").path),
+          "rows=\(r16.rows)")
+    try? FileManager.default.removeItem(at: tmp)   // not a defer: this function ends in exit()
+
     print("selftest: \(passed)/\(total) passed")
     exit(passed == total ? 0 : 1)
 }
@@ -770,18 +805,14 @@ func cmdSelftest() {
 let snapChannelTolerance = 24
 let snapMaxChangedPixels = 0
 
-/// `snap-compare --out RUN --ref REFDIR`: reads RUN/rendered.tsv (written by the snapshot test), compares RUN/current/<state>.png
-/// with REFDIR/<state>.png, writes RUN/diff/<state>.png masks (CHANGED only) and RUN/results.tsv (9 columns, as `sheet` reads).
-func cmdSnapCompare(_ args: [String]) {
-    let (_, opts) = parseOptions(args)
-    guard let outPath = opts["out"]?.first, let refPath = opts["ref"]?.first else {
-        fail("snap-compare: usage --out RUN --ref REFDIR", code: 3)
-    }
-    let out = URL(fileURLWithPath: outPath), refDir = URL(fileURLWithPath: refPath)
+/// The comparison of `snap-compare`: reads RUN/rendered.tsv (written by the snapshot test), compares
+/// RUN/current/<state>.png with REFDIR/<state>.png, writes RUN/diff/<state>.png masks (CHANGED only) and returns the
+/// results.tsv state rows (9 columns, as `sheet` reads) plus the number of states the run produced. Pure of exit().
+func snapCompareRows(out: URL, refDir: URL) throws -> (rows: [String], produced: Int) {
     let fm = FileManager.default
     guard let list = try? String(contentsOf: out.appendingPathComponent("rendered.tsv"), encoding: .utf8),
           list.split(separator: "\n").contains(where: { $0.hasPrefix("# complete ") }) else {
-        fail("snap-compare: rendered.tsv missing or incomplete", code: 3)
+        throw SnapCompareError(description: "snap-compare: rendered.tsv missing or incomplete")
     }
     try? fm.createDirectory(at: out.appendingPathComponent("diff"), withIntermediateDirectories: true)
     var rows: [String] = []
@@ -820,8 +851,21 @@ func cmdSnapCompare(_ args: [String]) {
         let state = String(f.dropLast(4))
         if !produced.contains(state) { add(state, "-", "ORPHAN-REF") }
     }
+    return (rows, produced.count)
+}
+
+/// `snap-compare --out RUN --ref REFDIR`: runs `snapCompareRows` and writes RUN/results.tsv.
+func cmdSnapCompare(_ args: [String]) {
+    let (_, opts) = parseOptions(args)
+    guard let outPath = opts["out"]?.first, let refPath = opts["ref"]?.first else {
+        fail("snap-compare: usage --out RUN --ref REFDIR", code: 3)
+    }
+    let out = URL(fileURLWithPath: outPath), refDir = URL(fileURLWithPath: refPath)
+    let result: (rows: [String], produced: Int)
+    do { result = try snapCompareRows(out: out, refDir: refDir) }
+    catch { fail("\(error)", code: 3) }
     let header = "state\talpha\thole_px\tbbox_pt\tregions\tdiff_pct\tthreshold\tverdict\ttext"
-    let body = ([header] + rows + ["# complete \(produced.count) states"]).joined(separator: "\n") + "\n"
+    let body = ([header] + result.rows + ["# complete \(result.produced) states"]).joined(separator: "\n") + "\n"
     do { try body.write(to: out.appendingPathComponent("results.tsv"), atomically: true, encoding: .utf8) }
     catch { fail("snap-compare: cannot write results.tsv: \(error)", code: 3) }
     exit(0)

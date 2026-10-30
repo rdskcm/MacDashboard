@@ -148,7 +148,7 @@ final class ReportCollector {
         Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
     }
 
-    /// Pure (Checks-tested): true iff `collectedAt` exists and lies within
+    /// Pure (unit-tested): true iff `collectedAt` exists and lies within
     /// `[now - window, now]`. A future timestamp (clock rolled back) counts as
     /// stale so a bad clock can never pin the cache forever.
     static func isBrewCacheFresh(collectedAt: Date?, now: Date,
@@ -177,7 +177,7 @@ final class ReportCollector {
          URL(fileURLWithPath: "/Library/Logs/DiagnosticReports", isDirectory: true)]
     }
 
-    /// Pure (Checks-tested): true iff `mtime` lies within `[now - window, now]`.
+    /// Pure (unit-tested): true iff `mtime` lies within `[now - window, now]`.
     /// A future mtime (clock rolled back) counts as stale — same rule as
     /// `isBrewCacheFresh`, so a bad clock can never pin a report in the list.
     static func isCrashRecent(mtime: Date, now: Date,
@@ -186,7 +186,7 @@ final class ReportCollector {
         return age >= 0 && age < window
     }
 
-    /// Pure (Checks-tested): process name out of a DiagnosticReports filename.
+    /// Pure (unit-tested): process name out of a DiagnosticReports filename.
     /// macOS names these `<process>-<YYYY-MM-DD>-<HHMMSS>.<ips|crash|panic>`;
     /// the process part may itself contain dashes, dots and spaces, so only an
     /// end-anchored date-time suffix is stripped. Total by construction: an
@@ -204,7 +204,7 @@ final class ReportCollector {
         return fallback.isEmpty ? filename : fallback
     }
 
-    /// Pure (Checks-tested): is this report a kernel panic (`.panic`) rather than
+    /// Pure (unit-tested): is this report a kernel panic (`.panic`) rather than
     /// an app-level `.ips`/`.crash`? A panic means the whole machine went down, so
     /// it raises attention whatever process logged it — and the extension is only
     /// visible here, at collection time, which is why the bit is carried into
@@ -213,7 +213,7 @@ final class ReportCollector {
         (filename as NSString).pathExtension.lowercased() == "panic"
     }
 
-    /// Pure (Checks-tested): must this group reach the user? Exactly the two cases
+    /// Pure (unit-tested): must this group reach the user? Exactly the two cases
     /// from V2-CRASH-SIGNAL — a kernel panic, whatever process logged it, or a crash
     /// of MacDashboard itself. Single source of truth on purpose (V2-CRASH-DETECT):
     /// `crashGroups` protects these groups from the group cap and `Assessment` raises
@@ -230,7 +230,7 @@ final class ReportCollector {
     /// backed: add a prefix only when a real report of that kind has been seen.
     static let nonCrashReportPrefixes = ["jetsamevent-"]
 
-    /// Pure (Checks-tested): is this report an actual process/kernel crash, or one of
+    /// Pure (unit-tested): is this report an actual process/kernel crash, or one of
     /// the non-crash kinds above? Total by construction: an empty or unrecognized
     /// filename is treated as a crash (fail-visible, never fail-silent).
     static func crashIsProcessCrash(from filename: String) -> Bool {
@@ -244,7 +244,7 @@ final class ReportCollector {
     /// is what the group reveals (V2-CRASH-REVEAL).
     typealias CrashDirectoryListing = (directory: String, files: [(name: String, mtime: Date)])
 
-    /// Pure (Checks-tested): one entry per report FILE NAME, first occurrence wins.
+    /// Pure (unit-tested): one entry per report FILE NAME, first occurrence wins.
     /// The collector concatenates two directories (see `crashReportDirectories`) and
     /// the same report could plausibly be listed by both; without this it would be
     /// counted twice and inflate a process's crash count. Input order IS the priority
@@ -262,7 +262,7 @@ final class ReportCollector {
         return out
     }
 
-    /// Pure (Checks-tested): the whole crash pipeline except the directory read —
+    /// Pure (unit-tested): the whole crash pipeline except the directory read —
     /// drop reports listed by more than one directory, drop files outside the window,
     /// collapse repeats per process, mark a group as a panic group if ANY of its
     /// reports is a `.panic`, order by count (desc) then name (asc, so ties are
@@ -899,7 +899,7 @@ final class ReportCollector {
                   fallback: ["/usr/local/sbin/smartctl", "/usr/local/bin/smartctl"])
     }
 
-    /// Pure (Checks-tested). N3: may a tool found at a /usr/local FALLBACK location be run
+    /// Pure (unit-tested). N3: may a tool found at a /usr/local FALLBACK location be run
     /// (unprivileged)? Regular file, owned by root or by the user running the app, no group/
     /// world write bit. Weaker than `sudoSafetyVerdict` on purpose: this guards an
     /// unprivileged run, and the sudo rule would reject every user-owned Homebrew install.
@@ -1114,7 +1114,7 @@ final class ReportCollector {
 
     // MARK: - folder sizes (background job, SIZES-BACKGROUND)
 
-    /// Pure (Checks-tested). Splits ONE `du -xk -d 2 -- home` output into the depth<=1 list
+    /// Pure (unit-tested). Splits ONE `du -xk -d 2 -- home` output into the depth<=1 list
     /// (home total + its children: today's homeDirs input) and the entries for `servicePaths`
     /// (exact path match; a service path du did not print is returned in `missing`).
     static func splitHomeWalk(home: String, lines: [DirSize], servicePaths: [String])
@@ -1138,7 +1138,7 @@ final class ReportCollector {
         var cut: Bool
     }
 
-    /// Pure (Checks-tested). A killed `du` leaves a prefix of its output whose last line may be
+    /// Pure (unit-tested). A killed `du` leaves a prefix of its output whose last line may be
     /// cut mid-path ("16\t/Users/u/Docu" still parses), so after a kill everything after the
     /// last newline is dropped. A finished run keeps the `nonEmptyText` contract.
     static func duRun(_ o: CommandOutcome) -> DuRun {
@@ -1151,7 +1151,7 @@ final class ReportCollector {
         }
     }
 
-    /// Pure (Checks-tested). Folds the home walk and the outside runs (same order as `outside`)
+    /// Pure (unit-tested). Folds the home walk and the outside runs (same order as `outside`)
     /// into one FolderSizes. nil when the home walk yielded no complete line: the caller keeps
     /// its previous cache, as before. Each path lands in at most one place, by priority:
     /// measured > refused (`.denied` → …Unreadable) > not reached (`.readable` and its run was
@@ -1278,7 +1278,7 @@ final class ReportCollector {
                             installedCount: formulae.flatMap { f in casks.map { f + $0 } })
     }
 
-    /// Pure (Checks-tested). `.exited(0)` => the first non-empty trimmed stdout line (brew prints
+    /// Pure (unit-tested). `.exited(0)` => the first non-empty trimmed stdout line (brew prints
     /// "Homebrew X.Y.Z" first); any other outcome, or no non-blank line => nil = version unknown.
     /// Brew is still installed in that case (BREW-VERSION-FAIL): the caller never maps nil to
     /// "not installed". Same exit-status rule as parseBrewOutdated.
@@ -1288,7 +1288,7 @@ final class ReportCollector {
             .map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
     }
 
-    /// Pure (Checks-tested). `brew outdated` without named args exits 0 whether or not anything is
+    /// Pure (unit-tested). `brew outdated` without named args exits 0 whether or not anything is
     /// outdated, so `.exited(0)` with complete stdout => the package list ([] = nothing outdated);
     /// anything else (non-zero exit, signal, timeout, cancellation, launch failure, truncated
     /// stdout) => nil = the check failed, never "all up to date". Same rule as BrewUpgrader
@@ -1335,7 +1335,7 @@ final class ReportCollector {
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
     }
 
-    /// Pure (Checks-tested). True iff brew is installed but one of its checks failed — `--version`
+    /// Pure (unit-tested). True iff brew is installed but one of its checks failed — `--version`
     /// (BREW-VERSION-FAIL) or `outdated` (BREW-OUTDATED-FAIL). Such a snapshot is shown but never
     /// session-cached, so the next pass retries both.
     static func brewCheckFailed(status: BrewStatus?, outdated: [String]?) -> Bool {
@@ -1349,7 +1349,7 @@ final class ReportCollector {
 
     // MARK: - macOS updates (background check, not part of the pass)
 
-    /// Pure (Checks-tested). Labels found => items; "no new software available" on stdout OR
+    /// Pure (unit-tested). Labels found => items; "no new software available" on stdout OR
     /// stderr (softwareupdate prints it to stderr) => []; anything else (timeout, launch failure,
     /// network error, unrecognised text) => nil = the check failed, never "up to date".
     /// A `* Label:` line opens an item; the next `Title:` line fills it (REDESIGN-SECURITY).

@@ -10,7 +10,8 @@ enum GlassTint {
     /// NSGlobalDomain float written by System Settings › Appearance › Liquid Glass: 0 = Clear … 1 = Tinted.
     /// Undocumented; absent or unreadable means the default (mockup) look.
     static let systemKey = "NSGlassTintAmount"
-    /// Fixture-only keys in the app's own defaults domain, read only under `-visualFixture` (tools/visual/run.sh writes them).
+    /// Fixture-only keys in the app's own defaults domain, read only under `-visualFixture`
+    /// (the visual harness under tools/visual/ writes them).
     static let fixtureTintKey = "visualGlassTintAmount"
     static let fixtureReduceTransparencyKey = "visualReduceTransparency"
 

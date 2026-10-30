@@ -661,9 +661,9 @@ func smartLocalizedLabel(_ raw: String) -> String {
     return knownLabels[raw] ?? raw
 }
 
-// MARK: - Report staleness caption time (pure; Checks-tested)
+// MARK: - Report staleness caption time (pure; covered by Tests/MacDashboardTests)
 
-/// Formats the "updated at" time for the Отчёт tab's staleness caption.
+/// Formats the "updated at" time for the Report sheet's staleness caption.
 /// Same calendar day as `now` → time only ("14:32"), matching the SMART card's
 /// caption; an older cached report (previous day or earlier) → abbreviated
 /// date + time so a stale file is never mistaken for today's.

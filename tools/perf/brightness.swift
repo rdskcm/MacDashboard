@@ -1,5 +1,5 @@
 // tools/perf/brightness.swift — main-display brightness for tools/perf/night.sh (compiled by it; never run from here).
-// usage: brightness get | set <0..1> | kbd-get | kbd-set <0..1> | brightness kbd-get | brightness kbd-set <0..1>
+// usage: brightness get | set <0..1> | kbd-get | kbd-set <0..1>
 // Method 1: DisplayServices (private framework, dlopen; the method of the open-source `brightness` CLI,
 //           github.com/nriley/brightness, on Apple Silicon). Method 2: IOKit IODisplayGet/SetFloatParameter with
 //           kIODisplayBrightnessKey (public, deprecated; Intel-era built-in panels).

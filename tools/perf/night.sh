@@ -80,7 +80,7 @@ ensure_excluded() {
 }
 
 # ---------------------------------------------------------------- shared checks
-power_ok() { "$PERF/power.sh" before "$NIGHT/state/power.log" night >/dev/null 2>&1; }
+power_ok() { local l="$NIGHT/state/power.log"; [ "$DRY" = 1 ] && l=/dev/null; "$PERF/power.sh" before "$l" night >/dev/null 2>&1; }
 unlocked() { local r; r="$(ioreg -n Root -d1)"; ! grep -q '"IOConsoleLocked" *= *Yes' <<< "$r"; }
 idle_secs() { ioreg -c IOHIDSystem -d 4 | awk '/"HIDIdleTime"/ {print int($NF/1000000000); exit}'; }
 idle_threshold() {
@@ -108,13 +108,14 @@ claude_working() {   # 0 + one-line reason on stdout when a transcript was writt
   last="${list##*$'\n'}"; t="${last%% *}"; f="${last#* }"
   echo "Claude Code working: $n transcript(s) written in the last $WORK_QUIET_MIN min, newest at $(date -r "$t" +%H:%M): ${f#"$CLAUDE_PROJECTS"/}"
 }
-busy() {   # another night run or gate, excluding this shell and its ancestors/children (as gate.sh)
+busy() {   # another night run or gate: a bash whose script argument is night.sh --run or gate.sh (same shape as gate.sh's
+           # check), excluding this shell and its ancestors/children
   local anc=" " a=$$ p
   while [ -n "$a" ] && [ "$a" -gt 1 ]; do
     anc="$anc$a "
     a="$(ps -o ppid= -p "$a" 2>/dev/null | tr -d ' ')"
   done
-  for p in $(pgrep -f 'tools/perf/(night\.sh --run|gate\.sh)' 2>/dev/null); do
+  for p in $(pgrep -f '^[^[:space:]]*bash ([^-].*/)?tools/perf/(night\.sh --run|gate\.sh)([[:space:]]|$)' 2>/dev/null); do
     case "$anc" in *" $p "*) continue ;; esac
     [ "$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" = "$$" ] && continue
     return 0
@@ -215,6 +216,9 @@ interrupted_jobs() {   # date-regex -> queue files whose "started: <date>" line 
 }
 pending_report() {   # date -> SKIPPED / INTERRUPTED report of that night when it has none (caller checked !busy)
   local d="$1" v r
+  # a missing or non-numeric first-check means "no report yet": return 0 on purpose (R2.3)
+  local fu; fu="$(cat "$NIGHT/state/first-check" 2>/dev/null)"; [[ "$fu" =~ ^[0-9]+$ ]] || return 0
+  [ "$fu" -le "$(date -j -f '%Y%m%d%H%M' "${d}0300" +%s)" ] || return 0   # that night ended before the first --check: nothing to report
   [ -f "$NIGHT/reports/$d.md" ] && return 0
   if [ -f "$NIGHT/runs/$d/started" ]; then
     v="NIGHT $d: INTERRUPTED — the run started at $(cat "$NIGHT/runs/$d/started") did not finish (restart, crash or interrupted)"
@@ -283,6 +287,7 @@ if [ "$MODE" = "--queue-add" ]; then
   [[ "$JNAME" =~ ^[A-Za-z0-9._-]{1,40}$ ]] || fatal 64 "--name: 1-40 characters from A-Z a-z 0-9 . _ -"
   { [[ "$JMIN" =~ ^[0-9]{1,3}$ ]] && [ "$((10#$JMIN))" -ge 1 ] && [ "$((10#$JMIN))" -le 540 ]; } || fatal 64 "--minutes: 1-540"
   case "$JDIR" in /*) ;; *) fatal 64 "--dir must be an absolute path" ;; esac
+  case "$JDIR" in *$'\n'*) fatal 64 "--dir must be one line" ;; esac
   [ -d "$JDIR" ] || fatal 64 "--dir does not exist: $JDIR"
   [ -n "$JCMD" ] || fatal 64 "--cmd is empty"
   case "$JCMD" in *$'\n'*) fatal 64 "--cmd must be one line" ;; esac
@@ -314,6 +319,7 @@ if [ "$MODE" = "--check" ]; then
     H="$NIGHT_HOUR"
   fi
   H=$((10#$H))
+  [ "$DRY" = 1 ] || [ -f "$NIGHT/state/first-check" ] || date +%s > "$NIGHT/state/first-check"
   if ! busy; then   # never while a night run or gate is alive: that run writes its own report
     pending_report "$(date -j -v-1d -f '%Y%m%d' "$DATE" +%Y%m%d)"
     [ "$H" -lt 3 ] || pending_report "$DATE"
@@ -371,15 +377,15 @@ close_copies() {   # what -> 0 nothing left | 1 some left or the close failed (C
   else CLOSE_WHY="closing MacDashboard processes failed (foreign-copies.sh exit $rc: $(tail -1 <<< "$out"))"; fi
   return 1
 }
-stop_job() {   # reason grace -> TERM the job's process group, KILL after grace; no-op when no job runs
+stop_job() {   # reason grace -> TERM the job's process group, KILL after grace. No-op when no job runs or the
+               # group already exited (then run_jobs' normal wait classifies the exit as DONE/FAILED, D5)
   [ -n "$JPID" ] || return 0
-  local t=0 how="had already exited"
-  if kill -0 -- "-$JPID" 2>/dev/null; then
-    kill -TERM -- "-$JPID" 2>/dev/null
-    while kill -0 -- "-$JPID" 2>/dev/null && [ "$t" -lt "$2" ]; do sleep 2; t=$((t + 2)); done
-    if kill -0 -- "-$JPID" 2>/dev/null; then kill -KILL -- "-$JPID" 2>/dev/null; how="SIGKILL after $2 s"
-    else how="exited $t s after SIGTERM"; fi
-  fi
+  kill -0 -- "-$JPID" 2>/dev/null || return 0
+  local t=0 how
+  kill -TERM -- "-$JPID" 2>/dev/null
+  while kill -0 -- "-$JPID" 2>/dev/null && [ "$t" -lt "$2" ]; do sleep 2; t=$((t + 2)); done
+  if kill -0 -- "-$JPID" 2>/dev/null; then kill -KILL -- "-$JPID" 2>/dev/null; how="SIGKILL after $2 s"
+  else how="exited $t s after SIGTERM"; fi
   wait "$JPID" 2>/dev/null; JRC=$?
   JSTOPPED="$1|$how"
 }
@@ -552,7 +558,11 @@ run_gate() {
 finish() {
   local rc=$? first jobs
   [ "$FINISHED" = 0 ] || return; FINISHED=1
-  if [ -n "$JPID" ]; then stop_job interrupted 30; job_done; fi
+  if [ -n "$JPID" ]; then
+    stop_job interrupted 30
+    [ -n "$JSTOPPED" ] || { wait "$JPID" 2>/dev/null; JRC=$?; }
+    job_done
+  fi
   [ -z "$SRC" ] || rm -rf "$SRC"
   DISP_LINE="$DISP_LINE$(end_light display)"; KBD_LINE="$KBD_LINE$(end_light kbd)"   # D18: before the report
   if [ "$JOBS" = 1 ]; then jobs="jobs: $NDONE done, $NFAILED failed, $NSTOPPED stopped at $STOP_HM, $NINT interrupted, $NNOT not started"

@@ -67,7 +67,7 @@ enum BrewUpgrader {
                        prependingPATH: [(brewPath as NSString).deletingLastPathComponent]))
     }
 
-    /// Pure (Checks-tested). How many packages of `before` (the outdated list the run started
+    /// Pure (unit-tested). How many packages of `before` (the outdated list the run started
     /// from) are no longer outdated in `after`; nil when the re-check failed or `before` is empty.
     /// Packages that became outdated during the run are not counted.
     static func upgradedCount(before: [String], after: [String]?) -> Int? {
@@ -76,7 +76,7 @@ enum BrewUpgrader {
         return before.filter { !still.contains($0) }.count
     }
 
-    /// Pure (Checks-tested). The neutral line shown after the user stopped a run (BREW-CANCEL).
+    /// Pure (unit-tested). The neutral line shown after the user stopped a run (BREW-CANCEL).
     static func stoppedNotice(before: [String], after: [String]?) -> String {
         guard let k = upgradedCount(before: before, after: after) else { return L.maintenanceBrewStoppedUnknown }
         return L.maintenanceBrewStopped(k, before.count)

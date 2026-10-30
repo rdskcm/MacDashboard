@@ -51,7 +51,11 @@ struct EngineBoundaryTests {
     ]
 
     static let importLine = regex(#"^\s*(?:@\w+\s+)*import\s+(?:(?:class|struct|enum|protocol|func|var|let|typealias)\s+)?(\w+)"#)
-    static let topLevelType = regex(#"^(?:@\w+(?:\([^)]*\))?\s+)*(?:public\s+|internal\s+)?(?:final\s+)?(?:struct|enum|class|actor|protocol)\s+(\w+)"#)
+    /// Type declarations; collected only at brace depth 0
+    /// (a nested Views type is reachable from Engine only through its outer name).
+    static let topLevelType = regex(
+        #"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:public\s+|internal\s+)?(?:final\s+)?"#
+        + #"(?:struct|enum|class|actor|protocol)\s+(\w+)"#)
     static let identifier = regex(#"[A-Za-z_]\w*"#)
 
     @Test func engineImportsNoUIFramework() throws {
@@ -69,8 +73,11 @@ struct EngineBoundaryTests {
     @Test func engineReferencesNoViewsType() throws {
         var viewsTypes = Set<String>()
         for file in try swiftFiles("Views") {
+            var depth = 0
             for line in try lines(of: file) {
-                if let name = firstGroup(Self.topLevelType, in: String(line)) { viewsTypes.insert(name) }
+                let code = codeOnly(line)
+                if depth == 0, let name = firstGroup(Self.topLevelType, in: String(line)) { viewsTypes.insert(name) }
+                depth += code.filter { $0 == "{" }.count - code.filter { $0 == "}" }.count
             }
         }
         viewsTypes.subtract(Self.knownCollisions)

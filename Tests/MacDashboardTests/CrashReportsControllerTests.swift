@@ -99,7 +99,7 @@ extension SerialTests {
             let (c, host, fake, _) = make()
             host.collecting = true
             c.hide("a")
-            await settle { false }
+            for _ in 0..<1000 { await Task.yield() }   // deliberate: nothing may happen, so no condition to settle on
             #expect(fake.scanCalls.isEmpty && c.scanTasks.isEmpty)
             #expect(c.action == .working(.hide, groupID: "a"))
             host.collecting = false
@@ -108,7 +108,7 @@ extension SerialTests {
             #expect(fake.scanCalls.count == 1)
             #expect(c.action == .idle)
             c.passEnded()
-            await settle { false }
+            for _ in 0..<1000 { await Task.yield() }   // deliberate: nothing may happen, so no condition to settle on
             #expect(fake.scanCalls.count == 1)
         }
 
@@ -199,7 +199,7 @@ extension SerialTests {
             e.stop()
             host3.collecting = false
             e.passEnded()
-            await settle { false }
+            for _ in 0..<1000 { await Task.yield() }   // deliberate: nothing may happen, so no condition to settle on
             #expect(fake3.scanCalls.isEmpty)
         }
 

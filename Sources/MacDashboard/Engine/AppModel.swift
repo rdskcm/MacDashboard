@@ -337,7 +337,8 @@ final class AppModel {
         }
     }
 
-    /// Visual fixture only (AppModel+VisualFixture, tools/visual/content_states.swift): sets the scan block directly; live code never calls this.
+    /// Visual fixture only (AppModel+VisualFixture,
+    /// Tests/MacDashboardTests/ContentSnapshotTests.swift): sets the scan block directly; live code never calls this.
     func applyFixtureScan(_ state: BlockState) { scanBlock = state }
 
     /// Visual fixture only: sets the CPU block and the high-load start.
@@ -540,7 +541,7 @@ final class AppModel {
     }
 
     /// Cold-launch disk cache (Block N5): if a report from a previous run exists on
-    /// disk, show it in the Отчёт tab immediately (with a staleness caption) while
+    /// disk, show it in the Report sheet (ReportSheet) immediately (with a staleness caption) while
     /// the background collect() refreshes it. Raw text only — FullReport is not
     /// serialized, so the Обзор cards still fill in progressively from the live
     /// collect. Synchronous by design: the file is tens of KB and this runs once,
