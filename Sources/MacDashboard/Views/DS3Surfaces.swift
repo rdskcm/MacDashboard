@@ -202,8 +202,9 @@ struct DS3Appear: ViewModifier {
     let offset: CGSize
     let scale: CGFloat
     let animation: Animation
-    /// Test probe (APPEAR-COST R3/R8): animated entrances started in this process. Not incremented under Reduce Motion or `isFrozen`.
-    @MainActor static var animatedStarts = 0
+    /// Test probe (APPEAR-COST R3/R8): entrances started in this process, counted in both branches below so the check
+    /// holds on a host with Reduce Motion on (the GitHub runner has it on).
+    @MainActor static var entranceStarts = 0
     @State private var shown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -213,11 +214,10 @@ struct DS3Appear: ViewModifier {
             .scaleEffect(shown ? 1 : scale)
             .offset(shown ? .zero : offset)
             .onAppear {
-                print("DIAG appear reduceMotion=\(reduceMotion) frozen=\(DS3Motion.isFrozen)")
+                Self.entranceStarts += 1
                 if reduceMotion || DS3Motion.isFrozen {
                     shown = true
                 } else {
-                    Self.animatedStarts += 1
                     withAnimation(animation.delay(delay)) { shown = true }
                 }
             }

@@ -133,23 +133,22 @@ extension SerialTests {
             let m = AppModel(dataDirectory: dir)
             m.applyVisualFixture()
             let r = NavigationRouter()
-            print("DIAG workspaceReduceMotion=\(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)")
-            let n0 = DS3Appear.animatedStarts
+            let n0 = DS3Appear.entranceStarts
             let h = Host(MacContentView(model: m, router: r, width: width, tier: tier, breakpoints: breakpoints))
             h.settle(1.0)
-            let homeStarts = DS3Appear.animatedStarts - n0
+            let homeStarts = DS3Appear.entranceStarts - n0
             #expect(homeStarts >= 9, "first Home: attention slot + Now card + 7-8 tiles start an entrance each (got \(homeStarts))")
             r.navigate(to: Destination(.cpu))
             h.settle(1.0)
-            let afterPage = DS3Appear.animatedStarts
+            let afterPage = DS3Appear.entranceStarts
             #expect(afterPage > n0 + homeStarts, "the page's own cards and slide start entrances")
             r.back()
             h.settle(1.0)
-            #expect(DS3Appear.animatedStarts == afterPage, "Back to Home starts no entrance")
+            #expect(DS3Appear.entranceStarts == afterPage, "Back to Home starts no entrance")
             // A fresh window starts fresh.
             let h2 = Host(MacContentView(model: m, router: NavigationRouter(), width: width, tier: tier, breakpoints: breakpoints))
             h2.settle(1.0)
-            #expect(DS3Appear.animatedStarts - afterPage >= 9, "a new window plays the first-open entrance again")
+            #expect(DS3Appear.entranceStarts - afterPage >= 9, "a new window plays the first-open entrance again")
             h.close(); h2.close()
         }
     }
