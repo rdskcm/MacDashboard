@@ -1,6 +1,7 @@
 // Tests/MacDashboardTests/SliceSpriteTests.swift
 // RESIZE-FRAME-COST Stage 1: nine-slice / three-slice geometry oracles (hand-computed from the spec formulas).
 import CoreGraphics
+import SwiftUI
 import Testing
 @testable import MacDashboard
 
@@ -20,20 +21,32 @@ struct SliceSpriteTests {
     }
 
     @Test func measure() {
-        func frame(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect { CGRect(x: x, y: y, width: w, height: h) }
-        let a = G.measure(.rounded(20), frame: frame(0, 0, 300, 203.33), scale: 2)
+        func size(_ w: CGFloat, _ h: CGFloat) -> CGSize { CGSize(width: w, height: h) }
+        let a = G.measure(.rounded(20), size: size(300, 203.33), scale: 2)
         #expect(a.heightPx == 407)
         #expect(a.narrow == false)
-        #expect(G.measure(.rounded(20), frame: frame(0, 0, 60, 200), scale: 2).narrow)
-        #expect(G.measure(.rect, frame: frame(0, 0, 10, 0), scale: 2).narrow)
-        // Top and bottom edges snap to the pixel grid separately: 106.6 px at a pixel-aligned origin covers 107 rows,
-        // at a half-pixel origin (20.5 -> 21, 127.1 -> 127) only 106.
-        #expect(G.measure(.rect, frame: frame(10, 10, 300, 53.3), scale: 2).heightPx == 107)
-        #expect(G.measure(.rect, frame: frame(10, 10.25, 300, 53.3), scale: 2).heightPx == 106)
-        #expect(G.measure(.rect, frame: frame(10, 10.25, 300, 53.3), scale: 1).heightPx == 54)
+        #expect(G.measure(.rounded(20), size: size(60, 200), scale: 2).narrow)
+        #expect(G.measure(.rect, size: size(10, 0), scale: 2).narrow)
+        // APPEAR-COST D1: the layout height alone decides the sprite height; position never enters.
+        #expect(G.measure(.rect, size: size(300, 53.3), scale: 2).heightPx == 107)
+        #expect(G.measure(.rect, size: size(300, 53.3), scale: 1).heightPx == 53)
         // Capsule corners are continuous: the cap holds 1.6 r like a rounded rectangle with r = h / 2.
-        #expect(G.measure(.capsule, frame: frame(0, 0, 62, 36), scale: 2).narrow)
-        #expect(!G.measure(.capsule, frame: frame(0, 0, 63, 36), scale: 2).narrow)
+        #expect(G.measure(.capsule, size: size(62, 36), scale: 2).narrow)
+        #expect(!G.measure(.capsule, size: size(63, 36), scale: 2).narrow)
+    }
+
+    @MainActor @Test func resolvedStopsAreCachedPerAppearance() {
+        let stops = [Gradient.Stop(color: .white.opacity(0.5), location: 0), Gradient.Stop(color: .white.opacity(0), location: 0.18)]
+        let c = DS3SpriteCache.shared
+        let before = c.resolveMisses
+        let light1 = ds3ResolvedStops(stops, dark: false)
+        let light2 = ds3ResolvedStops(stops, dark: false)
+        #expect(light1 == light2)
+        #expect(c.resolveMisses == before + 1, "second call for the same stops and appearance is a hit")
+        _ = ds3ResolvedStops(stops, dark: true)
+        #expect(c.resolveMisses == before + 2, "a different appearance resolves once more")
+        _ = ds3ResolvedStops(stops, dark: true)
+        #expect(c.resolveMisses == before + 2)
     }
 
     @Test func shadowSlices() {

@@ -16,7 +16,7 @@ struct DS3ResolvedStop: Hashable {
 }
 
 @MainActor
-func ds3ResolvedStops(_ stops: [Gradient.Stop], dark: Bool) -> [DS3ResolvedStop] {
+func ds3ResolveStopsUncached(_ stops: [Gradient.Stop], dark: Bool) -> [DS3ResolvedStop] {
     let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
     return stops.map { stop in
         let c = ds3Resolve(stop.color, in: appearance).components ?? [0, 0, 0, 0]
@@ -25,6 +25,18 @@ func ds3ResolvedStops(_ stops: [Gradient.Stop], dark: Bool) -> [DS3ResolvedStop]
         return DS3ResolvedStop(r: q(comps[0]), g: q(comps[1]), b: q(comps[2]), a: q(comps[3]),
                                location: Int((stop.location * 10000).rounded()))
     }
+}
+
+/// APPEAR-COST D2: one NSAppearance resolve per (stops, appearance) per process. `DS3StretchSprite.key` runs on every
+/// body evaluation; before the cache each evaluation resolved every stop again (17-20 % of main-thread samples in a page open).
+@MainActor
+func ds3ResolvedStops(_ stops: [Gradient.Stop], dark: Bool) -> [DS3ResolvedStop] {
+    DS3SpriteCache.shared.resolvedStops(stops, dark: dark)
+}
+
+struct DS3StopsKey: Hashable {
+    let stops: [Gradient.Stop]
+    let dark: Bool
 }
 
 enum DS3SpriteContent {
@@ -46,6 +58,18 @@ struct DS3SpriteKey: Hashable {
 final class DS3SpriteCache {
     static let shared = DS3SpriteCache()
     private var images: [DS3SpriteKey: CGImage] = [:]
+    private var stops: [DS3StopsKey: [DS3ResolvedStop]] = [:]
+    /// Test hook: resolves performed (cache misses).
+    private(set) var resolveMisses = 0
+
+    func resolvedStops(_ s: [Gradient.Stop], dark: Bool) -> [DS3ResolvedStop] {
+        let k = DS3StopsKey(stops: s, dark: dark)
+        if let hit = stops[k] { return hit }
+        resolveMisses += 1
+        let r = ds3ResolveStopsUncached(s, dark: dark)
+        stops[k] = r
+        return r
+    }
 
     func image(for key: DS3SpriteKey, render: () -> CGImage?) -> CGImage? {
         if let hit = images[key] { return hit }
@@ -86,7 +110,7 @@ struct DS3StretchSprite<S: InsettableShape>: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
     @State private var measure: DS3SliceGeometry.Measure?
-    /// The bitmap is stored with the key it was rendered for, so a changed height or appearance never shows the old one.
+    /// The bitmap is stored with the key it was rendered for, so a changed height or appearance never shows the old one. Measured from the layout size (APPEAR-COST D1).
     @State private var sprite: (key: DS3SpriteKey, image: CGImage)?
 
     private var scale: CGFloat { displayScale }
@@ -127,9 +151,10 @@ struct DS3StretchSprite<S: InsettableShape>: View {
     private var live: some View { gradientView(stops) }
 
     var body: some View {
+        let key = self.key
         Color.clear
             .onGeometryChange(for: DS3SliceGeometry.Measure?.self,
-                              of: { g in slice.map { DS3SliceGeometry.measure($0, frame: g.frame(in: .global), scale: scale) } }) { measure = $0 }
+                              of: { g in slice.map { DS3SliceGeometry.measure($0, size: g.size, scale: scale) } }) { measure = $0 }
             .overlay(alignment: .top) {
                 if let key, let sprite, sprite.key == key, let slice {
                     let cap = DS3SliceGeometry.cap(slice, height: CGFloat(key.heightPx) / scale)

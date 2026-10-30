@@ -27,12 +27,14 @@ enum DS3SliceGeometry {
         let narrow: Bool
     }
 
-    /// Measure from the frame in window space: SwiftUI snaps the top and bottom edge of every frame to the pixel grid
-    /// separately, so a 106.6 px tall view at a half-pixel offset covers 106 rows, not 107. The sprite must be that tall.
-    static func measure(_ s: DS3SliceShape, frame: CGRect, scale: CGFloat) -> Measure {
+    /// Measure from the layout size, never from a window-space frame (APPEAR-COST D1): an ancestor `scaleEffect`/`offset`
+    /// (the page entrance) or a fractional scroll offset moves the window frame every frame and re-keyed the sprite each
+    /// time. The overlay that shows the sprite is `heightPx / scale` pt tall, an integer pixel height, so the bitmap is never
+    /// resampled; the <= 1 px difference to the view's own snapped rows lies in the transparent lower part of the rim.
+    static func measure(_ s: DS3SliceShape, size: CGSize, scale: CGFloat) -> Measure {
         Measure(
-            heightPx: max(0, Int((frame.maxY * scale).rounded()) - Int((frame.minY * scale).rounded())),
-            narrow: frame.height <= 0 || frame.width < referenceWidth(cap: cap(s, height: frame.height))
+            heightPx: max(0, Int((size.height * scale).rounded())),
+            narrow: size.height <= 0 || size.width < referenceWidth(cap: cap(s, height: size.height))
         )
     }
 
