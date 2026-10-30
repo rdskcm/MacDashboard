@@ -9,12 +9,15 @@ mark() { # mark t0|t1 [label]
 }
 
 # Run a helper (or sleep) in the background and wait on that PID only, so a TERM from gate.sh
-# stops the helper instead of waiting for it. Helper output is dropped; marks come from mark().
+# stops the helper instead of waiting for it. Helper stdout is dropped; its exit status is returned (scen-resize.sh uses it).
 H=""
-trap '[ -n "$H" ] && kill "$H" 2>/dev/null; exit 143' TERM INT
+ERRF=""   # a scenario may set this to a temp file; the trap removes it
+trap '[ -n "$H" ] && kill "$H" 2>/dev/null; [ -n "$ERRF" ] && rm -f "$ERRF"; exit 143' TERM INT
 runh() {
   "$@" >/dev/null 2>&1 &
   H=$!
   wait "$H"
+  local rc=$?
   H=""
+  return $rc
 }

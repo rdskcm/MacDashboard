@@ -18,6 +18,17 @@ extension SerialTests {
             let realHome = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? ""
             try #require(!realHome.isEmpty && NSHomeDirectory() != realHome,
                          "run through tools/visual/snapshots.sh (CFFIXED_USER_HOME bench home)")
+            let home = NSHomeDirectory()
+            try #require(home.range(of: #"^/Users/[^/]+/?$"#, options: .regularExpression) == nil,
+                         """
+                         bench home \(home) is an account's home folder; \
+                         snapshots.sh uses tools/visual/out/snapshot-home
+                         """)
+            try #require(!FileManager.default.fileExists(atPath: home + "/Library/Application Support/MacDashboard"),
+                         """
+                         bench home \(home) already holds MacDashboard user data; \
+                         refuse (Live constraint: user data is off-limits to tests)
+                         """)
             VisualFixture.forced = true
             defer { VisualFixture.forced = false }
             // D8: Settings panes render with AppSettings at their unset defaults.

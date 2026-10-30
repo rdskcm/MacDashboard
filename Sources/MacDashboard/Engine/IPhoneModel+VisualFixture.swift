@@ -1,5 +1,6 @@
 // Engine/IPhoneModel+VisualFixture.swift
-// IPHONE-DESIGN: fixed iPhone dataset for `-visualFixture` and tools/visual/content_states.swift.
+// IPHONE-DESIGN: fixed iPhone dataset for -visualFixture and the snapshot suite
+// (Tests/MacDashboardTests/ContentSnapshotTests.swift).
 // Memory only: never starts the transport, never saves the store. All values are invented.
 import Foundation
 

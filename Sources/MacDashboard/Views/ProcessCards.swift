@@ -19,7 +19,8 @@ private let processRowMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, durati
 
 // MARK: - Shared list card
 
-/// Visual fixture only (tools/visual/content_states.swift): one row shown expanded with a fixed detail.
+/// Visual fixture only (Tests/MacDashboardTests/ContentSnapshotTests.swift):
+/// one row shown expanded with a fixed detail.
 struct ProcessRowFixture {
     enum Phase { case open, confirm, quitting }
     let pid: Int32

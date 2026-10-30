@@ -175,7 +175,7 @@ while [ -n "$a" ] && [ "$a" -gt 1 ]; do
   ANCESTORS="$ANCESTORS$a "
   a="$(ps -o ppid= -p "$a" 2>/dev/null | tr -d ' ')"
 done
-for p in $(pgrep -f 'tools/perf/gate\.sh' 2>/dev/null); do
+for p in $(pgrep -f '^[^[:space:]]*bash ([^-].*/)?tools/perf/gate\.sh([[:space:]]|$)' 2>/dev/null); do
   case "$ANCESTORS" in *" $p "*) continue ;; esac
   [ "$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" = "$$" ] && continue
   refuse "another gate.sh is running (pid $p)"
@@ -379,11 +379,15 @@ route_report() {
   local waited=0 st=""
   until st="$(ax enabled main-report)"; [ "$st" = enabled ]; do
     waited=$((waited + 2))
+    [ "$st" = absent ] && [ "$waited" -ge 10 ] && { ax_miss "G5: main-report absent for 10 s (a baseline older than PERF-GATE-RETARGET? see README §2)"; return 1; }
     [ "$waited" -le 90 ] || { ax_miss "G5: main-report not enabled within 90 s (last answer: $st)"; return 1; }
     sleep 2
   done
   ax_press id main-report || return 1; sleep 2
-  [ "$(ax exists report-sheet)" = present ] || { ax_miss "G5: report-sheet absent after pressing main-report"; return 1; }
+  if [ "$(ax exists report-sheet)" != present ]; then
+    ax_reactivate id main-report; sleep 2
+    [ "$(ax exists report-sheet)" = present ] || { ax_miss "G5: report-sheet absent after pressing main-report (and after one reactivate)"; return 1; }
+  fi
   local fr fx fy fw fh; fr="$(ax_frame frame report-show-in-finder)" || return 1; read -r fx fy fw fh <<< "$fr"
   local dx=$((fx + fw / 2)) dy=$((fy + fh / 2)) cx=$((fx - 300))
   { [ "$cx" -ge 40 ] && [ "$dx" -le 990 ] && [ "$dy" -ge 29 ] && [ "$dy" -le 762 ]; } \
@@ -598,10 +602,10 @@ analyze_item() {   # item prefix buf -> 0 | 1 with ERR_WHY / ERR_DIAG set (expor
       # Window = the drv resize call only (s0..s1 marks); CPU-s = top mean % x wall / 100 (top samples at 1 Hz).
       local s0 s1
       s0="$(awk '$1=="s0" && NF==2 {print $2; exit}' "$prefix-drv.txt")"; s1="$(awk '$1=="s1" && NF==2 {print $2; exit}' "$prefix-drv.txt")"
-      { [ -n "$s0" ] && [ -n "$s1" ]; } || { ERR_WHY="G10: no s0/s1 mark (the sweep did not finish inside the recording)"; ERR_DIAG="$prefix-drv.txt"; return 1; }
+      { [ -n "$s0" ] && [ -n "$s1" ]; } || { ERR_WHY="G10: $(grep -m1 '^drv-error' "$prefix-drv.txt" || echo 'no s0/s1 mark (the sweep did not finish inside the recording)')"; ERR_DIAG="$prefix-drv.txt"; return 1; }
       az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$s0" "$s1" || { rm -f "$buf.top"; return 1; }
       awk -v a="$s0" -v b="$s1" '$1=="app_pct" {ap=$2} $1=="ws_pct" {wp=$2} END {
-        w=b-a; printf "sweep_wall_s %.2f\napp_cpu_s %.2f\nws_cpu_s %.2f\n", w, ap*w/100, wp*w/100 }' "$buf.top" >> "$buf"
+        w=b-a; printf "sweep_wall_s %.2f\n", w; if (ap != "") printf "app_cpu_s %.2f\n", ap*w/100; else print "app_cpu_s n/a"; if (wp != "") printf "ws_cpu_s %.2f\n", wp*w/100; else print "ws_cpu_s n/a" }' "$buf.top" >> "$buf"
       rm -f "$buf.top" ;;
     G7|GP-*)
       export_tables "$prefix" || return 1

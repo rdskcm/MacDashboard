@@ -1,7 +1,7 @@
 // Engine/VisualFixture.swift
 // VISUAL-COVERAGE: a pure, fixed dataset used both by the real app (via a launch
 // argument, `AppModel+VisualFixture.swift`) and by the offscreen content
-// render stage (`tools/visual/content_states.swift`), so `main-*` and every
+// render stage (`Tests/MacDashboardTests/ContentSnapshotTests.swift`), so `main-*` and every
 // `content-*` visual reference is built from the same deterministic input
 // instead of live machine state. No `Date()`, no random — only the user's
 // home-directory path (needed so home-relative paths look real).

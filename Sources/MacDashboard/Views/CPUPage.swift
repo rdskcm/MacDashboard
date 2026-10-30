@@ -50,7 +50,8 @@ struct CPUPage: View {
 
 // MARK: - Page bar
 
-/// Internal (not private): the visual fixture renders it (tools/visual/content_states.swift).
+/// Internal (not private): the visual fixture renders it
+/// (Tests/MacDashboardTests/ContentSnapshotTests.swift).
 @MainActor
 struct CPUPageBar: View {
     let model: AppModel

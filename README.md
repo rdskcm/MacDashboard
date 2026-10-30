@@ -241,7 +241,7 @@ quarantine flag along the way, clear it exactly as in the first-launch step abov
 - `Sources/MacDashboard/` — the app itself (SwiftUI, no external dependencies).
 - `Tests/MacDashboardTests/` — swift-testing suite: parser, assessment and engine tests (`swift test`, needs Xcode).
 - `Tests/Fixtures/` — captured command outputs the parser checks run against (see its README).
-- `tools/visual/run.sh` — visual baseline: captures the real app windows and compares them with reference screenshots (dev tool).
+- `tools/visual/` — visual baseline: `snapshots.sh` (offscreen states) and `smoke.sh` (real windows), compared with reference screenshots (dev tool).
 - `build_app.sh` — Apple Silicon (arm64) build + `.app` packaging + codesign (the local signing identity if present, otherwise ad-hoc).
 - `tools/signing/make-identity.sh` — one-time creation of that local signing identity.
 - `SPEC.md` — the original build-out brief. Part of it is still binding (data

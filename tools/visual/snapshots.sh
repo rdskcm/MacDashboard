@@ -7,16 +7,17 @@
 #   tools/visual/snapshots.sh --bless RUN_DIR [STATE ...]
 #   tools/visual/snapshots.sh -h
 #
-# Exit (run):   0 every state same | 2 any CHANGED, SIZE-CHANGED, NO-REF, ORPHAN-REF (contact-sheet.png written) |
-#               64 usage | 65 main display backing scale is not 2 | 70 build, test or runtime error.
-# Exit (bless): 0 blessed | 1 refused.
+# Exit (run):   0 every state same | 2 any CHANGED, SIZE-CHANGED, NO-REF, ORPHAN-REF, MANIFEST-ORPHAN
+#               (contact-sheet.png written when a state differs) | 64 usage |
+#               65 main display backing scale is not 2 | 70 build, test or runtime error.
+# Exit (bless): 0 blessed | 1 refused (incomplete results, unknown state, RENDER-FAILED state).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 REF_DIR="$ROOT/Tests/Snapshots"
 MANIFEST="$REF_DIR/manifest.txt"
 
-usage() { sed -n 2,12p "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n 2,13p "$0" | sed 's/^# \{0,1\}//'; }
 
 OUT=""
 BLESS_DIR=""
@@ -50,6 +51,10 @@ if [ "$MODE" = bless ]; then
   for st in ${BLESS_STATES[@]+"${BLESS_STATES[@]}"}; do
     if ! awk -F'\t' -v s="$st" 'NR>1 && $1==s{f=1} END{exit !f}' "$RES"; then
       echo "REFUSED: bless: state not found in results.tsv: $st" >&2; exit 1
+    fi
+    v="$(awk -F'\t' -v s="$st" 'NR>1 && $1==s{print $8}' "$RES")"
+    if [ "$v" = RENDER-FAILED ]; then
+      echo "REFUSED: bless: $st is RENDER-FAILED in results.tsv (no usable current/$st.png)" >&2; exit 1
     fi
   done
   INFO="$BLESS_DIR/build-info.txt"
@@ -117,6 +122,7 @@ XCODEBUILD_V="$(xcodebuild -version 2>/dev/null | head -1 || true)"
   echo "rule: channel_tolerance=24 max_changed_pixels=0"
 } > "$OUT/build-info.txt"
 
+# Two steps on purpose: a build failure exits 70 with build.log; the test step must compile nothing (--skip-build).
 if ! (cd "$ROOT" && swift build --build-tests) > "$OUT/build.log" 2>&1; then
   echo "ERROR: swift build --build-tests failed" >&2; tail -20 "$OUT/build.log" >&2; exit 70
 fi
@@ -143,17 +149,27 @@ fi
 count() { awk -F'\t' -v v="$1" 'NR>1 && $1 !~ /^#/ && $8==v{n++} END{print n+0}' "$OUT/results.tsv"; }
 SAME=$(count same); CHANGED=$(count CHANGED); SIZE=$(count SIZE-CHANGED); NOREF=$(count NO-REF); ORPHAN=$(count ORPHAN-REF)
 TOTAL=$(awk -F'\t' 'NR>1 && $1 !~ /^#/{n++} END{print n+0}' "$OUT/results.tsv")
+[ "$TOTAL" -gt 0 ] || { echo "ERROR: results.tsv has no state rows" >&2; exit 70; }
+# manifest rows without a state in this run (a renamed or removed state whose PNG is already gone)
+awk -F'\t' 'NR==FNR { if (FNR>1 && $1 !~ /^#/) seen[$1]=1; next } FNR>1 && $1 !~ /^#/ && !($1 in seen) { print $1 }' \
+  "$OUT/results.tsv" "$MANIFEST" > "$OUT/manifest-orphans.txt"
+MORPHAN=$(wc -l < "$OUT/manifest-orphans.txt" | tr -d ' ')
+while IFS= read -r st; do
+  echo "MANIFEST-ORPHAN: $st (in Tests/Snapshots/manifest.txt, not rendered by the suite)"
+done < "$OUT/manifest-orphans.txt"
 if [ "$rc" -ne 0 ] && [ "$SAME" -eq "$TOTAL" ]; then
   echo "ERROR: swift test failed (rc=$rc) although every state is same" >&2; tail -30 "$OUT/swift-test.log" >&2; exit 70
 fi
-if [ "$((TOTAL - SAME))" -gt 0 ]; then
-  { head -1 "$OUT/results.tsv"; awk -F'\t' 'NR>1 && $1 !~ /^#/ && $8!="same"' "$OUT/results.tsv"; } > "$OUT/sheet-results.tsv"
-  "$VBTOOL" sheet --results "$OUT/sheet-results.tsv" --ref "$REF_DIR" --norm "$OUT/current" --diff "$OUT/diff" \
-    --title "snapshots $(date '+%Y-%m-%d %H:%M') $GIT_COMMIT" --out "$OUT/contact-sheet.png" \
-    || { echo "ERROR: contact sheet failed" >&2; exit 70; }
-  echo "contact sheet: $OUT/contact-sheet.png"
-  echo "SNAPSHOTS: same=$SAME changed=$CHANGED size=$SIZE noref=$NOREF orphan=$ORPHAN run=$OUT"
+if [ "$((TOTAL - SAME + MORPHAN))" -gt 0 ]; then
+  if [ "$((TOTAL - SAME))" -gt 0 ]; then
+    { head -1 "$OUT/results.tsv"; awk -F'\t' 'NR>1 && $1 !~ /^#/ && $8!="same"' "$OUT/results.tsv"; } > "$OUT/sheet-results.tsv"
+    "$VBTOOL" sheet --results "$OUT/sheet-results.tsv" --ref "$REF_DIR" --norm "$OUT/current" --diff "$OUT/diff" \
+      --title "snapshots $(date '+%Y-%m-%d %H:%M') $GIT_COMMIT" --out "$OUT/contact-sheet.png" \
+      || { echo "ERROR: contact sheet failed" >&2; exit 70; }
+    echo "contact sheet: $OUT/contact-sheet.png"
+  fi
+  echo "SNAPSHOTS: same=$SAME changed=$CHANGED size=$SIZE noref=$NOREF orphan=$ORPHAN morphan=$MORPHAN run=$OUT"
   exit 2
 fi
-echo "SNAPSHOTS: same=$SAME changed=$CHANGED size=$SIZE noref=$NOREF orphan=$ORPHAN run=$OUT"
+echo "SNAPSHOTS: same=$SAME changed=$CHANGED size=$SIZE noref=$NOREF orphan=$ORPHAN morphan=$MORPHAN run=$OUT"
 exit 0

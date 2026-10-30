@@ -25,6 +25,8 @@ Verified against the tree on 2026-08-14 (branch `v2`). §1.6 and §2's output pa
 wrong and were corrected then; the historical sections were labelled rather than
 rewritten. §5's smartctl step and §9's codesign line were re-verified and corrected on
 2026-08-27 (V2-RELEASE-FIXWAVE).
+The scaffold class `DashboardModel` named below was split into `AppModel` and per-page controllers in ARCH-MODEL-SPLIT
+(2026-10); the historical sections keep the old name.
 
 ## 1. Goals & hard constraints
 
@@ -62,11 +64,11 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
    | # | Action | Call site | Privileges | Confirmed before running? |
    |---|---|---|---|---|
    | 1 | Empty the Trash | `Views/AdviceActionRunner.swift` (`NSAppleScript`, Finder) | user + TCC | yes — `Views/AdviceActionDispatch.swift:152` |
-   | 2 | Enable the Application Firewall | `Engine/DashboardModel.swift:681` (`socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:158-162` |
-   | 3 | Delete an orphaned system launchd plist | `Engine/DashboardModel.swift:801` (`/bin/rm -f`, bulk at `:907`) | admin | yes — inline ask→confirm, `Views/AutostartCard.swift:346`/`:395` |
-   | 4 | Delete an orphaned user launchd plist | `Engine/DashboardModel.swift:808` (`trashItem`, bulk at `:895`) | user | yes — same gate as 3 |
+   | 2 | Enable the Application Firewall | `Engine/SecurityController.swift:61` (`enableNow`; command string `SecurityPageModel.swift:79`, `socketfilterfw --setglobalstate on`) | admin | yes — `Views/AdviceActionDispatch.swift:207` (`L.adviceFirewallConfirmButton`) |
+   | 3 | Delete an orphaned system launchd plist | `Engine/StartupItemsController.swift:101` (`deleteOrphan`, privileged `launchctl bootout` + `rm`; bulk `deleteOrphans` :147) | admin | yes — inline `SectionConfirmPanel`, `Views/SystemPage.swift:365-384` (`confirm`; the delete calls are in `perform` :386-401) |
+   | 4 | Delete an orphaned user launchd plist | `Engine/StartupItemsController.swift:101` (`deleteOrphan`, `trashItem` :26; bulk :147) | user | yes — same gate as 3 |
    | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | yes — `Views/BrewUpgradeConfirm.swift:33`, opened from `Views/MaintenanceCard.swift:80` and `Views/AdviceActionDispatch.swift:60` |
-   | 6 | Install `smartmontools` via Homebrew | `Engine/DashboardModel.swift:590` | user | **no** — deliberate, see below |
+   | 6 | Install `smartmontools` via Homebrew | `Engine/SmartToolsController.swift:133` (`installNow`) | user | **no** — deliberate, see below |
    | 7 | Apply energy settings | `Views/EnergyCard.swift:363` (`pmset -b`/`-c`) | admin | yes — `Views/EnergyCard.swift:176` |
    | 8 | Download an iOS restore image (IPSW) | `Engine/IPSWDownloader.swift` | user (+ Files & Folders prompt for Downloads) | yes — UI step: size, destination, source |
 
@@ -84,7 +86,7 @@ rewritten. §5's smartctl step and §9's codesign line were re-verified and corr
    recorded here so it is not read as an oversight: it is a single unprivileged Homebrew package
    install behind a button already labelled «Установить smartmontools», it destroys nothing, and it
    has no set of changes worth enumerating in a dialog. Note that 3 is irreversible (a permanent
-   `rm`, not a move to the Trash — see the reasoning at `DashboardModel.swift:668-677`) and that 7
+   `rm`, not a move to the Trash — see the doc comment of `StartupItemsController.deleteOrphan`, `Engine/StartupItemsController.swift:96-100`) and that 7
    now escalates privileges only after its confirmation.
 
    Row 8 (block IPHONE-IPSW, 2026-10) ships Engine-only first; its confirmation dialog comes

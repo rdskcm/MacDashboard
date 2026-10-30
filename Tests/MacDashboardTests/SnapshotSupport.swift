@@ -96,6 +96,7 @@ struct WindowCaptureError: Error, CustomStringConvertible {
 /// (SNAPSHOT-DARK-OFFSCREEN, findings C6). It renders a window that was never ordered in exactly like the real
 /// on-screen window and shows nothing on screen. Throws instead of returning a blank, partial or wrong-size image.
 /// Copy in tools/harness/HarnessKit.swift (the harness cannot compile test-target files); keep the two in step.
+/// The harness copy keeps the plain waitUntilExit (harness not rebuilt in INTERNAL-LEFTOVERS).
 func captureWindowPNG(windowNumber: Int, pixelWidth: Int, pixelHeight: Int) throws -> Data {
     guard CGPreflightScreenCaptureAccess() else {
         throw WindowCaptureError(description: "Screen Recording permission is missing for the app that started this run "
@@ -110,10 +111,15 @@ func captureWindowPNG(windowNumber: Int, pixelWidth: Int, pixelHeight: Int) thro
     let output = Pipe()
     proc.standardOutput = output
     proc.standardError = output
+    let done = DispatchSemaphore(value: 0); proc.terminationHandler = { _ in done.signal() }
     do { try proc.run() } catch {
         throw WindowCaptureError(description: "cannot launch /usr/sbin/screencapture: \(error)")
     }
-    proc.waitUntilExit()
+    if done.wait(timeout: .now() + 20) == .timedOut {
+        proc.terminate(); _ = done.wait(timeout: .now() + 2)
+        if proc.isRunning { kill(proc.processIdentifier, SIGKILL) }
+        throw WindowCaptureError(description: "screencapture -l \(windowNumber) did not exit within 20 s")
+    }
     let toolText = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         .trimmingCharacters(in: .whitespacesAndNewlines)
     guard proc.terminationStatus == 0 else {
@@ -132,8 +138,8 @@ func captureWindowPNG(windowNumber: Int, pixelWidth: Int, pixelHeight: Int) thro
     return png
 }
 
-/// True when every pixel of `image` has the same RGBA value, i.e. a blank capture. A real state differs within its
-/// first rows (text after 20 pt padding), so the scan stops early; only a blank image is scanned whole.
+/// True when every pixel of `image` has the same RGBA value, i.e. a blank capture. The whole image is drawn into an
+/// sRGB buffer first; the scan then stops at the first differing pixel, so only a blank image is scanned whole.
 func cgImageIsUniform(_ image: CGImage) -> Bool {
     let w = image.width, h = image.height
     guard w > 0, h > 0 else { return true }
@@ -152,8 +158,9 @@ func cgImageIsUniform(_ image: CGImage) -> Bool {
 }
 
 /// One snapshot run: renders each state to <out>/current/<state>.png and, in `finish()`, writes <out>/rendered.tsv
-/// (state, ok | RENDER-FAILED) and <out>/timing.txt. The comparison with the references is done by
-/// `vbtool snap-compare` (built with -O by tools/visual/snapshots.sh): the unoptimised test build is ~50x slower per pixel.
+/// (state, ok | RENDER-FAILED) and <out>/timing.txt; current/ is removed when the run stopped on a failure.
+/// The comparison with the references is done by `vbtool snap-compare` (built with -O by tools/visual/snapshots.sh):
+/// the unoptimised test build is ~50x slower per pixel.
 @MainActor
 final class SnapshotRun {
     let out: URL
@@ -190,6 +197,7 @@ final class SnapshotRun {
 
     func finish() throws {
         if let stopReason {
+            try? FileManager.default.removeItem(at: out.appendingPathComponent("current"))   // D11: no half-set of PNGs
             throw WindowCaptureError(description: "snapshot run stopped at \(stopReason); rendered.tsv not written")
         }
         let body = (rows + ["# complete \(rows.count) states"]).joined(separator: "\n") + "\n"

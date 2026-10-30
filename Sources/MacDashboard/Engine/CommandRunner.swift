@@ -154,7 +154,7 @@ struct CommandOutcome: Equatable, Sendable {
         return t
     }
 
-    /// Pure (Checks-tested). The wait(2) status decides the outcome, unless OUR kill is what ended
+    /// Pure (unit-tested). The wait(2) status decides the outcome, unless OUR kill is what ended
     /// the run: a kill reason counts only when the leader died of SIGKILL, its status is unknown,
     /// or reading was stopped with output still unread (`outputCut`). A leader that exited on its
     /// own before our kill landed is reported by its real status (RUNNER-HANG C-M2c).

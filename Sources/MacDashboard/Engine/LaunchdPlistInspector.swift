@@ -26,8 +26,8 @@ enum PlistDeleteOutcome: Equatable {
 }
 
 /// The Автозагрузка card collapses an orphan row the instant the user confirms,
-/// before the Trash/`rm` has run (deliberate — see `OrphanRow.onConfirm`). This
-/// is the counter-signal: paths whose delete did NOT happen, so the card can put
+/// before the Trash/`rm` has run (deliberate — see `SystemStartupCard`'s inline confirm in Views/SystemPage.swift).
+/// This is the counter-signal: paths whose delete did NOT happen, so the card can put
 /// exactly those rows back. ACCUMULATING: `StartupItemsController` unions new paths in
 /// and the card drains them via `StartupItemsController.acknowledgeRestore(_:)`, so two deletes
 /// finishing inside one SwiftUI update cycle cannot lose each other's paths.

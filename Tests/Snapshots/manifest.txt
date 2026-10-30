@@ -10,7 +10,6 @@ content-cpu-bars-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-processes-cpu-open-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-processes-cpu-confirm-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-processes-cpu-quitting-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
-content-claude-backup-dark	2026-10-19	27.0.1	Xcode 27.1	c7e6d75+host
 content-history-disk-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-history-battery-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-history-cycles-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
@@ -42,7 +41,6 @@ content-cpu-bars-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-processes-cpu-open-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-processes-cpu-confirm-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-processes-cpu-quitting-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
-content-claude-backup-light	2026-10-19	27.0.1	Xcode 27.1	c7e6d75+host
 content-history-disk-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-history-battery-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-history-cycles-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty

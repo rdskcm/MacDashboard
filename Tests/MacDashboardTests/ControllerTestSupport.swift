@@ -61,6 +61,7 @@ import Testing
 
 /// Yields until `cond` holds (bounded; every fake completes within a few yields). Unstructured Tasks spawned on
 /// the main actor do not run until the test suspends — call this before asserting on their side effects.
-@MainActor func settle(_ cond: () -> Bool) async {
+@MainActor func settle(_ cond: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
     for _ in 0..<1000 where !cond() { await Task.yield() }
+    #expect(cond(), "settle: condition still false after 1000 yields", sourceLocation: sourceLocation)
 }

@@ -1,6 +1,8 @@
 // Engine/AppSettings.swift
-// Non-language app settings (interval, wake-holder ignore list, hidden crash reports, backup-stale days, low-space %, notify categories, appearance, orbs,
-// keep-archives, iPhone auto-read, archive folder, snapshot time, claude log path). Foundation + Observation only — covered by Tests/MacDashboardTests.
+// Non-language app settings (interval, wake-holder ignore list, hidden crash reports, backup-stale days, low-space %,
+// notify categories, appearance, orbs, keep-archives, iPhone auto-read, archive folder, snapshot time,
+// claude log path).
+// Foundation + Observation only — covered by Tests/MacDashboardTests.
 // `init(defaults:)` is injectable; the four assessment inputs live in `AssessmentSettings` (ARCH-SETTINGS-PATH).
 import Foundation
 import Observation
