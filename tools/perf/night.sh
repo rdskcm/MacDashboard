@@ -18,7 +18,8 @@
 #   tools/perf/night.sh --install | --uninstall  add / remove the user LaunchAgent com.rdskcm.macdashboard.night
 #   tools/perf/night.sh --restore-brightness     put back display / keyboard values a crashed run left saved
 # Test seams: NIGHT_OUT=<absolute dir> replaces tools/perf/out/night.noindex (state, queue, builds, reports) in every mode
-# but --install/--uninstall; NIGHT_CLAUDE_PROJECTS with --dry-run or NIGHT_OUT; NIGHT_HOUR, NIGHT_DATE with --check --dry-run.
+# but --install/--uninstall; NIGHT_CLAUDE_PROJECTS with --dry-run or NIGHT_OUT; NIGHT_HOUR, NIGHT_DATE with --check --dry-run;
+# NIGHT_FOREIGN_ONLY=<pid> with NIGHT_OUT (the close step acts on that MacDashboard process only).
 # Exit: 0 (also for skips — the reason is in the report) | 64 usage | 70 runtime error
 set -uo pipefail
 
@@ -98,6 +99,7 @@ WORK_QUIET_MIN=15
 CLAUDE_PROJECTS="$HOME/.claude/projects"
 { [ "$DRY" = 1 ] || [ -n "${NIGHT_OUT:-}" ]; } && [ -n "${NIGHT_CLAUDE_PROJECTS:-}" ] && CLAUDE_PROJECTS="$NIGHT_CLAUDE_PROJECTS"
 if [ "$DRY" = 1 ] && [ -n "${NIGHT_DATE:-}" ]; then [[ "$NIGHT_DATE" =~ ^[0-9]{8}$ ]] || fatal 64 "NIGHT_DATE must be YYYYMMDD"; DATE="$NIGHT_DATE"; fi
+FOREIGN_ONLY=""; [ -z "${NIGHT_OUT:-}" ] || FOREIGN_ONLY="${NIGHT_FOREIGN_ONLY:-}"   # test seam: close only that pid
 claude_working() {   # 0 + one-line reason on stdout when a transcript was written in the window; 1 when quiet or no folder
   local list n last t f
   list="$(find "$CLAUDE_PROJECTS" -type f -name '*.jsonl' -mmin -"$WORK_QUIET_MIN" -exec stat -f '%m %N' {} + 2>/dev/null | sort -n)"
@@ -127,10 +129,14 @@ brightness_bin() {
   return 0
 }
 REPORTED=0
-write_report() {   # date line... -> reports/<date>.md; latest.md only when no later report exists
-  local d="$1"; shift
-  printf '%s\n' "$@" > "$NIGHT/reports/$d.md"
-  [ "$(ls -1 "$NIGHT/reports" | grep -E '^[0-9]{8}\.md$' | sort | tail -1)" = "$d.md" ] && cp "$NIGHT/reports/$d.md" "$NIGHT/latest.md"
+write_report() {   # date line... -> reports/<date>.md, or <date>-2.md, -3 … when that date already has a report (a second
+  # run the same date never overwrites the first, GATE-AX-MISS); latest.md = this report unless a later date has one
+  local d="$1" f n=2 newest; shift
+  f="$NIGHT/reports/$d.md"
+  while [ -e "$f" ]; do f="$NIGHT/reports/$d-$n.md"; n=$((n + 1)); done
+  printf '%s\n' "$@" > "$f"
+  newest="$(ls -1 "$NIGHT/reports" | grep -E '^[0-9]{8}(-[0-9]+)?\.md$' | cut -c1-8 | sort | tail -1)"
+  [ "$newest" = "$d" ] && cp "$f" "$NIGHT/latest.md"
   REPORTED=1
 }
 log() { [ "$DRY" = 1 ] || echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$NIGHT/agent.log"; }
@@ -341,6 +347,7 @@ NIGHT_VERDICT=""   # only for a whole-night outcome (SKIPPED / ERROR); otherwise
 GATE_VERDICT=""; GATE_LINES=(); JOB_LINES=(); NOTES=(); REP=()
 NDONE=0; NFAILED=0; NSTOPPED=0; NINT=0; NNOT=0
 JPID=""; JF=""; JOUT=""; JSTART=""; JRC=""; JSTOPPED=""; JLEFT=""
+CLOSE_LINES=(); CLOSE_WHY=""
 DISP_LINE="display: not attempted"; KBD_LINE="keyboard: not attempted"
 JOBS=1; STOP_HM="09:00"                                   # D12: a hand run runs jobs only with --stop
 if [ "$NOW" = 1 ]; then if [ -n "$STOP" ]; then STOP_HM="$STOP"; else JOBS=0; fi; fi
@@ -348,6 +355,22 @@ STOP_EPOCH="$(date -j -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 [ "$STOP_EPOCH" -gt "$START_EPOCH" ] || STOP_EPOCH="$(date -j -v+1d -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 SOFT_HM="$(date -r $((STOP_EPOCH - 900)) +%H:%M)"        # D7: STOP_AT for self-stopping jobs
 
+# GATE-AX-MISS: every MacDashboard process is closed before the gate and before each job (tools/perf/foreign-copies.sh:
+# copies SIGTERM then SIGKILL, the installed app by a polite AppleScript quit, never killed).
+close_copies() {   # what -> 0 nothing left | 1 some left or the close failed (CLOSE_WHY); CLOSE_LINES = report lines, empty when none was found
+  local out rc l
+  CLOSE_LINES=(); CLOSE_WHY=""
+  out="$("$PERF/foreign-copies.sh" close ${FOREIGN_ONLY:+--only "$FOREIGN_ONLY"} 2>&1)"; rc=$?
+  if [ -n "$out" ]; then
+    CLOSE_LINES+=("MacDashboard processes before $1 (found: pid ppid started command):")
+    while IFS= read -r l; do CLOSE_LINES+=("    | $l"); done <<< "$out"
+  fi
+  [ "$rc" = 0 ] && return 0
+  l="$(sed -n 's/^left: //p' <<< "$out" | paste -sd ';' - | sed 's/;/; /g')"
+  if [ -n "$l" ]; then CLOSE_WHY="MacDashboard process(es) still running after the close: $l"
+  else CLOSE_WHY="closing MacDashboard processes failed (foreign-copies.sh exit $rc: $(tail -1 <<< "$out"))"; fi
+  return 1
+}
 stop_job() {   # reason grace -> TERM the job's process group, KILL after grace; no-op when no job runs
   [ -n "$JPID" ] || return 0
   local t=0 how="had already exited"
@@ -393,6 +416,10 @@ run_jobs() {   # D4-D10: queue order, fit check, re-checks, one at a time
       elif ! power_ok; then halt="on battery or Low Power Mode on"; why="$halt"
       elif ! unlocked; then halt="screen locked"; why="$halt"; fi
     fi
+    if [ -z "$why" ]; then
+      close_copies "job #$id $name" || why="$CLOSE_WHY"
+      [ "${#CLOSE_LINES[@]}" = 0 ] || JOB_LINES+=("${CLOSE_LINES[@]}")
+    fi
     if [ -n "$why" ]; then
       NNOT=$((NNOT + 1)); JOB_LINES+=("- #$id $name: NOT STARTED — $why; stays queued")
       sed -i '' '/^last: /d' "$f"; echo "last: $DATE not started, $why" >> "$f"
@@ -427,7 +454,7 @@ run_jobs() {   # D4-D10: queue order, fit check, re-checks, one at a time
 # is rebuilt, and such a directory is never a baseline and is removed by the bookkeeping prune.
 night_built() { [ -f "$1/build.ok" ] && [ -d "$1/MacDashboardBench.app" ]; }
 run_gate() {
-  local OFFLINE="" SHA BASE="" BASE_SHA="" GOUT GRC GLINE NOISY NFAILG NERR PRUNE_OK PRUNE_NOTE="" VERDICT IDLE d l
+  local OFFLINE="" SHA BASE="" BASE_SHA="" GOUT GRC GLINE NOISY NFAILG NERR PRUNE_OK PRUNE_NOTE="" VERDICT IDLE d l crc
   # 5. candidate
   GIT_TERMINAL_PROMPT=0 git -C "$ROOT" -c core.sshCommand="ssh -o BatchMode=yes" fetch --quiet origin main >/dev/null 2>&1 || OFFLINE="offline: local origin/main"
   SHA="$(git -C "$ROOT" rev-parse --short=10 origin/main)" || { GATE_VERDICT="ERROR — cannot resolve origin/main"; return; }
@@ -456,10 +483,15 @@ run_gate() {
     BASE="$d/MacDashboardBench.app"; BASE_SHA="$(basename "$d")"; break
   done < <(ls -1dt "$NIGHT"/builds/*/ 2>/dev/null)
 
+  # 6b. MacDashboard processes (GATE-AX-MISS): closed before the gate; one that survives skips it (gate.sh would refuse)
+  close_copies "the gate"; crc=$?
+  [ "${#CLOSE_LINES[@]}" = 0 ] || GATE_LINES+=("${CLOSE_LINES[@]}")
+  [ "$crc" = 0 ] || { GATE_VERDICT="SKIPPED — $CLOSE_WHY — main $SHA"; return; }
+
   # 7. gate
   GOUT="$PERF/out/night-$DATE"
   [ ! -e "$GOUT" ] || GOUT="$GOUT-$(date +%H%M%S)"
-  "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MacDashboardBench.app" ${BASE:+--baseline "$BASE"} \
+  env -u GATE_TEST_ALLOW_FOREIGN "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MacDashboardBench.app" ${BASE:+--baseline "$BASE"} \
     --scenarios "${LIST:-all}" --runs "${N:-3}" --out "$GOUT" > "$NIGHT/runs/$DATE/gate.out" 2>&1
   GRC=$?
   GLINE="$(grep '^GATE:' "$NIGHT/runs/$DATE/gate.out" | tail -1)"
@@ -495,6 +527,7 @@ run_gate() {
     1) if [ "${NFAILG:-0}" -gt 0 ]; then VERDICT="FAIL"; else VERDICT="ERROR (gate exit 1 without a measured FAIL: shell error in gate.sh?)"; fi ;;
     3) VERDICT="INVALID" ;;
     4) VERDICT="DEFAULTS-CHANGED" ;;
+    65) VERDICT="SKIPPED — gate refused to start: $(grep '^gate: precondition refused: ' "$NIGHT/runs/$DATE/gate.out" | tail -1 | sed 's/^gate: precondition refused: //')" ;;
     5) VERDICT="ERROR in ${NERR:-?} scenario(s)"
        if [ "${NFAILG:-0}" -gt 0 ]; then VERDICT="$VERDICT, $NFAILG FAIL"; fi ;;
     *) VERDICT="ERROR (exit $GRC: $(grep -v '^GATE:' "$NIGHT/runs/$DATE/gate.out" | tail -1))" ;;

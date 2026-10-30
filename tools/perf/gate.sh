@@ -20,6 +20,8 @@
 #       retry, or a trace or analysis step of one run failed; the other scenarios ran and are reported) | 64 usage |
 #       65 precondition refused | 70 runtime error (setup, app launch or window pin, fixture, final verdict) or a shell error (exit 1 before the verdict is reported as 70).
 #       When several apply: 3 over 4 over 5 over 1.
+# Preconditions refuse (65) while any MacDashboard process runs that the gate did not start (tools/perf/foreign-copies.sh
+# list; GATE-AX-MISS). GATE_TEST_ALLOW_FOREIGN=1 runs beside them instead — for the GATE-AX-MISS verification only.
 #       Last line: GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1> error=<e>
 # Data safety: runs bench copies (bundle id com.rdskcm.mac-dashboard.bench); synthetic fixtures only; never touches ~/Library/Application Support/MacDashboard;
 # kills only the PIDs it started (never by name); never writes or restores the defaults domain.
@@ -164,9 +166,6 @@ SCREEN="$(osascript -l JavaScript -e "ObjC.import('AppKit'); var f = \$.NSScreen
 read -r SW SH <<< "$SCREEN"
 if [ "${SW:-0}" -lt 1280 ] || [ "${SH:-0}" -lt 800 ]; then refuse "main display is ${SW}x${SH} pt, need at least 1280x800"; fi
 
-AX_ENABLED="$(osascript -e 'tell application "System Events" to get UI elements enabled' 2>/dev/null || echo false)"
-[ "$AX_ENABLED" = "true" ] || refuse "Accessibility is not enabled for the terminal app (System Events refuses UI scripting)"
-
 xcrun xctrace version >/dev/null 2>&1 || refuse "xcrun xctrace version failed"
 
 # no other gate.sh: ignore this shell, its children and its ancestors (the wrapper that started it)
@@ -181,6 +180,20 @@ for p in $(pgrep -f 'tools/perf/gate\.sh' 2>/dev/null); do
   [ "$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" = "$$" ] && continue
   refuse "another gate.sh is running (pid $p)"
 done
+
+# no MacDashboard process the gate did not start (GATE-AX-MISS): on 2026-10-30 a leftover bench copy of another session
+# took the gate's presses, and any copy loads the CPU/GPU being measured. The gate never closes one (night.sh does).
+FOREIGN="$("$PERF/foreign-copies.sh" list)" || fatal 70 "tools/perf/foreign-copies.sh list failed"
+FOREIGN_NOTE=""
+if [ -n "$FOREIGN" ]; then
+  FOREIGN_ONE="$(paste -sd ';' - <<< "$FOREIGN" | sed 's/;/; /g')"
+  if [ "${GATE_TEST_ALLOW_FOREIGN:-0}" = 1 ]; then
+    FOREIGN_NOTE="TEST ONLY (GATE_TEST_ALLOW_FOREIGN=1): running beside MacDashboard process(es) the gate did not start (pid ppid started command): $FOREIGN_ONE"
+    echo "gate: $FOREIGN_NOTE" >&2
+  else
+    refuse "MacDashboard process(es) the gate did not start are running (pid ppid started command): $FOREIGN_ONE — quit them and run again (the gate never closes them; night.sh does)"
+  fi
+fi
 
 mkdir -p "$OUT" || fatal 70 "cannot create $OUT"
 STARTED=1
@@ -197,15 +210,17 @@ for f in summary.tsv report.md runs.tsv; do   # a reused --out keeps the previou
   [ -f "$OUT/$f" ] && mv "$OUT/$f" "$OUT/${f%.*}-$(date +%H%M%S).${f##*.}"
 done
 : > "$OUT/runs.tsv"; : > "$OUT/invalid.log"; : > "$OUT/gate.log"; : > "$OUT/errors.tsv"; : > "$OUT/error-runs.tsv"
+[ -z "$FOREIGN_NOTE" ] || log "$FOREIGN_NOTE"
 "$PERF/power.sh" before "$OUT/power.log" "gate start" || refuse "power: need AC power and Low Power Mode off ($(tail -1 "$OUT/power.log"))"
 
 # ---------------------------------------------------------------- helpers (compiled fresh every run)
 BIN="$OUT/.bin"
 mkdir -p "$BIN"
-for h in drv hold; do
+for h in drv hold ax; do
   swiftc -O "$PERF/$h.swift" -o "$BIN/$h" -module-cache-path "$BIN/modcache" >"$BIN/$h.build.log" 2>&1 \
     || fatal 70 "swiftc failed for $h.swift (see $BIN/$h.build.log)"
 done
+[ "$("$BIN/ax" 0 trusted 2>&1)" = trusted ] || refuse "Accessibility is not enabled for the terminal app (AXIsProcessTrusted is false)"
 export BIN
 
 # ---------------------------------------------------------------- defaults snapshot (D18, read-only)
@@ -217,13 +232,14 @@ now() { perl -MTime::HiRes=time -e 'printf "%.3f\n", time'; }
 mark_now() { perl -MTime::HiRes=time -e 'printf "%s %.3f\n", $ARGV[0], time' "$1" >> "$2"; }
 mark_val() { awk -v k="$1" '$1==k && NF==2 {print $2; exit}' "$2"; }   # first unlabelled mark of kind k
 
-ax() { osascript "$PERF/ui.applescript" "$PID" "$@" 2>&1; }
-# AX misses (S6). The one retry after re-activating the app is ROBUSTNESS, not a cause fix: on the first night
-# (2026-10-20) this app's AX tree listed 6 of 8 Home tiles while all 8 are drawn (cause open). A second miss writes
-# diagnostics (ax_miss) and returns 1; attempt() then marks the scenario ERROR and the gate goes on.
+ax() { "$BIN/ax" "$PID" "$@" 2>&1; }   # native AX by pid (ax.swift); the kinds and answers of the old AppleScript helper
+# AX misses (S6). The one retry after re-activating the app is robustness. The 2026-10-20 and 2026-10-30 misses had a
+# cause (GATE-AX-MISS): the AppleScript process lookup by unix id returned another MacDashboard process's
+# window contents; the helper is now native AX by pid and the gate refuses to start beside another MacDashboard process.
+# A second miss writes diagnostics (ax_miss) and returns 1; attempt() then marks the scenario ERROR and the gate goes on.
 # Never a coordinate fallback. The helpers log to stderr: ax_frame runs inside $(...), whose stdout is the result.
 ax_reactivate() {   # kind value: frontmost again; a Home tile also gets a fresh Home press
-  osascript -e 'tell application "System Events" to set frontmost of (first process whose unix id is '"$PID"') to true' >/dev/null 2>&1 || true
+  ax front >/dev/null
   sleep 1
   if [ "$1" = id ] && [[ "$2" == home-tile-* ]]; then
     log "re-pressing main-mode-mac before the retry of '$2'" >&2
@@ -241,7 +257,8 @@ ax_miss() {   # label -> $CUR_PREFIX-axdiag/ {miss.txt ax-dump.txt winfo.txt scr
   {
     echo "time: $(date '+%Y-%m-%d %H:%M:%S')"
     echo "app pid $PID alive: $(kill -0 "$PID" 2>/dev/null && echo yes || echo no)"
-    echo "frontmost pid: $(osascript -e 'tell application "System Events" to get unix id of first process whose frontmost is true' 2>&1)"
+    echo "frontmost pid: $(ax focused)"
+    echo "MacDashboard processes (pid ppid started command):"; "$PERF/foreign-copies.sh" list 2>&1 | sed 's/^/  /'
     if [ -x "$b" ]; then echo "brightness: $("$b" get 2>&1)"; else echo "brightness: n/a (no helper at $b)"; fi
     echo "session locked: $(ioreg -n Root -d1 | grep -q '"IOConsoleLocked" *= *Yes' && echo yes || echo no)"
     echo "HID idle s: $(ioreg -c IOHIDSystem -d 4 | awk '/"HIDIdleTime"/ {print int($NF/1000000000); exit}')"
@@ -263,9 +280,13 @@ ax_press() {   # kind value -> 0 pressed | 1 missed twice (diagnostics written)
   return 1
 }
 
-pin_window() {
+pin_window() {   # 0 pinned | 1 AX window frame != CG window frame of $PID (diagnostics written, run ERROR) | other failures exit 70
   local out; out="$(ax pin)"
-  [ "$out" = "pinned" ] || fatal 70 "window pin failed: $out"
+  case "$out" in
+    pinned) ;;
+    MISMATCH*) ax_miss "pin: the AX window of pid $PID is not its on-screen window ($out)"; return 1 ;;
+    *) fatal 70 "window pin failed: $out" ;;
+  esac
   sleep 1
   local frame; frame="$("$BIN/drv" winfo "$PID" | python3 -I -c '
 import re, sys
@@ -279,7 +300,7 @@ print(" ".join(t.split())); sys.exit(1)')" || fatal 70 "window frame is not 1000
 
 is_frame() { [[ "$1" =~ ^-?[0-9]+\ -?[0-9]+\ [0-9]+\ [0-9]+$ ]]; }
 ax_frame() {   # kind value -> "x y w h" (global points, top-left origin) | 1 after a miss and one retry (diagnostics written)
-  # kind: frame = element by AXIdentifier (ui.applescript)
+  # kind: frame = element by AXIdentifier (ax.swift)
   local out; out="$(ax "$1" "$2")"
   if ! is_frame "$out"; then
     log "AX $1 missed for '$2' (got: $out); re-activating, one retry" >&2
@@ -312,7 +333,7 @@ probe_scroll() {   # buf tag -> 0 (for S_SCROLL items "scrollable 1|0" appended 
 
 park_pointer() { "$BIN/hold" 1100 500 0.4 >/dev/null 2>&1; }   # drv move with 0 s is a no-op
 
-launch_app() {   # app tag -> PID
+launch_app() {   # app tag -> PID; 1 when the pin check failed (diagnostics written)
   defaults delete "$BENCH_ID" >/dev/null 2>&1 || true
   rm -rf "$HOME/Library/Saved Application State/$BENCH_ID.savedState"
   CFFIXED_USER_HOME="$HOMEDIR" "$1/Contents/MacOS/MacDashboard" -appLanguage en -AppleLanguages "(en)" -ApplePersistenceIgnoreState YES >"$OUT/$2-app.log" 2>&1 &
@@ -320,9 +341,9 @@ launch_app() {   # app tag -> PID
   track "$PID"; LS_DIRTY=1
   sleep 7
   kill -0 "$PID" 2>/dev/null || fatal 70 "app exited at launch (see $OUT/$2-app.log)"
-  osascript -e 'tell application "System Events" to set frontmost of (first process whose unix id is '"$PID"') to true' >/dev/null 2>&1 || true
+  local fr; fr="$(ax front)"; [ "$fr" = front ] || log "warning: pid $PID not frontmost after launch ($fr)"
   sleep 1
-  pin_window
+  pin_window || return 1
 }
 
 stop_app() {
@@ -447,7 +468,11 @@ attempt() {
     || fatal 70 "mkfixture failed (see $prefix-fixture.log)"
 
   define_item "$item"
-  launch_app "$app" "$tag"
+  if ! launch_app "$app" "$tag"; then   # GATE-AX-MISS: the pinned AX window is not the pid's on-screen window -> ERROR
+    stop_app
+    local why; why="$(head -1 "$prefix-axdiag/miss.txt" 2>/dev/null)"
+    run_error "$item" "$tag" "$prefix" "${why:-window pin check failed}" "$prefix-axdiag"; return 2
+  fi
   if ! do_route || ! probe_scroll "$buf" "$tag"; then   # S6: an AX element still missing after one retry -> this scenario is ERROR, the gate goes on
     stop_app
     local why; why="$(head -1 "$prefix-axdiag/miss.txt" 2>/dev/null)"
