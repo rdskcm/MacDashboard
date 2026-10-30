@@ -19,36 +19,36 @@ struct BatteryPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     BatteryNowCard(model: model, narrow: narrow)
-                        .id(CardID.batnow)
                         .sectionFocusPulse(pulse == .batnow)
-                        .ds3Appear(delay: 0.08)
+                        .ds3HostedEntrance(delay: 0.08)
+                        .id(CardID.batnow)
                     BatteryHealthCard(model: model, narrow: narrow)
-                        .id(CardID.bathero)
                         .sectionFocusPulse(pulse == .bathero)
-                        .ds3Appear(delay: 0.14)
+                        .ds3HostedEntrance(delay: 0.14)
+                        .id(CardID.bathero)
                     BatteryChargingCard(model: model)
-                        .id(CardID.batchg)
                         .sectionFocusPulse(pulse == .batchg)
-                        .ds3Appear(delay: 0.20)
+                        .ds3HostedEntrance(delay: 0.20)
+                        .id(CardID.batchg)
                     BatteryLifetimeCard(model: model)
-                        .id(CardID.batlife)
                         .sectionFocusPulse(pulse == .batlife)
-                        .ds3Appear(delay: 0.26)
+                        .ds3HostedEntrance(delay: 0.26)
+                        .id(CardID.batlife)
                     BatteryPassportCard(model: model)
-                        .id(CardID.batid)
                         .sectionFocusPulse(pulse == .batid)
-                        .ds3Appear(delay: 0.32)
+                        .ds3HostedEntrance(delay: 0.32)
+                        .id(CardID.batid)
                     BatteryHistoryCard(model: model, router: router)
-                        .id(CardID.bathist)
                         .sectionFocusPulse(pulse == .bathist)
-                        .ds3Appear(delay: 0.38)
+                        .ds3HostedEntrance(delay: 0.38)
+                        .id(CardID.bathist)
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { BatteryPageBar(model: model, onBack: { _ = router.back() }) }
+            .safeAreaInset(edge: .top, spacing: 0) { BatteryPageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Now is already on top) and pulse it.
                 let d = router.destination
@@ -60,7 +60,6 @@ struct BatteryPage: View {
             }
             .task { await model.runBatteryLoop() }
         }
-        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
     }
 }
 

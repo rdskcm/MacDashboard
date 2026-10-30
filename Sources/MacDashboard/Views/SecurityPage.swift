@@ -20,24 +20,24 @@ struct SecurityPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     SecurityProtectionCard(model: model, narrow: narrow)
-                        .id(CardID.protect)
                         .sectionFocusPulse(pulse == .protect)
-                        .ds3Appear(delay: 0.08)
+                        .ds3HostedEntrance(delay: 0.08)
+                        .id(CardID.protect)
                     SecurityUpdatesCard(model: model)
-                        .id(CardID.updates)
                         .sectionFocusPulse(pulse == .updates)
-                        .ds3Appear(delay: 0.14)
+                        .ds3HostedEntrance(delay: 0.14)
+                        .id(CardID.updates)
                     SecurityCrashesCard(model: model, onConfirmShown: { router.isInlineConfirmOpen = $0 })
-                        .id(CardID.crashes)
                         .sectionFocusPulse(pulse == .crashes)
-                        .ds3Appear(delay: 0.20)
+                        .ds3HostedEntrance(delay: 0.20)
+                        .id(CardID.crashes)
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { SecurityPageBar(model: model, onBack: { _ = router.back() }) }
+            .safeAreaInset(edge: .top, spacing: 0) { SecurityPageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Protection is already on top) and pulse it.
                 let d = router.destination
@@ -48,7 +48,6 @@ struct SecurityPage: View {
                 pulse = nil
             }
         }
-        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
         .onDisappear { router.isInlineConfirmOpen = false }
     }
 }

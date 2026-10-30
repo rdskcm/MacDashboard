@@ -90,6 +90,7 @@ extension SerialTests {
 
             // 2. Controls: a Home left mounted must change both metrics.
             #expect(expectedRims[.home]! > 0, "Home registers rims, so a Home left mounted changes the rim count")
+            #expect(expectedRims[.storage]! >= 3, "the three hosted Storage cards register their rims (APPEAR-CA-ENTRANCE R5)")
             #expect(expectedViews[.home]! >= 50, "Home is about 100 NSViews (findings C5), so a Home left mounted changes the view count")
 
             func check(_ h: Host, _ p: Page, _ label: String) {

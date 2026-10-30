@@ -232,9 +232,20 @@ final class DS3RimView: NSView {
         }
     }
 
+    /// APPEAR-CA-ENTRANCE D4: the tracker reports the pointer in `DS3.windowSpace` = the window root hosting view's
+    /// flipped coordinates. Convert from that view (not from the window: no y-flip bookkeeping). Inside a nested
+    /// `DS3EntranceHost` the named space is not resolvable, so the rim never reads it.
+    func localPoint(fromWindowSpace p: CGPoint) -> CGPoint {
+        guard let root = window?.contentView else { return p }
+        return convert(NSPoint(x: p.x, y: p.y), from: root)
+    }
+    /// Test hook (DS3RimGeometryTests): the last card-local point `aim(to:)` received (nil = pointer outside).
+    private(set) var lastAim: CGPoint?
+
     /// Moves the light to the pointer's card-local point (nil = pointer outside the window: fade out).
     /// A fixed animation key replaces the previous one, so at most one live animation per card.
     func aim(to local: CGPoint?) {
+        lastAim = local
         guard !isStatic else { return }
         guard let local else {
             if spotVisible { spotVisible = false; fade(to: 0) }

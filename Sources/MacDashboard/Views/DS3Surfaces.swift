@@ -70,15 +70,14 @@ final class DS3PointerTracker {
     }
 }
 
-/// One rim's window-space frame and its layer view; the tracker calls `aim(at:)` directly.
+/// One rim's layer view; the tracker calls `aim(at:)` directly.
 @MainActor
 final class DS3RimModel {
-    var rect = CGRect.zero
     weak var view: DS3RimView?
 
     func aim(at p: CGPoint?) {
         guard let view else { return }
-        view.aim(to: p.map { RimLight.localPoint($0, in: rect) })
+        view.aim(to: p.map { view.localPoint(fromWindowSpace: $0) })
     }
 }
 
@@ -301,7 +300,6 @@ struct DS3Rim: View {
         Group {
             if let tracker {
                 DS3RimLayer(cornerRadius: cornerRadius, model: model, isStatic: reduceMotion || DS3Motion.isFrozen)
-                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(DS3.windowSpace)) }) { model.rect = $0 }
                     .onAppear { tracker.register(model) }
                     .onDisappear { tracker.unregister(model) }
             } else if colorScheme == .dark || RimLight.lightMode != .none {
