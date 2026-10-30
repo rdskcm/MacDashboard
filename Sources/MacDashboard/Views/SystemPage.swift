@@ -21,28 +21,28 @@ struct SystemPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     SystemSleepCard(model: model)
-                        .id(CardID.sleep)
                         .sectionFocusPulse(pulse == .sleep)
-                        .ds3Appear(delay: 0.08)
+                        .ds3HostedEntrance(delay: 0.08)
+                        .id(CardID.sleep)
                     SystemStartupCard(model: model, router: router, onConfirmShown: { startupConfirmOpen = $0; router.isInlineConfirmOpen = startupConfirmOpen || energyConfirmOpen })
-                        .id(CardID.auto)
                         .sectionFocusPulse(pulse == .auto)
-                        .ds3Appear(delay: 0.14)
+                        .ds3HostedEntrance(delay: 0.14)
+                        .id(CardID.auto)
                     SystemBrewCard(model: model)
-                        .id(CardID.brew)
                         .sectionFocusPulse(pulse == .brew)
-                        .ds3Appear(delay: 0.20)
+                        .ds3HostedEntrance(delay: 0.20)
+                        .id(CardID.brew)
                     SystemEnergyCard(model: model, router: router, onConfirmShown: { energyConfirmOpen = $0; router.isInlineConfirmOpen = startupConfirmOpen || energyConfirmOpen })
-                        .id(CardID.energy)
                         .sectionFocusPulse(pulse == .energy)
-                        .ds3Appear(delay: 0.26)
+                        .ds3HostedEntrance(delay: 0.26)
+                        .id(CardID.energy)
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { SystemPageBar(model: model, onBack: { _ = router.back() }) }
+            .safeAreaInset(edge: .top, spacing: 0) { SystemPageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Sleep is already on top) and pulse it.
                 let d = router.destination
@@ -53,7 +53,6 @@ struct SystemPage: View {
                 pulse = nil
             }
         }
-        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
         .onDisappear { router.isInlineConfirmOpen = false }
     }
 }

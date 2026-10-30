@@ -21,20 +21,20 @@ struct BackupsPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     BackupsTimeMachineCard(model: model, narrow: narrow)
-                        .id(CardID.tm)
                         .sectionFocusPulse(pulse == .tm)
-                        .ds3Appear(delay: 0.08)
+                        .ds3HostedEntrance(delay: 0.08)
+                        .id(CardID.tm)
                     BackupsClaudeCard(model: model)
-                        .id(CardID.claude)
                         .sectionFocusPulse(pulse == .claude)
-                        .ds3Appear(delay: 0.14)
+                        .ds3HostedEntrance(delay: 0.14)
+                        .id(CardID.claude)
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { BackupsPageBar(model: model, onBack: { _ = router.back() }) }
+            .safeAreaInset(edge: .top, spacing: 0) { BackupsPageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Time Machine is already on top) and pulse it.
                 let d = router.destination
@@ -47,7 +47,6 @@ struct BackupsPage: View {
             // REDESIGN-BACKUPS D2: cancelled with the page, which is exactly the «only while on screen» rule.
             .task { await model.timeMachine.observeStatus() }
         }
-        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
     }
 }
 

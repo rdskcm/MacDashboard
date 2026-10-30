@@ -20,20 +20,20 @@ struct CPUPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     CPUUsageCard(model: model)
-                        .id(CardID.cpu)
                         .sectionFocusPulse(pulse == .cpu)
-                        .ds3Appear(delay: 0.08)
+                        .ds3HostedEntrance(delay: 0.08)
+                        .id(CardID.cpu)
                     ProcessListCard(model: model, initialMetric: .cpu, onConfirmShown: { router.isInlineConfirmOpen = $0 })
-                        .id(CardID.procs)
                         .sectionFocusPulse(pulse == .procs)
-                        .ds3Appear(delay: 0.14)
+                        .ds3HostedEntrance(delay: 0.14)
+                        .id(CardID.procs)
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { CPUPageBar(model: model, onBack: { _ = router.back() }) }
+            .safeAreaInset(edge: .top, spacing: 0) { CPUPageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (the CPU card is already on top) and pulse it.
                 let d = router.destination
@@ -44,7 +44,6 @@ struct CPUPage: View {
                 pulse = nil
             }
         }
-        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
         .onDisappear { router.isInlineConfirmOpen = false }
     }
 }

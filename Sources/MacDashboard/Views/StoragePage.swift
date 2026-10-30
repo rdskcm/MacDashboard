@@ -22,25 +22,25 @@ struct StoragePage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     StorageDiskCard(model: model)
-                        .id(CardID.disk)
                         .sectionFocusPulse(pulse == .disk)
-                        .ds3Appear(delay: 0.08)
+                        .ds3HostedEntrance(delay: 0.08)
+                        .id(CardID.disk)
                     StorageFoldersCard(model: model, router: router, initialSegment: router.destination.foldersSegment ?? .home,
-                                       scrollTo: { proxy.scrollTo($0, anchor: .bottom) })
-                        .id(CardID.folders)
+                                       revealConfirm: { proxy.scrollTo(CardID.folders, anchor: .bottom) })
                         .sectionFocusPulse(pulse == .folders)
-                        .ds3Appear(delay: 0.14)
+                        .ds3HostedEntrance(delay: 0.14)
+                        .id(CardID.folders)
                     StorageSmartCard(model: model, breakpoints: breakpoints)
-                        .id(CardID.smart)
                         .sectionFocusPulse(pulse == .smart)
-                        .ds3Appear(delay: 0.20)
+                        .ds3HostedEntrance(delay: 0.20)
+                        .id(CardID.smart)
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { StoragePageBar(model: model, onBack: { _ = router.back() }) }
+            .safeAreaInset(edge: .top, spacing: 0) { StoragePageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Disk is already on top) and pulse it.
                 let d = router.destination
@@ -51,7 +51,6 @@ struct StoragePage: View {
                 pulse = nil
             }
         }
-        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
         .onDisappear { router.isInlineConfirmOpen = false }
     }
 }
@@ -196,16 +195,16 @@ struct StorageFoldersCard: View {
     /// What the card draws; mirrors `dispatch.showTrashConfirm`, committed through an explicit `withAnimation`
     /// so the panel's transition runs (the dispatch flag flips outside any animation).
     @State private var confirmShown: Bool
-    /// The page's `ScrollViewReader` proxy (the one the CardID focus scroll uses); nil in the snapshots.
-    private let scrollTo: ((String) -> Void)?
-    private static let confirmPanelID = "storage-trash-confirm"
+    /// Scrolls the page so the card's bottom edge (= the confirm panel's) is visible; the page's `ScrollViewReader`
+    /// proxy cannot see ids inside the hosted card (APPEAR-CA-ENTRANCE R10). nil in the snapshots.
+    private let revealConfirm: (() -> Void)?
 
     init(model: AppModel, router: NavigationRouter, initialSegment: FoldersSegment = .home,
          initialConfirm: StorageTrashConfirmFixture? = nil, initialCounting: Bool = false,
-         scrollTo: ((String) -> Void)? = nil) {
+         revealConfirm: (() -> Void)? = nil) {
         self.model = model
         self.router = router
-        self.scrollTo = scrollTo
+        self.revealConfirm = revealConfirm
         _confirmShown = State(initialValue: initialConfirm != nil)
         _segment = State(initialValue: initialSegment)
         let d = AdviceActionDispatch(model: model)
@@ -243,9 +242,9 @@ struct StorageFoldersCard: View {
             // tmin (00-shared.md): opacity + offset 14 + scale .98 with a spring; Reduce Motion: opacity only.
             let curve: Animation = reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.35, dampingFraction: 0.7)
             withAnimation(curve) { confirmShown = new }
-            // The panel's `.id` exists only after the insertion commits: scroll on the next main-queue turn.
+            // The panel exists only after the insertion commits: scroll on the next main-queue turn.
             if new {
-                DispatchQueue.main.async { withAnimation(curve) { scrollTo?(Self.confirmPanelID) } }
+                DispatchQueue.main.async { withAnimation(curve) { revealConfirm?() } }
             }
         }
     }
@@ -288,7 +287,6 @@ struct StorageFoldersCard: View {
             }
             if confirmShown {
                 confirmPanel(size: fmtCapacity(trashBytes))
-                    .id(Self.confirmPanelID)
                     .transition(reduceMotion ? .opacity
                                 : .opacity.combined(with: .offset(y: 14)).combined(with: .scale(scale: 0.98)))
             }
@@ -515,9 +513,10 @@ struct StorageSmartCard: View {
                 let tiles = StoragePageModel.kvTiles(disk.health)
                 EqualColumnsLayout(columns: StoragePageModel.kvColumns(wide: breakpoints.storageWide), spacing: 8) {
                     ForEach(tiles.indices, id: \.self) { i in
-                        kvTile(tiles[i]).ds3Appear(delay: 0.08 + 0.06 * Double(i))
+                        kvTile(tiles[i])
                     }
                 }
+                .ds3HostedEntrance(delay: 0.32, slideX: 0)
             }
         }
     }
