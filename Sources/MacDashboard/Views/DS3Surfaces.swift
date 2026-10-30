@@ -213,6 +213,7 @@ struct DS3Appear: ViewModifier {
             .scaleEffect(shown ? 1 : scale)
             .offset(shown ? .zero : offset)
             .onAppear {
+                print("DIAG appear reduceMotion=\(reduceMotion) frozen=\(DS3Motion.isFrozen)")
                 if reduceMotion || DS3Motion.isFrozen {
                     shown = true
                 } else {

@@ -133,6 +133,7 @@ extension SerialTests {
             let m = AppModel(dataDirectory: dir)
             m.applyVisualFixture()
             let r = NavigationRouter()
+            print("DIAG workspaceReduceMotion=\(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)")
             let n0 = DS3Appear.animatedStarts
             let h = Host(MacContentView(model: m, router: r, width: width, tier: tier, breakpoints: breakpoints))
             h.settle(1.0)
