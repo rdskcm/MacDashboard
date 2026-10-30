@@ -269,7 +269,7 @@ struct MainDashboardView: View {
 
 /// This Mac content (HIDDEN-CONTENT-WORK): exactly one page is in the hierarchy — Home or the open section page.
 /// Hidden content does no work (user rule 2026-10-28), so Home is unmounted while a page is open and rebuilt on
-/// Back, where its entrance replays. Home owns no loader: a rebuild re-renders model state, and the attention card's
+/// Back without its staggered entrance (APPEAR-COST D3: `homeEntrancePlayed`, set when Home is left, so a mounted Home never changes branch). Home owns no loader: a rebuild re-renders model state, and the attention card's
 /// action state lives on the model (`AppModel.homeAdviceDispatch`). `body` reads no live model field:
 /// `HomeView` and its slots do the reading. Internal (not private) so HiddenContentTests can host it.
 @MainActor
@@ -280,11 +280,14 @@ struct MacContentView: View {
     let tier: WidthTier
     let breakpoints: PageBreakpoints
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// APPEAR-COST D3: Home's staggered entrance plays once per window. Flipped when Home is left (never while it is
+    /// mounted: `homeEntrance` is a `@ViewBuilder` branch, and switching it would remount every card).
+    @State private var homeEntrancePlayed = false
 
     var body: some View {
         ZStack {
             if router.destination.page == .home {
-                HomeView(model: model, router: router, width: width, tier: tier)
+                HomeView(model: model, router: router, width: width, tier: tier, animatesEntrance: !homeEntrancePlayed)
                     .zIndex(0)   // default (opacity) transition: fades out under an opening page and in on Back
             }
             if router.destination.page == .cpu {
@@ -328,6 +331,9 @@ struct MacContentView: View {
                     .transition(.identity)
                     .zIndex(1)
             }
+        }
+        .onChange(of: router.destination.page == .home) { _, isHome in
+            if !isHome { homeEntrancePlayed = true }
         }
         // The transaction form this file used before; nil under Reduce Motion / frozen = instant swap.
         .animation((reduceMotion || DS3Motion.isFrozen) ? nil : .easeOut(duration: 0.25),

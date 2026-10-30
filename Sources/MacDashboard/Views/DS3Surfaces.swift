@@ -197,11 +197,13 @@ extension View {
     }
 }
 
-private struct DS3Appear: ViewModifier {
+struct DS3Appear: ViewModifier {
     let delay: Double
     let offset: CGSize
     let scale: CGFloat
     let animation: Animation
+    /// Test probe (APPEAR-COST R3/R8): animated entrances started in this process. Not incremented under Reduce Motion or `isFrozen`.
+    @MainActor static var animatedStarts = 0
     @State private var shown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -214,6 +216,7 @@ private struct DS3Appear: ViewModifier {
                 if reduceMotion || DS3Motion.isFrozen {
                     shown = true
                 } else {
+                    Self.animatedStarts += 1
                     withAnimation(animation.delay(delay)) { shown = true }
                 }
             }

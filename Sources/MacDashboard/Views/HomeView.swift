@@ -78,7 +78,7 @@ extension HomeInput {
 
 extension View {
     /// Home's staggered entrance. The offscreen visual harness has no window, so `onAppear` never fires there
-    /// and an animated entrance would stay at opacity 0: it renders its states with `enabled: false`.
+    /// and an animated entrance would stay at opacity 0: it renders its states with `enabled: false`; `MacContentView` also passes `false` for every Home mount after the first per window (APPEAR-COST).
     @ViewBuilder
     func homeEntrance(delay: Double, enabled: Bool) -> some View {
         if enabled { ds3Appear(delay: delay) } else { self }
@@ -91,15 +91,18 @@ struct HomeView: View {
     let router: NavigationRouter
     let width: LiveWindowWidth
     let tier: WidthTier
+    /// `false` in the offscreen visual harness and on every Home mount after the first per window (APPEAR-COST D3: Back
+    /// to Home shows the cards in place under the crossfade `MacContentView` already runs).
+    var animatesEntrance = true
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HomeScanBannerSlot(model: model)
-                HomeAttentionSlot(model: model, router: router, width: width)
+                HomeAttentionSlot(model: model, router: router, width: width, animatesEntrance: animatesEntrance)
                 nowSlot
                 HomeSectionsHeader(model: model)
-                HomeSectionsGrid(model: model, router: router, tier: tier)
+                HomeSectionsGrid(model: model, router: router, tier: tier, animatesEntrance: animatesEntrance)
             }
             .padding(.top, 26)
             .padding(.horizontal, 28)
@@ -109,6 +112,6 @@ struct HomeView: View {
     }
 
     private var nowSlot: some View {
-        HomeNowCard(model: model, router: router, tier: tier)
+        HomeNowCard(model: model, router: router, tier: tier, animatesEntrance: animatesEntrance)
     }
 }
