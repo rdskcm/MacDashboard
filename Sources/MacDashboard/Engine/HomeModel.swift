@@ -53,6 +53,16 @@ struct HomeTile: Identifiable, Equatable {
     let hotRing: Bool
 }
 
+extension HomeTile {
+    /// HOME-AX-FIGURES: the tile's VoiceOver label — name, sub, then (not while skeleton) tag and each "label value"
+    /// pair. Used by `HomeSectionTile`; covered by HomeModelTests.
+    var accessibilityText: String {
+        var parts = [name, sub]
+        if !skeleton { parts += [tagText] + kvs.map { "\($0.label) \($0.value)" } }
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+}
+
 enum HomeScan: Equatable {
     case firstScan
     case ok(at: Date)
@@ -504,6 +514,19 @@ struct HomeNowCell: Identifiable, Equatable {
     let legend: [HomeLegendItem]
     let foot: String
     let destination: Destination
+}
+
+extension HomeNowCell {
+    /// HOME-AX-FIGURES: the cell's VoiceOver label — every string the cell draws: label, value + unit (not while
+    /// loading: the "—" placeholder), chip, legend items, foot. Used by `HomeNowCellView`; covered by HomeModelTests.
+    var accessibilityText: String {
+        var parts = [label]
+        if !loading { parts.append("\(big) \(of)".trimmingCharacters(in: .whitespaces)) }
+        if let chipText, chipTone != nil { parts.append(chipText) }
+        parts += legend.map(\.text)
+        parts.append(foot)
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
 }
 
 extension HomeModel {
