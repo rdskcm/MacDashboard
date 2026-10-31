@@ -95,7 +95,7 @@ struct IPhoneModeView: View {
                 ForEach(Array(model.sortedDevices.enumerated()), id: \.element.id) { i, r in
                     IPhoneTileView(record: r, status: model.status[r.id] ?? .remembered,
                                    snapshot: model.lastSnapshot[r.id],
-                                   storage: model.identity[r.id]?.first { $0.label == .storage }?.value) {
+                                   storage: model.identityRows(r.id)?.first { $0.label == .storage && !$0.isPending }?.value) {
                         model.selectedDeviceKey = r.id
                     }
                     .accessibilityIdentifier("iphone-tile-\(i)")

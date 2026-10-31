@@ -8,6 +8,7 @@
 //
 // R13: nothing here stores a serial, IMEI, part id or UDID. `IPhoneDeviceRecord` is the
 // only persisted device data, and it is keyed by `deviceKey(udid:)`.
+// The crash-log type cache (`IPhoneLogTypeStore`, IPhoneLogTypes.swift) is the second persisted file: crash-log paths, sizes, times and bug_types keyed by deviceKey — no identifier.
 
 import CryptoKit
 import Foundation
@@ -34,12 +35,16 @@ struct IPhoneIdentityField: Equatable, Identifiable {
     let label: IdentityLabel
     let value: String
     let isSecret: Bool
+    /// true only for the storage placeholder «…» while the storage read runs; never set by `identityFields`.
+    var isPending: Bool = false
 }
 
 /// Crash-log categories in DISPLAY order (real app crashes first).
 enum LogCategory: String, CaseIterable {
     case appCrash, exceptionFault, jetsam, diskWrites, cpuResource, stackshot
     case otherReport, analytics, other
+    /// `pending` = type not read yet (IPHONE-LOAD-SPEED); never returned by `category(bugType:)`.
+    case pending
 }
 
 struct IPhoneAFCEntry: Equatable {
@@ -72,7 +77,7 @@ struct BatteryPoint: Codable, Equatable {
     var source: String              // "live" | "import"
 }
 
-/// The ONLY persisted device data (R13).
+/// The only persisted device record (R13); the crash-log type cache is a separate rebuildable file.
 struct IPhoneDeviceRecord: Codable, Equatable, Identifiable {
     var id: String                  // deviceKey
     var name: String
@@ -600,6 +605,13 @@ enum IPhoneData {
 
     // MARK: - Identity and parts
 
+    /// `TotalDiskCapacity` of the disk-usage domain in bytes; nil when missing, not a number or ≤ 0.
+    static func storageBytes(diskUsage: [String: Any]?) -> Int64? {
+        guard let v = diskUsage?["TotalDiskCapacity"] else { return nil }
+        let n: Int64? = (v as? NSNumber)?.int64Value ?? stringValue(v).flatMap { Int64($0) }
+        return n.flatMap { $0 > 0 ? $0 : nil }
+    }
+
     /// Builds the identity rows from the lockdown values, the `com.apple.disk_usage` domain
     /// and the relay payloads. A value that is missing or empty omits its field; order =
     /// `IdentityLabel.allCases`.
@@ -618,17 +630,13 @@ enum IPhoneData {
             default: return nil
             }
         }
-        func bytes(_ v: Any?) -> Int64? {
-            if let n = v as? NSNumber { return n.int64Value }
-            return stringValue(v).flatMap { Int64($0) }
-        }
         var values: [IdentityLabel: String] = [:]
         values[.marketingName] = lock("MarketingName")
         values[.modelNumber] = joined(lock("ModelNumber"), lock("RegionInfo"), sep: " ")
         values[.regulatoryModel] = lock("RegulatoryModelNumber")
         values[.hardwareModel] = lock("HardwareModel")
         values[.ios] = joined(lock("ProductVersion"), lock("BuildVersion").map { "(\($0))" }, sep: " ")
-        values[.storage] = diskUsage.flatMap { bytes($0["TotalDiskCapacity"]) }.flatMap { $0 > 0 ? fmtCapacity($0) : nil }
+        values[.storage] = storageBytes(diskUsage: diskUsage).map { fmtCapacity($0) }
         values[.colorCode] = lock("DeviceEnclosureColor") ?? lock("DeviceColor")
         values[.serial] = lock("SerialNumber")
         values[.logicBoard] = lock("MLBSerialNumber")
@@ -650,6 +658,31 @@ enum IPhoneData {
         return IdentityLabel.allCases.compactMap { label in
             values[label].map { IPhoneIdentityField(id: label.rawValue, label: label, value: $0, isSecret: label.isSecret) }
         }
+    }
+
+    static let storagePlaceholder = "…"
+
+    /// Identity rows with the storage state applied. nil state → `fields` unchanged (the visual
+    /// fixture and any caller that never read storage separately). `.waiting` → a storage field with
+    /// value `storagePlaceholder` and `isPending: true`; `.value(v)` → a storage field with `v`;
+    /// `.missing` → no storage field. Any storage field already in `fields` is replaced; position =
+    /// `IdentityLabel.allCases` order.
+    static func identityRows(_ fields: [IPhoneIdentityField], storage: IPhoneStorageRead?) -> [IPhoneIdentityField] {
+        guard let storage else { return fields }
+        var rows = fields.filter { $0.label != .storage }
+        let value: String, pending: Bool
+        switch storage {
+        case .waiting: value = storagePlaceholder; pending = true
+        case .value(let v): value = v; pending = false
+        case .missing: return rows
+        }
+        let field = IPhoneIdentityField(id: IdentityLabel.storage.rawValue, label: .storage, value: value,
+                                        isSecret: IdentityLabel.storage.isSecret, isPending: pending)
+        let order = IdentityLabel.allCases
+        let rank = order.firstIndex(of: .storage) ?? 0
+        let at = rows.firstIndex { (order.firstIndex(of: $0.label) ?? 0) > rank } ?? rows.endIndex
+        rows.insert(field, at: at)
+        return rows
     }
 
     // MARK: - Phone colour
@@ -752,5 +785,20 @@ final class IPhoneStore {
         df.dateFormat = "yyyyMMdd-HHmmss"
         return url.deletingLastPathComponent().appendingPathComponent(
             url.lastPathComponent + ".unreadable-" + df.string(from: Date()))
+    }
+}
+
+/// The separate storage read (IPHONE-LOAD-SPEED R5).
+enum IPhoneStorageRead: Equatable {
+    case waiting            // queued or running, deadline not passed
+    case value(String)      // formatted capacity
+    case missing            // deadline passed, or the phone gave no value
+    static let deadlineSeconds: TimeInterval = 2.0
+    /// The deadline passed: `.waiting` becomes `.missing`; anything else stays.
+    func afterDeadline() -> IPhoneStorageRead { self == .waiting ? .missing : self }
+    /// A result arrived (on time or late): bytes > 0 → `.value(fmtCapacity(bytes))`, else `.missing`.
+    static func result(bytes: Int64?) -> IPhoneStorageRead {
+        guard let b = bytes, b > 0 else { return .missing }
+        return .value(fmtCapacity(b))
     }
 }

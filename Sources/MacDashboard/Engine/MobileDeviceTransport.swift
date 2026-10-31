@@ -19,6 +19,7 @@
 // the subscribing thread's run loop. Results return to the caller on the main thread.
 // Device pointers and the subscription are touched only on that thread, so detach events
 // cannot release a device while a read is using it (reads and callbacks are serialised).
+// Device jobs are queued by urgency through `IPhoneJobRunner` and still run one at a time on that thread.
 
 import Foundation
 
@@ -82,7 +83,9 @@ final class MobileDeviceTransport {
     private typealias AfcKVReadFn = @convention(c) (Ptr?, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>, UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
     private typealias AfcKVCloseFn = @convention(c) (Ptr?) -> Int32
     private typealias AfcFileOpenFn = @convention(c) (Ptr?, UnsafePointer<CChar>, UInt64, UnsafeMutablePointer<Ptr?>) -> Int32
-    private typealias AfcFileReadFn = @convention(c) (Ptr?, Ptr?, Ptr?, UnsafeMutablePointer<UInt32>) -> Int32
+    /// `len` is a size_t in/out slot: a 4-byte slot let the framework read 4 stray stack bytes as the
+    /// high half of the requested length (seen in a debug build: every file over the buffer size came back whole).
+    private typealias AfcFileReadFn = @convention(c) (Ptr?, Ptr?, Ptr?, UnsafeMutablePointer<UInt>) -> Int32
 
     /// Every function this block uses, resolved all-or-nothing (R16).
     private struct Syms {
@@ -193,6 +196,7 @@ final class MobileDeviceTransport {
     /// argument does) starts no thread.
     private let threadLock = NSLock()
     private var thread: ParkedRunLoopThread?
+    private let runner = IPhoneJobRunner()
 
     // Confined to the transport thread from here down.
     private var eventHandler: (@MainActor (IPhoneTransportEvent) -> Void)?
@@ -214,6 +218,13 @@ final class MobileDeviceTransport {
         thread = t
         threadLock.unlock()
         return t.async(body)
+    }
+
+    /// Queues a device job by urgency (R1); false when the framework is unavailable.
+    @discardableResult
+    private func enqueue(_ p: IPhoneJobPriority, _ body: @escaping () -> Void) -> Bool {
+        guard syms != nil else { return false }
+        return runner.enqueue(p, body) { self.onThread($0) }
     }
 
     private static func onMain(_ body: @escaping @MainActor () -> Void) {
@@ -422,7 +433,7 @@ final class MobileDeviceTransport {
             var data = Data()
             var buf = [UInt8](repeating: 0, count: min(limit, 1 << 20))
             while data.count < limit {
-                var len = UInt32(min(buf.count, limit - data.count))
+                var len = UInt(min(buf.count, limit - data.count))
                 let rc = buf.withUnsafeMutableBytes { s.afcFileRefRead(afc, ref, $0.baseAddress, &len) }
                 guard rc == 0 else { return nil }
                 if len == 0 { break }   // EOF
@@ -443,7 +454,7 @@ final class MobileDeviceTransport {
             var buf = [UInt8](repeating: 0, count: 1 << 20)
             var total: Int64 = 0
             while total < size {
-                var len = UInt32(buf.count)
+                var len = UInt(buf.count)
                 let rc = buf.withUnsafeMutableBytes { s.afcFileRefRead(afc, ref, $0.baseAddress, &len) }
                 guard rc == 0, len > 0 else { return false }
                 do { try out.write(contentsOf: Data(buf[0..<Int(len)])) } catch { return false }
@@ -476,7 +487,7 @@ final class MobileDeviceTransport {
     func readSnapshot(_ h: IPhoneHandle,
                       includeBattery: Bool = true,
                       completion: @escaping @MainActor (Result<IPhoneSnapshot, IPhoneReadError>) -> Void) {
-        let queued = onThread { [self] in
+        let queued = enqueue(.interactive) { [self] in
             let result = withSession(h) { dev -> IPhoneSnapshot in
                 guard let udid = lockdownString(dev, "UniqueDeviceID") else {
                     throw IPhoneReadError.failed(step: "UniqueDeviceID", code: 0)
@@ -502,11 +513,11 @@ final class MobileDeviceTransport {
         if !queued { Self.onMain { completion(.failure(.unavailable)) } }
     }
 
-    /// Identity and parts: lockdown keys, the disk-usage domain and registry entries over one
-    /// relay connection. Values are returned to the caller only; nothing is stored or logged here.
+    /// Identity and parts without storage (read by `readStorage`): lockdown keys and registry entries
+    /// over one relay connection. Values are returned to the caller only; nothing is stored or logged here.
     func readIdentity(_ h: IPhoneHandle,
                       completion: @escaping @MainActor (Result<[IPhoneIdentityField], IPhoneReadError>) -> Void) {
-        let queued = onThread { [self] in
+        let queued = enqueue(.interactive) { [self] in
             let result = withSession(h) { dev -> [IPhoneIdentityField] in
                 var lockdown: [String: Any] = [:]
                 for key in ["MarketingName", "ModelNumber", "RegionInfo", "RegulatoryModelNumber",
@@ -515,7 +526,6 @@ final class MobileDeviceTransport {
                             "InternationalMobileEquipmentIdentity", "InternationalMobileEquipmentIdentity2"] {
                     if let v = copyValue(dev, domain: nil, key: key) { lockdown[key] = v }
                 }
-                let disk = copyValue(dev, domain: "com.apple.disk_usage", key: nil) as? [String: Any]
                 let payloads = withRelay(dev) { send -> [[String: Any]?] in
                     let battery = IPhoneData.relayPayload(send(.ioRegistryName("AppleSmartBattery")))
                     let panel = IPhoneData.relayPayload(send(.ioRegistryClass("AppleCLCD2")))
@@ -527,7 +537,7 @@ final class MobileDeviceTransport {
                     }
                     return [battery, panel, product, camera]
                 } ?? [nil, nil, nil, nil]
-                return IPhoneData.identityFields(lockdown: lockdown, diskUsage: disk, battery: payloads[0],
+                return IPhoneData.identityFields(lockdown: lockdown, diskUsage: nil, battery: payloads[0],
                                                  panel: payloads[1], product: payloads[2], camera: payloads[3])
             }
             Self.onMain { completion(result) }
@@ -535,51 +545,99 @@ final class MobileDeviceTransport {
         if !queued { Self.onMain { completion(.failure(.unavailable)) } }
     }
 
-    /// Lists the crash-log tree in one session and classifies each regular file by the
-    /// `bug_type` of its header. `knownHeaders` maps "<path>|<size>|<mtime>" to a bug_type
-    /// ("" = none); only files missing from it have their header read. Returns the entries
-    /// and the updated cache (entries not seen this time, and files whose header read failed, are dropped from it).
-    func listLogs(_ h: IPhoneHandle, knownHeaders: [String: String],
-                  completion: @escaping @MainActor (Result<([IPhoneLogEntry], [String: String]), IPhoneReadError>) -> Void) {
-        let queued = onThread { [self] in
-            let result = withSession(h) { dev -> ([IPhoneLogEntry], [String: String]) in
-                guard let listed = withCrashAFC(dev, { afc -> ([IPhoneLogEntry], [String: String]) in
-                    var entries: [IPhoneLogEntry] = []
-                    var cache: [String: String] = [:]
-                    for f in afc.list() where !f.isDirectory {
-                        let k = IPhoneData.logCacheKey(path: f.path, size: f.size, modified: f.modified)
-                        let bug: String?
-                        if let known = knownHeaders[k] {
-                            bug = known
-                        } else {
-                            var head = afc.readPrefix(path: f.path, limit: 4096)
-                            if let d = head, f.size > 4096, !d.contains(0x0A) {
-                                head = afc.readPrefix(path: f.path, limit: 65536)
-                            }
-                            // nil = the read failed: not cached, so the next listing reads it again.
-                            bug = head.map { IPhoneData.bugType(fromHeader: $0) ?? "" }
-                        }
-                        if let bug { cache[k] = bug }
-                        let bugType = (bug?.isEmpty ?? true) ? nil : bug
-                        entries.append(IPhoneLogEntry(path: f.path, size: f.size, modified: f.modified,
-                                                      bugType: bugType,
-                                                      category: IPhoneData.category(bugType: bugType),
-                                                      source: .live))
-                    }
-                    return (entries, cache)
-                }) else { throw IPhoneReadError.failed(step: "crashreportcopymobile", code: 0) }
-                return listed
+    /// `TotalDiskCapacity` in bytes, in its own job at the lowest urgency (R5). `onStart` is posted to
+    /// main when the job begins (the model's 2 s deadline counts from then). The call can block for
+    /// up to ~20 s on a phone-side stall (findings C5); only jobs queued after it wait.
+    func readStorage(_ h: IPhoneHandle,
+                     onStart: @escaping @MainActor () -> Void,
+                     completion: @escaping @MainActor (Result<Int64?, IPhoneReadError>) -> Void) {
+        let queued = enqueue(.last) { [self] in
+            Self.onMain { onStart() }
+            let result = withSession(h) { dev -> Int64? in
+                IPhoneData.storageBytes(diskUsage: copyValue(dev, domain: "com.apple.disk_usage", key: nil) as? [String: Any])
             }
             Self.onMain { completion(result) }
         }
         if !queued { Self.onMain { completion(.failure(.unavailable)) } }
     }
 
+    /// Walks the crash-log tree and posts the listing at once (`onListing`, R2), then reads the
+    /// headers of files not in `knownHeaders` in the same session, posting `onTypes` per batch.
+    /// The read loop yields to any more urgent job; the rest is queued at `.background` (D5, D6).
+    func listLogs(_ h: IPhoneHandle, knownHeaders: [String: String],
+                  onListing: @escaping @MainActor (Result<IPhoneLogListing, IPhoneReadError>) -> Void,
+                  onTypes: @escaping @MainActor (IPhoneLogTypeBatch) -> Void) {
+        let queued = enqueue(.user) { [self] in
+            var posted = false
+            let result = withSession(h) { dev -> Void in
+                let walked: Bool? = withCrashAFC(dev) { afc -> Bool in
+                    let (listing, pending) = IPhoneLogTypes.split(afc.list(), known: knownHeaders)
+                    Self.onMain { onListing(.success(listing)) }
+                    posted = true
+                    finishTypes(h, afc, pending[...], onTypes)
+                    return true
+                }
+                guard walked != nil else { throw IPhoneReadError.failed(step: "crashreportcopymobile", code: 0) }
+            }
+            if case .failure(let err) = result, !posted { Self.onMain { onListing(.failure(err)) } }
+        }
+        if !queued { Self.onMain { onListing(.failure(.unavailable)) } }
+    }
+
+    /// Reads headers in order until done or a more urgent job waits; posts one batch (if non-empty)
+    /// and queues the rest at `.background`. Transport thread only, inside a crash-AFC session.
+    private func finishTypes(_ h: IPhoneHandle, _ afc: AFCSession, _ files: ArraySlice<IPhoneAFCEntry>,
+                             _ onTypes: @escaping @MainActor (IPhoneLogTypeBatch) -> Void) {
+        var batch = IPhoneLogTypeBatch()
+        var rest = files
+        while let f = rest.first {
+            if runner.hasPending(moreUrgentThan: .background) { break }
+            rest = rest.dropFirst()
+            let key = IPhoneData.logCacheKey(path: f.path, size: f.size, modified: f.modified)
+            var head = afc.readPrefix(path: f.path, limit: 4096)
+            if let d = head, f.size > 4096, !d.contains(0x0A) {
+                head = afc.readPrefix(path: f.path, limit: 65536)
+            }
+            // nil = the read failed: reported as failed, so it is not cached and the next listing reads it again.
+            if let head {
+                batch.read[key] = IPhoneData.bugType(fromHeader: head) ?? ""
+            } else {
+                batch.failed.insert(key)
+            }
+        }
+        if !batch.isEmpty { Self.onMain { onTypes(batch) } }
+        guard !rest.isEmpty else { return }
+        let remaining = Array(rest)
+        if !enqueue(.background, { [self] in fillTypes(h, remaining, onTypes) }) {
+            Self.onMain { onTypes(Self.failedBatch(remaining)) }
+        }
+    }
+
+    /// The queued rest: own session + crash AFC, then `finishTypes`; a failed session or AFC open
+    /// posts every key of `files` in `failed`.
+    private func fillTypes(_ h: IPhoneHandle, _ files: [IPhoneAFCEntry],
+                           _ onTypes: @escaping @MainActor (IPhoneLogTypeBatch) -> Void) {
+        let result = withSession(h) { dev -> Bool in
+            withCrashAFC(dev) { afc -> Bool in
+                finishTypes(h, afc, files[...], onTypes)
+                return true
+            } != nil
+        }
+        if case .success(true) = result { return }
+        Self.onMain { onTypes(Self.failedBatch(files)) }
+    }
+
+    private static func failedBatch(_ files: [IPhoneAFCEntry]) -> IPhoneLogTypeBatch {
+        var b = IPhoneLogTypeBatch()
+        for f in files { b.failed.insert(IPhoneData.logCacheKey(path: f.path, size: f.size, modified: f.modified)) }
+        return b
+    }
+
     /// Copies one phone file (read-only) to `url`; `progress` gets bytes done, on main.
     func copyFile(_ h: IPhoneHandle, remotePath: String, size: Int64, to url: URL,
                   progress: @escaping @MainActor (Int) -> Void,
                   completion: @escaping @MainActor (Bool) -> Void) {
-        let queued = onThread { [self] in
+        let queued = enqueue(.user) { [self] in
             let result = withSession(h) { dev -> Bool in
                 withCrashAFC(dev) { afc in
                     afc.copy(path: remotePath, size: size, to: url) { done in

@@ -108,6 +108,7 @@ extension StringsEN: IPhoneLogsStrings {
         case .otherReport: return "Other reports"
         case .analytics: return "Analytics"
         case .other: return "Other files"
+        case .pending: return "Identifying type…"
         }
     }
     var iphoneSectionReadFailed: String { "Could not read from the iPhone. Press Refresh to try again." }
@@ -274,6 +275,7 @@ extension StringsRU: IPhoneLogsStrings {
         case .otherReport: return "Другие отчёты"
         case .analytics: return "Аналитика"
         case .other: return "Прочие файлы"
+        case .pending: return "Определяется тип…"
         }
     }
     var iphoneSectionReadFailed: String { "Не удалось прочитать данные с iPhone. Нажмите «Обновить», чтобы попробовать снова." }

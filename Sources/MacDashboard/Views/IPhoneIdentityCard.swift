@@ -25,7 +25,7 @@ struct IPhoneIdentityCard: View {
     }
 
     private var isConnected: Bool { model.connected[deviceKey] != nil }
-    private var fields: [IPhoneIdentityField]? { model.identity[deviceKey] }
+    private var fields: [IPhoneIdentityField]? { model.identityRows(deviceKey) }
     private var loading: Bool { model.identityLoading.contains(deviceKey) }
 
     var body: some View {
@@ -73,15 +73,16 @@ struct IPhoneIdentityCard: View {
                         .lineLimit(1)
                     Text(f.value)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(DS3.ink)
+                        .foregroundStyle(f.isPending ? DS3.muted : DS3.ink)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .help(f.value)
+                        .help(f.isPending ? "" : f.value)
                 }
                 .padding(.vertical, 12)
                 .padding(.horizontal, 14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .ds3RowPanel(cornerRadius: 20)
+                .modifier(PendingCellAccessibility(isPending: f.isPending))
             }
         }
     }
@@ -144,5 +145,17 @@ struct IPhoneIdentityCard: View {
         .padding(.trailing, 10)
         .padding(.vertical, 10)
         .ds3RowPanel(cornerRadius: 20)
+    }
+}
+
+/// A pending cell (value still being read) is one element whose value says so; other cells are untouched.
+private struct PendingCellAccessibility: ViewModifier {
+    let isPending: Bool
+    func body(content: Content) -> some View {
+        if isPending {
+            content.accessibilityElement(children: .combine).accessibilityValue(L.sharedCollectingData)
+        } else {
+            content
+        }
     }
 }
