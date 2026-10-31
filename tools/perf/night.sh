@@ -4,7 +4,7 @@
 #
 # Usage:
 #   tools/perf/night.sh --check [--dry-run]      LaunchAgent entry (every 60 s): start tonight's run if due and write a
-#                                                pending morning report; --dry-run prints the decisions and changes nothing
+#                                                pending morning report; --dry-run prints the decisions and changes nothing; from 21:00 until tonight's run starts (03:00 at the latest) it keeps the display awake so the screen cannot lock, dimmed while the user is away
 #   tools/perf/night.sh --run [--now] [--keep-dark] [--scenarios LIST] [--runs N] [--stop HH:MM] [--no-gate]
 #                                                the run (normally opened in Terminal by --check): gate, then jobs until
 #                                                09:00. --now skips the window and idle checks (hand run) and runs the gate
@@ -18,8 +18,10 @@
 #   tools/perf/night.sh --install | --uninstall  add / remove the user LaunchAgent com.rdskcm.macdashboard.night
 #   tools/perf/night.sh --restore-brightness     put back display / keyboard values a crashed run left saved
 # Test seams: NIGHT_OUT=<absolute dir> replaces tools/perf/out/night.noindex (state, queue, builds, reports) in every mode
-# but --install/--uninstall; NIGHT_CLAUDE_PROJECTS with --dry-run or NIGHT_OUT; NIGHT_HOUR, NIGHT_DATE with --check --dry-run;
-# NIGHT_FOREIGN_ONLY=<pid> with NIGHT_OUT (the close step acts on that MacDashboard process only).
+# but --install/--uninstall; NIGHT_CLAUDE_PROJECTS with --dry-run or NIGHT_OUT; NIGHT_DATE with --check --dry-run;
+# NIGHT_HOUR with --check --dry-run, or 3-23 with --check and NIGHT_OUT; NIGHT_IDLE=<seconds> (the HID idle the evening
+# hold sees, never the start check) with --dry-run or NIGHT_OUT; NIGHT_FOREIGN_ONLY=<pid> with NIGHT_OUT (the close step
+# acts on that MacDashboard process only).
 # Exit: 0 (also for skips — the reason is in the report) | 64 usage | 70 runtime error
 set -uo pipefail
 
@@ -100,6 +102,10 @@ CLAUDE_PROJECTS="$HOME/.claude/projects"
 { [ "$DRY" = 1 ] || [ -n "${NIGHT_OUT:-}" ]; } && [ -n "${NIGHT_CLAUDE_PROJECTS:-}" ] && CLAUDE_PROJECTS="$NIGHT_CLAUDE_PROJECTS"
 if [ "$DRY" = 1 ] && [ -n "${NIGHT_DATE:-}" ]; then [[ "$NIGHT_DATE" =~ ^[0-9]{8}$ ]] || fatal 64 "NIGHT_DATE must be YYYYMMDD"; DATE="$NIGHT_DATE"; fi
 FOREIGN_ONLY=""; [ -z "${NIGHT_OUT:-}" ] || FOREIGN_ONLY="${NIGHT_FOREIGN_ONLY:-}"   # test seam: close only that pid
+HOLD_IDLE=""   # test seam (NIGHT-START-LOCK): the HID idle seconds the evening hold sees; never used by the start check
+if { [ "$DRY" = 1 ] || [ -n "${NIGHT_OUT:-}" ]; } && [ -n "${NIGHT_IDLE:-}" ]; then
+  [[ "$NIGHT_IDLE" =~ ^[0-9]{1,6}$ ]] || fatal 64 "NIGHT_IDLE must be 0-999999 seconds"; HOLD_IDLE="$((10#$NIGHT_IDLE))"
+fi
 claude_working() {   # 0 + one-line reason on stdout when a transcript was written in the window; 1 when quiet or no folder
   local list n last t f
   list="$(find "$CLAUDE_PROJECTS" -type f -name '*.jsonl' -mmin -"$WORK_QUIET_MIN" -exec stat -f '%m %N' {} + 2>/dev/null | sort -n)"
@@ -159,6 +165,12 @@ restore_light() {   # kind -> 0 when nothing is saved or the restore worked; LIG
 dim_light() {   # kind label -> LIGHT_LINE
   local k="$1" l="$2" f out v m setout; f="$(light_file "$k")"
   brightness_bin || { LIGHT_LINE="$l: not settable: brightness helper did not compile (see .bin/brightness-build.log)"; return; }
+  if [ -f "$f" ]; then   # NIGHT-START-LOCK: a saved value (evening hold, or a run that died) is the user's: never overwrite it
+    v="$(awk 'NR==1{print $1}' "$f")"
+    if setout="$("$NIGHT/.bin/brightness" "$(light_verb "$k" set)" 0 2>&1)"; then LIGHT_LINE="$l: -> 0.000, earlier saved value $v kept for the restore"
+    else LIGHT_LINE="$l: not settable: $setout; earlier saved value $v kept for the restore"; fi
+    return
+  fi
   out="$("$NIGHT/.bin/brightness" "$(light_verb "$k" get)" 2>&1)" || { LIGHT_LINE="$l: not settable: $out"; return; }
   v="${out%% *}"; m="${out#* }"
   # D19: never save a near-zero start value — after a system idle dim it would be "restored" as a black screen
@@ -215,7 +227,7 @@ interrupted_jobs() {   # date-regex -> queue files whose "started: <date>" line 
   done
 }
 pending_report() {   # date -> SKIPPED / INTERRUPTED report of that night when it has none (caller checked !busy)
-  local d="$1" v r
+  local d="$1" v r l
   # a missing or non-numeric first-check means "no report yet": return 0 on purpose (R2.3)
   local fu; fu="$(cat "$NIGHT/state/first-check" 2>/dev/null)"; [[ "$fu" =~ ^[0-9]+$ ]] || return 0
   [ "$fu" -le "$(date -j -f '%Y%m%d%H%M' "${d}0300" +%s)" ] || return 0   # that night ended before the first --check: nothing to report
@@ -226,14 +238,104 @@ pending_report() {   # date -> SKIPPED / INTERRUPTED report of that night when i
     r="$(sed 's/^[0-9:]* //' "$NIGHT/state/last-skip-$d" 2>/dev/null)"
     v="NIGHT $d: SKIPPED — ${r:-the Mac was asleep or never idle between 00:00 and 03:00}"
   fi
-  REP=("$v"); interrupted_jobs "$d"; waiting_line
+  REP=("$v"); l="$(hold_line "$d")"; [ -z "$l" ] || REP+=("evening hold: $l"); interrupted_jobs "$d"; waiting_line
   if [ "$DRY" = 1 ]; then printf 'would write report %s:\n' "$d"; printf '  %s\n' "${REP[@]}"
-  else write_report "$d" "${REP[@]}"; decide "report $d: $v"; fi
+  else write_report "$d" "${REP[@]}"; rm -f "$(hold_events "$d")"; decide "report $d: $v"; fi
 }
 decide() {   # --check decision: stdout with --dry-run; otherwise agent.log, only when it differs from the previous one
   if [ "$DRY" = 1 ]; then echo "$*"; return; fi
   [ "$*" = "$(cat "$NIGHT/state/last-decision" 2>/dev/null)" ] && return
   echo "$*" > "$NIGHT/state/last-decision"; log "$*"
+}
+
+# ---- evening hold (NIGHT-START-LOCK): from 21:00 until tonight's run starts or 03:00, --check keeps the display awake so
+# the console cannot lock while the run waits for its start conditions (2026-10-31: locked at 02:06, one minute before
+# the Claude-quiet wait ended), and dims the lights while the user is away. One caffeinate per evening, in its own process
+# group (launchd kills what is left in the job's group) and bounded by -t to 03:00; --run ends it once its own is verified.
+HOLD="$NIGHT/state/hold"              # "pid start-HH:MM night-date" of the live hold caffeinate
+HOLD_DIM="$NIGHT/state/hold-dimmed"   # present while the hold owns the dimmed lights (values in brightness-saved / kbd-saved)
+HOLD_MAX=21600                        # 6 h = 21:00 -> 03:00; also caps a test-seam hour
+hold_events() { echo "$NIGHT/state/hold-night-$1"; }
+hold_note() {   # night text -> stdout with --dry-run; otherwise agent.log "hold: …" and the night's event file, once per change
+  if [ "$DRY" = 1 ]; then echo "hold: $2"; return; fi
+  [ "$2" = "$(cat "$NIGHT/state/hold-last-note" 2>/dev/null)" ] && return
+  echo "$2" > "$NIGHT/state/hold-last-note"; log "hold: $2"
+  echo "$(date +%H:%M) $2" >> "$(hold_events "$1")"
+}
+hold_live() {   # -> pid of the live hold caffeinate on stdout; 1 when there is none
+  local p; p="$(awk 'NR==1{print $1}' "$HOLD" 2>/dev/null)"
+  [[ "$p" =~ ^[0-9]+$ ]] || return 1
+  case "$(ps -o command= -p "$p" 2>/dev/null)" in *"caffeinate -d -i -s -t "*) echo "$p" ;; *) return 1 ;; esac
+}
+hold_line() {   # night -> that night's events joined by " | " (last 12), empty when none
+  local f; f="$(hold_events "$1")"; [ -s "$f" ] || return 0
+  tail -12 "$f" | paste -sd '|' - | sed 's/|/ | /g'
+}
+hold_start() {   # night hour -> starts the hold, bounded to the next 03:00 as seen from that hour; 1 when it did not start
+  local night="$1" h="$2" secs p a
+  # seconds from <hour>:<real mm:ss> to 03:00 — the real clock in production, the seam hour in tests (h 21 -> 6 h, 2 -> 1 h)
+  secs=$(( ((27 - h) % 24) * 3600 - 10#$(date +%M) * 60 - 10#$(date +%S) ))
+  [ "$secs" -le "$HOLD_MAX" ] || secs="$HOLD_MAX"
+  [ "$secs" -ge 60 ] || return 1
+  if [ "$DRY" = 1 ]; then echo "hold: would start caffeinate -d -i -s -t $secs (night $night)"; return 0; fi
+  /usr/bin/perl -e 'setpgrp(0,0) or die "setpgrp: $!\n"; exec @ARGV or die "exec: $!\n"' \
+    /usr/bin/caffeinate -d -i -s -t "$secs" < /dev/null > /dev/null 2>&1 &
+  p=$!
+  sleep 1
+  a="$(pmset -g assertions)"   # captured first: grep -q on a pipe would SIGPIPE pmset under pipefail
+  if ! grep -qE "pid $p\(caffeinate\).*PreventUserIdleDisplaySleep" <<< "$a"; then
+    kill "$p" 2>/dev/null
+    hold_note "$night" "start FAILED: caffeinate showed no PreventUserIdleDisplaySleep assertion"; return 1   # no pid: retried every tick, logged once
+  fi
+  echo "$p $(date +%H:%M) $night" > "$HOLD"
+  caffeinate -u -t 2   # wakes a display that already slept: the assertion alone does not, and the lock follows 300 s later
+  hold_note "$night" "started caffeinate pid $p for $secs s (until $(date -r $(( $(date +%s) + secs )) +%H:%M) at the latest)"
+}
+hold_release() {   # fallback-night reason [keep] -> ends the hold; restores the lights it dimmed unless keep (a run took them over)
+  local night why="$2" keep="${3:-}" p="" t=0 l="" k
+  p="$(hold_live)"
+  [ -n "$p" ] || [ -f "$HOLD" ] || [ -f "$HOLD_DIM" ] || return 0
+  night="$(awk 'NR==1{print $3}' "$HOLD" 2>/dev/null)"; [ -n "$night" ] || night="$1"
+  if [ "$DRY" = 1 ]; then
+    echo "hold: would release${p:+ caffeinate pid $p} ($why)$([ -f "$HOLD_DIM" ] && [ -z "$keep" ] && echo ' and restore the lights')"; return 0
+  fi
+  if [ -n "$p" ]; then
+    kill "$p" 2>/dev/null
+    while kill -0 "$p" 2>/dev/null && [ "$t" -lt 5 ]; do sleep 1; t=$((t + 1)); done
+  fi
+  rm -f "$HOLD"
+  if [ -f "$HOLD_DIM" ]; then
+    if [ -n "$keep" ]; then l="; lights handed over"
+    else for k in display kbd; do restore_light "$k"; l="$l; $k $LIGHT_NOTE"; done; fi
+    rm -f "$HOLD_DIM"
+  fi
+  hold_note "$night" "released${p:+ caffeinate pid $p}: $why$l"
+}
+hold_tick() {   # hour night -> keeps, starts or ends the evening hold; dims / restores the lights it owns
+  local h="$1" night="$2" p is t out k
+  if [ "$h" -ge 3 ] && [ "$h" -lt 21 ]; then
+    hold_release "$night" "start window closed"
+    [ "$DRY" = 1 ] || find "$NIGHT/state" -maxdepth 1 -name 'hold-night-*' -mtime +3 -delete 2>/dev/null
+    return 0
+  fi
+  if [ -f "$NIGHT/runs/$night/started" ]; then hold_release "$night" "tonight's run has started"; return 0; fi
+  if ! "$PERF/power.sh" before /dev/null night >/dev/null 2>&1; then hold_release "$night" "on battery or Low Power Mode on"; return 0; fi
+  if ! unlocked; then hold_release "$night" "screen locked: tonight's run cannot start until it is unlocked"; return 0; fi
+  if p="$(hold_live)"; then [ "$DRY" = 0 ] || echo "hold: caffeinate pid $p is holding"
+  else busy && return 0; hold_start "$night" "$h" || return 0; fi
+  is="${HOLD_IDLE:-$(idle_secs)}"; is="${is:-0}"; t="$(idle_threshold)"
+  if [ "$is" -lt "$t" ]; then
+    [ -f "$HOLD_DIM" ] || return 0
+    if [ "$DRY" = 1 ]; then echo "hold: would restore the lights (idle $is s < $t s)"; return 0; fi
+    out=""; for k in display kbd; do restore_light "$k"; out="$out; $k $LIGHT_NOTE"; done
+    rm -f "$HOLD_DIM"; hold_note "$night" "input seen (idle $is s < $t s)$out"
+  else
+    [ ! -f "$HOLD_DIM" ] || return 0
+    busy && return 0   # a hand gate or run is measuring: the hold does not change its lights
+    if [ "$DRY" = 1 ]; then echo "hold: would dim the lights (idle $is s >= $t s)"; return 0; fi
+    dim_light display display; out="$LIGHT_LINE"; dim_light kbd keyboard; out="$out; $LIGHT_LINE"
+    touch "$HOLD_DIM"; hold_note "$night" "user away (idle $is s >= $t s): $out"
+  fi
 }
 
 # ---------------------------------------------------------------- --restore-brightness
@@ -272,12 +374,13 @@ if [ "$MODE" = "--install" ]; then
 PL
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null
   launchctl bootstrap "gui/$(id -u)" "$PLIST" || fatal 70 "launchctl bootstrap failed"
-  echo "installed: checks every 60 s; between 00:00 and 03:00, when the Mac is idle and no Claude Code transcript was written for $WORK_QUIET_MIN min, it runs the gate (when main changed) and then the queued jobs until 09:00; report: $NIGHT/latest.md"
+  echo "installed: checks every 60 s; between 00:00 and 03:00, when the Mac is idle and no Claude Code transcript was written for $WORK_QUIET_MIN min, it runs the gate (when main changed) and then the queued jobs until 09:00; from 21:00 until the run starts (03:00 at the latest) it keeps the display awake, dimmed while you are away, so the screen cannot lock; report: $NIGHT/latest.md"
   exit 0
 fi
 if [ "$MODE" = "--uninstall" ]; then
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null
   rm -f "$PLIST"
+  hold_release "$DATE" "LaunchAgent uninstalled"
   echo "uninstalled $LABEL"
   exit 0
 fi
@@ -309,16 +412,19 @@ fi
 
 # ---------------------------------------------------------------- --check
 if [ "$MODE" = "--check" ]; then
-  if { [ -f "$(light_file display)" ] || [ -f "$(light_file kbd)" ]; } && ! busy; then
-    if [ "$DRY" = 1 ]; then echo "would restore the light values a crashed run left saved"
-    else for k in display kbd; do [ -f "$(light_file "$k")" ] || continue; restore_light "$k"; decide "restored saved $k: $LIGHT_NOTE"; done; fi
-  fi
   H="$(date +%H)"
-  if [ "$DRY" = 1 ] && [ -n "${NIGHT_HOUR:-}" ]; then
+  if { [ "$DRY" = 1 ] || [ -n "${NIGHT_OUT:-}" ]; } && [ -n "${NIGHT_HOUR:-}" ]; then
     { [[ "$NIGHT_HOUR" =~ ^[0-9]{1,2}$ ]] && [ $((10#$NIGHT_HOUR)) -le 23 ]; } || fatal 64 "NIGHT_HOUR must be 0-23"
+    [ "$DRY" = 1 ] || [ $((10#$NIGHT_HOUR)) -ge 3 ] || fatal 64 "NIGHT_HOUR 0-2 needs --dry-run: a real tick in the window can open a real run"
     H="$NIGHT_HOUR"
   fi
   H=$((10#$H))
+  if [ "$H" -ge 21 ]; then NIGHTD="$(date -j -v+1d -f '%Y%m%d' "$DATE" +%Y%m%d)"; else NIGHTD="$DATE"; fi
+  hold_tick "$H" "$NIGHTD"   # first: the crash restore below must see whether the hold owns the saved lights
+  if { [ -f "$(light_file display)" ] || [ -f "$(light_file kbd)" ]; } && [ ! -f "$HOLD_DIM" ] && ! busy; then
+    if [ "$DRY" = 1 ]; then echo "would restore the light values a crashed run left saved"
+    else for k in display kbd; do [ -f "$(light_file "$k")" ] || continue; restore_light "$k"; decide "restored saved $k: $LIGHT_NOTE"; done; fi
+  fi
   [ "$DRY" = 1 ] || [ -f "$NIGHT/state/first-check" ] || date +%s > "$NIGHT/state/first-check"
   if ! busy; then   # never while a night run or gate is alive: that run writes its own report
     pending_report "$(date -j -v-1d -f '%Y%m%d' "$DATE" +%Y%m%d)"
@@ -348,7 +454,7 @@ busy && fatal 70 "another night run or gate is running"   # a second run would r
 mkdir -p "$NIGHT/runs/$DATE"
 [ "$NOW" = 1 ] && date '+%H:%M' > "$NIGHT/runs/$DATE/started"
 START_EPOCH="$(date +%s)"; START_HM="$(date +%H:%M)"
-SRC=""; SIGNAME=""; FINISHED=0; CAF=""; CAF_SEEN="no"; IDLE0="?"; THR="?"
+SRC=""; SIGNAME=""; FINISHED=0; CAF=""; CAF_SEEN="no"; IDLE0="?"; THR="?" HOLD_NIGHT=""
 NIGHT_VERDICT=""   # only for a whole-night outcome (SKIPPED / ERROR); otherwise line 1 = gate verdict + job counts
 GATE_VERDICT=""; GATE_LINES=(); JOB_LINES=(); NOTES=(); REP=()
 NDONE=0; NFAILED=0; NSTOPPED=0; NINT=0; NNOT=0
@@ -556,7 +662,7 @@ run_gate() {
 }
 
 finish() {
-  local rc=$? first jobs
+  local rc=$? first jobs hl
   [ "$FINISHED" = 0 ] || return; FINISHED=1
   if [ -n "$JPID" ]; then
     stop_job interrupted 30
@@ -578,6 +684,8 @@ finish() {
        REP+=("idle at start: $IDLE0 s, threshold $THR s$([ "$NOW" = 1 ] && echo ' (--now: window and idle checks skipped)')")
        REP+=("preconditions: AC power and Low Power Mode off, screen unlocked")
        REP+=("keep-awake: caffeinate pid ${CAF:-none}, assertion seen: $CAF_SEEN" "$DISP_LINE" "$KBD_LINE")
+       hl="$(hold_line "${HOLD_NIGHT:-$DATE}")"; REP+=("evening hold: ${hl:-none}")
+       [ "${HOLD_NIGHT:-$DATE}" != "$DATE" ] || rm -f "$(hold_events "$DATE")"
        [ "${#NOTES[@]}" = 0 ] || REP+=("${NOTES[@]}")
        REP+=("## gate"); [ "${#GATE_LINES[@]}" = 0 ] || REP+=("${GATE_LINES[@]}")
        REP+=("## jobs"); [ "${#JOB_LINES[@]}" = 0 ] || REP+=("${JOB_LINES[@]}") ;;
@@ -605,6 +713,8 @@ sleep 1
 ASSERTS="$(pmset -g assertions)"   # captured first: grep -q on a pipe would SIGPIPE pmset under pipefail
 if grep -qE "pid $CAF\(caffeinate\).*PreventUserIdleDisplaySleep" <<< "$ASSERTS"; then CAF_SEEN="yes"
 else NIGHT_VERDICT="ERROR — keep-awake assertion not found"; exit 70; fi
+HOLD_NIGHT="$(awk 'NR==1{print $3}' "$HOLD" 2>/dev/null)"
+hold_release "$DATE" "the run took over (its caffeinate pid $CAF)" keep   # no-op when there is no hold
 caffeinate -u -t 2
 dim_light display display; DISP_LINE="$LIGHT_LINE"
 dim_light kbd keyboard; KBD_LINE="$LIGHT_LINE"
