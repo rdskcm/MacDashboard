@@ -118,24 +118,6 @@ extension SerialTests {
 
             // MARK: - Real processes
 
-            // Process group on timeout (R3): the grandchild is killed with its group.
-            do {
-                let start = Date()
-                let outcome = await runCommand("/bin/sh", ["-c", "sleep 30 & echo $!; wait"], timeout: 1)
-                let elapsed = Date().timeIntervalSince(start)
-                #expect(outcome.termination == .timedOut, "process group on timeout: termination == .timedOut")
-                #expect(elapsed < 3, "process group on timeout: elapsed < 3 s (was \(elapsed))")
-                let pid = pid_t(outcome.stdout.trimmingCharacters(in: .whitespacesAndNewlines)) ?? -1
-                #expect(pid > 0, "process group on timeout: a pid was parsed from stdout")
-                var reaped = false
-                let deadline = Date().addingTimeInterval(3)
-                while Date() < deadline {
-                    if kill(pid, 0) == -1 && errno == ESRCH { reaped = true; break }
-                    Thread.sleep(forTimeInterval: 0.05)
-                }
-                #expect(reaped, "process group on timeout: the grandchild was killed with its group")
-            }
-
             // Post-exit sweep (R3): a leftover background child is swept when the leader exits.
             do {
                 let start = Date()
@@ -291,6 +273,85 @@ extension SerialTests {
                     }
                 }
             }
+        }
+
+        // Process group on timeout (R3, CI-PGROUP-FLAKE): the whole group is killed at the deadline.
+        // The pgid comes from a file the leader writes, never from the killed run's stdout. An absent
+        // or empty file means the shell was killed before it forked anything, so nothing can leak and
+        // only the timeout itself is checked; that is the only effect a slow start under load can have.
+        @Test func processGroupKilledOnTimeout() async {
+            let pgidFile = NSTemporaryDirectory() + "cmdrunner-pgroup-\(getpid())-\(UUID().uuidString)"
+            unlink(pgidFile)
+            defer { unlink(pgidFile) }
+            let start = Date()
+            let outcome = await runCommand("/bin/sh", ["-c", "echo started; echo $$ > '\(pgidFile)'; sleep 30 & wait"],
+                                           timeout: 2)
+            let elapsed = Date().timeIntervalSince(start)
+            #expect(outcome.termination == .timedOut, "process group on timeout: termination == .timedOut")
+            #expect(elapsed < 10, "process group on timeout: elapsed < 10 s (was \(elapsed))")
+            guard let text = try? String(contentsOfFile: pgidFile, encoding: .utf8),
+                  let pgid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pgid > 1 else { return }
+            // `started` was written before the pgid file, so it was in the pipe before the kill.
+            #expect(outcome.stdout == "started\n",
+                    "process group on timeout: output written before the kill is kept (was \(outcome.stdout.debugDescription))")
+            var gone = false
+            let deadline = Date().addingTimeInterval(10)
+            while Date() < deadline {
+                if killpg(pgid, 0) == -1 && errno == ESRCH { gone = true; break }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            #expect(gone, "process group on timeout: no process of group \(pgid) survives")
+        }
+
+        // CI-PGROUP-FLAKE / RUNNER-HANG: a pipe holder OUTSIDE the group survives our kill. The drain is
+        // bounded, so the run returns about killDrainWindow after the reap, with the output marked cut.
+        @Test func killedRunWithOutsideHolderReturns() async {
+            let ready = NSTemporaryDirectory() + "cmdrunner-outside-\(getpid())-\(UUID().uuidString)"
+            unlink(ready)
+            defer { unlink(ready); unlink(ready + ".tmp") }
+            // perl leaves the group (setpgrp), records its pid atomically (tmp + rename), then becomes sleep.
+            let script = #"/usr/bin/perl -e 'setpgrp(0,0) or die; open(F, ">", "$ARGV[0].tmp") or die; print F "$$\n"; close F; rename("$ARGV[0].tmp", $ARGV[0]) or die; exec "/bin/sleep", "30"' '\#(ready)' & wait"#
+            let task = Task { await CommandRunner.run("/bin/sh", ["-c", script], timeout: 30) }
+            var holder: pid_t = -1
+            let deadline = Date().addingTimeInterval(20)
+            while Date() < deadline {
+                if let t = try? String(contentsOfFile: ready, encoding: .utf8),
+                   let p = pid_t(t.trimmingCharacters(in: .whitespacesAndNewlines)) { holder = p; break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            #expect(holder > 1, "outside holder: the holder left the group and reported its pid")
+            let start = Date()
+            task.cancel()
+            let o = await task.value
+            let elapsed = Date().timeIntervalSince(start)
+            if holder > 1 { _ = kill(holder, SIGKILL) }        // it is outside the group: the runner cannot reach it
+            #expect(o.termination == .cancelled, "outside holder: termination == .cancelled (was \(o.termination))")
+            #expect(elapsed >= CommandRunner.killDrainWindow * 0.9,
+                    "outside holder: the runner drained before giving up (elapsed \(elapsed))")
+            #expect(elapsed < 10, "outside holder: bounded drain, no hang (elapsed \(elapsed))")
+        }
+
+        // CI-PGROUP-FLAKE regression (path B): after OUR kill the runner keeps reading until EOF
+        // (bounded by CommandRunner.killDrainWindow), so output the child wrote is kept and nothing
+        // counts as cut. The holder ignores SIGINT and keeps both pipes open until reap's own sweep;
+        // before the fix reading stopped right at reap with both streams open (outputCut → .cancelled).
+        @Test func killedRunKeepsOutputUntilEOF() async {
+            let ready = NSTemporaryDirectory() + "cmdrunner-drain-\(getpid())-\(UUID().uuidString)"
+            unlink(ready)
+            defer { unlink(ready) }
+            let script = "trap 'echo cleanup; exit 0' INT; (trap '' INT; : > '\(ready)'; exec /bin/sleep 30) & wait"
+            let task = Task { await CommandRunner.run("/bin/sh", ["-c", script], timeout: 30, interruptGrace: 30) }
+            let deadline = Date().addingTimeInterval(20)
+            while !FileManager.default.fileExists(atPath: ready) && Date() < deadline {
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            #expect(FileManager.default.fileExists(atPath: ready), "drain: the SIGINT-immune pipe holder started")
+            task.cancel()
+            let o = await task.value
+            #expect(o.termination == .exited(0),
+                    "drain: the child's own exit status, nothing cut (was \(o.termination))")
+            #expect(o.stdout == "cleanup\n",
+                    "drain: output written after SIGINT is kept (was \(o.stdout.debugDescription))")
         }
     }
 }
