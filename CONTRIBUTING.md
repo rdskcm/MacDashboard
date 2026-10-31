@@ -58,9 +58,12 @@ Code and comments: English only, regardless of UI language.
 
 ## Localization
 
-Every new user-facing string needs an entry in both `StringsEN.swift` and
-`StringsRU.swift`. No English-only UI text is accepted, since the app is bilingual and
-switchable in Settings.
+Every user-facing string is a key in one feature file under
+`Sources/MacDashboard/Engine/Strings/` (`Strings+<Feature>.swift`). Each file holds the
+feature's protocol, the English table (`extension StringsEN`, the reference) and the
+Russian table (`extension StringsRU`, the translation); a new key goes into all three
+parts of the same file, and a key missing from either table does not compile. No
+English-only UI text is accepted, since the app is bilingual and switchable in Settings.
 
 ## A note on expectations
 

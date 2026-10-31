@@ -53,7 +53,8 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    from the SAME observable state — switching a card to table view must keep updating
    (this fixes the old dashboard's bug).
 5. UI language: **bilingual (English/Russian)**, switchable in Settings, via the
-   `L10n` protocol with `StringsEN`/`StringsRU` witness files (see §8). Code +
+   `AppStrings` protocol, split into per-feature files under `Engine/Strings/` that each
+   hold the feature protocol and its `StringsEN`/`StringsRU` witnesses (see §8). Code +
    comments: English only, regardless of UI language.
 6. **Read-only by default, with an enumerated set of user-initiated exceptions.**
    Collection never mutates anything: every collector and parser only reads. On top of
@@ -572,7 +573,7 @@ A file that exists but cannot be read as a history object is never overwritten: 
 
 Window ~1150×780 (min 900×620). Every user-facing label below is illustrated in
 Russian for concreteness (matching the legacy dashboard's tone), but each one is a
-`L10n` key with an entry in both `StringsRU.swift` and `StringsEN.swift` — the UI
+`L10n` key with an entry in both the `StringsRU` and `StringsEN` tables — the UI
 renders whichever locale is selected in Settings, defaulting to the system language.
 Structure:
 - Header: «Диагностика Mac» + sub "MacBook Air · Apple M3 · 8 ГБ · macOS 26.5.2" (from
