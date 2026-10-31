@@ -59,7 +59,7 @@ struct HomeNowCellView: View {
             .modifier(HomeNowTint(tone: cell.tone, kind: cell.kind))
         }
         .buttonStyle(DS3TileButtonStyle())
-        .accessibilityLabel("\(cell.label), \(cell.big) \(cell.of)")
+        .accessibilityLabel(cell.accessibilityText)
         .accessibilityIdentifier("home-now-\(cell.kind.rawValue)")
     }
 

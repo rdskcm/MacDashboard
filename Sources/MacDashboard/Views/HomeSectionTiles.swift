@@ -66,7 +66,7 @@ struct HomeSectionTile: View {
             .homeHotRing(tile.hotRing)
         }
         .buttonStyle(DS3TileButtonStyle())
-        .accessibilityLabel(tile.skeleton ? tile.name : "\(tile.name), \(tile.tagText)")
+        .accessibilityLabel(tile.accessibilityText)
         .accessibilityIdentifier("home-tile-\(tile.page.rawValue)")
     }
 

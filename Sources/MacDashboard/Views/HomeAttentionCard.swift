@@ -342,6 +342,11 @@ private struct HomeTaskRow: View {
                     .help(task.section.title)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("\(task.object) \(task.state), \(task.section.title)")
+            .accessibilityHint(Text(help))
+            .accessibilityAction { onOpen() }
             if let verb = task.verb {
                 Button(action: runVerb) {
                     Text(verb).dsSwapInPlace(busy) { DS3Spinner(role: .softRing, size: 12) }
@@ -372,25 +377,7 @@ private struct HomeTaskRow: View {
         .onKeyPress(.return) { onOpen(); return .handled }
         .onKeyPress(.space) { onOpen(); return .handled }
         .modifier(WakeIgnoreMenu(keys: task.wakeHolderKeys, model: model))
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("\(task.object) \(task.state), \(task.section.title)")
-        .accessibilityAction { onOpen() }
-        .modifier(VerbAccessibilityAction(verb: task.verb, perform: runVerb))
-    }
-}
-
-/// The row's verb button is merged into the row's accessibility element, so its action is re-exposed by name.
-private struct VerbAccessibilityAction: ViewModifier {
-    let verb: String?
-    let perform: () -> Void
-
-    func body(content: Content) -> some View {
-        if let verb {
-            content.accessibilityAction(named: Text(verb), perform)
-        } else {
-            content
-        }
+        .accessibilityElement(children: .contain)
     }
 }
 

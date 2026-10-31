@@ -173,8 +173,10 @@ extension SerialTests {
             #expect(stor.tagTone == .hot && stor.tagText == "drive failing", "storage tag from its first (hottest) task")
             let cpu = tiles.first { $0.page == .cpu }!
             #expect(cpu.kvs[0].value == fmtFixed(2.1, decimals: 2) && cpu.kvs[1].value == "412" && cpu.sub == "Apple M3 · 8 cores")
+            #expect(cpu.accessibilityText == "\(cpu.name), Apple M3 · 8 cores, \(cpu.tagText), Load \(fmtFixed(2.1, decimals: 2)), Processes 412")
 
             let skel = HomeModel.tiles(input, tasks: tasks, scan: .firstScan)
+            #expect(skel.allSatisfy { $0.accessibilityText == [$0.name, $0.sub].filter { !$0.isEmpty }.joined(separator: ", ") })
             #expect(skel.allSatisfy { $0.skeleton && !$0.hotRing && $0.kvs.allSatisfy { $0.value == "—" } })
 
             var comps = DateComponents(); comps.year = 2026; comps.month = 10; comps.day = 18; comps.hour = 9; comps.minute = 12
@@ -309,6 +311,22 @@ extension SerialTests {
             #expect(two[1].legend[2].text == "compressed 1.5")
             let three = nowCells(report, live, pressure: .normal, hasBattery: false)
             #expect(three[1].legend.map(\.series) == [.s1, .s2, .s3, .s4])
+        }
+
+        @Test func nowCellAccessibilityText() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            let (report, live) = nowFixture()
+            let cells = nowCells(report, live, pressure: .normal)
+            #expect(cells[0].accessibilityText == "CPU, 25.7%, 48 °C, load 2.10 · 8 cores")
+            let m = cells[1]
+            #expect(m.accessibilityText == (["Memory", "9.5 GB of 16", "pressure low"] + m.legend.map(\.text)
+                                            + ["swap 1 GB of 8 GB · compressed 1.5 GB"]).joined(separator: ", "))
+            #expect(cells[2].accessibilityText.hasPrefix("Storage, \(fmtCapacity(150 * GIB)) free, healthy, data "))
+            #expect(cells[3].accessibilityText == "Battery, 76% capacity, worn, of new, wear threshold 80%, 1 cycle · now 64%, discharging")
+            let loading = nowCells(report, live, pressure: nil, cpu: nil)[0]
+            #expect(loading.accessibilityText == "CPU, Collecting data…")
         }
 
         @Test func nowCellsBatteryMergesReportStatics() {

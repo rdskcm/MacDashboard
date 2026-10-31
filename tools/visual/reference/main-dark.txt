@@ -6,9 +6,13 @@ Devices
 MacDashboard
 MacBook Air · Apple M3 · 16 GB · macOS 26.1 (25B78) · uptime 3 days 4 hours
 Mac status, 5 tasks, need attention, Critical, 1, Warnings, 4, checked at 10:30
+Enable… — Firewall
 Firewall off, Security
+Details — Battery
 Battery 24% worn, Battery
+Update — Homebrew
 Homebrew 3 packages outdated, System
+Set up… — Time Machine
 Time Machine not set up, Backups
 Show all (5)
 Free up space 18.3 GB
@@ -18,7 +22,7 @@ Full Disk Access needed
 You can
 Now
 every 2 s
-CPU, 25.7%
-Memory, 9.5 GB of 16
-Storage, 76.8 GB free
-Battery, 76% capacity
+CPU, 25.7%, 48 °C, load 2.10 · 8 cores
+Memory, 9.5 GB of 16, pressure low, act. 6, wired 2.5, inact. 4.5, swap 512 MB of 2 GB · compressed 1 GB
+Storage, 76.8 GB free, healthy, data 160, sys. 18, oth. 1, of 256 GB · free up 3.1 GB
+Battery, 76% capacity, worn, of new, wear threshold 80%, 312 cycles · charge 82%
