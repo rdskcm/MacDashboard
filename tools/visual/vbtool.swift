@@ -429,7 +429,7 @@ func cmdWindows(_ args: [String]) {
 }
 
 func cmdScreen() {
-    guard let screen = NSScreen.main else { fail("screen: no main screen", code: 3) }
+    guard let screen = NSScreen.screens.first else { fail("screen: no screens", code: 3) }   // menu-bar display: origin of the global top-left coordinates (SMOKE-DISPLAY-SIZE)
     let frame = screen.frame
     let vf = screen.visibleFrame
     let scale = screen.backingScaleFactor
@@ -457,7 +457,7 @@ func cmdParkPoint(_ args: [String]) {
         guard parts.count == 4 else { continue }
         rects.append(CGRect(x: parts[0], y: parts[1], width: parts[2], height: parts[3]))
     }
-    guard let screen = NSScreen.main else { fail("park-point: no main screen", code: 3) }
+    guard let screen = NSScreen.screens.first else { fail("park-point: no screens", code: 3) }
     let frame = screen.frame
     let vf = screen.visibleFrame
     let vx = vf.origin.x
