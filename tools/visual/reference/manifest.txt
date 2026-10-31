@@ -1,15 +1,15 @@
-# state	blessed	macos	sdk	commit
-main-dark	2026-10-27	27.2	27	214bd7d
-main-glass-clear-dark	2026-10-27	27.2	27	214bd7d
-main-glass-tinted-dark	2026-10-27	27.2	27	214bd7d
-main-glass-rt-dark	2026-10-27	27.2	27	214bd7d
-main-report-dark	2026-10-27	27.2	27	214bd7d
-settings-general-dark	2026-10-27	27.2	27	214bd7d
-main-light	2026-10-27	27.2	27	214bd7d
-main-glass-clear-light	2026-10-27	27.2	27	214bd7d
-main-glass-tinted-light	2026-10-27	27.2	27	214bd7d
-main-glass-rt-light	2026-10-27	27.2	27	214bd7d
-main-report-light	2026-10-27	27.2	27	214bd7d
-settings-general-light	2026-10-27	27.2	27	214bd7d
-settings-glass-rt-dark	2026-10-27	27.2	27	214bd7d
-settings-glass-rt-light	2026-10-27	27.2	27	214bd7d
+# state	blessed	macos	sdk	commit	display	profile
+main-dark	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-glass-clear-dark	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-glass-tinted-dark	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-glass-rt-dark	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-report-dark	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+settings-general-dark	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-light	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-glass-clear-light	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-glass-tinted-light	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-glass-rt-light	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+main-report-light	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+settings-general-light	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+settings-glass-rt-dark	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3
+settings-glass-rt-light	2026-10-31	27.2	27	5224c7b-dirty	1280.00x832.00@2.0	Display P3

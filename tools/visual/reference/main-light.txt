@@ -1,0 +1,24 @@
+Critical
+Report
+Refresh report
+This Mac
+Devices
+MacDashboard
+MacBook Air · Apple M3 · 16 GB · macOS 26.1 (25B78) · uptime 3 days 4 hours
+Mac status, 5 tasks, need attention, Critical, 1, Warnings, 4, checked at 10:30
+Firewall off, Security
+Battery 24% worn, Battery
+Homebrew 3 packages outdated, System
+Time Machine not set up, Backups
+Show all (5)
+Free up space 18.3 GB
+Local snapshots 3
+Homebrew 3 outdated
+Full Disk Access needed
+You can
+Now
+every 2 s
+CPU, 25.7%
+Memory, 9.5 GB of 16
+Storage, 76.8 GB free
+Battery, 76% capacity
