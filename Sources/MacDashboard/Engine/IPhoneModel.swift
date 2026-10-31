@@ -31,8 +31,9 @@ final class IPhoneModel {
     var transportAvailable = true
     /// Crash-log listing per device (memory only).
     var logs: [String: [IPhoneLogEntry]] = [:]
-    /// Per device: "<path>|<size>|<mtime>" → bug_type ("" = none), replaced by each successful
-    /// listing (files gone from the phone drop out). Memory only; never written to disk.
+    /// Per device: "<path>|<size>|<mtime ms>" → bug_type ("" = none). Replaced by each successful
+    /// listing (files gone from the phone drop out), extended by type batches, saved to
+    /// `iphone-log-types.json` (IPHONE-LOAD-SPEED R3). IPHONE-CRASHLOG-ACTIONS reads it.
     var headerCache: [String: [String: String]] = [:]
     var logsLoading = InFlightReads<IPhoneHandle>()
     /// Devices whose last crash-log listing failed; cleared by a successful listing or detach.
@@ -54,6 +55,14 @@ final class IPhoneModel {
     var identityLoading = InFlightReads<IPhoneHandle>()
     /// Devices whose last identity read failed; cleared by a successful read or detach.
     var identityFailed: Set<String> = []
+    /// Separate storage read per connected device (R5). Memory only; cleared on detach.
+    var storage: [String: IPhoneStorageRead] = [:]
+    var storageLoading = InFlightReads<IPhoneHandle>()
+
+    /// The identity rows with the storage state applied.
+    func identityRows(_ key: String) -> [IPhoneIdentityField]? {
+        identity[key].map { IPhoneData.identityRows($0, storage: storage[key]) }
+    }
 
     /// «Найти iPhone» → restart of the connection service (Stage 7).
     var restartingService = false
@@ -72,6 +81,7 @@ final class IPhoneModel {
     @ObservationIgnored private var autoReadAt: [String: Date] = [:]
 
     private let store: IPhoneStore
+    private let logTypeStore: IPhoneLogTypeStore
     private let transport: MobileDeviceTransport
     private var started = false
     /// Every handle the transport reported attached and has not detached yet. A read that
@@ -80,8 +90,11 @@ final class IPhoneModel {
 
     init(store: IPhoneStore = IPhoneStore(url: IPhoneStore.defaultURL()),
          transport: MobileDeviceTransport = .shared,
-         archiveRoot: URL? = nil) {
+         archiveRoot: URL? = nil,
+         logTypeStore: IPhoneLogTypeStore = IPhoneLogTypeStore(
+            url: AppInfo.supportFolderURL.appendingPathComponent(IPhoneLogTypeStore.fileName))) {
         self.store = store
+        self.logTypeStore = logTypeStore
         self.transport = transport
         self.archiveRoot = archiveRoot ?? AppSettings.resolveArchiveFolder(
             raw: AppSettings.shared.iphoneArchiveFolder, defaultRoot: IPhoneStore.defaultArchiveRoot())
@@ -93,6 +106,7 @@ final class IPhoneModel {
         // Before any import can start (D7).
         IPhoneData.removeStaleImportRoots(in: FileManager.default.temporaryDirectory)
         devices = store.load()
+        headerCache = logTypeStore.load(keeping: Set(devices.map(\.id)))
         for d in devices { status[d.id] = .remembered }
         migrateLegacyArchivesIfNeeded()
         transportAvailable = transport.isAvailable
@@ -174,12 +188,14 @@ final class IPhoneModel {
             attached.remove(h)
             logsLoading.detach(h)
             identityLoading.detach(h)
+            storageLoading.detach(h)
             pendingHandles.remove(h)
             pendingStatus[h] = nil
             for (key, handle) in connected where handle == h {
                 connected[key] = nil
                 status[key] = .remembered
                 identity[key] = nil
+                storage[key] = nil
                 identityFailed.remove(key)
                 lastSnapshot[key] = nil
                 logs[key] = nil
@@ -205,22 +221,37 @@ final class IPhoneModel {
     }
 
     /// Lists the phone's crash logs (headers already in `headerCache` are not re-read).
+    /// The listing is published before any header is read; the types follow in batches.
     /// No-op when the phone is not connected or a listing over the current connection is already running.
     func loadLogs(deviceKey: String) {
         guard let h = connected[deviceKey], let id = logsLoading.begin(deviceKey, handle: h) else { return }
-        transport.listLogs(h, knownHeaders: headerCache[deviceKey] ?? [:]) { [weak self] result in
+        transport.listLogs(h, knownHeaders: headerCache[deviceKey] ?? [:], onListing: { [weak self] result in
             guard let self else { return }
             // A listing superseded by a newer one, or whose phone detached, is dropped.
             guard logsLoading.finish(deviceKey, id: id), attached.contains(h) else { return }
             switch result {
-            case .success(let (entries, cache)):
-                logs[deviceKey] = entries
-                headerCache[deviceKey] = cache
+            case .success(let listing):
+                logs[deviceKey] = listing.entries
+                setHeaderCache(deviceKey, listing.known)
                 logsFailed.remove(deviceKey)
             case .failure:
                 logsFailed.insert(deviceKey)
             }
-        }
+        }, onTypes: { [weak self] batch in
+            // No request-id check: batches are keyed by file, so a batch of an older listing applies correctly.
+            guard let self, attached.contains(h), connected[deviceKey] == h, let current = logs[deviceKey] else { return }
+            let merged = IPhoneLogTypes.merge(current, batch)
+            if merged != current { logs[deviceKey] = merged }
+            setHeaderCache(deviceKey, IPhoneLogTypes.updatedCache(headerCache[deviceKey] ?? [:],
+                                                                  entries: merged, batch: batch))
+        })
+    }
+
+    /// Updates the in-memory type cache of one device and saves the file when it changed.
+    private func setHeaderCache(_ key: String, _ cache: [String: String]) {
+        guard headerCache[key] != cache else { return }
+        headerCache[key] = cache
+        try? logTypeStore.save(headerCache.filter { k, _ in devices.contains { $0.id == k } })
     }
 
     /// Reads identity and parts of a connected phone; the result is held in memory only.
@@ -238,6 +269,25 @@ final class IPhoneModel {
             case .failure:
                 identityFailed.insert(deviceKey)
             }
+        }
+        loadStorage(deviceKey: deviceKey, handle: h)
+    }
+
+    /// The storage value in its own last-priority read (R5); the card shows «…» until it lands or
+    /// 2 s after the read started on the transport thread.
+    private func loadStorage(deviceKey: String, handle h: IPhoneHandle) {
+        // A stalled read is still in flight: keep its state; its late result still lands.
+        guard let id = storageLoading.begin(deviceKey, handle: h) else { return }
+        storage[deviceKey] = .waiting
+        transport.readStorage(h, onStart: { [weak self] in
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(IPhoneStorageRead.deadlineSeconds))
+                guard let self, storageLoading.isCurrent(deviceKey, id: id) else { return }
+                storage[deviceKey] = storage[deviceKey]?.afterDeadline()
+            }
+        }) { [weak self] result in
+            guard let self, storageLoading.finish(deviceKey, id: id), attached.contains(h) else { return }
+            if case .success(let bytes) = result { storage[deviceKey] = .result(bytes: bytes) } else { storage[deviceKey] = .missing }
         }
     }
 

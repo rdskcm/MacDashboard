@@ -56,7 +56,9 @@ extension SerialTests {
                                _ tweak: (IPhoneModel) -> Void = { _ in }) -> IPhoneModel {
                 // Machine-independent archive path for the Settings › iPhone reference.
                 let m = IPhoneModel(store: IPhoneStore(url: ipStore),
-                                    archiveRoot: archiveRoot)
+                                    archiveRoot: archiveRoot,
+                                    logTypeStore: IPhoneLogTypeStore(
+                                        url: ipStore.deletingLastPathComponent().appendingPathComponent(IPhoneLogTypeStore.fileName)))
                 m.applyVisualFixture()
                 tweak(m)
                 return m
@@ -1001,6 +1003,16 @@ extension SerialTests {
                                 $0.archiveLogs = [:]
                             }, deviceKey: alex)
                         }
+                        HarnessSection(label: "iPhone logs: types still being read") {
+                            IPhoneLogsCard(model: fixtureIPhone { m in
+                                m.archiveLogs = [:]
+                                m.logs[alex] = m.logs[alex]!.map { e in
+                                    e.category == .other || e.category == .jetsam
+                                        ? IPhoneLogEntry(path: e.path, size: e.size, modified: e.modified, bugType: nil, category: .pending, source: .live)
+                                        : e
+                                }
+                            }, deviceKey: alex)
+                        }
                     }
                 }
                 // Kept archives show only for names whose file exists: a temp root holds the fixture's one file.
@@ -1064,6 +1076,9 @@ extension SerialTests {
                                 $0.identity[alex] = nil
                                 $0.connected[alex] = nil
                             }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone identity: storage still reading") {
+                            IPhoneIdentityCard(model: fixtureIPhone { $0.storage[alex] = .waiting }, deviceKey: alex, wide: true)
                         }
                     }
                 }

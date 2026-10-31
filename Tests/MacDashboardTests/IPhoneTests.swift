@@ -57,7 +57,7 @@ extension SerialTests {
             }
             #expect(IPhoneData.category(bugType: nil) == .other, "iPhone: category nil -> other")
             #expect(LogCategory.allCases == [.appCrash, .exceptionFault, .jetsam, .diskWrites, .cpuResource,
-                                           .stackshot, .otherReport, .analytics, .other],
+                                           .stackshot, .otherReport, .analytics, .other, .pending],
                   "iPhone: LogCategory.allCases is the display order")
 
             // --- AFC mtime ---
