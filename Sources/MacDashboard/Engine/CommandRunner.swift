@@ -56,12 +56,21 @@ enum CommandRunner {
     /// Cap on how many stderr bytes `CommandOutcome.stderrHead` keeps. 2 KiB.
     static let stderrHeadCap = 2 * 1024
 
+    /// How long a run keeps reading after OUR kill (timeout or cancellation) before it stops
+    /// (CI-PGROUP-FLAKE). The reap's `killpg` sweep has killed every writer in the group, so EOF
+    /// normally follows within milliseconds and every byte the child wrote is kept. Only a pipe
+    /// holder OUTSIDE the group, which `killpg` cannot reach, makes the run wait this long; then
+    /// reading stops and the output counts as cut. 2 s: above the >1 s scheduling stalls seen on
+    /// loaded CI runners, below the shortest command timeout in the app (5 s).
+    static let killDrainWindow: TimeInterval = 2
+
     /// Runs the executable at the ABSOLUTE `path` (no PATH lookup, no /usr/bin/env) with
     /// `args`, stdin /dev/null, the pinned `environment`, as leader of its own process group.
     /// `onLine` (optional) receives every stdout and stderr line, on a private serial queue,
     /// all of them before this function returns. Cancelling the awaiting Task kills the
     /// group (or skips the spawn). Never blocks the caller or the Swift concurrency pool: each running child has one
     /// dedicated waiter thread that blocks until it exits.
+    /// Output the child wrote before OUR kill is kept: after a timeout or cancellation, reading continues until EOF, at most `killDrainWindow` after the leader is reaped.
     /// `interruptGrace` (opt-in): cancellation first sends SIGINT to the group so the child can clean up (what Ctrl-C does) and sends SIGKILL only if the leader is still unreaped `interruptGrace` seconds later. The outcome is then the child's own exit status unless the escalation fired or output was cut (→ `.cancelled`). Timeouts always SIGKILL.
     static func run(_ path: String, _ args: [String], timeout: TimeInterval,
                     environment: [String: String] = defaultEnvironment,
@@ -220,7 +229,7 @@ struct LineSplitter {
 }
 
 /// One run's state machine. EVERY stored property is read and written only on `queue`
-/// (both DispatchIO channels, the deadline timer, the cancel hop and the waiter's reap hop all target it;
+/// (both DispatchIO channels, the deadline and drain timers, the cancel hop and the waiter's reap hop all target it;
 /// the waiter thread itself reads no stored property except the immutable `queue`; `qos` is immutable, like `queue`), which is what makes
 /// `@unchecked Sendable` sound without a lock.
 /// Invariant: a signal is sent only in phase `.running`, i.e. before the leader is reaped,
@@ -243,6 +252,7 @@ private final class CommandJob: @unchecked Sendable {
     private var outputCut = false          // stopReading() ran while a stream was still open
     private var timer: DispatchSourceTimer?
     private var escalation: DispatchSourceTimer?   // SIGKILL fallback after an interrupt
+    private var drain: DispatchSourceTimer?        // bounds reading after OUR kill (killDrainWindow)
 
     init(onLine: ((String, Bool) -> Void)?, qos: CommandQoS, interruptGrace: TimeInterval?) {
         self.onLine = onLine
@@ -333,10 +343,12 @@ private final class CommandJob: @unchecked Sendable {
                 _ = killpg(pid, SIGKILL)                            // leader unreaped: pgid is ours
             }
         case .reaped:
-            // Leader gone, but a pipe is still open (a holder outside the group). Stop reading;
-            // the output is incomplete, so the outcome is timedOut/cancelled, not the exit status.
+            // Leader gone, but a pipe is still open. If WE killed the group, a drain is running and its
+            // timer decides when reading stops (a second request must not cut it short). Otherwise the
+            // holder is outside the group: stop reading; the output is incomplete, so the outcome is
+            // timedOut/cancelled, not the exit status.
             if killReason == nil { killReason = reason }
-            stopReading()
+            if drain == nil { stopReading() }
         case .done:
             break
         }
@@ -374,8 +386,19 @@ private final class CommandJob: @unchecked Sendable {
             if got == pid { status = s }
         }
         phase = .reaped(status)
-        if killReason != nil { stopReading() }      // we killed it: do not wait on pipe holders outside the group
+        if killReason != nil { beginDrain() }       // we killed it: read to EOF, but never past killDrainWindow
         finishIfComplete()
+    }
+
+    /// After OUR kill: keep reading so bytes the group already wrote are kept, but never wait longer
+    /// than `killDrainWindow` on a pipe holder outside the group (RUNNER-HANG). No-op when both streams
+    /// already ended (`finishIfComplete` finishes at once) or a drain is already running.
+    private func beginDrain() {
+        guard drain == nil, openStreams > 0 else { return }
+        let t = DispatchSource.makeTimerSource(queue: queue)
+        t.schedule(deadline: .now() + CommandRunner.killDrainWindow)
+        t.setEventHandler { self.stopReading() }
+        t.resume(); drain = t
     }
 
     private func stopReading() {
@@ -397,6 +420,7 @@ private final class CommandJob: @unchecked Sendable {
         phase = .done
         timer?.cancel(); timer = nil
         escalation?.cancel(); escalation = nil
+        drain?.cancel(); drain = nil
         channels = []
         let c = completion; completion = nil
         c?(outcome)
