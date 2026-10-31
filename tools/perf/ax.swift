@@ -2,7 +2,7 @@ import Foundation
 import CoreGraphics
 import ApplicationServices
 import AppKit
-// tools/perf helper, compiled by gate.sh into $OUT/.bin/ax (never run from here). Native AX by pid
+// tools/perf helper, compiled by gate.sh and tools/visual/smoke.sh into their $OUT/.bin/ax (never run from here). Native AX by pid
 // (AXUIElementCreateApplication) for every gate UI action. It replaces the old AppleScript helper, whose process lookup
 // `first process whose unix id is <pid>` returned another MacDashboard process's window contents when two ran
 // (GATE-AX-MISS, 2026-10-30), so the gate pressed buttons in the wrong app.
@@ -16,6 +16,13 @@ import AppKit
 //   vscroll <x>,<y>                  first AXScrollArea of window 1 whose frame contains the global point: "bar" when it has
 //                                    a vertical AXScrollBar child (its content overflows), else "nobar"
 //   pin                              window 1 to (0, 29) 1000x733, then the verify check: "pinned" | "MISMATCH ..." | "no window"
+//   place <x>,<y>,<w>,<h>            window 1 to that frame (global top-left points), same poll as pin: "placed" | "off x y w h"
+//                                    (AX and CG agree on another frame) | "MISMATCH ..." | "no window"
+//   main                             "x y w h" of the AXWindows element whose AXMain is true | "notmain" | "no window"
+//   appmenu <prefix>[|alt...]        press the first item of the application menu (menu bar item index 1) whose AXTitle
+//                                    starts with a value: "pressed" | "NOT FOUND: <titles|...>" | "PRESS FAILED (...)"
+//   closewin <x>,<y>,<w>,<h>         press the AXCloseButton (direct child AXButton) of the AXWindows element whose frame is
+//                                    within 2 pt of that frame: "pressed" | "no window" | "NOT FOUND" | "PRESS FAILED (...)"
 //   verify [cgpid]                   "match x y w h" when window 1's AX frame equals (within 2 pt) a layer-0 on-screen CG
 //                                    window of cgpid (default: pid), else "MISMATCH ax=... cg=..." | "no window"
 //   front                            set AXFrontmost and activate the app; "front" once pid is the focused application (<= 1 s), else "NOT FRONT (...)"
@@ -98,6 +105,25 @@ func verify(_ w: AXUIElement, against p: Int32) -> String {
 func focusedPid() -> Int32? {
     NSWorkspace.shared.frontmostApplication?.processIdentifier
 }
+// Sets w's frame, then polls up to 2 s (the window server applies it asynchronously) for AX frame = target = an
+// on-screen CG frame of pid. nil when settled at the target, else the last verify() answer.
+func setFrame(_ w: AXUIElement, _ target: CGRect) -> String? {
+    var p = target.origin, s = target.size
+    AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &p)!)
+    AXUIElementSetAttributeValue(w, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &s)!)
+    var last = ""
+    for _ in 0..<20 {
+        last = verify(w, against: pid)
+        if last.hasPrefix("match"), let f = frame(w), near(f, target) { return nil }
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    return last
+}
+func rect(_ v: String) -> CGRect {   // "x,y,w,h" -> CGRect, else usage
+    let xs = v.split(separator: ",").compactMap { Double(String($0)) }
+    guard xs.count == 4 else { usage() }
+    return CGRect(x: xs[0], y: xs[1], width: xs[2], height: xs[3])
+}
 
 switch kind {
 case "trusted":
@@ -114,19 +140,39 @@ case "front":
     out("NOT FRONT (focused pid \(focusedPid().map { String($0) } ?? "none"))")
 case "pin":
     guard let w = mainWindow() else { out("no window") }
-    var p = CGPoint(x: 0, y: 29), s = CGSize(width: 1000, height: 733)
-    let target = CGRect(origin: p, size: s)
-    AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &p)!)
-    AXUIElementSetAttributeValue(w, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &s)!)
-    // The window server applies the frame asynchronously: poll up to 2 s for AX frame = target = an on-screen CG frame.
-    var last = ""
-    for _ in 0..<20 {
-        last = verify(w, against: pid)
-        if last.hasPrefix("match"), let f = frame(w), near(f, target) { out("pinned") }
-        Thread.sleep(forTimeInterval: 0.1)
-    }
+    guard let last = setFrame(w, CGRect(x: 0, y: 29, width: 1000, height: 733)) else { out("pinned") }
     // AX and CG agree but not at the target: "pinned", and gate.sh's CG frame check reports the wrong frame (exit 70).
     out(last.hasPrefix("match") ? "pinned" : last)
+case "place":
+    let target = rect(value)
+    guard let w = mainWindow() else { out("no window") }
+    guard let last = setFrame(w, target) else { out("placed") }
+    out(last.hasPrefix("match ") ? "off " + String(last.dropFirst(6)) : last)
+case "main":
+    let ws = windows()
+    guard !ws.isEmpty else { out("no window") }
+    guard let m = ws.first(where: { (attr($0, kAXMainAttribute) as? Bool) == true }), let f = frame(m) else { out("notmain") }
+    out("\(n(f.minX)) \(n(f.minY)) \(n(f.width)) \(n(f.height))")
+case "appmenu":
+    guard !alts.isEmpty else { usage() }
+    guard let barRef = attr(app, kAXMenuBarAttribute), CFGetTypeID(barRef) == AXUIElementGetTypeID() else { out("NOT FOUND: no menu bar") }
+    let barItems = children(barRef as! AXUIElement)
+    guard barItems.count > 1, let menu = children(barItems[1]).first else { out("NOT FOUND: no application menu") }
+    let entries = children(menu)
+    let titles = entries.map { str($0, kAXTitleAttribute) }
+    guard let i = titles.firstIndex(where: { t in !t.isEmpty && alts.contains { t.hasPrefix($0) } }) else {
+        out("NOT FOUND: " + titles.joined(separator: "|"))
+    }
+    let err = AXUIElementPerformAction(entries[i], kAXPressAction as CFString)
+    out(err == .success ? "pressed" : "PRESS FAILED (AXError \(err.rawValue))")
+case "closewin":
+    let target = rect(value)
+    guard let w = windows().first(where: { win in frame(win).map { near($0, target) } ?? false }) else { out("no window") }
+    guard let b = children(w).first(where: {
+        str($0, kAXRoleAttribute) == "AXButton" && str($0, kAXSubroleAttribute) == "AXCloseButton"
+    }) else { out("NOT FOUND") }
+    let err = AXUIElementPerformAction(b, kAXPressAction as CFString)
+    out(err == .success ? "pressed" : "PRESS FAILED (AXError \(err.rawValue))")
 case "verify":
     guard let w = mainWindow() else { out("no window") }
     var p = pid

@@ -112,6 +112,10 @@ if [ "$MODE" = "bless" ]; then
     echo "REFUSED: bless: this run's SDK gate was overridden (sdk_gate: overridden)" >&2
     exit 1
   fi
+  if grep -q '^foreign_copies: TEST ONLY' "$RUN_DIR/build-info.txt"; then
+    echo "REFUSED: bless: this run ran beside foreign MacDashboard processes (foreign_copies: TEST ONLY)" >&2
+    exit 1
+  fi
 
   # Collect candidate states with their alpha verdict from results.tsv (skip header).
   BLESS_LIST="$BLESS_STATES"
@@ -196,9 +200,20 @@ if [[ "$IOREG_ROOT" =~ $LOCK_RE ]]; then
   precondition_refused "the screen is locked — unlock it and run again"
 fi
 
-# Precondition 3: no running instance
-if pgrep -x MacDashboard >/dev/null 2>&1; then
-  precondition_refused "quit MacDashboard first"
+# Precondition 3: no MacDashboard process this run did not start (tools/perf/foreign-copies.sh list, as gate.sh;
+# GATE-AX-MISS): a window behind the bench window changes the glass backdrop, and a leftover bench copy is what took
+# the 2026-10-30 night gate's presses. smoke never closes one (night.sh does). SMOKE_TEST_ALLOW_FOREIGN=1 runs beside
+# them instead — for the SMOKE-AX-PID verification only; --bless refuses such a run.
+FOREIGN="$("$ROOT/tools/perf/foreign-copies.sh" list)" || runtime_error "tools/perf/foreign-copies.sh list failed"
+FOREIGN_NOTE="none"
+if [ -n "$FOREIGN" ]; then
+  FOREIGN_ONE="$(paste -sd ';' - <<< "$FOREIGN" | sed 's/;/; /g')"
+  if [ "${SMOKE_TEST_ALLOW_FOREIGN:-0}" = 1 ]; then
+    FOREIGN_NOTE="TEST ONLY (SMOKE_TEST_ALLOW_FOREIGN=1): running beside MacDashboard process(es) this run did not start (pid ppid started command): $FOREIGN_ONE"
+    echo "smoke: $FOREIGN_NOTE" >&2
+  else
+    precondition_refused "MacDashboard process(es) this run did not start are running (pid ppid started command): $FOREIGN_ONE — quit them and run again (smoke never closes them)"
+  fi
 fi
 
 # Precondition 4: SDK gate
@@ -226,16 +241,20 @@ VBTOOL="$TMPBIN/vbtool"
 if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit -framework Vision; then
   runtime_error "vbtool compile failed"
 fi
+# The AX helper of the perf gate (tools/perf/ax.swift, native AX by pid), compiled fresh with gate.sh's flags.
+AXHELPER="$TMPBIN/ax"
+if ! swiftc -O "$ROOT/tools/perf/ax.swift" -o "$AXHELPER" -module-cache-path "$TMPBIN/modcache" > "$TMPBIN/ax.build.log" 2>&1; then
+  runtime_error "ax.swift compile failed: $(tail -5 "$TMPBIN/ax.build.log")"
+fi
 
 # Precondition 5: Screen Recording
 if ! "$VBTOOL" preflight >/dev/null 2>&1; then
   precondition_refused "grant Screen Recording to the terminal running this tool"
 fi
 
-# Precondition 6: Accessibility
-AX_ENABLED="$(osascript -e 'tell application "System Events" to get UI elements enabled' 2>/dev/null || echo false)"
-if [ "$AX_ENABLED" != "true" ]; then
-  precondition_refused "Accessibility is needed (System Events UI elements enabled = $AX_ENABLED)"
+# Precondition 6: Accessibility (the grant of the terminal app; the AX calls are made by the ax helper)
+if [ "$("$AXHELPER" 0 trusted 2>&1)" != trusted ]; then
+  precondition_refused "Accessibility is not enabled for the terminal app (AXIsProcessTrusted is false)"
 fi
 
 # Precondition 7: cliclick
@@ -260,6 +279,12 @@ fi
 mkdir -p "$OUT/raw" "$OUT/norm" "$OUT/diff" "$OUT/text" "$OUT/.bin"
 mv "$TMPBIN/vbtool" "$OUT/.bin/vbtool"
 VBTOOL="$OUT/.bin/vbtool"
+mv "$TMPBIN/ax" "$OUT/.bin/ax"
+AXHELPER="$OUT/.bin/ax"
+ax() { "$AXHELPER" "$PID" "$@" 2>&1; }   # native AX by pid (tools/perf/ax.swift), never a process lookup by name (GATE-AX-MISS)
+is_frame() { [[ "$1" =~ ^-?[0-9]+\ -?[0-9]+\ [0-9]+\ [0-9]+$ ]]; }
+# "pid <n> (<executable>)" of the frontmost application, for diagnostics.
+focused_app() { local p; p="$("$AXHELPER" 0 focused 2>&1)"; echo "pid $p ($(ps -o comm= -p "$p" 2>/dev/null || echo "?"))"; }
 rm -rf "$TMPBIN"
 
 # ---------------------------------------------------------------------------
@@ -304,6 +329,7 @@ THRESHOLDS_CONTENTS="$(cat "$ROOT/tools/visual/thresholds.txt")"
   echo "scrollbars: WhenScrolling (pinned via argument domain; global=$SCROLLBARS_GLOBAL)"
   echo "fixture: visualFixture"
   echo "bench: $BENCH_ID copy at $OUT/app, home $OUT/home"
+  echo "foreign_copies: $FOREIGN_NOTE"
   echo "appearance: in-app (visualAppearance fixture key)"
   echo "alpha_params: corner_pt=32 edge_inset_px=0"
   echo "--- thresholds.txt ---"
@@ -319,7 +345,7 @@ THRESHOLDS_CONTENTS="$(cat "$ROOT/tools/visual/thresholds.txt")"
 # ---------------------------------------------------------------------------
 LAUNCHED_PID=""; MAIN_ID=""; SET_ID=""; CLEANED=0
 CURSOR0="$("$VBTOOL" cursor)"
-FRONT_BUNDLE0="$(osascript -e 'tell application "System Events" to get bundle identifier of first process whose frontmost is true' 2>/dev/null || echo "")"
+FRONT_PID0="$("$AXHELPER" 0 focused 2>&1 || echo none)"   # restored by pid in cleanup (never by bundle id or name)
 BENCH_SAVED_STATE="$HOME/Library/Saved Application State/$BENCH_ID.savedState"
 
 # Nothing of the user's is changed by this run, so cleanup only stops the bench copy and removes bench-only state.
@@ -339,7 +365,7 @@ cleanup() {
   fi
   IFS=' ' read -r cx0 cy0 <<< "$CURSOR0"
   "$CLICLICK" "m:${cx0%.*},${cy0%.*}" >/dev/null 2>&1 || true
-  [ -n "$FRONT_BUNDLE0" ] && osascript -e "tell application id \"$FRONT_BUNDLE0\" to activate" >/dev/null 2>&1 || true
+  case "$FRONT_PID0" in ''|none|"$LAUNCHED_PID") ;; *) "$AXHELPER" "$FRONT_PID0" front >/dev/null 2>&1 || true ;; esac
 }
 trap cleanup EXIT
 trap 'echo "INTERRUPTED"; cleanup; exit 130' INT
@@ -363,7 +389,7 @@ waited=0
 WINDOWS_OUT=""
 # A binary started directly (not through LaunchServices) opens its window only once it is activated.
 while [ "$waited" -lt 20 ]; do
-  osascript -e 'tell application "System Events" to set frontmost of (first process whose unix id is '"$PID"') to true' >/dev/null 2>&1 || true
+  ax front >/dev/null || true
   WINDOWS_OUT="$("$VBTOOL" windows --pid "$PID" || true)"
   COUNT="$(printf '%s\n' "$WINDOWS_OUT" | grep -c . || true)"
   if [ "$COUNT" -eq 1 ]; then break; fi
@@ -391,22 +417,18 @@ echo "main_window_pt: 1150x${H}" >> "$OUT/build-info.txt"
 POS_X="$(awk -v v="$SVX" 'BEGIN{printf "%d", v+20}')"
 POS_Y="$(awk -v v="$SVY" 'BEGIN{printf "%d", v+20}')"
 
-# The window is listed by CGWindowList before System Events can address it: retry for up to 10 s.
-sized=0
+# The window is listed by CGWindowList before AX can address it: retry for up to 10 tries (ax place itself polls 2 s).
+sized=0; PLACE_OUT=""
 for _try in 1 2 3 4 5 6 7 8 9 10; do
-  osascript -e 'tell application "System Events" to set frontmost of (first process whose unix id is '"$PID"') to true' >/dev/null 2>&1 || true
-  if osascript >/dev/null 2>&1 <<OSA
-tell application "System Events"
-  tell (first process whose unix id is $PID)
-    set position of window 1 to {$POS_X, $POS_Y}
-    set size of window 1 to {1150, $H}
-  end tell
-end tell
-OSA
-  then sized=1; break; fi
+  ax front >/dev/null || true
+  PLACE_OUT="$(ax place "$POS_X,$POS_Y,1150,$H")" || true
+  case "$PLACE_OUT" in
+    placed) sized=1; break ;;
+    off\ *) echo "WARNING: the bench window settled at ${PLACE_OUT#off } instead of $POS_X $POS_Y 1150 $H" >&2; sized=1; break ;;
+  esac
   sleep 1
 done
-[ "$sized" = 1 ] || runtime_error "could not position and size the bench window through System Events"
+[ "$sized" = 1 ] || runtime_error "could not position and size the bench window by AX (last answer: $PLACE_OUT)"
 
 LAUNCH_SETTLE=10
 sleep "$LAUNCH_SETTLE"
@@ -426,7 +448,7 @@ within() {
 assert_key() {
   local wid="$1"
   local context="$2"
-  osascript -e 'tell application "System Events" to set frontmost of (first process whose unix id is '"$PID"') to true' >/dev/null 2>&1 || true
+  ax front >/dev/null || true
   local waited_ms=0
   local printed=0
   local last_reason="no window bounds yet"
@@ -434,48 +456,35 @@ assert_key() {
     local wb
     wb="$(window_bounds "$wid")"
     if [ -n "$wb" ]; then
-      local out
-      out="$(osascript <<OSA
-tell application "System Events"
-  set procs to (processes whose unix id is $PID)
-  if (count of procs) = 0 then return "notfront"
-  set proc to item 1 of procs
-  if not (frontmost of proc) then return "notfront"
-  tell proc
-    if not (value of attribute "AXMain" of window 1) then return "notmain"
-    set p to position of window 1
-    set sz to size of window 1
-    return ((item 1 of p) as string) & " " & ((item 2 of p) as string) & " " & ((item 1 of sz) as string) & " " & ((item 2 of sz) as string)
-  end tell
-end tell
-OSA
-)"
-      if [ "$out" = "notfront" ] || [ "$out" = "notmain" ]; then
-        last_reason="$out"
+      local fp out
+      fp="$("$AXHELPER" 0 focused 2>&1)"
+      if [ "$fp" != "$PID" ]; then
+        last_reason="notfront (focused pid $fp)"
       else
-        local px py pw ph bx by bw bh
-        read -r px py pw ph <<< "$out"
-        read -r bx by bw bh <<< "$wb"
-        if within "$px" "$bx" && within "$py" "$by" && within "$pw" "$bw" && within "$ph" "$bh"; then
-          return 0
+        out="$(ax main)"
+        if ! is_frame "$out"; then
+          last_reason="$out"
+        else
+          local px py pw ph bx by bw bh
+          read -r px py pw ph <<< "$out"
+          read -r bx by bw bh <<< "$wb"
+          if within "$px" "$bx" && within "$py" "$by" && within "$pw" "$bw" && within "$ph" "$bh"; then
+            return 0
+          fi
+          last_reason="bounds AX=$px $py $pw $ph CG=$bx $by $bw $bh"
         fi
-        last_reason="bounds AX=$px $py $pw $ph CG=$bx $by $bw $bh"
       fi
     else
       last_reason="no window bounds for wid=$wid"
     fi
     if [ "$printed" -eq 0 ]; then
-      local fname
-      fname="$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || echo "?")"
-      echo "waiting for MacDashboard to become key (front app: $fname) — answer any system prompt"
+      echo "waiting for MacDashboard to become key (front app: $(focused_app)) — answer any system prompt"
       printed=1
     fi
     sleep 0.5
     waited_ms=$((waited_ms + 500))
     if [ "$waited_ms" -ge 30000 ]; then
-      local fname2
-      fname2="$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null || echo "?")"
-      runtime_error "assert_key timeout: wid=$wid context=$context reason=$last_reason front app: $fname2"
+      runtime_error "assert_key timeout: wid=$wid context=$context reason=$last_reason front app: $(focused_app)"
     fi
   done
 }
@@ -498,210 +507,60 @@ park_cursor() {
   "$CLICLICK" "m:$pt" >/dev/null 2>&1 || runtime_error "cliclick park failed"
 }
 
-# Drive the main window via an AX press on a button (VISUAL-COVERAGE, R4;
-# Amendment 1; REDESIGN-HOME: the header Report button `main-report` toggles
-# the report, `home-tile-*` / `page-back` open and close a section page) — never
-# a coordinate click or keystroke. `.accessibilityLabel` lands in
-# AXAttributedDescription, which System Events cannot read (-10000);
-# `AXIdentifier` (set via `.accessibilityIdentifier`) is the
-# language-independent, script-readable handle instead. Searches
-# `entire contents of window 1` for the first button whose AXIdentifier
-# equals $1; presses it, or reports the identifiers it saw.
+# Drive the main window via an AX press on a button (VISUAL-COVERAGE, R4; Amendment 1; REDESIGN-HOME) — never a
+# coordinate click or keystroke. `AXIdentifier` (set via `.accessibilityIdentifier`) is the language-independent
+# handle. All AX goes through tools/perf/ax.swift addressed by $PID (SMOKE-AX-PID): a lookup by process (System
+# Events `first process whose unix id is`) returned another MacDashboard process's windows when two ran (GATE-AX-MISS).
+# On a miss the tree of the pid's window 1 is written to $OUT/ax-dump-<id>.txt.
 press_main_tab() {
-  local axid="$1"
-  local out
-  out="$(osascript - "$PID" "$axid" <<'EOF'
-on run argv
-  set thePID to (item 1 of argv) as integer
-  set theAXID to (item 2 of argv)
-  tell application "System Events"
-    tell (first process whose unix id is thePID)
-      set allElements to entire contents of window 1
-      set target to missing value
-      set idsStr to ""
-      repeat with el in allElements
-        try
-          if (class of el) is button then
-            set elID to ""
-            try
-              set elID to (value of attribute "AXIdentifier" of el)
-            end try
-            if idsStr is "" then
-              set idsStr to elID
-            else
-              set idsStr to idsStr & "|" & elID
-            end if
-            if target is missing value and elID is theAXID then
-              set target to el
-            end if
-          end if
-        end try
-      end repeat
-      if target is missing value then
-        return "NOTFOUND:" & idsStr
-      end if
-      perform action "AXPress" of target
-      return "OK"
-    end tell
-  end tell
-end run
-EOF
-)" || runtime_error "press_main_tab: osascript failed"
+  local axid="$1" out
+  out="$(ax id "$axid")"
   case "$out" in
-    OK) ;;
-    NOTFOUND:*) runtime_error "press_main_tab: AXIdentifier '$axid' not found; identifiers seen: ${out#NOTFOUND:}" ;;
-    *) runtime_error "press_main_tab: unexpected osascript output: $out" ;;
+    pressed) ;;
+    "NOT FOUND")
+      ax dump > "$OUT/ax-dump-$axid.txt"
+      runtime_error "press_main_tab: AXIdentifier '$axid' not found in pid $PID; identifiers seen: $OUT/ax-dump-$axid.txt" ;;
+    *) runtime_error "press_main_tab: ax id '$axid' answered: $out" ;;
   esac
 }
 
-# wait_ax_id present|absent AXIDENTIFIER SECONDS — polls window 1 every 0.5 s for an element of any class with
-# that AXIdentifier (ids are collected into one string and matched in the shell); 0 when the wanted state is reached, 1 on timeout (D12).
+# wait_ax_id present|absent AXIDENTIFIER SECONDS — polls window 1 of $PID every 0.5 s for an element of any role with
+# that AXIdentifier (ax exists); 0 when the wanted state is reached, 1 on timeout (D12).
 wait_ax_id() {
-  local want="$1" axid="$2" secs="$3" n=0 out state
+  local want="$1" axid="$2" secs="$3" n=0 state
   while :; do
-    out="$(osascript - "$PID" <<'EOF'
-on run argv
-  set thePID to (item 1 of argv) as integer
-  set outStr to "|"
-  tell application "System Events"
-    tell (first process whose unix id is thePID)
-      set allElements to entire contents of window 1
-      repeat with el in allElements
-        try
-          set elID to (value of attribute "AXIdentifier" of el)
-          set outStr to outStr & elID & "|"
-        end try
-      end repeat
-    end tell
-  end tell
-  return outStr
-end run
-EOF
-)" || out=""
-    case "$out" in *"|$axid|"*) state=present ;; *) state=absent ;; esac
-    [ -n "$out" ] && [ "$state" = "$want" ] && return 0
+    state="$(ax exists "$axid")"
+    [ "$state" = "$want" ] && return 0
     n=$((n + 1)); [ "$n" -ge $((secs * 2)) ] && return 1
     sleep 0.5
   done
 }
 
-# Open Settings via an AX press on the app-menu item (block spec, Design
-# section, amended 2026-09-24: synthetic keystrokes proved intermittent on
-# this bench — Cmd+, sometimes not delivered — so the tool targets the menu
-# item directly through AX and sends no keystrokes at all). Searches menu bar
-# item 2 (the application menu) of the process for the first menu item whose
-# name starts with "Settings" and performs "AXPress" on it. If none is found,
-# reports the menu items it saw and exits 70 (never falls back to keystrokes).
+# Open Settings via an AX press on the app-menu item whose title starts with "Settings" (amended 2026-09-24:
+# synthetic keystrokes proved intermittent, so no keystrokes at all). Never falls back to keystrokes.
 open_settings() {
   local out
-  out="$(osascript - "$PID" <<'EOF'
-on run argv
-  set thePID to (item 1 of argv) as integer
-  tell application "System Events"
-    tell (first process whose unix id is thePID)
-      set appMenu to menu 1 of menu bar item 2 of menu bar 1
-      set settingsItem to missing value
-      set namesStr to ""
-      repeat with mi in menu items of appMenu
-        set miName to ""
-        try
-          set miName to name of mi
-        end try
-        if namesStr is "" then
-          set namesStr to miName
-        else
-          set namesStr to namesStr & "|" & miName
-        end if
-        if settingsItem is missing value and miName starts with "Settings" then
-          set settingsItem to mi
-        end if
-      end repeat
-      if settingsItem is missing value then
-        return "NOTFOUND:" & namesStr
-      end if
-      perform action "AXPress" of settingsItem
-      return "OK"
-    end tell
-  end tell
-end run
-EOF
-)" || runtime_error "open_settings: osascript failed"
+  out="$(ax appmenu Settings)"
   case "$out" in
-    OK) ;;
-    NOTFOUND:*) runtime_error "Settings menu item not found via AX; menu items seen: ${out#NOTFOUND:}" ;;
-    *) runtime_error "open_settings: unexpected osascript output: $out" ;;
+    pressed) ;;
+    "NOT FOUND"*) runtime_error "Settings menu item not found via AX; menu items seen: ${out#NOT FOUND: }" ;;
+    *) runtime_error "open_settings: ax appmenu answered: $out" ;;
   esac
 }
 
-# Close Settings via an AX press on its AXCloseButton (block spec, Design
-# section, amended 2026-09-24; same rationale as open_settings — Cmd+W
-# sometimes left Settings open). Finds the process window whose position and
-# size match the Settings window's last-known bounds (±1 pt, same tolerance
-# as assert_key's `within`), then presses the button with subrole
-# "AXCloseButton" on it.
+# Close Settings via an AX press on the AXCloseButton of the pid's window whose frame matches the Settings window's
+# CG bounds (amended 2026-09-24; Cmd+W sometimes left Settings open).
 close_settings() {
-  local wid="$1"
-  local wb
+  local wid="$1" wb bx by bw bh out
   wb="$(window_bounds "$wid")"
   [ -n "$wb" ] || runtime_error "close_settings: no bounds for window $wid"
-  local bx by bw bh
   read -r bx by bw bh <<< "$wb"
-  local out
-  out="$(osascript - "$PID" "$bx" "$by" "$bw" "$bh" <<'EOF'
-on run argv
-  set thePID to (item 1 of argv) as integer
-  set bx to (item 2 of argv) as real
-  set boundsY to (item 3 of argv) as real
-  set bw to (item 4 of argv) as real
-  set bh to (item 5 of argv) as real
-  tell application "System Events"
-    tell (first process whose unix id is thePID)
-      set targetWindow to missing value
-      repeat with w in windows
-        try
-          set p to position of w
-          set sz to size of w
-          set dx to (item 1 of p) - bx
-          if dx < 0 then set dx to -dx
-          set dy to (item 2 of p) - boundsY
-          if dy < 0 then set dy to -dy
-          set dw to (item 1 of sz) - bw
-          if dw < 0 then set dw to -dw
-          set dh to (item 2 of sz) - bh
-          if dh < 0 then set dh to -dh
-          if dx <= 1 and dy <= 1 and dw <= 1 and dh <= 1 then
-            set targetWindow to w
-            exit repeat
-          end if
-        end try
-      end repeat
-      if targetWindow is missing value then
-        return "NOWINDOW"
-      end if
-      set closeBtn to missing value
-      repeat with b in buttons of targetWindow
-        try
-          if (subrole of b) is "AXCloseButton" then
-            set closeBtn to b
-            exit repeat
-          end if
-        end try
-      end repeat
-      if closeBtn is missing value then
-        return "NOBUTTON"
-      end if
-      perform action "AXPress" of closeBtn
-      return "OK"
-    end tell
-  end tell
-end run
-EOF
-)" || runtime_error "close_settings: osascript failed"
+  out="$(ax closewin "$bx,$by,$bw,$bh")"
   case "$out" in
-    OK) ;;
-    NOWINDOW) runtime_error "close_settings: no AX window matching Settings bounds ($bx,$by,$bw,$bh)" ;;
-    NOBUTTON) runtime_error "close_settings: AXCloseButton not found on Settings window" ;;
-    *) runtime_error "close_settings: unexpected osascript output: $out" ;;
+    pressed) ;;
+    "no window") runtime_error "close_settings: no AX window of pid $PID matching Settings bounds ($bx,$by,$bw,$bh)" ;;
+    "NOT FOUND") runtime_error "close_settings: AXCloseButton not found on Settings window" ;;
+    *) runtime_error "close_settings: ax closewin answered: $out" ;;
   esac
 }
 
