@@ -1,12 +1,11 @@
 // tools/visual/vbtool.swift — pixel/window helper for tools/visual/smoke.sh and snapshots.sh.
-// Compiled fresh at the start of every run: `swiftc -O -o .bin/vbtool vbtool.swift -framework AppKit -framework Vision`.
+// Compiled fresh at the start of every run: `swiftc -O -o .bin/vbtool vbtool.swift -framework AppKit`.
 // Subcommands: preflight, windows, screen, cursor, park-point, alpha-check,
-// downscale, diff, text-diff, sheet, snap-compare, selftest. See tools/visual/README.md for the contract.
+// downscale, diff, text-compare, sheet, snap-compare, selftest. See tools/visual/README.md for the contract.
 
 import AppKit
 import CoreGraphics
 import ImageIO
-import Vision
 
 // MARK: - Errors
 
@@ -298,30 +297,12 @@ func computeDiff(ref: PixelImage, cur: PixelImage, tol: Int) -> (pct: Double, si
     return (pct, false, mask)
 }
 
-// MARK: - Text recognition (VISUAL-TEXT-DRIFT)
+// MARK: - Text comparison (SMOKE-TEXT-NOISE: Accessibility text files)
 
-/// Visible text of an image as normalized lines (Apple Vision, on-device).
-/// Fixed settings so reference and capture are read identically: accurate,
-/// no language correction, en-US (the run pins the app language to en),
-/// minimum text height 6 px regardless of image height.
-func recognizeTextLines(_ cg: CGImage) throws -> [String] {
-    let request = VNRecognizeTextRequest()
-    request.recognitionLevel = .accurate
-    request.usesLanguageCorrection = false
-    request.recognitionLanguages = ["en-US"]
-    request.minimumTextHeight = Float(min(1.0, 6.0 / Double(max(cg.height, 1))))
-    let handler = VNImageRequestHandler(cgImage: cg, options: [:])
-    try handler.perform([request])
-    return (request.results ?? [])
-        .compactMap { $0.topCandidates(1).first?.string }
-        .map(normalizeTextLine)
-        .filter { !$0.isEmpty }
-}
-
-/// Drop all whitespace: Vision splits or joins small labels ("3 d" / "3d") when pixels change
-/// elsewhere in the image, so spaces are not a stable part of the recognized text.
-func normalizeTextLine(_ s: String) -> String {
-    String(s.filter { !$0.isWhitespace })
+/// Lines of an LF text file (reference/<state>.txt, axtext/<state>.txt); empty lines dropped. The strings are exact
+/// (ax `text` already folded whitespace), so no normalisation here (D8).
+func readTextLines(_ path: String) throws -> [String] {
+    try String(contentsOfFile: path, encoding: .utf8).split(separator: "\n").map(String.init)
 }
 
 /// Order-insensitive multiset difference: lines only in ref (removed) and only in cur (added), each sorted.
@@ -384,22 +365,6 @@ func makeOpaqueCGImage(w: Int, h: Int) -> CGImage {
         data: &pixels, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
         space: cs, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
     )!
-    return ctx.makeImage()!
-}
-
-func makeTextCGImage(_ text: String, w: Int, h: Int) -> CGImage {
-    let cs = CGColorSpace(name: CGColorSpace.sRGB)!
-    let ctx = CGContext(
-        data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
-        space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-    )!
-    ctx.setFillColor(CGColor(gray: 1, alpha: 1))
-    ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
-    NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 24), .foregroundColor: NSColor.black])
-        .draw(at: CGPoint(x: 20, y: CGFloat(h) / 2 - 14))
-    NSGraphicsContext.restoreGraphicsState()
     return ctx.makeImage()!
 }
 
@@ -552,14 +517,14 @@ func cmdDiff(_ args: [String]) {
     }
 }
 
-func cmdTextDiff(_ args: [String]) {
+func cmdTextCompare(_ args: [String]) {
     let (pos, opts) = parseOptions(args)
     guard pos.count >= 2, let outPath = opts["out"]?.first else {
-        fail("text-diff: usage REF CUR --out FILE", code: 3)
+        fail("text-compare: usage REF.txt CUR.txt --out FILE", code: 3)
     }
     do {
-        let refLines = try recognizeTextLines(loadCGImage(URL(fileURLWithPath: pos[0])))
-        let curLines = try recognizeTextLines(loadCGImage(URL(fileURLWithPath: pos[1])))
+        let refLines = try readTextLines(pos[0])
+        let curLines = try readTextLines(pos[1])
         let (removed, added) = textMultisetDiff(ref: refLines, cur: curLines)
         let body = removed.map { "- \($0)" } + added.map { "+ \($0)" }
         try (body.isEmpty ? "" : body.joined(separator: "\n") + "\n")
@@ -572,7 +537,7 @@ func cmdTextDiff(_ args: [String]) {
         }
         exit(0)
     } catch {
-        fail("text-diff: \(error)", code: 3)
+        fail("text-compare: \(error)", code: 3)
     }
 }
 
@@ -746,8 +711,9 @@ func cmdSelftest() {
     let d9 = computeDiff(ref: a6, cur: b9, tol: 24)
     check(9, approxEqual(d9.pct, 0.0), "pct=\(d9.pct)")
 
-    // Text comparison (VISUAL-TEXT-DRIFT)
-    check(10, normalizeTextLine("  Version \t 2.2 ") == "Version2.2")
+    // Text comparison (SMOKE-TEXT-NOISE): exact multiset of Accessibility strings
+    let d10 = textMultisetDiff(ref: ["CPU, 25.7%"], cur: ["CPU, 27.5%"])          // digit-order mutation is caught
+    check(10, d10.removed == ["CPU, 25.7%"] && d10.added == ["CPU, 27.5%"], "\(d10)")
 
     let d11 = textMultisetDiff(ref: ["a", "b", "b"], cur: ["b", "a", "b"])
     check(11, d11.removed.isEmpty && d11.added.isEmpty, "\(d11)")
@@ -755,16 +721,23 @@ func cmdSelftest() {
     let d12 = textMultisetDiff(ref: ["Version", "2.2"], cur: ["2.3.2", "Version"])
     check(12, d12.removed == ["2.2"] && d12.added == ["2.3.2"], "\(d12)")
 
-    let t22 = makeTextCGImage("Version 2.2", w: 400, h: 80)
-    let t232 = makeTextCGImage("Version 2.3.2", w: 400, h: 80)
-    let o22 = (try? recognizeTextLines(t22)) ?? []
-    let o22again = (try? recognizeTextLines(t22)) ?? []
-    let o232 = (try? recognizeTextLines(t232)) ?? []
-    check(13, o22.joined(separator: " ").contains("2.2"), "ocr=\(o22)")
-    let d14 = textMultisetDiff(ref: o22, cur: o22again)
-    check(14, d14.removed.isEmpty && d14.added.isEmpty, "first=\(o22) second=\(o22again)")
-    let d15 = textMultisetDiff(ref: o22, cur: o232)
-    check(15, !(d15.removed.isEmpty && d15.added.isEmpty), "ref=\(o22) cur=\(o232)")
+    let ttmp = FileManager.default.temporaryDirectory.appendingPathComponent("vbtool-selftest-text-\(getpid())")
+    try! FileManager.default.createDirectory(at: ttmp, withIntermediateDirectories: true)
+    func tfile(_ name: String, _ body: String) -> String {
+        let p = ttmp.appendingPathComponent(name).path
+        try! body.write(toFile: p, atomically: true, encoding: .utf8)
+        return p
+    }
+    let r13 = try! readTextLines(tfile("r13", "Home\n9.5 GB of 16\nCPU, 25.7%\n"))
+    let c13 = try! readTextLines(tfile("c13", "CPU, 25.7%\nHome\n9.5 GB of 16"))   // reordered, no final LF
+    let d13 = textMultisetDiff(ref: r13, cur: c13)
+    check(13, r13.count == 3 && d13.removed.isEmpty && d13.added.isEmpty, "ref=\(r13) cur=\(c13)")
+    let d14 = textMultisetDiff(ref: ["Firewall off", "Security"], cur: ["Firewall off Security"])   // a merge is a change
+    check(14, d14.removed.count == 2 && d14.added == ["Firewall off Security"], "\(d14)")
+    let c15 = try! readTextLines(tfile("c15", ""))
+    let d15 = textMultisetDiff(ref: r13, cur: c15)
+    check(15, c15.isEmpty && d15.removed.count == 3 && d15.added.isEmpty, "\(d15)")
+    try? FileManager.default.removeItem(at: ttmp)
 
     // snap-compare verdicts on a temp run (HARNESS-REDESIGN-RETARGET; INTERNAL-LEFTOVERS)
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("vbtool-selftest-\(getpid())")
@@ -887,7 +860,7 @@ case "park-point": cmdParkPoint(rest)
 case "alpha-check": cmdAlphaCheck(rest)
 case "downscale": cmdDownscale(rest)
 case "diff": cmdDiff(rest)
-case "text-diff": cmdTextDiff(rest)
+case "text-compare": cmdTextCompare(rest)
 case "sheet": cmdSheet(rest)
 case "snap-compare": cmdSnapCompare(rest)
 case "selftest": cmdSelftest()

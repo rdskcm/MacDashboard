@@ -30,6 +30,12 @@ import AppKit
 //   trusted                          "trusted" | "untrusted": AXIsProcessTrusted() (the grant of the terminal app running the gate)
 //   dump                             "windows: <n>", "window 1 @ x,y wxh", then "<id> <AXRole> @ x,y wxh" per element of window 1
 //                                    with a non-empty AXIdentifier
+//   text <x>,<y>,<w>,<h>             visible strings of the AXWindows element whose frame is within 2 pt of that frame (plus
+//                                    its sheets), one per line in reading order (SMOKE-TEXT-NOISE D4-D7) | "NO TEXT" | "no window"
+//                                    An element only partly inside the clip contributes just its visible part of AXValue: AXStringForRange of
+//                                    AXVisibleCharacterRange, else the \n-lines whose AXBoundsForRange meets the clip, else the whole value
+//                                    plus "PARTIAL-CLIP <role>" on stderr (SMOKE-TEXT-NOISE R11); an AXValue equal to a descendant's is read
+//                                    from the deepest element only (Amendment 1a)
 // Window 1 = the app's main window (mainWindow()): the AXWindows element whose AXMain is true, else the first AXStandardWindow,
 // else the largest by AX frame area (tooltips and overlays are extra, small AXWindows entries). Elements are searched depth-first in AXChildren order (as
 // AppleScript's `entire contents`), at most 20000. "NOT FOUND" when nothing matches or the app has no window.
@@ -209,6 +215,113 @@ case "id", "title":
     guard let e = hit else { out("NOT FOUND") }
     let err = AXUIElementPerformAction(e, kAXPressAction as CFString)
     out(err == .success ? "pressed" : "PRESS FAILED (AXError \(err.rawValue))")
+case "text":
+    // SMOKE-TEXT-NOISE: the visible text of the captured window for smoke's text check. Visible (D4): a frame with
+    // positive area that intersects the window frame and every AXScrollArea ancestor's frame, no AXHidden on the path,
+    // and (outside a sheet) not lying entirely inside a sheet's frame. Strings (D5): distinct non-empty AXValue (String
+    // only), AXTitle, AXDescription, whitespace runs folded to one space. Order (D7): minY, minX, depth-first index.
+    // R11: an element whose frame is not entirely inside the clip (one multi-line text box in a scroll view) gives only its
+    // visible part of AXValue, see visibleValue.
+    let target = rect(value)
+    let ws = windows()
+    guard let root = ws.first(where: { w in frame(w).map { near($0, target) } ?? false }),
+          let rootFrame = frame(root) else { out("no window") }
+    var sheets = children(root).filter { str($0, kAXRoleAttribute) == "AXSheet" }
+    for w in ws where !CFEqual(w, root) && !sheets.contains(where: { CFEqual($0, w) }) {
+        if let f = frame(w), target.insetBy(dx: -2, dy: -2).contains(f) { sheets.append(w) }
+    }
+    let sheetFrames = sheets.compactMap { frame($0) }
+    var items: [(y: Int, x: Int, i: Int, s: String)] = []
+    var visited = 0
+    func fold(_ s: String) -> String { s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ") }
+    // SwiftUI Text + .textSelection exposes two nested AXStaticText with one AXValue; only the deepest is read (R11 / Amendment 1a).
+    func descendantHasValue(_ e: AXUIElement, _ value: String) -> Bool {
+        var budget = 200
+        func scan(_ x: AXUIElement) -> Bool {
+            for c in children(x) {
+                guard budget > 0 else { return false }
+                budget -= 1
+                if (attr(c, "AXHidden") as? Bool) == true { continue }
+                if (attr(c, kAXValueAttribute) as? String) == value || scan(c) { return true }
+            }
+            return false
+        }
+        return scan(e)
+    }
+    func axRange(_ r: CFRange) -> AXValue? { var r = r; return AXValueCreate(.cfRange, &r) }
+    func visibleValue(_ e: AXUIElement, _ full: String, clip: CGRect) -> String {
+        var names: CFArray?
+        _ = AXUIElementCopyAttributeNames(e, &names)
+        let attrNames = (names as? [String]) ?? []
+        names = nil
+        _ = AXUIElementCopyParameterizedAttributeNames(e, &names)
+        let paramNames = (names as? [String]) ?? []
+        func param(_ name: String, _ r: CFRange) -> AnyObject? {
+            guard let p = axRange(r) else { return nil }
+            var v: CFTypeRef?
+            return AXUIElementCopyParameterizedAttributeValue(e, name as CFString, p, &v) == .success ? v : nil
+        }
+        if attrNames.contains("AXVisibleCharacterRange"), paramNames.contains("AXStringForRange"),
+           let rv = attr(e, "AXVisibleCharacterRange"), CFGetTypeID(rv) == AXValueGetTypeID() {
+            var r = CFRange()
+            // SwiftUI reports the whole string as the visible range even inside a scroll view: such a range carries no clip.
+            if AXValueGetValue(rv as! AXValue, .cfRange, &r), r.length > 0, r.length < (full as NSString).length,
+               let s = param("AXStringForRange", r) as? String { return s }
+        }
+        if paramNames.contains("AXBoundsForRange") {
+            let ns = full as NSString
+            var kept: [String] = []
+            var start = 0
+            for line in full.components(separatedBy: "\n") {
+                let len = (line as NSString).length
+                defer { start += len + 1 }
+                if fold(line).isEmpty { continue }
+                guard let bv = param("AXBoundsForRange", CFRange(location: start, length: len)),
+                      CFGetTypeID(bv) == AXValueGetTypeID() else { continue }
+                var b = CGRect.zero
+                if AXValueGetValue(bv as! AXValue, .cgRect, &b), b.width > 0, b.height > 0 {
+                    let i = b.intersection(clip)
+                    if !i.isNull && i.width > 0 && i.height > 0 { kept.append(ns.substring(with: NSRange(location: start, length: len))) }
+                }
+            }
+            return kept.joined(separator: "\n")
+        }
+        FileHandle.standardError.write("PARTIAL-CLIP \(str(e, kAXRoleAttribute))\n".data(using: .utf8)!)
+        return full
+    }
+    func walk(_ e: AXUIElement, clip: CGRect, inSheet: Bool) {
+        guard visited < 20000 else { return }
+        visited += 1
+        if (attr(e, "AXHidden") as? Bool) == true { return }
+        if !inSheet && sheets.contains(where: { CFEqual($0, e) }) { return }   // walked as its own root below
+        let f = frame(e)
+        if !inSheet, let f = f, sheetFrames.contains(where: { $0.contains(f) }) { return }   // covered by the sheet
+        var inner = clip
+        if str(e, kAXRoleAttribute) == "AXScrollArea", let f = f { inner = clip.intersection(f) }
+        if let f = f, f.width > 0, f.height > 0 {
+            let v = f.intersection(clip)
+            if !v.isNull && v.width > 0 && v.height > 0 {
+                var got: [String] = []
+                var value = (attr(e, kAXValueAttribute) as? String) ?? ""
+                if !value.isEmpty && descendantHasValue(e, value) { value = "" }   // the deepest element carrying the string wins
+                if !value.isEmpty && v != f { value = visibleValue(e, value, clip: clip) }
+                for s in [value, str(e, kAXTitleAttribute), str(e, kAXDescriptionAttribute)] {
+                    let t = fold(s)
+                    if !t.isEmpty && !got.contains(t) { got.append(t) }
+                }
+                for t in got { items.append((y: n(f.minY), x: n(f.minX), i: items.count, s: t)) }
+            }
+        }
+        for c in children(e) { walk(c, clip: inner, inSheet: inSheet) }
+    }
+    for c in children(root) { walk(c, clip: rootFrame, inSheet: false) }
+    for s in sheets {
+        guard let sf = frame(s) else { continue }
+        for c in children(s) { walk(c, clip: sf.intersection(rootFrame), inSheet: true) }
+    }
+    guard !items.isEmpty else { out("NO TEXT") }
+    items.sort { ($0.y, $0.x, $0.i) < ($1.y, $1.x, $1.i) }
+    out(items.map { $0.s }.joined(separator: "\n"))
 case "dump":
     let ws = windows()
     var lines = ["windows: \(ws.count)"]

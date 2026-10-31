@@ -1,0 +1,30 @@
+General
+General
+Language
+System
+English
+Русский
+Language
+Monitoring
+Theme
+Backups
+System
+Light
+Dark
+Theme
+iPhone
+Background orbs
+1
+Background orbs
+Off when Reduce Motion is on
+About
+Edge light
+Edge light
+Narrow
+Medium
+Wide
+Pointer highlight is off with Reduce Motion
+1
+Launch at login
+Launch at login
+Changes apply instantly.

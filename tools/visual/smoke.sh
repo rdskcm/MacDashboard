@@ -24,7 +24,7 @@ tools/visual/smoke.sh -h | --help
 
 Exit codes: 0 all alpha ok, every diff <= threshold and no text change. 1 at
 least one alpha FAIL (wins over 2). 2 no alpha FAIL, but >=1 state is CHANGED,
-SIZE-CHANGED, TEXT-CHANGED NO-REF or ORPHAN-REF (or its text column reads changed). 64
+SIZE-CHANGED, TEXT-CHANGED, NO-REF or ORPHAN-REF, or its text column reads changed or no-ref (text = the window's visible Accessibility text vs reference/<state>.txt). 64
 usage error. 65 precondition refused. 70 runtime error (the bench copy
 was stopped and its state removed). --bless and --selftest exit 0 on success, 1 on refusal/failure."
 
@@ -94,7 +94,7 @@ if [ -z "$OUT" ]; then OUT="$ROOT/tools/visual/out/$DATESTAMP"; fi
 if [ "$MODE" = "selftest" ]; then
   TMPBIN="$(mktemp -d /tmp/vbtool-selftest.XXXXXX)"
   trap 'rm -rf "$TMPBIN"' EXIT
-  swiftc -O -o "$TMPBIN/vbtool" "$ROOT/tools/visual/vbtool.swift" -framework AppKit -framework Vision
+  swiftc -O -o "$TMPBIN/vbtool" "$ROOT/tools/visual/vbtool.swift" -framework AppKit
   "$TMPBIN/vbtool" selftest
   exit $?
 fi
@@ -140,30 +140,45 @@ if [ "$MODE" = "bless" ]; then
     echo "REFUSED: bless: states with alpha != ok:$FAILED_STATES" >&2
     exit 1
   fi
+  # SMOKE-TEXT-NOISE: every non-orphan candidate needs its Accessibility text; a run made before this block has none.
+  MISSING_TEXT=""
+  for st in $BLESS_LIST; do
+    [ "$(awk -F'\t' -v s="$st" 'NR>1 && $1==s{print $8}' "$RUN_DIR/results.tsv")" = "ORPHAN-REF" ] && continue
+    [ -s "$RUN_DIR/axtext/$st.txt" ] || MISSING_TEXT="$MISSING_TEXT $st"
+  done
+  if [ -n "$MISSING_TEXT" ]; then
+    echo "REFUSED: bless: no Accessibility text (axtext/<state>.txt) in $RUN_DIR for:$MISSING_TEXT — run smoke again" >&2
+    exit 1
+  fi
 
   # Only now, having refused any bad candidate, create/touch the reference dir.
   REF_DIR="$ROOT/tools/visual/reference"
   mkdir -p "$REF_DIR"
   MANIFEST="$REF_DIR/manifest.txt"
   if [ ! -f "$MANIFEST" ]; then
-    printf '# state\tblessed\tmacos\tsdk\tcommit\n' > "$MANIFEST"
+    printf '# state\tblessed\tmacos\tsdk\tcommit\tdisplay\tprofile\n' > "$MANIFEST"
   fi
+  if head -1 "$MANIFEST" | grep -q '^# state'; then TMPM="$(mktemp)"; { printf '# state\tblessed\tmacos\tsdk\tcommit\tdisplay\tprofile\n'; tail -n +2 "$MANIFEST"; } > "$TMPM"; mv "$TMPM" "$MANIFEST"; fi
 
   GIT_COMMIT="$(awk -F': ' '/^git_commit:/{print $2}' "$RUN_DIR/build-info.txt" | head -1)"
   MACOS_V="$(awk -F': ' '/^macos:/{print $2}' "$RUN_DIR/build-info.txt" | head -1)"
   SDK_V="$(awk -F': ' '/^sdk_major:/{print $2}' "$RUN_DIR/build-info.txt" | head -1)"
+  CAP_DISPLAY="$(sed -n 's/^capture_display: //p' "$RUN_DIR/build-info.txt" | head -1)"; CAP_PROFILE="$(sed -n 's/^capture_profile: //p' "$RUN_DIR/build-info.txt" | head -1)"
+  [ -n "$CAP_DISPLAY" ] || CAP_DISPLAY="unknown"
+  [ -n "$CAP_PROFILE" ] || CAP_PROFILE="unknown"
   TODAY="$(date +%Y-%m-%d)"
 
   for st in $BLESS_LIST; do
     if [ "$(awk -F'\t' -v s="$st" 'NR>1 && $1==s{print $8}' "$RUN_DIR/results.tsv")" = "ORPHAN-REF" ]; then
-      rm -f "$REF_DIR/$st.png"
+      rm -f "$REF_DIR/$st.png" "$REF_DIR/$st.txt"
       TMPM="$(mktemp)"
       awk -v s="$st" -F'\t' '$1!=s{print}' "$MANIFEST" > "$TMPM"; mv "$TMPM" "$MANIFEST"
       echo "blessed: $st (reference deleted)"
       continue
     fi
     cp "$RUN_DIR/norm/$st.png" "$REF_DIR/$st.png"
-    NEWLINE="$(printf '%s\t%s\t%s\t%s\t%s' "$st" "$TODAY" "$MACOS_V" "$SDK_V" "$GIT_COMMIT")"
+    cp "$RUN_DIR/axtext/$st.txt" "$REF_DIR/$st.txt"
+    NEWLINE="$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s' "$st" "$TODAY" "$MACOS_V" "$SDK_V" "$GIT_COMMIT" "$CAP_DISPLAY" "$CAP_PROFILE")"
     if grep -q "^$st"$'\t' "$MANIFEST" 2>/dev/null; then
       TMPM="$(mktemp)"
       awk -v s="$st" -v nl="$NEWLINE" -F'\t' 'BEGIN{OFS="\t"} $1==s{print nl; next} {print}' "$MANIFEST" > "$TMPM"
@@ -238,7 +253,7 @@ fi
 TMPBIN="$(mktemp -d /tmp/vbtool-run.XXXXXX)"
 trap 'rm -rf "$TMPBIN"' EXIT
 VBTOOL="$TMPBIN/vbtool"
-if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit -framework Vision; then
+if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit; then
   runtime_error "vbtool compile failed"
 fi
 # The AX helper of the perf gate (tools/perf/ax.swift, native AX by pid), compiled fresh with gate.sh's flags.
@@ -283,7 +298,7 @@ fi
 
 # Every precondition passed: now it is safe to create the run directory and
 # hand vbtool over to it (R7).
-mkdir -p "$OUT/raw" "$OUT/norm" "$OUT/diff" "$OUT/text" "$OUT/.bin"
+mkdir -p "$OUT/raw" "$OUT/norm" "$OUT/diff" "$OUT/text" "$OUT/axtext" "$OUT/.bin"
 mv "$TMPBIN/vbtool" "$OUT/.bin/vbtool"
 VBTOOL="$OUT/.bin/vbtool"
 mv "$TMPBIN/ax" "$OUT/.bin/ax"
@@ -583,6 +598,20 @@ close_settings() {
 STATE_NAMES=()
 STATE_BOUNDS=()
 
+# Visible Accessibility text of the captured window (SMOKE-TEXT-NOISE): read right after the capture, while the
+# state is still on screen, from the AX window at the captured window's CG bounds ($2 = "x y w h"; ax `text`).
+capture_ax_text() {
+  local name="$1" x y w h out
+  read -r x y w h <<< "$2"
+  out="$(ax text "$x,$y,$w,$h")"
+  case "$out" in
+    "no window"|"NO TEXT"|"")
+      ax dump > "$OUT/ax-dump-text-$name.txt"
+      runtime_error "capture_ax_text: '$out' for $name at $x,$y,$w,$h (pid $PID); tree of window 1: $OUT/ax-dump-text-$name.txt" ;;
+  esac
+  printf '%s\n' "$out" > "$OUT/axtext/$name.txt"
+}
+
 capture_state() {
   local name="$1"
   local wid="$2"
@@ -595,6 +624,7 @@ capture_state() {
   if [ ! -f "$OUT/raw/$name.png" ]; then
     runtime_error "screencapture produced no file for $name"
   fi
+  capture_ax_text "$name" "$wb"
   STATE_NAMES+=("$name")
   STATE_BOUNDS+=("$wb")
 }
@@ -616,6 +646,7 @@ capture_region_state() {
   if [ ! -f "$OUT/raw/$name.png" ]; then
     runtime_error "screencapture produced no file for $name"
   fi
+  capture_ax_text "$name" "$wb"
   STATE_NAMES+=("$name")
   STATE_BOUNDS+=("$wb")
 }
@@ -716,6 +747,13 @@ for mode in dark light; do
   fi
 done
 
+# Capture environment (SMOKE-TEXT-NOISE R7): the menu-bar display the window was placed on and the colour profile the
+# capture carries (findings C4: Display P3 on the built-in display, BT.2020 on the external one).
+CAPTURE_DISPLAY="${SW}x${SH}@${SSCALE}"
+CAPTURE_PROFILE="$(sips -g profile "$OUT/raw/main-dark.png" 2>/dev/null | awk -F': ' '/^ *profile:/{print $2; exit}' || true)"
+[ -n "$CAPTURE_PROFILE" ] || CAPTURE_PROFILE="unknown"
+{ echo "capture_display: $CAPTURE_DISPLAY"; echo "capture_profile: $CAPTURE_PROFILE"; } >> "$OUT/build-info.txt"
+
 # ---------------------------------------------------------------------------
 # Per-state processing
 # ---------------------------------------------------------------------------
@@ -764,9 +802,15 @@ while [ "$i" -lt "${#STATE_NAMES[@]}" ]; do
         VERDICT="same"
       fi
     fi
-    # Text check (VISUAL-TEXT-DRIFT): OCR of reference vs capture, independent of diff_pct.
-    TEXT_LINE="$("$VBTOOL" text-diff "$REFERENCE/$st.png" "$OUT/norm/$st.png" --out "$OUT/text/$st.txt")" \
-      || runtime_error "text-diff failed for $st"
+  else
+    VERDICT="NO-REF"
+    DIFF_PCT="n/a"
+    ANY_CHANGE=1
+  fi
+  # Text check (SMOKE-TEXT-NOISE): the state's visible Accessibility text vs reference/<state>.txt (exact multiset).
+  if [ -f "$REFERENCE/$st.txt" ]; then
+    TEXT_LINE="$("$VBTOOL" text-compare "$REFERENCE/$st.txt" "$OUT/axtext/$st.txt" --out "$OUT/text/$st.txt")" \
+      || runtime_error "text-compare failed for $st"
     printf '%s\t%s\n' "$st" "$TEXT_LINE" >> "$OUT/text/summary.txt"
     case "$TEXT_LINE" in
       "TEXT same"*) TEXT="same" ;;
@@ -775,21 +819,21 @@ while [ "$i" -lt "${#STATE_NAMES[@]}" ]; do
         ANY_CHANGE=1
         if [ "$VERDICT" = "same" ]; then VERDICT="TEXT-CHANGED"; fi
         ;;
-      *) runtime_error "text-diff printed no TEXT line for $st: $TEXT_LINE" ;;
+      *) runtime_error "text-compare printed no TEXT line for $st: $TEXT_LINE" ;;
     esac
   else
-    VERDICT="NO-REF"
-    DIFF_PCT="n/a"
+    TEXT="no-ref"
     ANY_CHANGE=1
+    printf '%s\tTEXT no-ref\n' "$st" >> "$OUT/text/summary.txt"
   fi
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$st" "$ALPHA_OK" "$HOLE_PX" "$BBOX_PT" "$REGIONS" "$DIFF_PCT" "$THRESH" "$VERDICT" "$TEXT" >> "$RESULTS"
 done
 
-# A reference whose state is no longer in STATE_ORDER is an ORPHAN-REF (R7); --bless of it deletes the file.
-for f in "$REFERENCE"/*.png; do
-  [ -e "$f" ] || continue
-  ost="$(basename "$f" .png)"
+# A reference (PNG or text) whose state is no longer in STATE_ORDER is an ORPHAN-REF (R7; SMOKE-TEXT-NOISE R5);
+# --bless of it deletes both files.
+for ost in $(for f in "$REFERENCE"/*.png "$REFERENCE"/*.txt; do [ -e "$f" ] || continue; b="$(basename "$f")"; echo "${b%.*}"; done | sort -u); do
+  [ "$ost" = manifest ] && continue
   case " $STATE_ORDER " in *" $ost "*) continue ;; esac
   printf '%s\tn/a\t-\t-\t-\tn/a\t-\tORPHAN-REF\tn/a\n' "$ost" >> "$RESULTS"
   ANY_CHANGE=1
@@ -815,21 +859,32 @@ fi
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
+# Display/profile of the references vs this run (SMOKE-TEXT-NOISE R7): a warning, never an exit-code change (D12).
+REF_ENVS="$( { awk -F'\t' '!/^#/ && NF { print ($6 == "" ? "unknown" : $6) "\t" ($7 == "" ? "unknown" : $7) }' "$REFERENCE/manifest.txt" 2>/dev/null || true; } | sort -u)"
+DISPLAY_WARN=""
+if [ -n "$REF_ENVS" ] && [ "$REF_ENVS" != "$(printf '%s\t%s' "$CAPTURE_DISPLAY" "$CAPTURE_PROFILE")" ]; then
+  DISPLAY_WARN="WARNING: captured on $CAPTURE_DISPLAY ($CAPTURE_PROFILE); references captured on: $(printf '%s\n' "$REF_ENVS" | tr '\t' ' ' | paste -sd ';' - | sed 's/;/; /g'). Pixel results can differ for that reason alone; the text check does not depend on the display."
+fi
+
 {
   echo "MacDashboard visual baseline report"
   echo "run: $OUT"
+  echo "capture: display $CAPTURE_DISPLAY, profile $CAPTURE_PROFILE"
+  [ -z "$DISPLAY_WARN" ] || echo "$DISPLAY_WARN"
   cat "$RESULTS" | column -t -s "$(printf '\t')"
   echo
   echo "reference provenance (manifest vs. current):"
   CUR_MACOS="$(sw_vers -productVersion)"
   CUR_MACOS_MAJOR="${CUR_MACOS%%.*}"
   awk -F'\t' -v ref="$REFERENCE/manifest.txt" -v cur_macos="$CUR_MACOS" \
-      -v cur_macos_major="$CUR_MACOS_MAJOR" -v cur_sdk="$SDK_MAJOR" '
+      -v cur_macos_major="$CUR_MACOS_MAJOR" -v cur_sdk="$SDK_MAJOR" \
+      -v cur_disp="$CAPTURE_DISPLAY" -v cur_prof="$CAPTURE_PROFILE" '
     BEGIN {
       while ((getline line < ref) > 0) {
         if (line ~ /^#/ || line == "") continue
         split(line, f, "\t")
         blessed[f[1]] = f[2]; refmacos[f[1]] = f[3]; refsdk[f[1]] = f[4]
+        refdisp[f[1]] = (f[6] == "" ? "unknown" : f[6]); refprof[f[1]] = (f[7] == "" ? "unknown" : f[7])
         seen[f[1]] = 1
       }
       close(ref)
@@ -841,11 +896,12 @@ fi
       rm = refmacos[st]; rs = refsdk[st]
       rmajor = rm; sub(/\..*/, "", rmajor)
       same = (rmajor == cur_macos_major && rs == cur_sdk) ? "same" : "DIFFERS"
-      print st"  blessed="blessed[st]"  ref="rm"/"rs"  current="cur_macos"/"cur_sdk"  "same
+      print st"  blessed="blessed[st]"  ref="rm"/"rs"  current="cur_macos"/"cur_sdk"  "same \
+        "  display ref=" refdisp[st] " / " refprof[st] "  current=" cur_disp " / " cur_prof "  " ((refdisp[st] == cur_disp && refprof[st] == cur_prof) ? "same" : "DIFFERS")
     }
   ' "$RESULTS"
   echo
-  echo "text differences (OCR; - only in reference, + only in capture):"
+  echo "text differences (Accessibility text vs reference/<state>.txt; - only in reference, + only in capture):"
   TEXT_CHANGED_STATES="$(awk -F'\t' 'NR>1 && $9=="changed"{print $1}' "$RESULTS")"
   if [ -z "$TEXT_CHANGED_STATES" ]; then
     echo "none"
@@ -855,9 +911,13 @@ fi
       sed 's/^/  /' "$OUT/text/$tst.txt"
     done
   fi
+  NOREF_TEXT="$(awk -F'\t' 'NR>1 && $9=="no-ref"{print $1}' "$RESULTS" | paste -sd ' ' -)"
+  [ -z "$NOREF_TEXT" ] || echo "states without reference text (review axtext/ and bless): $NOREF_TEXT"
 } | tee "$OUT/report.txt"
+[ -z "$DISPLAY_WARN" ] || echo "$DISPLAY_WARN" >&2
 
 TITLE="current: macOS $(sw_vers -productVersion) / SDK $SDK_MAJOR / commit $GIT_COMMIT — reference: $REFERENCE"
+[ -z "$DISPLAY_WARN" ] || TITLE="$TITLE — DISPLAY DIFFERS from references (captured $CAPTURE_DISPLAY $CAPTURE_PROFILE)"
 "$VBTOOL" sheet --results "$RESULTS" --ref "$REFERENCE" --norm "$OUT/norm" --diff "$OUT/diff" --title "$TITLE" --out "$OUT/contact-sheet.png" || runtime_error "sheet generation failed"
 
 echo "contact sheet: $OUT/contact-sheet.png"

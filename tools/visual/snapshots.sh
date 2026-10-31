@@ -95,7 +95,7 @@ mkdir -p "$OUT/.bin" || exit 70
 OUT="$(cd "$OUT" && pwd)"
 
 VBTOOL="$OUT/.bin/vbtool"
-if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit -framework Vision >"$OUT/vbtool-build.log" 2>&1; then
+if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit >"$OUT/vbtool-build.log" 2>&1; then
   echo "ERROR: vbtool compile failed" >&2; tail -20 "$OUT/vbtool-build.log" >&2; exit 70
 fi
 
