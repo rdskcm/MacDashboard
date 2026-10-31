@@ -266,6 +266,13 @@ if [ -z "$CLICLICK" ]; then
   precondition_refused "cliclick not found"
 fi
 
+# Precondition 7b: the menu-bar display (where the bench window is placed; `vbtool screen`) is 2x. The references
+# are 2x captures normalised to points; a 1x capture is not resized and differs in antialiasing on every state.
+SCREEN_SCALE="$("$VBTOOL" screen | awk '{print $3}')"
+if [ "$SCREEN_SCALE" != "2.0" ] && [ "$SCREEN_SCALE" != "2" ]; then
+  precondition_refused "the menu-bar display is ${SCREEN_SCALE}x; references are 2x — make a Retina display the main display"
+fi
+
 # Precondition 8: staleness warning (default dist app only)
 if [ "$APP" = "$ROOT/dist.noindex/MacDashboard.app" ]; then
   STALE="$(find "$ROOT/Sources" -newer "$APP_BIN" -print -quit 2>/dev/null || true)"
@@ -404,14 +411,16 @@ SCREEN_NOW="$("$VBTOOL" screen)"
 read -r SW SH SSCALE SVX SVY SVW SVH <<EOF_SCR
 $SCREEN_NOW
 EOF_SCR
-# Main window height: H = min(780, screen_frame_h - 150) (amended 2026-09-24,
-# twice: the original fixed 780 pt cannot fit the bench Mac's 1280x741 pt
-# visible frame; and the visible frame height (vh) drifts 1-2 pt between
-# runs, which made H non-deterministic and produced false SIZE-CHANGED -- so
-# H is derived from the full screen frame height (SH), which is stable).
-H="$(awk -v sh="$SH" 'BEGIN{h=sh-150; if(h>780)h=780; printf "%d", h}')"
-if awk -v w="$SVW" -v h="$H" -v vh="$SVH" 'BEGIN{exit !(w<1260 || h<620 || h>vh-40)}'; then
-  runtime_error "screen too small (visible frame ${SVW}x${SVH} pt, screen frame h ${SH} pt, need vw>=1260, H>=620, H<=vh-40)"
+# Main window size: a fixed 1150x682 pt (SMOKE-DISPLAY-SIZE, 2026-10-31). The references are point-normalised
+# captures of this window, so its size must not follow the display: the former H = min(780, screen_h - 150)
+# gave 682 pt on the built-in 1280x832 pt display and 780 pt on a 1920x1080 pt external one, and every main
+# state became SIZE-CHANGED. 682 is the size the references were blessed at and fits the smallest visible frame
+# seen on the built-in display (733 pt, H <= vh - 40). `vbtool screen` reports the menu-bar display
+# (NSScreen.screens[0]), whose top-left is the origin of the global coordinates `ax place` uses, so the window
+# is placed on the display checked here.
+H=682
+if awk -v w="$SVW" -v h="$H" -v vh="$SVH" 'BEGIN{exit !(w<1260 || h>vh-40)}'; then
+  runtime_error "menu-bar display too small for the fixed 1150x${H} pt bench window (visible frame ${SVW}x${SVH} pt; need visible width >= 1260 and height >= $((H + 40)) pt)"
 fi
 echo "main_window_pt: 1150x${H}" >> "$OUT/build-info.txt"
 POS_X="$(awk -v v="$SVX" 'BEGIN{printf "%d", v+20}')"
@@ -424,7 +433,12 @@ for _try in 1 2 3 4 5 6 7 8 9 10; do
   PLACE_OUT="$(ax place "$POS_X,$POS_Y,1150,$H")" || true
   case "$PLACE_OUT" in
     placed) sized=1; break ;;
-    off\ *) echo "WARNING: the bench window settled at ${PLACE_OUT#off } instead of $POS_X $POS_Y 1150 $H" >&2; sized=1; break ;;
+    off\ *)
+      read -r _ _ OFF_W OFF_H <<< "${PLACE_OUT#off }"
+      if ! awk -v w="$OFF_W" -v h="$OFF_H" -v H="$H" 'BEGIN{dw=w-1150; dh=h-H; if(dw<0)dw=-dw; if(dh<0)dh=-dh; exit !(dw<=1 && dh<=1)}'; then
+        runtime_error "the bench window settled at ${PLACE_OUT#off } instead of $POS_X $POS_Y 1150 $H (wrong size)"
+      fi
+      echo "WARNING: the bench window settled at ${PLACE_OUT#off } instead of $POS_X $POS_Y 1150 $H" >&2; sized=1; break ;;
   esac
   sleep 1
 done
