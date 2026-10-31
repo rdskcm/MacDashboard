@@ -19,6 +19,9 @@ private func swiftFiles(_ subdir: String) throws -> [URL] {
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
 }
 
+/// Engine sources: `Engine/` plus its `Strings/` subfolder (ARCH-STRINGS-SPLIT: the per-feature string tables).
+private func engineFiles() throws -> [URL] { try swiftFiles("Engine") + swiftFiles("Engine/Strings") }
+
 /// One source line with its `//` comment and simple one-line string literals removed.
 private func codeOnly(_ line: Substring) -> String {
     let noComment = line.range(of: "//").map { line[..<$0.lowerBound] } ?? line
@@ -60,7 +63,7 @@ struct EngineBoundaryTests {
 
     @Test func engineImportsNoUIFramework() throws {
         var offenders: [String] = []
-        for file in try swiftFiles("Engine") where Self.engineExceptions[file.lastPathComponent] == nil {
+        for file in try engineFiles() where Self.engineExceptions[file.lastPathComponent] == nil {
             for line in try lines(of: file) {
                 if let module = firstGroup(Self.importLine, in: String(line)), Self.bannedImports.contains(module) {
                     offenders.append("\(file.lastPathComponent): \(line.trimmingCharacters(in: .whitespaces))")
@@ -83,7 +86,7 @@ struct EngineBoundaryTests {
         viewsTypes.subtract(Self.knownCollisions)
         #expect(viewsTypes.count > 50, "the Views type scan found only \(viewsTypes.count) names; the regex is broken")
         var offenders: [String] = []
-        for file in try swiftFiles("Engine") where Self.engineExceptions[file.lastPathComponent] == nil {
+        for file in try engineFiles() where Self.engineExceptions[file.lastPathComponent] == nil {
             var used = Set<String>()
             for line in try lines(of: file) {
                 let code = codeOnly(line)
@@ -111,7 +114,7 @@ struct EngineBoundaryTests {
     }
 
     @Test func movedSideEffectsHaveOneSite() throws {
-        let all = ["", "Engine", "Views"]
+        let all = ["", "Engine", "Engine/Strings", "Views"]
         let relaunch = try sites("AppLifecycle.relaunch(", in: all)
         #expect(relaunch.count == 1 && relaunch[0].hasPrefix("SettingsView.swift:"),
                 "relaunch-single-site: exactly one call site, in SettingsView; found \(relaunch)")
