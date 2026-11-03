@@ -5,6 +5,7 @@
 // (`light-theme-ink-variants`).
 
 import SwiftUI
+import AppKit
 
 // MARK: - Page bar
 
@@ -251,6 +252,51 @@ struct HeroSplitLayout: Layout {
 }
 
 // MARK: - Focus pulse
+
+extension View {
+    /// SECURITY-IDLE-COST F5: keeps a deep link's focus scroll on its card while the page's content is still taking its
+    /// size. Measured on the first visit after launch (Battery, fixture): the page's one `proxy.scrollTo` leaves the page at
+    /// offset 0, while a repeat visit scrolls (270 pt). While `focus` (the page's pulse, a scroll-needing card, not `top`) is
+    /// set, every content-height change repeats the `scrollTo`; the user scrolling, clicking or pressing a key ends it for
+    /// that focus.
+    func ds3KeepFocusScroll(_ focus: CardID?, top: CardID, proxy: ScrollViewProxy, router: NavigationRouter) -> some View {
+        modifier(KeepFocusScroll(focus: focus == top ? nil : focus, proxy: proxy, router: router))
+    }
+}
+
+private struct KeepFocusScroll: ViewModifier {
+    let focus: CardID?
+    let proxy: ScrollViewProxy
+    let router: NavigationRouter
+    @State private var userActed = false
+    @State private var monitor: Any?
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentSize.height }) { _, _ in
+                guard let focus, !userActed, !router.isInlineConfirmOpen else { return }
+                proxy.scrollTo(focus, anchor: .top)
+            }
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting || phase == .decelerating { userActed = true }
+            }
+            .onChange(of: focus) { _, new in
+                userActed = false
+                removeMonitor()
+                guard new != nil else { return }
+                monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { e in
+                    userActed = true
+                    return e
+                }
+            }
+            .onDisappear { removeMonitor() }
+    }
+
+    private func removeMonitor() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+}
 
 extension View {
     /// Deep-link focus ring: a 3 pt accent ring on the card; `active` flips true when the page was opened

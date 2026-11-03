@@ -393,11 +393,19 @@ struct BatteryPageModel: Equatable {
         var comps = DateComponents()
         comps.year = y; comps.month = m; comps.day = 1
         guard let date = Calendar.current.date(from: comps) else { return yyyyMM }
-        let df = DateFormatter()
-        df.locale = Locale(identifier: L10nStore.shared.language == .en ? "en_US" : "ru_RU")
-        df.timeZone = .current
-        df.dateFormat = "LLL yyyy"
+        let df = L10nStore.shared.language == .en ? monthFormatterEN : monthFormatterRU
         return df.string(from: date)
+    }
+
+    private static let monthFormatterEN = makeMonthFormatter("en_US")
+    private static let monthFormatterRU = makeMonthFormatter("ru_RU")
+
+    private static func makeMonthFormatter(_ locale: String) -> DateFormatter {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: locale)
+        df.timeZone = .autoupdatingCurrent
+        df.dateFormat = "LLL yyyy"
+        return df
     }
 
     static func capacityHistory(_ entries: [MacHistoryEntry]) -> (rows: [BatteryHistoryRow], caption: String) {

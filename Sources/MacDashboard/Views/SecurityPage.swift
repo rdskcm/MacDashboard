@@ -20,24 +20,25 @@ struct SecurityPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     SecurityProtectionCard(model: model, narrow: narrow)
-                        .sectionFocusPulse(pulse == .protect)
-                        .ds3HostedEntrance(delay: 0.08)
                         .id(CardID.protect)
+                        .sectionFocusPulse(pulse == .protect)
+                        .ds3Appear(delay: 0.08)
                     SecurityUpdatesCard(model: model)
-                        .sectionFocusPulse(pulse == .updates)
-                        .ds3HostedEntrance(delay: 0.14)
                         .id(CardID.updates)
+                        .sectionFocusPulse(pulse == .updates)
+                        .ds3Appear(delay: 0.14)
                     SecurityCrashesCard(model: model, onConfirmShown: { router.isInlineConfirmOpen = $0 })
-                        .sectionFocusPulse(pulse == .crashes)
-                        .ds3HostedEntrance(delay: 0.20)
                         .id(CardID.crashes)
+                        .sectionFocusPulse(pulse == .crashes)
+                        .ds3Appear(delay: 0.20)
                 }
-                .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { SecurityPageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
+            .contentMargins(.top, 16, for: .scrollContent)
+            .ds3KeepFocusScroll(pulse, top: .protect, proxy: proxy, router: router)
+            .safeAreaInset(edge: .top, spacing: 0) { SecurityPageBar(model: model, onBack: { _ = router.back() }) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Protection is already on top) and pulse it.
                 let d = router.destination
@@ -48,6 +49,7 @@ struct SecurityPage: View {
                 pulse = nil
             }
         }
+        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
         .onDisappear { router.isInlineConfirmOpen = false }
     }
 }

@@ -723,54 +723,34 @@ func brewProgressText(_ p: BrewProgress) -> String {
 
 // MARK: - Shared pointing-hand hover cursor
 
-/// Balances `NSCursor.pointingHand.push()`/`.pop()` for a hover affordance.
-///
-/// `pushed` is tracked explicitly rather than inferred from `hovering`, and it is
-/// popped on THREE exits, not one:
-///   * hover-exit — the ordinary case;
-///   * `isEnabled` going false mid-hover (a button disabled under a stationary
-///     cursor, a plate turning non-interactive after its action ran);
-///   * `.onDisappear` — SwiftUI does not fire `onHover`'s exit callback for a view
-///     removed from the hierarchy while the cursor is still over it (force-quit
-///     removes a process row, a disk is unplugged, a card is rebuilt on refresh),
-///     so without this the push leaks and the pointing-hand cursor sticks app-wide.
+/// Pointing-hand cursor for a hover affordance, via `.pointerStyle(.link)`: the system owns the cursor, so there is
+/// nothing to balance and it survives a view being rebuilt or removed under a stationary pointer.
 ///
 /// `hovering` is optional: sites that keep their own hover visual pass a binding,
 /// sites that only need the cursor pass nothing. While `isEnabled` is false the
 /// binding is left alone entirely, so a non-interactive element shows no hover
 /// visual either — that gating is load-bearing for the former attention card's plates.
-///
-/// `.pointerStyle(.link)` (macOS 15+) is within the package's macOS 26 floor and
-/// could replace this modifier; that replacement has not been made yet.
+/// `isEnabled` going false mid-hover sets the binding to false.
 struct PointingHandOnHover: ViewModifier {
     var isEnabled: Bool = true
     var hovering: Binding<Bool>? = nil
-    @State private var pushed = false
 
     func body(content: Content) -> some View {
         content
+            .pointerStyle(isEnabled ? .link : nil)
             .onHover { isHovering in
                 guard isEnabled else { return }
                 hovering?.wrappedValue = isHovering
-                if isHovering {
-                    if !pushed { NSCursor.pointingHand.push(); pushed = true }
-                } else if pushed {
-                    NSCursor.pop(); pushed = false
-                }
             }
             .onChange(of: isEnabled) { _, nowEnabled in
                 guard !nowEnabled else { return }
                 hovering?.wrappedValue = false
-                if pushed { NSCursor.pop(); pushed = false }
-            }
-            .onDisappear {
-                if pushed { NSCursor.pop(); pushed = false }
             }
     }
 }
 
 extension View {
-    /// Pointing-hand cursor on hover, balanced on hover-exit, on disable and on unmount.
+    /// Pointing-hand cursor on hover (`.pointerStyle(.link)`), enabled by `isEnabled`.
     func pointingHandOnHover(isEnabled: Bool = true, hovering: Binding<Bool>? = nil) -> some View {
         modifier(PointingHandOnHover(isEnabled: isEnabled, hovering: hovering))
     }
