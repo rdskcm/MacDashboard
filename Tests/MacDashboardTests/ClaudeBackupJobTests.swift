@@ -58,6 +58,15 @@ extension SerialTests {
             #expect(ClaudeBackupJob.launchArguments(appPath: "/a/B.app") == ["-n", "-g", "/a/B.app", "--args", "--force"])
         }
 
+        @Test func launchEnvironmentKeepsLocalTimeZone() async {
+            let out = await CommandRunner.run("/bin/date", ["+%z"], timeout: 5, environment: ClaudeBackupJob.launchEnvironment)
+            let secs = TimeZone.current.secondsFromGMT()
+            let sign = secs < 0 ? "-" : "+"
+            let hh = String(format: "%02d", abs(secs) / 3600)
+            let mm = String(format: "%02d", (abs(secs) % 3600) / 60)
+            #expect(out.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "\(sign)\(hh)\(mm)")
+        }
+
         @Test func nextRun() {
             let cal = utcCal
             let e = ClaudeBackupJob.CalendarEntry(minute: 0, hour: 13)

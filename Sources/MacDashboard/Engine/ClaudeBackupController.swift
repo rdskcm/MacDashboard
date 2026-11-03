@@ -26,7 +26,7 @@ final class ClaudeBackupController {
                 readClickOutcome: { since in
                     await BackupLog.readClickOutcome(logURL: BackupLog.resolvedURLs(custom: settings.claudeLogPath).log, since: since)
                 },
-                launch: { app in await CommandRunner.run("/usr/bin/open", ClaudeBackupJob.launchArguments(appPath: app), timeout: 15) },
+                launch: { app in await CommandRunner.run("/usr/bin/open", ClaudeBackupJob.launchArguments(appPath: app), timeout: 15, environment: ClaudeBackupJob.launchEnvironment) },
                 pathExists: { await BackupLog.pathExists($0) })
         }
     }

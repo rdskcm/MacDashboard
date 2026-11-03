@@ -65,6 +65,8 @@ struct ClaudeBackupJob: Equatable, Sendable {
 
     /// Arguments for /usr/bin/open (D2).
     static func launchArguments(appPath: String) -> [String] { ["-n", "-g", appPath, "--args", "--force"] }
+    /// /usr/bin/open passes its environment to the launcher, so the job must not get CommandRunner's pinned TZ and locale: the script stamps its log and snapshot names in local time.
+    static var launchEnvironment: [String: String] { ProcessInfo.processInfo.environment }
 
     /// Next fire strictly after `date`.
     static func nextRun(_ entries: [CalendarEntry], after date: Date, calendar: Calendar = .current) -> Date? {
