@@ -266,5 +266,10 @@ extension SerialTests {
                 #expect(L.batHistoryDelta("−1,2 %", months: 5) == "−1,2 % за 5 месяцев")
             }
         }
+
+        @Test func monthLabelPerLanguage() {
+            withLanguage(.en) { #expect(BatteryPageModel.monthLabel("2025-03") == "Mar 2025") }
+            withLanguage(.ru) { #expect(BatteryPageModel.monthLabel("2025-03") == "март 2025") }
+        }
     }
 }

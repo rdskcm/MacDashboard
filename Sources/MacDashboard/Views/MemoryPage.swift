@@ -22,24 +22,25 @@ struct MemoryPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     MemoryUsageCard(model: model, narrow: narrow)
-                        .sectionFocusPulse(pulse == .usage)
-                        .ds3HostedEntrance(delay: 0.08)
                         .id(CardID.usage)
+                        .sectionFocusPulse(pulse == .usage)
+                        .ds3Appear(delay: 0.08)
                     MemoryCompositionCard(model: model, narrow: narrow)
-                        .sectionFocusPulse(pulse == .comp)
-                        .ds3HostedEntrance(delay: 0.14)
                         .id(CardID.comp)
+                        .sectionFocusPulse(pulse == .comp)
+                        .ds3Appear(delay: 0.14)
                     ProcessListCard(model: model, memoryPage: true)
-                        .sectionFocusPulse(pulse == .procs)
-                        .ds3HostedEntrance(delay: 0.20)
                         .id(CardID.procs)
+                        .sectionFocusPulse(pulse == .procs)
+                        .ds3Appear(delay: 0.20)
                 }
-                .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { MemoryPageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
+            .contentMargins(.top, 16, for: .scrollContent)
+            .ds3KeepFocusScroll(pulse, top: .usage, proxy: proxy, router: router)
+            .safeAreaInset(edge: .top, spacing: 0) { MemoryPageBar(model: model, onBack: { _ = router.back() }) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (Usage is already on top) and pulse it.
                 let d = router.destination
@@ -50,6 +51,7 @@ struct MemoryPage: View {
                 pulse = nil
             }
         }
+        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
     }
 }
 

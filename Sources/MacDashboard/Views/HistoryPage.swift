@@ -17,16 +17,16 @@ struct HistoryPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     HistoryCardView(model: model, router: router, narrow: narrow)
-                        .sectionFocusPulse(pulse == .hist)
-                        .ds3HostedEntrance(delay: 0.08)
                         .id(CardID.hist)
+                        .sectionFocusPulse(pulse == .hist)
+                        .ds3Appear(delay: 0.08)
                 }
-                .padding(.top, 20)
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { HistoryPageBar(model: model, onBack: { _ = router.back() }).ds3HostedEntrance(delay: 0, offsetY: 0, scale: 1) }
+            .contentMargins(.top, 16, for: .scrollContent)
+            .safeAreaInset(edge: .top, spacing: 0) { HistoryPageBar(model: model, onBack: { _ = router.back() }) }
             .task(id: router.navigationSerial) {
                 let d = router.destination
                 guard d.page == .history, d.focus == .hist else { return }
@@ -35,6 +35,7 @@ struct HistoryPage: View {
                 pulse = nil
             }
         }
+        .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
     }
 }
 
