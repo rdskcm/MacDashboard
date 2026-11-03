@@ -296,10 +296,13 @@ extension SerialTests {
             #expect(cells[1].big == "9.5 GB" && cells[1].tone == .neutral && cells[1].chipText == "pressure low")
             #expect(cells[1].of == "of 16" && cells[1].foot == "swap 1 GB of 8 GB · compressed 1.5 GB")
             #expect(cells[2].big == fmtCapacity(150 * GIB) && cells[2].of == "free" && cells[2].chipText == "healthy")
-            #expect(cells[3].big == "76%" && cells[3].mark == 0.8 && cells[3].foot == "1 cycle · now 64%, discharging")
+            #expect(cells[3].big == "76%" && cells[3].of == "of new" && cells[3].foot == "1 cycle · now 64%, discharging")
             // 76 % with 1 cycle is an early-wear (warn) task: amber cell, "worn" chip, amber fill.
             #expect(cells[3].tone == .amber && cells[3].chipText == "worn")
-            #expect(cells[3].segments == [HomeNowSegment(series: .amber, value: 76), HomeNowSegment(series: .track, value: 24)])
+            #expect(cells[3].batteryBar == HomeBatteryBar(fraction: 0.76, fill: .amber, tick: 0.8, tickLabel: "80%",
+                                                          spoken: "wear threshold 80%", help: "80% — Apple’s wear threshold"))
+            #expect(cells[3].segments.isEmpty && cells[3].legend.isEmpty)
+            #expect(cells[0...2].allSatisfy { $0.batteryBar == nil })
             #expect(HomeModel.nowCells(homeInput(report, live), tasks: [], memPressure: nil, socTempC: nil, cpu: CPUUsage(user: 1, sys: 1, idle: 98),
                                        short: false, narrow: false)[0].chipText == nil)
             let short = nowCells(report, live, pressure: .normal, short: true)
@@ -324,7 +327,12 @@ extension SerialTests {
             #expect(m.accessibilityText == (["Memory", "9.5 GB of 16", "pressure low"] + m.legend.map(\.text)
                                             + ["swap 1 GB of 8 GB · compressed 1.5 GB"]).joined(separator: ", "))
             #expect(cells[2].accessibilityText.hasPrefix("Storage, \(fmtCapacity(150 * GIB)) free, healthy, data "))
-            #expect(cells[3].accessibilityText == "Battery, 76% capacity, worn, of new, wear threshold 80%, 1 cycle · now 64%, discharging")
+            #expect(cells[3].accessibilityText == "Battery, 76% of new, worn, wear threshold 80%, 1 cycle · now 64%, discharging")
+            L10nStore.shared.language = .ru
+            let ru = nowCells(report, live, pressure: .normal)[3]
+            #expect(ru.batteryBar?.tickLabel == "80 %")
+            #expect(ru.accessibilityText == "Батарея, 76 % от новой, износ, порог износа 80 %, \(ru.foot)")
+            L10nStore.shared.language = .en
             let loading = nowCells(report, live, pressure: nil, cpu: nil)[0]
             #expect(loading.accessibilityText == "CPU, Collecting data…")
         }
@@ -339,6 +347,7 @@ extension SerialTests {
             let cell = nowCells(report, live, pressure: .normal)[3]
             #expect(cell.loading == false && cell.big == "86%")
             #expect(cell.foot.contains("300 cycles") && cell.foot.contains("now 55%"), "foot \(cell.foot)")
+            #expect(cell.batteryBar?.fraction == 0.86 && cell.batteryBar?.fill == .green)
         }
 
         @Test func batteryMergedHelper() {
@@ -388,6 +397,7 @@ extension SerialTests {
             let bad = nowCells(report, live, pressure: .normal)
             #expect(bad[2].tone == .hot && bad[2].chipText == "drive failing" && bad[2].destination.focus == .smart)
             #expect(bad[3].tone == .hot && bad[3].chipText == "service")
+            #expect(bad[3].batteryBar?.fill == .hot)
         }
 
         @Test func nowCellsMissing() {

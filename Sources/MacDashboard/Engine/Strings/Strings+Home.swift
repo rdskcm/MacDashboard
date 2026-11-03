@@ -109,7 +109,6 @@ protocol HomeStrings {
     func homeLegendSystem(_ v: String, short: Bool) -> String
     func homeLegendOther(_ v: String, short: Bool) -> String
     func homeStorageFoot(size: String, purgeable: String?, short: Bool) -> String
-    var homeCapacityWord: String { get }
     var homeOfNew: String { get }
     var homeWearThreshold: String { get }
     var homeWearThresholdHelp: String { get }
@@ -224,7 +223,6 @@ extension StringsEN: HomeStrings {
     func homeStorageFoot(size: String, purgeable: String?, short: Bool) -> String {
         "of \(size)" + (purgeable.map { short ? " · free up \($0)" : " · purgeable \($0)" } ?? "")
     }
-    var homeCapacityWord: String { "capacity" }
     var homeOfNew: String { "of new" }
     var homeWearThreshold: String { "wear threshold 80%" }
     var homeWearThresholdHelp: String { "80% — Apple’s wear threshold" }
@@ -346,7 +344,6 @@ extension StringsRU: HomeStrings {
     func homeStorageFoot(size: String, purgeable: String?, short: Bool) -> String {
         "из \(size)" + (purgeable.map { " · очищаемое \($0)" } ?? "")
     }
-    var homeCapacityWord: String { "ёмкость" }
     var homeOfNew: String { "от новой" }
     var homeWearThreshold: String { "порог износа 80 %" }
     var homeWearThresholdHelp: String { "80 % — порог износа по Apple" }

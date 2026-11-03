@@ -114,10 +114,12 @@ struct HomeNowCellView: View {
     private var visual: some View {
         if cell.kind == .cpu {
             HomeSparkline(values: sparkline)
+        } else if let bar = cell.batteryBar {
+            HomeBatteryBarView(bar: bar)
         } else {
             VStack(alignment: .leading, spacing: 7) {
                 Spacer(minLength: 0)
-                HomeStackBar(segments: cell.segments, mark: cell.mark)
+                HomeStackBar(segments: cell.segments)
                 legend
             }
         }
@@ -128,8 +130,8 @@ struct HomeNowCellView: View {
             ForEach(Array(cell.legend.enumerated()), id: \.offset) { _, item in
                 HStack(spacing: 5) {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(item.isRule ? DS3.inkSoft : homeSeriesColor(item.series))
-                        .frame(width: item.isRule ? 2 : 7, height: 7)
+                        .fill(homeSeriesColor(item.series))
+                        .frame(width: 7, height: 7)
                     Text(item.text)
                         .font(.system(size: 12.5))
                         .foregroundStyle(DS3.muted)
@@ -234,7 +236,6 @@ private struct HomeSparklinePath: Shape {
 /// (`no-measured-size-feedback`); no animation on segment widths.
 struct HomeStackBar: View {
     let segments: [HomeNowSegment]
-    let mark: Double?
 
     var body: some View {
         Color.clear.frame(height: 10)
@@ -251,16 +252,66 @@ struct HomeStackBar: View {
                     }
                 }
             }
-            .overlay {
-                if let mark {
+    }
+}
+
+/// The Battery cell's visual (BATTERY-BAR-DESIGN): one continuous bar, a tick at the wear threshold and the threshold's
+/// value centred under the tick. Bar and label slot match the stack bar and its legend row, so bars align across the
+/// row. Tick, label and tooltip target are placed in non-sizing overlays (`no-measured-size-feedback`).
+struct HomeBatteryBarView: View {
+    let bar: HomeBatteryBar
+
+    /// Moves the label right of its geometric centre: the percent sign and the side bearings leave the ink off-centre
+    /// at 0. Picked by eye from rendered candidates (-0.5, 0, 0.5, 1 pt) and approved by the user.
+    private static let labelOpticalOffset: CGFloat = 0.5
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Spacer(minLength: 0)
+            DS3Bar(fraction: bar.fraction, height: 10, fill: AnyShapeStyle(homeSeriesColor(bar.fill)))
+                .overlay {
                     GeometryReader { g in
                         RoundedRectangle(cornerRadius: 1, style: .continuous)
-                            .fill(DS3.ink.opacity(0.55))
+                            .fill(DS3.ink.opacity(0.7))
                             .frame(width: 2, height: 18)
-                            .position(x: g.size.width * mark, y: 5)
-                            .help(L.homeWearThresholdHelp)
+                            .position(x: g.size.width * bar.tick, y: 5)
                     }
                 }
+            Color.clear.frame(height: 15).overlay {
+                GeometryReader { g in
+                    ZStack(alignment: Alignment(horizontal: .batteryTick, vertical: .center)) {
+                        Color.clear.frame(width: g.size.width, height: 15)
+                            .alignmentGuide(.batteryTick) { $0.width * bar.tick }
+                        Text(bar.tickLabel)
+                            .alignmentGuide(.batteryTick) { $0[HorizontalAlignment.center] }
+                            .offset(x: Self.labelOpticalOffset)
+                    }
+                    .frame(width: g.size.width, height: 15, alignment: .leading)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(DS3.muted)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                }
             }
+        }
+        .overlay {
+            // One tooltip target from the tick's top (y 4 of the 40 pt area) to the label's bottom (y 40): the 2 pt tick
+            // alone is too thin to hover. `.help` stays before `.position`, which would otherwise widen it to the whole area.
+            GeometryReader { g in
+                Color.clear
+                    .frame(width: 40, height: 36)
+                    .contentShape(Rectangle())
+                    .help(bar.help)
+                    .position(x: g.size.width * bar.tick, y: g.size.height - 18)
+            }
+        }
     }
+}
+
+private extension HorizontalAlignment {
+    private struct BatteryTick: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[HorizontalAlignment.center] }
+    }
+    /// The Battery cell's tick: its value is centred on it without measuring the text.
+    static let batteryTick = HorizontalAlignment(BatteryTick.self)
 }

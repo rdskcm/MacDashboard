@@ -496,8 +496,16 @@ enum HomeModel {
 enum HomeSeries: Equatable { case s1, s2, s3, s4, sfree, track, green, amber, hot }
 enum HomeNowKind: String, Equatable { case cpu, memory, storage, battery }
 struct HomeNowSegment: Equatable { let series: HomeSeries; let value: Double }
-/// `isRule` = the 2-pt mark swatch.
-struct HomeLegendItem: Equatable { let series: HomeSeries; let text: String; let isRule: Bool }
+struct HomeLegendItem: Equatable { let series: HomeSeries; let text: String }
+/// The Battery cell's bar: one fill up to the capacity, a tick at the wear threshold, the threshold's value under the tick.
+struct HomeBatteryBar: Equatable {
+    let fraction: Double    // capacity / 100; DS3Bar clamps it to 0…1
+    let fill: HomeSeries    // .green / .amber / .hot
+    let tick: Double        // 0.8
+    let tickLabel: String   // "80%" / "80 %"
+    let spoken: String      // the threshold in words, for VoiceOver
+    let help: String        // tooltip over the tick and its label
+}
 
 struct HomeNowCell: Identifiable, Equatable {
     var id: HomeNowKind { kind }
@@ -509,8 +517,8 @@ struct HomeNowCell: Identifiable, Equatable {
     let big: String
     let of: String
     let loading: Bool
-    let segments: [HomeNowSegment]     // memory/storage stack, battery bar; CPU: []
-    let mark: Double?                  // battery 0.8
+    let segments: [HomeNowSegment]     // memory/storage stack; CPU, battery: []
+    let batteryBar: HomeBatteryBar?    // battery with a capacity reading only
     let legend: [HomeLegendItem]
     let foot: String
     let destination: Destination
@@ -518,12 +526,13 @@ struct HomeNowCell: Identifiable, Equatable {
 
 extension HomeNowCell {
     /// HOME-AX-FIGURES: the cell's VoiceOver label — every string the cell draws: label, value + unit (not while
-    /// loading: the "—" placeholder), chip, legend items, foot. Used by `HomeNowCellView`; covered by HomeModelTests.
+    /// loading: the "—" placeholder), chip, legend items, the battery threshold in words, foot. Used by `HomeNowCellView`; covered by HomeModelTests.
     var accessibilityText: String {
         var parts = [label]
         if !loading { parts.append("\(big) \(of)".trimmingCharacters(in: .whitespaces)) }
         if let chipText, chipTone != nil { parts.append(chipText) }
         parts += legend.map(\.text)
+        if let batteryBar { parts.append(batteryBar.spoken) }
         parts.append(foot)
         return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
@@ -538,7 +547,7 @@ extension HomeModel {
         func task(_ k: AttentionKind) -> HomeTask? { tasks.first { $0.kind == k } }
         func loadingCell(_ kind: HomeNowKind, _ label: String, _ dest: Destination) -> HomeNowCell {
             HomeNowCell(kind: kind, label: label, tone: .neutral, chipTone: nil, chipText: nil, big: "—", of: "",
-                        loading: true, segments: [HomeNowSegment(series: .track, value: 1)], mark: nil, legend: [],
+                        loading: true, segments: [HomeNowSegment(series: .track, value: 1)], batteryBar: nil, legend: [],
                         foot: L.commonCollectingData, destination: dest)
         }
         func g(_ x: Int64) -> String { fmtNum(Double(x) / gib, decimals: 1) }
@@ -563,7 +572,7 @@ extension HomeModel {
             else { foot = L.homeCoresOnly(input.ncpu) }
             cells.append(HomeNowCell(kind: .cpu, label: L.commonCPU, tone: .neutral, chipTone: chipTone, chipText: chipText,
                                      big: L.homePercent(fmtFixed(cpu.user + cpu.sys, decimals: 1)), of: "", loading: false,
-                                     segments: [], mark: nil, legend: [], foot: foot, destination: cpuDest))
+                                     segments: [], batteryBar: nil, legend: [], foot: foot, destination: cpuDest))
         } else {
             cells.append(loadingCell(.cpu, L.commonCPU, cpuDest))
         }
@@ -581,11 +590,11 @@ extension HomeModel {
             let rest = max(0, mem.total - mem.active - mem.wired - mem.compressor - mem.inactive)
             // The compressed item only where the cell is wide: 2x2 (narrow) and the 3-column no-battery layout;
             // the 4-in-a-row layouts keep three items (a fourth truncates the labels there).
-            var memLegend = [HomeLegendItem(series: .s1, text: L.homeLegendActive(g(mem.active), short: short), isRule: false),
-                             HomeLegendItem(series: .s2, text: L.homeLegendWired(g(mem.wired)), isRule: false),
-                             HomeLegendItem(series: .s4, text: L.homeLegendInactive(g(mem.inactive), short: short), isRule: false)]
+            var memLegend = [HomeLegendItem(series: .s1, text: L.homeLegendActive(g(mem.active), short: short)),
+                             HomeLegendItem(series: .s2, text: L.homeLegendWired(g(mem.wired))),
+                             HomeLegendItem(series: .s4, text: L.homeLegendInactive(g(mem.inactive), short: short))]
             if narrow || !input.hasBattery {
-                memLegend.insert(HomeLegendItem(series: .s3, text: L.homeLegendCompressed(g(mem.compressor), short: short), isRule: false), at: 2)
+                memLegend.insert(HomeLegendItem(series: .s3, text: L.homeLegendCompressed(g(mem.compressor), short: short)), at: 2)
             }
             let foot: String
             if let s = input.swap, s.total > 0 { foot = L.homeMemFoot(fmtBytes(s.used), fmtBytes(s.total), fmtBytes(mem.compressor)) }
@@ -599,7 +608,7 @@ extension HomeModel {
                            HomeNowSegment(series: .s3, value: Double(mem.compressor)),
                            HomeNowSegment(series: .s4, value: Double(mem.inactive)),
                            HomeNowSegment(series: .track, value: Double(rest))],
-                mark: nil,
+                batteryBar: nil,
                 legend: memLegend,
                 foot: foot, destination: memDest))
         } else {
@@ -624,18 +633,18 @@ extension HomeModel {
                 let other = max(0, used - data - system)
                 segments = [HomeNowSegment(series: .s1, value: Double(data)), HomeNowSegment(series: .sfree, value: Double(system)),
                             HomeNowSegment(series: .s3, value: Double(other)), HomeNowSegment(series: .track, value: Double(disk.avail))]
-                legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(data)), isRule: false),
-                          HomeLegendItem(series: .sfree, text: L.homeLegendSystem(gb(system), short: short), isRule: false),
-                          HomeLegendItem(series: .s3, text: L.homeLegendOther(gb(other), short: short), isRule: false)]
+                legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(data))),
+                          HomeLegendItem(series: .sfree, text: L.homeLegendSystem(gb(system), short: short)),
+                          HomeLegendItem(series: .s3, text: L.homeLegendOther(gb(other), short: short))]
             } else {
                 segments = [HomeNowSegment(series: .s1, value: Double(used)), HomeNowSegment(series: .track, value: Double(disk.avail))]
-                legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(used)), isRule: false)]
+                legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(used)))]
             }
             let size = short ? L.homeGB(fmtNum(Double(disk.size) / 1e9, decimals: 0)) : fmtCapacity(disk.size)
             let focus: CardID = (smart != nil || (wear != nil && diskT == nil)) ? .smart : .disk
             cells.append(HomeNowCell(
                 kind: .storage, label: L.commonStorage, tone: tone, chipTone: chipTone, chipText: chipText,
-                big: fmtCapacity(disk.avail), of: L.homeFreeWord, loading: false, segments: segments, mark: nil, legend: legend,
+                big: fmtCapacity(disk.avail), of: L.homeFreeWord, loading: false, segments: segments, batteryBar: nil, legend: legend,
                 foot: L.homeStorageFoot(size: size, purgeable: disk.purgeable.map { fmtCapacity($0) }, short: short),
                 destination: Destination(.storage, focus: focus)))
         } else {
@@ -655,11 +664,10 @@ extension HomeModel {
                 else { tone = .neutral; (chipTone, chipText) = (.green, L.homeChipHealthy); fill = .green }
                 cells.append(HomeNowCell(
                     kind: .battery, label: L.commonBattery, tone: tone, chipTone: chipTone, chipText: chipText,
-                    big: L.homePercent("\(cap)"), of: L.homeCapacityWord, loading: false,
-                    segments: [HomeNowSegment(series: fill, value: Double(cap)), HomeNowSegment(series: .track, value: Double(100 - cap))],
-                    mark: 0.8,
-                    legend: [HomeLegendItem(series: fill, text: L.homeOfNew, isRule: false),
-                             HomeLegendItem(series: .track, text: L.homeWearThreshold, isRule: true)],
+                    big: L.homePercent("\(cap)"), of: L.homeOfNew, loading: false, segments: [],
+                    batteryBar: HomeBatteryBar(fraction: Double(cap) / 100, fill: fill, tick: 0.8, tickLabel: L.homePercent("80"),
+                                               spoken: L.homeWearThreshold, help: L.homeWearThresholdHelp),
+                    legend: [],
                     foot: L.homeBatteryFoot(cycles: b.cycles, charge: b.charge, state: b.state, short: short),
                     destination: battDest))
             } else {
