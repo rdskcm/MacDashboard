@@ -19,6 +19,9 @@ struct ClaudeBackupAttempt: Equatable, Sendable {
     var mount: String?    // from the last START seen; nil when that START is not in the text read
 }
 
+/// The `SIZE:` line backup_auto.sh writes after a successful run (bytes; the log holds KiB).
+struct ClaudeBackupSize: Equatable, Sendable { var snapshotBytes: Int64; var addedBytes: Int64; var totalBytes: Int64 }
+
 /// What a forced run logged instead of starting (only SKIP lines; a started run shows as an attempt).
 enum ClaudeBackupClickOutcome: Equatable, Sendable { case diskNotConnected, alreadyRunning }
 
@@ -50,6 +53,7 @@ enum BackupLog {
     // formatters are shared mutable state (their zone follows each call, and readStatus runs
     // on the global executor, so calls can overlap), so every use of them is under formatterLock.
     private static let eventRE = try! NSRegularExpression(pattern: "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}  OK$")
+    private static let sizeRE = try! NSRegularExpression(pattern: "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}  SIZE: snapshot=(\\d+) added=(\\d+) total=(\\d+)$")
     private static let stampRE = try! NSRegularExpression(pattern: "^\\d{4}-\\d{2}-\\d{2}_\\d{6}$")
     private static let eventFmt = formatter("yyyy-MM-dd HH:mm:ss", .current)
     private static let stampFmt = formatter("yyyy-MM-dd_HHmmss", .current)
@@ -204,6 +208,37 @@ extension BackupLog {
     /// EPERM = someone else's process, so not our script.
     static func isProcessAlive(_ pid: Int32) -> Bool { pid > 0 && kill(pid, 0) == 0 }
 
+    /// The LAST well-formed `SIZE:` line in `text`, in bytes. Malformed lines and overflowing numbers are no match.
+    static func latestSize(in text: String) -> ClaudeBackupSize? {
+        var out: ClaudeBackupSize? = nil
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            let line = String(raw)
+            let range = NSRange(line.startIndex..., in: line)
+            guard let m = sizeRE.firstMatch(in: line, range: range), m.numberOfRanges == 4 else { continue }
+            var v: [Int64] = []
+            for i in 1...3 {
+                guard let r = Range(m.range(at: i), in: line), let n = Int64(line[r]) else { break }
+                let (b, overflow) = n.multipliedReportingOverflow(by: 1024)
+                if overflow { break }
+                v.append(b)
+            }
+            if v.count == 3 { out = ClaudeBackupSize(snapshotBytes: v[0], addedBytes: v[1], totalBytes: v[2]) }
+        }
+        return out
+    }
+
+    /// The newest size across the pair (a later failed run keeps it: it describes the last successful snapshot).
+    static func size(logURL: URL = BackupLog.logURL, rotatedURL: URL = BackupLog.rotatedURL) -> ClaudeBackupSize? {
+        for url in [logURL, rotatedURL] where FileManager.default.fileExists(atPath: url.path) {
+            for window in attemptWindows {
+                guard let tail = try? tailText(of: url, maxBytes: window) else { break }
+                if let s = latestSize(in: tail.text) { return s }
+                if tail.coversWholeFile { break }
+            }
+        }
+        return nil
+    }
+
     /// The newest attempt across the pair: the main log wins as soon as it holds any attempt line.
     static func attempt(logURL: URL = BackupLog.logURL, rotatedURL: URL = BackupLog.rotatedURL) -> ClaudeBackupAttempt? {
         for url in [logURL, rotatedURL] where FileManager.default.fileExists(atPath: url.path) {
@@ -222,6 +257,10 @@ extension BackupLog {
         guard let a = attempt(logURL: logURL, rotatedURL: rotatedURL) else { return nil }
         let alive = lockPID(at: lockPIDURL).map(isProcessAlive) ?? false
         return settled(a, lockPIDAlive: alive, now: now)
+    }
+
+    static func readSize(logURL: URL = BackupLog.logURL, rotatedURL: URL = BackupLog.rotatedURL) async -> ClaudeBackupSize? {
+        size(logURL: logURL, rotatedURL: rotatedURL)
     }
 
     /// The newest disk-absent / already-running SKIP stamped at or after `since` (log stamps are whole seconds).

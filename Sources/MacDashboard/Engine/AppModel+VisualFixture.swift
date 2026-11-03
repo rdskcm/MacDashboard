@@ -25,7 +25,7 @@ extension AppModel {
         history.applyFixture(d.history)
         reportText = d.reportText
         claudeBackup = d.claudeBackup
-        claudeRun.applyFixture(job: d.claudeJob, attempt: d.claudeAttempt, diskConnected: true, action: .idle)
+        claudeRun.applyFixture(job: d.claudeJob, attempt: d.claudeAttempt, diskConnected: true, action: .idle, size: d.claudeSize)
         fixtureNow = VisualFixture.referenceDate
         reportUpdatedAt = VisualFixture.referenceDate
         lastSampleAt = VisualFixture.referenceDate

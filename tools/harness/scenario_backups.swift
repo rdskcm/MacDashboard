@@ -42,11 +42,11 @@ MainActor.assumeIsolated {
     let findingChanges = tm(backingDest, backup: TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53))
     let failed = tm(dest(last: ref - 9 * 86_400, mounted: true), action: .failed(L.bkStartDidNotBegin))
     @MainActor func claude(_ s: ClaudeBackupStatus?, attempt: ClaudeBackupAttempt? = nil, disk: Bool? = true, action: ClaudeBackupAction = .idle,
-                           job: Bool = true) -> AppModel {
+                           job: Bool = true, size: ClaudeBackupSize? = nil) -> AppModel {
         model { m in
             let fixtureJob = m.claudeRun.job
             m.claudeBackup = s
-            m.claudeRun.applyFixture(job: job ? fixtureJob : nil, attempt: attempt, diskConnected: disk, action: action)
+            m.claudeRun.applyFixture(job: job ? fixtureJob : nil, attempt: attempt, diskConnected: disk, action: action, size: size)
         }
     }
     let mnt = "/Volumes/Backup SSD"
@@ -77,7 +77,7 @@ MainActor.assumeIsolated {
         HarnessSection(label: "M: Claude none") { BackupsClaudeCard(model: claude(.noSuccessFound)) }
         HarnessSection(label: "N: Claude missing") { BackupsClaudeCard(model: claude(nil)) }
         HarnessSection(label: "O: Claude unreadable") { BackupsClaudeCard(model: claude(.unreadable)) }
-        HarnessSection(label: "Q: Claude failed, fresh snapshot") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: failedAttempt)) }
+        HarnessSection(label: "Q: Claude failed, fresh snapshot") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: failedAttempt, size: ClaudeBackupSize(snapshotBytes: 28_548_000_000, addedBytes: 467_000_000, totalBytes: 38_654_000_000))) }
         HarnessSection(label: "R: Claude failed, stale") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 4 * 86_400), attempt: failedAttempt)) }
         HarnessSection(label: "S: Claude running") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: .init(at: ref - 7 * 60, result: .running, mount: mnt))) }
         HarnessSection(label: "T: Claude interrupted") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: .init(at: ref - 4 * 3600, result: .interrupted, mount: mnt))) }

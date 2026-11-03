@@ -104,6 +104,9 @@ protocol BackupsStrings {
     // BACKUP-CARD-FAILURE
     var bkClaudeAttemptLabel: String { get }
     var bkClaudeNextLabel: String { get }
+    var bkClaudeSizeLabel: String { get }
+    var bkClaudeSizeNone: String { get }
+    func bkClaudeSizeNote(added: String, total: String) -> String
     var bkClaudeAttemptOK: String { get }
     func bkClaudeAttemptFailed(_ exit: Int) -> String
     func bkClaudeAttemptRunning(_ d: String) -> String
@@ -229,6 +232,9 @@ extension StringsEN: BackupsStrings {
     // BACKUP-CARD-FAILURE
     var bkClaudeAttemptLabel: String { "Last attempt" }
     var bkClaudeNextLabel: String { "Next run" }
+    var bkClaudeSizeLabel: String { "Size" }
+    var bkClaudeSizeNone: String { "appears after the next backup" }
+    func bkClaudeSizeNote(added: String, total: String) -> String { "\(added) new · all snapshots \(total)" }
     var bkClaudeAttemptOK: String { "succeeded" }
     func bkClaudeAttemptFailed(_ exit: Int) -> String { "failed, code \(exit)" }
     func bkClaudeAttemptRunning(_ d: String) -> String { "running for \(d)" }
@@ -361,6 +367,9 @@ extension StringsRU: BackupsStrings {
     // BACKUP-CARD-FAILURE
     var bkClaudeAttemptLabel: String { "Последняя попытка" }
     var bkClaudeNextLabel: String { "Следующий запуск" }
+    var bkClaudeSizeLabel: String { "Размер" }
+    var bkClaudeSizeNone: String { "появится после следующей копии" }
+    func bkClaudeSizeNote(added: String, total: String) -> String { "новых \(added) · все снимки \(total)" }
     var bkClaudeAttemptOK: String { "успешно" }
     func bkClaudeAttemptFailed(_ exit: Int) -> String { "ошибка, код \(exit)" }
     func bkClaudeAttemptRunning(_ d: String) -> String { "идёт \(d)" }

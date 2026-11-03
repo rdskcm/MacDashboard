@@ -11,6 +11,7 @@ import Testing
     static let exit1 = CommandOutcome(termination: .exited(1), stdout: "", stdoutTruncated: false, stderrHead: "")
     var job: ClaudeBackupJob? = ClaudeBackupJob(label: "x", appPath: "/Apps/ClaudeBackup.app", schedule: [], startsOnMount: true)
     var attempt: ClaudeBackupAttempt? = nil
+    var size: ClaudeBackupSize? = nil
     var outcome: ClaudeBackupClickOutcome? = nil
     var launchResult = FakeClaudeBackup.exit0
     var existing: Set<String> = []
@@ -20,6 +21,7 @@ import Testing
     var deps: ClaudeBackupController.Dependencies {
         .init(findJob: { self.jobReads += 1; return self.job },
               readAttempt: { _ in self.attemptReads += 1; return self.attempt },
+              readSize: { self.size },
               readClickOutcome: { _ in self.outcomeReads += 1; return self.outcome },
               launch: { app in self.launched.append(app); return self.launchResult },
               pathExists: { self.existsReads += 1; return self.existing.contains($0) })
@@ -84,6 +86,17 @@ extension SerialTests {
             await t.value
             #expect(c2.pollTask == nil)
             #expect(clock2.sleeps.count <= 4)
+        }
+
+        @Test func refreshAttemptPublishesTheSize() async {
+            let (c, _, fake, _) = make()
+            #expect(c.size == nil)
+            fake.size = ClaudeBackupSize(snapshotBytes: 3, addedBytes: 2, totalBytes: 5)
+            await c.refreshAttempt()
+            #expect(c.size == fake.size)
+            fake.size = nil
+            await c.refreshAttempt()
+            #expect(c.size == nil)
         }
 
         @Test func visualFixtureReadsNothing() async {

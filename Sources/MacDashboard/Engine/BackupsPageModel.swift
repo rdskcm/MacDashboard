@@ -41,6 +41,7 @@ struct BackupsPageModel: Equatable {
         var warnAfterHours: Int
         var now: Date
         var claudeAttempt: ClaudeBackupAttempt? = nil
+        var claudeSize: ClaudeBackupSize? = nil
         var claudeJob: ClaudeBackupJob? = nil
         var claudeDiskConnected: Bool? = nil
         var claudeAction: ClaudeBackupAction = .idle
@@ -114,6 +115,7 @@ struct BackupsPageModel: Equatable {
         m.claudeRunTiles = (i.claudeJob == nil && i.claudeAttempt == nil) ? [] : [
             claudeAttemptTile(i.claudeAttempt, now: i.now),
             claudeNextTile(job: i.claudeJob, attempt: i.claudeAttempt, status: i.claudeBackup, diskConnected: i.claudeDiskConnected, now: i.now),
+            claudeSizeTile(i.claudeSize),
         ]
         m.claudeActionNote = claudeActionNote(i.claudeAction)
         m.claudeButton = claudeButton(job: i.claudeJob, usesDefaultLog: i.claudeUsesDefaultLog, state: m.claudeState,
@@ -345,6 +347,15 @@ struct BackupsPageModel: Equatable {
         default:
             return nil
         }
+    }
+
+    static func claudeSizeTile(_ s: ClaudeBackupSize?) -> BackupsTile {
+        var t = BackupsTile(id: "size", label: L.bkClaudeSizeLabel, value: dash, valueTone: .neutral)
+        guard let s else { t.note = L.bkClaudeSizeNone; return t }
+        t.value = fmtBytes(s.snapshotBytes)
+        t.valueTone = nil
+        t.note = L.bkClaudeSizeNote(added: fmtBytes(s.addedBytes), total: fmtBytes(s.totalBytes))
+        return t
     }
 
     static func claudeAttemptTile(_ a: ClaudeBackupAttempt?, now: Date) -> BackupsTile {

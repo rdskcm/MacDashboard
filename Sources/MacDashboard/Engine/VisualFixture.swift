@@ -204,6 +204,7 @@ enum VisualFixture {
         var reportText: String
         var claudeBackup: ClaudeBackupStatus
         var claudeAttempt: ClaudeBackupAttempt
+        var claudeSize: ClaudeBackupSize
         var claudeJob: ClaudeBackupJob
     }
 
@@ -302,6 +303,7 @@ enum VisualFixture {
         // assessing at `now: referenceDate` here and by AppModel.fixtureNow in the views.
         let claudeBackup = ClaudeBackupStatus.lastSuccess(referenceDate.addingTimeInterval(-2 * 3600))
         let claudeAttempt = ClaudeBackupAttempt(at: referenceDate.addingTimeInterval(-2 * 3600), result: .ok, mount: "/Volumes/Backup SSD")
+        let claudeSize = ClaudeBackupSize(snapshotBytes: 28_548_000_000, addedBytes: 467_000_000, totalBytes: 38_654_000_000)
         let claudeJob = ClaudeBackupJob(label: "com.example.claude-backup", appPath: home + "/Applications/ClaudeBackup.app",
                                         schedule: [.init(minute: 0, hour: 13)], startsOnMount: true)
 
@@ -351,7 +353,7 @@ enum VisualFixture {
             socTempC: socTempC, topCPU: topCPU, topMem: topMem, cpuHistory: cpuHistory,
             report: report, wakeHolders: wakeHolders, assessment: assessment,
             history: history, reportText: reportText, claudeBackup: claudeBackup,
-            claudeAttempt: claudeAttempt, claudeJob: claudeJob
+            claudeAttempt: claudeAttempt, claudeSize: claudeSize, claudeJob: claudeJob
         )
     }
 }

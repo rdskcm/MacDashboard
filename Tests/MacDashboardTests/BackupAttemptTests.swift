@@ -175,6 +175,36 @@ extension SerialTests {
             #expect(out("2026-11-03 17:00:05  SKIP: newest snapshot is 1h old (cooldown 6h)\n") == nil)
         }
 
+        @Test func latestSizeReadsTheLastLine() {
+            let one = "2026-11-03 16:16:09  SIZE: snapshot=100 added=10 total=1000\n"
+            #expect(BackupLog.latestSize(in: one) == ClaudeBackupSize(snapshotBytes: 102_400, addedBytes: 10_240, totalBytes: 1_024_000))
+            let two = one + "2026-11-03 22:16:09  SIZE: snapshot=200 added=20 total=2000\n"
+            #expect(BackupLog.latestSize(in: two)?.snapshotBytes == 204_800)
+            let bad = one + "2026-11-03 22:16:09  SIZE: snapshot=abc added=20 total=2000\n2026-11-03 22:17:09  SIZE: snapshot=1 added=2\n"
+            #expect(BackupLog.latestSize(in: bad)?.snapshotBytes == 102_400)
+            #expect(BackupLog.latestSize(in: "2026-11-03 22:16:09  SIZE: snapshot=9223372036854775807 added=1 total=1\n") == nil)
+            #expect(BackupLog.latestSize(in: "2026-11-03 16:16:05  OK\n") == nil)
+            #expect(BackupLog.latestSize(in: "") == nil)
+        }
+
+        @Test func sizeIsFoundInTheRotatedLogAndSurvivesAFailedRun() {
+            let d = tempDir(); defer { try? FileManager.default.removeItem(at: d) }
+            let log = d.appendingPathComponent("c.log"), rot = d.appendingPathComponent("c.log.1")
+            #expect(BackupLog.size(logURL: log, rotatedURL: rot) == nil)
+            write("2026-11-03 16:16:05  OK\n2026-11-03 16:16:09  SIZE: snapshot=100 added=10 total=1000\n", to: rot)
+            write("2026-11-03 17:00:00  SKIP: newest snapshot is 0h old (cooldown 6h)\n", to: log)
+            #expect(BackupLog.size(logURL: log, rotatedURL: rot)?.totalBytes == 1_024_000)
+            // a failed run after the SIZE line keeps the size and is still the last attempt
+            write("2026-11-03 16:16:09  SIZE: snapshot=100 added=10 total=1000\n" + failed([]), to: log)
+            #expect(BackupLog.size(logURL: log, rotatedURL: rot)?.snapshotBytes == 102_400)
+            #expect(BackupLog.attempt(logURL: log, rotatedURL: rot)?.result == .failed(exit: 23, reason: .other))
+        }
+
+        @Test func aSizeLineAfterOKDoesNotChangeTheAttempt() {
+            let t = "2026-11-03 16:15:20  START: \(M)\n2026-11-03 16:16:05  OK\n2026-11-03 16:16:09  SIZE: snapshot=100 added=10 total=1000\n"
+            #expect(attempt(t) == ClaudeBackupAttempt(at: date("2026-11-03 16:16:05"), result: .ok, mount: M))
+        }
+
         @Test func latestSuccessIsUnchangedForAFailedSample() {
             let t = "2026-10-31 14:51:08  START: \(M)\n2026-10-31 14:51:30  OK\n"
                 + failed(["    rsync(1): error: a: open (2) in /: No such file or directory"]).replacingOccurrences(of: "14:51:08", with: "14:55:00")

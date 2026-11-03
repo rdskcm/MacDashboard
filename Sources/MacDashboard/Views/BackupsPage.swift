@@ -61,7 +61,7 @@ private func backupsInput(_ model: AppModel, now: Date) -> BackupsPageModel.Inpu
     .init(tmDest: model.report.tmDest, snapshots: model.report.snapshots, backup: model.timeMachine.backup,
           action: model.timeMachine.action, updatedAt: model.timeMachine.updatedAt, claudeBackup: model.claudeBackup,
           claudeLogPath: model.claudeLogPath, warnAfterHours: model.settings.backupStaleHours, now: now,
-          claudeAttempt: model.claudeRun.attempt, claudeJob: model.claudeRun.job, claudeDiskConnected: model.claudeRun.diskConnected,
+          claudeAttempt: model.claudeRun.attempt, claudeSize: model.claudeRun.size, claudeJob: model.claudeRun.job, claudeDiskConnected: model.claudeRun.diskConnected,
           claudeAction: model.claudeRun.action, claudeUsesDefaultLog: model.claudeUsesDefaultLog)
 }
 
@@ -261,7 +261,7 @@ struct BackupsClaudeCard: View {
                 if let n = m.claudeActionNote { SectionNote(tone: toneColor(n.tone), text: n.text) }
                 if let n = m.claudeNote { note(n) }
                 if !m.claudeRunTiles.isEmpty {
-                    EqualColumnsLayout(columns: 2, spacing: 8) {
+                    EqualColumnsLayout(columns: 3, spacing: 8) {
                         ForEach(m.claudeRunTiles, id: \.id) { backupsTileView($0) }
                     }
                 }

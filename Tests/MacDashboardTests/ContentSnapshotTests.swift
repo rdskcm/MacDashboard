@@ -342,16 +342,17 @@ extension SerialTests {
             // BACKUP-CARD-FAILURE: the same ten states as harness Q-Z.
             let bkMnt = "/Volumes/Backup SSD"
             @MainActor func bkRun(_ status: ClaudeBackupStatus?, _ attempt: ClaudeBackupAttempt?, disk: Bool? = true,
-                                  action: ClaudeBackupAction = .idle, job: Bool = true) -> AppModel {
+                                  action: ClaudeBackupAction = .idle, job: Bool = true, size: ClaudeBackupSize? = nil) -> AppModel {
                 backups {
                     let fixtureJob = $0.claudeRun.job
                     $0.claudeBackup = status
-                    $0.claudeRun.applyFixture(job: job ? fixtureJob : nil, attempt: attempt, diskConnected: disk, action: action)
+                    $0.claudeRun.applyFixture(job: job ? fixtureJob : nil, attempt: attempt, diskConnected: disk, action: action, size: size)
                 }
             }
             let bkFailedAttempt = ClaudeBackupAttempt(at: homeRef - 3 * 3600, result: .failed(exit: 23, reason: .filesChanged), mount: bkMnt)
             let bkOkAttempt7 = ClaudeBackupAttempt(at: homeRef - 7 * 3600, result: .ok, mount: bkMnt)
-            let bkClaudeFailedFresh = bkRun(.lastSuccess(homeRef - 5 * 3600), bkFailedAttempt)
+            let bkClaudeFailedFresh = bkRun(.lastSuccess(homeRef - 5 * 3600), bkFailedAttempt,
+                                            size: ClaudeBackupSize(snapshotBytes: 28_548_000_000, addedBytes: 467_000_000, totalBytes: 38_654_000_000))
             let bkClaudeFailedStale = bkRun(.lastSuccess(homeRef - 4 * 86_400), bkFailedAttempt)
             let bkClaudeRunning = bkRun(.lastSuccess(homeRef - 5 * 3600), .init(at: homeRef - 7 * 60, result: .running, mount: bkMnt))
             let bkClaudeInterrupted = bkRun(.lastSuccess(homeRef - 5 * 3600), .init(at: homeRef - 4 * 3600, result: .interrupted, mount: bkMnt))
