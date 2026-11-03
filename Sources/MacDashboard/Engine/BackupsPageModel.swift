@@ -294,6 +294,7 @@ struct BackupsPageModel: Equatable {
         let finding = backup.phase == "FindingChanges"
         if stopping { caption = L.bkStopping }
         else if finding { caption = backup.changedItems.map { L.bkFindingChanges(fmtGrouped($0)) } ?? L.bkFindingChangesNoCount }
+        else if backup.phase == "ThinningPostBackup" || backup.phase == "Finishing" { caption = L.bkFinishing }
         else if action == .starting && !backup.running { caption = L.bkPreparing }
         else { caption = bytesCaption(done: backup.bytesDone, total: backup.bytesTotal, secondsRemaining: backup.secondsRemaining) }
         return BackupsProgress(text: L.bkBackingTo(dest.name ?? L.bkTheBackupDisk), caption: caption,

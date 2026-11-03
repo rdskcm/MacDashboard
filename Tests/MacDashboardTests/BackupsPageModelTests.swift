@@ -336,6 +336,21 @@ extension SerialTests {
             }
         }
 
+        @Test func finishingPhasesCaption() {
+            let d = dest(last: nil)
+            let thin = TMBackupProgress(running: true, stopping: false, phase: "ThinningPostBackup")
+            let fin = TMBackupProgress(running: true, stopping: false, phase: "Finishing")
+            let prep = TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes")
+            withLanguage(.en) {
+                for b in [thin, fin] {
+                    let p = BackupsPageModel.progress(dest: d, backup: b, action: .idle)
+                    #expect(p.caption == L.bkFinishing); #expect(p.fraction == nil)
+                }
+                #expect(BackupsPageModel.progress(dest: d, backup: thin, action: .stopping).caption == L.bkStopping)
+                #expect(BackupsPageModel.progress(dest: d, backup: prep, action: .idle).caption == L.bkPreparing)
+            }
+        }
+
         // MARK: Claude
 
         @Test func claudeStates() {
