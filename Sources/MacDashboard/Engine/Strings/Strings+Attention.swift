@@ -115,6 +115,12 @@ protocol AttentionStrings {
     var quietMarkOff: String { get }
     var quietMarkUnknown: String { get }
     func quietCountItems(_ n: Int) -> String
+    // BACKUP-CARD-FAILURE
+    func assessClaudeBackupStaleFailed(_ age: String, _ reason: String) -> String
+    func assessClaudeBackupNoneFailed(_ reason: String) -> String
+    func assessClaudeBackupStaleInterrupted(_ age: String) -> String
+    var attnDetailClaudeBackupFailed: String { get }
+    var attnDetailClaudeBackupInterrupted: String { get }
 }
 
 extension StringsEN: AttentionStrings {
@@ -230,6 +236,12 @@ extension StringsEN: AttentionStrings {
     var quietMarkOff: String { "off" }
     var quietMarkUnknown: String { "unknown" }
     func quietCountItems(_ n: Int) -> String { "\(n)" }
+    // BACKUP-CARD-FAILURE
+    func assessClaudeBackupStaleFailed(_ age: String, _ reason: String) -> String { "No Claude backup for \(age) — the last attempt failed: \(reason). Older snapshots were not touched." }
+    func assessClaudeBackupNoneFailed(_ reason: String) -> String { "The Claude backup log has no successful snapshot — the last attempt failed: \(reason)." }
+    func assessClaudeBackupStaleInterrupted(_ age: String) -> String { "No Claude backup for \(age) — the last attempt did not finish." }
+    var attnDetailClaudeBackupFailed: String { "last attempt failed" }
+    var attnDetailClaudeBackupInterrupted: String { "last attempt did not finish" }
 }
 
 extension StringsRU: AttentionStrings {
@@ -346,4 +358,10 @@ extension StringsRU: AttentionStrings {
     var quietMarkOff: String { "выключен" }
     var quietMarkUnknown: String { "неизвестно" }
     func quietCountItems(_ n: Int) -> String { "\(n) шт." }
+    // BACKUP-CARD-FAILURE
+    func assessClaudeBackupStaleFailed(_ age: String, _ reason: String) -> String { "Бэкапа Claude не было \(age) — последняя попытка не удалась: \(reason). Старые снимки не затронуты." }
+    func assessClaudeBackupNoneFailed(_ reason: String) -> String { "В журнале бэкапа Claude нет ни одного успешного снимка — последняя попытка не удалась: \(reason)." }
+    func assessClaudeBackupStaleInterrupted(_ age: String) -> String { "Бэкапа Claude не было \(age) — последняя попытка не завершилась." }
+    var attnDetailClaudeBackupFailed: String { "последняя попытка не удалась" }
+    var attnDetailClaudeBackupInterrupted: String { "последняя попытка не завершилась" }
 }

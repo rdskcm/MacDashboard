@@ -197,5 +197,46 @@ extension SerialTests {
                 #expect(none.count == 1 && none[0].detail == L.attnDetailClaudeBackupNone, "Assess backup (\(lang)): noSuccessFound -> one item with the none detail")
             }
         }
+
+        // BACKUP-CARD-FAILURE R11: the Assessment text names the failure, and no item appears for a fresh snapshot.
+        @Test func assessNamesTheFailedAttempt() {
+            let now = Date(timeIntervalSince1970: 1_800_000_000)
+            func items(_ s: ClaudeBackupStatus?, _ r: ClaudeBackupAttempt.Result?) -> [AttentionItem] {
+                let a = r.map { ClaudeBackupAttempt(at: now - 3600, result: $0, mount: nil) }
+                return Assess.assess(report: FullReport(), live: LiveSnapshot(), claudeBackup: s, claudeAttempt: a, backupStaleHours: 48, now: now)
+                    .items.filter { $0.kind == .claudeBackup }
+            }
+            let old = ClaudeBackupStatus.lastSuccess(now - 4 * 86_400), fresh = ClaudeBackupStatus.lastSuccess(now - 3600)
+            let failed = ClaudeBackupAttempt.Result.failed(exit: 23, reason: .filesChanged)
+            for lang in AppLanguage.allCases {
+                L10nStore.shared.language = lang
+                let reason = BackupLog.reasonText(.filesChanged, exit: 23)
+                let a = items(old, failed)
+                #expect(a.count == 1 && a[0].detail == L.attnDetailClaudeBackupFailed && a[0].fullText.contains(reason))
+                #expect(a.first?.action == .revealPath(BackupLog.logURL.path))
+                let i = items(old, .interrupted)
+                #expect(i.count == 1 && i[0].detail == L.attnDetailClaudeBackupInterrupted)
+                let n = items(.noSuccessFound, failed)
+                #expect(n.count == 1 && n[0].detail == L.attnDetailClaudeBackupFailed && n[0].fullText.contains(reason))
+                let o = items(old, .ok)
+                #expect(o.count == 1 && o[0].fullText == L.assessClaudeBackupStale(BackupLog.durationText(seconds: 4 * 86_400)))
+                #expect(items(fresh, failed).isEmpty)
+            }
+        }
+
+        @Test func reportRowAddsTheFailure() {
+            func row(_ r: ClaudeBackupAttempt.Result?) -> String {
+                let a = r.map { ClaudeBackupAttempt(at: Date(), result: $0, mount: nil) }
+                let at = Date(timeIntervalSince1970: 1_760_000_000)
+                let input = ReportSummaryInput(
+                    generatedAt: at, system: nil, status: .good, tasks: [], cpu: nil, load: nil, ncpu: 8, socTempC: nil,
+                    mem: nil, memPressure: nil, swap: nil, disk: nil, hasBattery: false, battery: nil, security: nil,
+                    claudeBackup: .lastSuccess(at), claudeAttempt: a, snapshotCount: nil, now: at, parseFailures: [])
+                return ReportWriter.render(input)
+            }
+            L10nStore.shared.language = .en
+            #expect(row(.failed(exit: 23, reason: .filesChanged)).contains("files changed while they were being copied"))
+            #expect(!row(.ok).contains("last attempt"))
+        }
     }
 }

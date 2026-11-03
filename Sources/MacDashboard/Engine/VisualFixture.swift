@@ -203,6 +203,9 @@ enum VisualFixture {
         var history: HistoryState
         var reportText: String
         var claudeBackup: ClaudeBackupStatus
+        var claudeAttempt: ClaudeBackupAttempt
+        var claudeSize: ClaudeBackupSize
+        var claudeJob: ClaudeBackupJob
     }
 
     static func make() -> Dataset {
@@ -299,13 +302,17 @@ enum VisualFixture {
         // Settings Backups row and the Backups page's Claude card are in the baseline. Age is pinned by
         // assessing at `now: referenceDate` here and by AppModel.fixtureNow in the views.
         let claudeBackup = ClaudeBackupStatus.lastSuccess(referenceDate.addingTimeInterval(-2 * 3600))
+        let claudeAttempt = ClaudeBackupAttempt(at: referenceDate.addingTimeInterval(-2 * 3600), result: .ok, mount: "/Volumes/Backup SSD")
+        let claudeSize = ClaudeBackupSize(snapshotBytes: 28_548_000_000, addedBytes: 467_000_000, totalBytes: 38_654_000_000)
+        let claudeJob = ClaudeBackupJob(label: "com.example.claude-backup", appPath: home + "/Applications/ClaudeBackup.app",
+                                        schedule: [.init(minute: 0, hour: 13)], startsOnMount: true)
 
         let live = LiveSnapshot(
             t: referenceDate, load: load, cpu: cpu,
             topCPU: topCPU, topMem: topMem, mem: mem, swap: swap, disk: disk, battery: battery
         )
         let assessment = Assess.assess(report: report, live: live, memPressure: nil, topApps: [], wakeHolders: wakeHolders,
-                                       claudeBackup: claudeBackup, now: referenceDate)
+                                       claudeBackup: claudeBackup, claudeAttempt: claudeAttempt, now: referenceDate)
 
         var history = HistoryState()
         var entries: [MacHistoryEntry] = []
@@ -337,7 +344,7 @@ enum VisualFixture {
             cpu: cpu, load: load, ncpu: 8, socTempC: socTempC,
             mem: mem, memPressure: .normal, swap: swap, disk: disk,
             hasBattery: true, battery: BatteryInfo.merged(live: battery, report: report.battery),
-            security: report.security, claudeBackup: claudeBackup, snapshotCount: report.snapshots?.count,
+            security: report.security, claudeBackup: claudeBackup, claudeAttempt: claudeAttempt, snapshotCount: report.snapshots?.count,
             now: referenceDate, parseFailures: [],
             details: ReportDetails(report: report, live: live)))
 
@@ -345,7 +352,8 @@ enum VisualFixture {
             load: load, cpu: cpu, mem: mem, swap: swap, disk: disk, battery: battery,
             socTempC: socTempC, topCPU: topCPU, topMem: topMem, cpuHistory: cpuHistory,
             report: report, wakeHolders: wakeHolders, assessment: assessment,
-            history: history, reportText: reportText, claudeBackup: claudeBackup
+            history: history, reportText: reportText, claudeBackup: claudeBackup,
+            claudeAttempt: claudeAttempt, claudeSize: claudeSize, claudeJob: claudeJob
         )
     }
 }

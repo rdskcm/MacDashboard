@@ -40,7 +40,7 @@ enum Assess {
         }
     }
 
-    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleDays * 24, lowSpacePercent: Int = AppSettings.defaultLowSpacePercent, claudeLogPath: String = BackupLog.logURL.path, now: Date = Date()) -> Assessment {
+    static func assess(report: FullReport, live: LiveSnapshot, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, claudeAttempt: ClaudeBackupAttempt? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleDays * 24, lowSpacePercent: Int = AppSettings.defaultLowSpacePercent, claudeLogPath: String = BackupLog.logURL.path, now: Date = Date()) -> Assessment {
         var a = Assessment()
         // Paired with its `Problem` so the final sort keeps `items` in lockstep
         // with `problems` (see §3 of the v2 attention spec — parity is structural,
@@ -227,7 +227,18 @@ enum Assess {
             let text: String, detail: String
             if case .lastSuccess(let d) = backup {
                 let age = BackupLog.durationText(seconds: Int(max(0, now.timeIntervalSince(d))))
-                text = L.assessClaudeBackupStale(age); detail = L.claudeBackupAgo(age)
+                switch claudeAttempt?.result {
+                case .failed(let exit, let reason)?:
+                    text = L.assessClaudeBackupStaleFailed(age, BackupLog.reasonText(reason, exit: exit))
+                    detail = L.attnDetailClaudeBackupFailed
+                case .interrupted?:
+                    text = L.assessClaudeBackupStaleInterrupted(age); detail = L.attnDetailClaudeBackupInterrupted
+                default:
+                    text = L.assessClaudeBackupStale(age); detail = L.claudeBackupAgo(age)
+                }
+            } else if case .failed(let exit, let reason)? = claudeAttempt?.result {
+                text = L.assessClaudeBackupNoneFailed(BackupLog.reasonText(reason, exit: exit))
+                detail = L.attnDetailClaudeBackupFailed
             } else {
                 text = L.assessClaudeBackupNone; detail = L.attnDetailClaudeBackupNone
             }

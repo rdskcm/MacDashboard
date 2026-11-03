@@ -101,6 +101,40 @@ protocol BackupsStrings {
     func bkNoteClaudeUnreadable(_ path: String) -> String
     var bkOpenPrivacy: String { get }
     var bkOpenPrivacyA11y: String { get }
+    // BACKUP-CARD-FAILURE
+    var bkClaudeAttemptLabel: String { get }
+    var bkClaudeNextLabel: String { get }
+    var bkClaudeSizeLabel: String { get }
+    var bkClaudeSizeNone: String { get }
+    func bkClaudeSizeNote(added: String, total: String) -> String
+    var bkClaudeAttemptOK: String { get }
+    func bkClaudeAttemptFailed(_ exit: Int) -> String
+    func bkClaudeAttemptRunning(_ d: String) -> String
+    var bkClaudeAttemptInterrupted: String { get }
+    func bkTomorrow(_ t: String) -> String
+    var bkClaudeNextIfDisk: String { get }
+    var bkClaudeNextDiskOn: String { get }
+    var bkClaudeNextNoSchedule: String { get }
+    var bkClaudeNextNoJob: String { get }
+    func bkNoteClaudeFailed(_ reason: String) -> String
+    var bkNoteClaudeInterrupted: String { get }
+    var bkClaudeProgressText: String { get }
+    var bkClaudeProgressFinishing: String { get }
+    func bkNoteClaudeStaleNoRun(_ limit: String) -> String
+    var bkClaudeReasonDiskGone: String { get }
+    var bkClaudeReasonDiskError: String { get }
+    var bkClaudeReasonNoSpace: String { get }
+    var bkClaudeReasonNoPermission: String { get }
+    var bkClaudeReasonFilesChanged: String { get }
+    func bkClaudeReasonOther(_ exit: Int) -> String
+    var bkTagClaudeFailed: String { get }
+    var bkTagClaudeInterrupted: String { get }
+    var bkTagClaudeRunning: String { get }
+    var bkClaudeClickNoDisk: String { get }
+    var bkClaudeClickAlreadyRunning: String { get }
+    var bkClaudeClickNoResponse: String { get }
+    var bkClaudeClickLaunchFailed: String { get }
+    var bkClaudeBackUpNowA11y: String { get }
 }
 
 extension StringsEN: BackupsStrings {
@@ -196,6 +230,40 @@ extension StringsEN: BackupsStrings {
     func bkNoteClaudeUnreadable(_ path: String) -> String { "Can’t read \(path). Full Disk Access may be needed." }
     var bkOpenPrivacy: String { "Open Privacy settings…" }
     var bkOpenPrivacyA11y: String { "Open System Settings › Privacy & Security › Full Disk Access" }
+    // BACKUP-CARD-FAILURE
+    var bkClaudeAttemptLabel: String { "Last attempt" }
+    var bkClaudeNextLabel: String { "Next run" }
+    var bkClaudeSizeLabel: String { "Size" }
+    var bkClaudeSizeNone: String { "appears after the next backup" }
+    func bkClaudeSizeNote(added: String, total: String) -> String { "\(added) new · all snapshots \(total)" }
+    var bkClaudeAttemptOK: String { "succeeded" }
+    func bkClaudeAttemptFailed(_ exit: Int) -> String { "failed, code \(exit)" }
+    func bkClaudeAttemptRunning(_ d: String) -> String { "running for \(d)" }
+    var bkClaudeAttemptInterrupted: String { "did not finish" }
+    func bkTomorrow(_ t: String) -> String { "tomorrow, \(t)" }
+    var bkClaudeNextIfDisk: String { "if the disk is connected" }
+    var bkClaudeNextDiskOn: String { "disk connected" }
+    var bkClaudeNextNoSchedule: String { "no schedule" }
+    var bkClaudeNextNoJob: String { "no scheduled job found" }
+    func bkNoteClaudeFailed(_ reason: String) -> String { "The last backup attempt failed: \(reason). Older snapshots were not touched." }
+    var bkNoteClaudeInterrupted: String { "The last backup attempt did not finish: it stopped before reporting a result. Older snapshots were not touched." }
+    var bkClaudeProgressText: String { "Creating a backup" }
+    var bkClaudeProgressFinishing: String { "finishing" }
+    func bkNoteClaudeStaleNoRun(_ limit: String) -> String { "The last Claude backup is older than \(limit), and no run has started since. Check that the backup disk is connected." }
+    var bkClaudeReasonDiskGone: String { "the disk disconnected during the copy" }
+    var bkClaudeReasonDiskError: String { "the disk reported a read or write error" }
+    var bkClaudeReasonNoSpace: String { "the backup disk is full" }
+    var bkClaudeReasonNoPermission: String { "macOS refused access to the disk or to files" }
+    var bkClaudeReasonFilesChanged: String { "files changed while they were being copied" }
+    func bkClaudeReasonOther(_ exit: Int) -> String { "the copy stopped with error code \(exit)" }
+    var bkTagClaudeFailed: String { "Claude backup failed" }
+    var bkTagClaudeInterrupted: String { "Claude backup did not finish" }
+    var bkTagClaudeRunning: String { "Claude backup running" }
+    var bkClaudeClickNoDisk: String { "The backup disk is not connected, so no backup started. Connect it and try again." }
+    var bkClaudeClickAlreadyRunning: String { "A backup is already running, so a second one did not start." }
+    var bkClaudeClickNoResponse: String { "The backup did not start within 30 seconds. The disk may not be connected." }
+    var bkClaudeClickLaunchFailed: String { "Couldn’t start the backup app. It may have been moved or removed." }
+    var bkClaudeBackUpNowA11y: String { "Start a Claude backup now, without waiting for the 6-hour pause" }
 }
 
 extension StringsRU: BackupsStrings {
@@ -298,4 +366,38 @@ extension StringsRU: BackupsStrings {
         if (2...4).contains(d) { return "дня" }
         return "дней"
     }
+    // BACKUP-CARD-FAILURE
+    var bkClaudeAttemptLabel: String { "Последняя попытка" }
+    var bkClaudeNextLabel: String { "Следующий запуск" }
+    var bkClaudeSizeLabel: String { "Размер" }
+    var bkClaudeSizeNone: String { "появится после следующей копии" }
+    func bkClaudeSizeNote(added: String, total: String) -> String { "новых \(added) · все снимки \(total)" }
+    var bkClaudeAttemptOK: String { "успешно" }
+    func bkClaudeAttemptFailed(_ exit: Int) -> String { "ошибка, код \(exit)" }
+    func bkClaudeAttemptRunning(_ d: String) -> String { "идёт \(d)" }
+    var bkClaudeAttemptInterrupted: String { "не завершилась" }
+    func bkTomorrow(_ t: String) -> String { "завтра, \(t)" }
+    var bkClaudeNextIfDisk: String { "если диск подключён" }
+    var bkClaudeNextDiskOn: String { "диск подключён" }
+    var bkClaudeNextNoSchedule: String { "нет расписания" }
+    var bkClaudeNextNoJob: String { "задача не найдена" }
+    func bkNoteClaudeFailed(_ reason: String) -> String { "Последняя попытка бэкапа не удалась: \(reason). Старые снимки не затронуты." }
+    var bkNoteClaudeInterrupted: String { "Последняя попытка бэкапа не завершилась: она остановилась, не сообщив результат. Старые снимки не затронуты." }
+    var bkClaudeProgressText: String { "Создаётся копия" }
+    var bkClaudeProgressFinishing: String { "завершение" }
+    func bkNoteClaudeStaleNoRun(_ limit: String) -> String { "Последний бэкап Claude старше \(limit), и с тех пор запусков не было. Проверьте, подключён ли диск для копий." }
+    var bkClaudeReasonDiskGone: String { "диск отключился во время копирования" }
+    var bkClaudeReasonDiskError: String { "диск сообщил об ошибке чтения или записи" }
+    var bkClaudeReasonNoSpace: String { "на диске для копий нет места" }
+    var bkClaudeReasonNoPermission: String { "macOS не дала доступ к диску или файлам" }
+    var bkClaudeReasonFilesChanged: String { "файлы менялись во время копирования" }
+    func bkClaudeReasonOther(_ exit: Int) -> String { "копирование остановилось с кодом ошибки \(exit)" }
+    var bkTagClaudeFailed: String { "Бэкап Claude не удался" }
+    var bkTagClaudeInterrupted: String { "Бэкап Claude не завершился" }
+    var bkTagClaudeRunning: String { "Идёт бэкап Claude" }
+    var bkClaudeClickNoDisk: String { "Диск для копий не подключён, поэтому бэкап не начался. Подключите его и попробуйте снова." }
+    var bkClaudeClickAlreadyRunning: String { "Бэкап уже идёт, поэтому второй не запущен." }
+    var bkClaudeClickNoResponse: String { "Бэкап не начался за 30 секунд. Возможно, диск не подключён." }
+    var bkClaudeClickLaunchFailed: String { "Не удалось запустить приложение бэкапа. Возможно, оно перемещено или удалено." }
+    var bkClaudeBackUpNowA11y: String { "Начать бэкап Claude сейчас, не дожидаясь конца 6-часовой паузы" }
 }

@@ -323,10 +323,45 @@ extension SerialTests {
                 $0.report.tmDest = .some(bkDest(last: homeRef - 9 * 86_400, mounted: true))
                 $0.timeMachine.applyFixture(updatedAt: homeRef, backup: nil, action: .failed(L.bkStartDidNotBegin))
             }
-            let bkClaudeStale = backups { $0.claudeBackup = .lastSuccess(homeRef - 4 * 86_400) }
-            let bkClaudeNone = backups { $0.claudeBackup = .noSuccessFound }
-            let bkClaudeMissing = backups { $0.claudeBackup = nil }
-            let bkClaudeUnreadable = backups { $0.claudeBackup = .unreadable }
+            let bkClaudeStale = backups {
+                $0.claudeBackup = .lastSuccess(homeRef - 4 * 86_400)
+                $0.claudeRun.applyFixture(job: $0.claudeRun.job, attempt: .init(at: homeRef - 4 * 86_400, result: .ok, mount: "/Volumes/Backup SSD"), diskConnected: true, action: .idle)
+            }
+            let bkClaudeNone = backups {
+                $0.claudeBackup = .noSuccessFound
+                $0.claudeRun.applyFixture(job: $0.claudeRun.job, attempt: nil, diskConnected: nil, action: .idle)
+            }
+            let bkClaudeMissing = backups {
+                $0.claudeBackup = nil
+                $0.claudeRun.applyFixture(job: $0.claudeRun.job, attempt: nil, diskConnected: nil, action: .idle)
+            }
+            let bkClaudeUnreadable = backups {
+                $0.claudeBackup = .unreadable
+                $0.claudeRun.applyFixture(job: $0.claudeRun.job, attempt: nil, diskConnected: nil, action: .idle)
+            }
+            // BACKUP-CARD-FAILURE: the same ten states as harness Q-Z.
+            let bkMnt = "/Volumes/Backup SSD"
+            @MainActor func bkRun(_ status: ClaudeBackupStatus?, _ attempt: ClaudeBackupAttempt?, disk: Bool? = true,
+                                  action: ClaudeBackupAction = .idle, job: Bool = true, size: ClaudeBackupSize? = nil, progress: Double? = nil) -> AppModel {
+                backups {
+                    let fixtureJob = $0.claudeRun.job
+                    $0.claudeBackup = status
+                    $0.claudeRun.applyFixture(job: job ? fixtureJob : nil, attempt: attempt, diskConnected: disk, action: action, size: size, progress: progress)
+                }
+            }
+            let bkFailedAttempt = ClaudeBackupAttempt(at: homeRef - 3 * 3600, result: .failed(exit: 23, reason: .filesChanged), mount: bkMnt)
+            let bkOkAttempt7 = ClaudeBackupAttempt(at: homeRef - 7 * 3600, result: .ok, mount: bkMnt)
+            let bkClaudeFailedFresh = bkRun(.lastSuccess(homeRef - 5 * 3600), bkFailedAttempt,
+                                            size: ClaudeBackupSize(snapshotBytes: 28_548_000_000, addedBytes: 467_000_000, totalBytes: 38_654_000_000))
+            let bkClaudeFailedStale = bkRun(.lastSuccess(homeRef - 4 * 86_400), bkFailedAttempt)
+            let bkClaudeRunning = bkRun(.lastSuccess(homeRef - 5 * 3600), .init(at: homeRef - 7 * 60, result: .running, mount: bkMnt), progress: 0.62)
+            let bkClaudeInterrupted = bkRun(.lastSuccess(homeRef - 5 * 3600), .init(at: homeRef - 4 * 3600, result: .interrupted, mount: bkMnt))
+            let bkClickStarting = bkRun(.lastSuccess(homeRef - 7 * 3600), bkOkAttempt7, action: .starting)
+            let bkClickNoDisk = bkRun(.lastSuccess(homeRef - 7 * 3600), bkOkAttempt7, disk: false, action: .diskNotConnected)
+            let bkClickAlreadyRunning = bkRun(.lastSuccess(homeRef - 5 * 3600), .init(at: homeRef - 60, result: .running, mount: bkMnt), action: .alreadyRunning)
+            let bkClickNoResponse = bkRun(.lastSuccess(homeRef - 7 * 3600), bkOkAttempt7, disk: nil, action: .noResponse)
+            let bkClickLaunchFailed = bkRun(.lastSuccess(homeRef - 7 * 3600), bkOkAttempt7, action: .launchFailed)
+            let bkClaudeNoJob = bkRun(.lastSuccess(homeRef - 5 * 3600), nil, job: false)
             let bkWait = backups { $0.report.tmDest = nil }
             // REDESIGN-SYSTEM: System page states. Fixture = caffeinate (amber) + backupd (system), brew outdated (3), nothing checked.
             @MainActor func system(_ tweak: (AppModel) -> Void = { _ in }) -> AppModel { fixtureHome(tweak) }
@@ -676,6 +711,20 @@ extension SerialTests {
                         BackupsClaudeCard(model: bkClaudeMissing); BackupsClaudeCard(model: bkClaudeUnreadable)
                     }
                 }
+                run.snap("content-backups-claude-run", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        BackupsClaudeCard(model: bkClaudeFailedFresh); BackupsClaudeCard(model: bkClaudeFailedStale)
+                        BackupsClaudeCard(model: bkClaudeRunning); BackupsClaudeCard(model: bkClaudeInterrupted)
+                        BackupsClaudeCard(model: bkClaudeNoJob)
+                    }
+                }
+                run.snap("content-backups-claude-click", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        BackupsClaudeCard(model: bkClickStarting); BackupsClaudeCard(model: bkClickNoDisk)
+                        BackupsClaudeCard(model: bkClickAlreadyRunning); BackupsClaudeCard(model: bkClickNoResponse)
+                        BackupsClaudeCard(model: bkClickLaunchFailed)
+                    }
+                }
                 run.snap("content-backups-wait", mode, width: 1094) {
                     BackupsTimeMachineCard(model: bkWait, narrow: false)
                 }
@@ -687,6 +736,7 @@ extension SerialTests {
                         BackupsPageBar(model: bkNotSet) {}; BackupsPageBar(model: bkOk) {}; BackupsPageBar(model: bkOverdue7) {}
                         BackupsPageBar(model: bkOverdue30) {}; BackupsPageBar(model: bkBacking) {}; BackupsPageBar(model: bkClaudeStale) {}
                         BackupsPageBar(model: bkClaudeMissing) {}; BackupsPageBar(model: bkWait) {}
+                        BackupsPageBar(model: bkClaudeFailedFresh) {}; BackupsPageBar(model: bkClaudeRunning) {}
                     }
                 }
                 run.snap("content-system-sleep", mode, width: 1094) {
