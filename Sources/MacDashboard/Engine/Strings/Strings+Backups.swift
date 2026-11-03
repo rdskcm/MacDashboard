@@ -82,6 +82,7 @@ protocol BackupsStrings {
     func bkProgressBytes(_ done: String, _ total: String) -> String
     func bkTimeLeft(_ d: String) -> String
     var bkPreparing: String { get }
+    var bkFinishing: String { get }
     func bkFindingChanges(_ count: String) -> String
     var bkFindingChangesNoCount: String { get }
     var bkStopping: String { get }
@@ -211,6 +212,7 @@ extension StringsEN: BackupsStrings {
     func bkProgressBytes(_ done: String, _ total: String) -> String { "\(done) of \(total)" }
     func bkTimeLeft(_ d: String) -> String { "about \(d) left" }
     var bkPreparing: String { "preparing…" }
+    var bkFinishing: String { "finishing…" }
     func bkFindingChanges(_ count: String) -> String { "Looking for changes · found \(count)" }
     var bkFindingChangesNoCount: String { "Looking for changes…" }
     var bkStopping: String { "stopping…" }
@@ -340,6 +342,7 @@ extension StringsRU: BackupsStrings {
     func bkProgressBytes(_ done: String, _ total: String) -> String { "\(done) из \(total)" }
     func bkTimeLeft(_ d: String) -> String { "осталось около \(d)" }
     var bkPreparing: String { "подготовка…" }
+    var bkFinishing: String { "завершение…" }
     func bkFindingChanges(_ count: String) -> String { "Поиск изменений · найдено \(count)" }
     var bkFindingChangesNoCount: String { "Поиск изменений…" }
     var bkStopping: String { "остановка…" }

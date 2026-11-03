@@ -103,6 +103,20 @@ private func backupsTileView(_ t: BackupsTile) -> some View {
                 dot: t.dot.map(toneColor), valueInk: toneInk(t.valueTone))
 }
 
+/// The header «Back up now» of both Backups cards. The label swaps for a spinner without changing the width (`swap-in-place`).
+@MainActor
+private func backupsHeaderButton(busy: Bool, primary: Bool, disabled: Bool, a11y: String, identifier: String,
+                                 action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        Text(L.bkBackUpNow).dsSwapInPlace(busy) { DS3Spinner(role: primary ? .onSolid : .softRing, size: 12) }
+    }
+    .buttonStyle(DS3ButtonStyle(kind: primary ? .primary : .secondary, height: 30, hPad: 13, fontSize: 12.5))
+    .disabled(disabled)
+    .accessibilityLabel(a11y)
+    .ds3BusyValue(busy)
+    .accessibilityIdentifier(identifier)
+}
+
 // MARK: - Page bar
 
 /// Internal (not private): the visual fixture renders it. No Refresh button on this page.
@@ -138,7 +152,10 @@ struct BackupsTimeMachineCard: View {
     @ViewBuilder
     private func card(now: Date) -> some View {
         let m = BackupsPageModel.make(backupsInput(model, now: now))
-        DS3Card(title: "Time Machine", caption: m.tmCaption) {
+        DS3Card(title: "Time Machine", caption: m.tmCaption, trailing: {
+            // Outside the state switch (`control-identity-branch`): one button through starting, running and the end of a backup.
+            if let b = m.tmButton { backUpNowButton(b) }
+        }, content: {
             switch m.tmState {
             case .wait:
                 SectionWait(text: L.commonCollectingData)
@@ -158,7 +175,19 @@ struct BackupsTimeMachineCard: View {
                     }
                 }
             }
-        }
+        })
+    }
+
+    /// A disabled macOS button shows no help tag, so the tooltip sits on a clear layer over it. The layer exists only
+    /// while the button is disabled for that reason, so it never takes a click from an enabled button.
+    private func backUpNowButton(_ b: BackupsTMButton) -> some View {
+        backupsHeaderButton(busy: b.busy, primary: b.primary, disabled: !b.enabled, a11y: L.bkBackUpNowA11y,
+                            identifier: "backups-tm-backup-now") { model.timeMachine.startBackupNow() }
+            .overlay {
+                if let help = b.help {
+                    Color.clear.contentShape(Capsule()).help(help).accessibilityHidden(true)
+                }
+            }
     }
 
     @ViewBuilder
@@ -168,15 +197,6 @@ struct BackupsTimeMachineCard: View {
             SectionNote(tone: toneColor(n.tone), text: n.text,
                         button: (L.commonSetUp, L.bkSetUpA11y, false, { AdviceActionRunner.openPane(AdvicePanes.timeMachine) }),
                         buttonIdentifier: "backups-tm-setup", primary: true)
-        case .backUpNow(let enabled)?:
-            let disk: String = {
-                if case .some(.some(let d)) = model.report.tmDest { return d.name ?? L.bkTheBackupDisk }
-                return L.bkTheBackupDisk
-            }()
-            SectionNote(tone: toneColor(n.tone), text: n.text,
-                        button: (L.bkBackUpNow, L.bkBackUpNowA11y, model.timeMachine.action == .starting, { model.timeMachine.startBackupNow() }),
-                        buttonIdentifier: "backups-tm-backup-now", primary: true,
-                        buttonDisabled: !enabled, buttonHelp: enabled ? nil : L.bkConnectFirst(disk))
         default:
             SectionNote(tone: toneColor(n.tone), text: n.text)
         }
@@ -277,16 +297,9 @@ struct BackupsClaudeCard: View {
         })
     }
 
-    /// The label swaps for a spinner without changing the width (`swap-in-place`).
     private func backUpNowButton(_ b: BackupsClaudeButton) -> some View {
-        Button { model.claudeRun.startBackupNow() } label: {
-            Text(L.bkBackUpNow).dsSwapInPlace(b.busy) { DS3Spinner(role: b.primary ? .onSolid : .softRing, size: 12) }
-        }
-        .buttonStyle(DS3ButtonStyle(kind: b.primary ? .primary : .secondary, height: 30, hPad: 13, fontSize: 12.5))
-        .disabled(b.busy)
-        .accessibilityLabel(L.bkClaudeBackUpNowA11y)
-        .ds3BusyValue(b.busy)
-        .accessibilityIdentifier("backups-claude-backup-now")
+        backupsHeaderButton(busy: b.busy, primary: b.primary, disabled: b.busy, a11y: L.bkClaudeBackUpNowA11y,
+                            identifier: "backups-claude-backup-now") { model.claudeRun.startBackupNow() }
     }
 
     @ViewBuilder

@@ -80,7 +80,8 @@ extension SerialTests {
                 #expect(ok.tmFailure == nil)
                 let failed = BackupsPageModel.make(input(.some(.some(dest(last: t0 - 9 * dy))), action: .failed("boom")))
                 #expect(failed.tmFailure == "boom")
-                #expect(failed.tmNote?.button == .backUpNow(enabled: true), "a failed start may be retried")
+                #expect(failed.tmNote?.button == nil, "the overdue note has no button; the header button retries")
+                #expect(failed.tmButton?.enabled == true, "a failed start may be retried")
             }
         }
 
@@ -217,20 +218,66 @@ extension SerialTests {
             withLanguage(.en) {
                 let off = BackupsPageModel.overdueNote(dest: dest(mount: nil, last: nil), days: 9, hot: false)
                 #expect(off.text == "The last backup was 9 days ago. Connect Backup SSD to continue.")
-                #expect(off.button == .backUpNow(enabled: false)); #expect(off.tone == .amber)
+                #expect(off.button == nil); #expect(off.tone == .amber)
                 let on = BackupsPageModel.overdueNote(dest: dest(last: nil), days: 9, hot: false)
                 #expect(on.text == "The last backup was 9 days ago. Back up now to catch up.")
-                #expect(on.button == .backUpNow(enabled: true))
+                #expect(on.button == nil)
                 let hot = BackupsPageModel.overdueNote(dest: dest(last: nil), days: 34, hot: true)
                 #expect(hot.tone == .hot); #expect(hot.text == "The last backup was 34 days ago, more than a month. Back up now.")
-                let busy = BackupsPageModel.overdueNote(dest: dest(last: nil), days: 9, hot: false, action: .starting)
-                #expect(busy.button == .backUpNow(enabled: false))
                 let unnamed = BackupsPageModel.overdueNote(dest: dest(name: nil, mount: nil, last: nil), days: 9, hot: false)
                 #expect(unnamed.text.contains("the backup disk"))
             }
             withLanguage(.ru) {
                 #expect(BackupsPageModel.overdueNote(dest: dest(last: nil), days: 22, hot: false).text
                         == "Последняя копия была 22 дня назад. Создайте копию сейчас.")
+            }
+        }
+
+        @Test func tmButtonRules() {
+            func button(_ d: TMDestination, backup: TMBackupProgress? = nil, action: TMActionState = .idle) -> BackupsTMButton? {
+                BackupsPageModel.make(input(.some(.some(d)), backup: backup, action: action)).tmButton
+            }
+            let fresh = dest(last: t0 - 50 * min), overdue = dest(last: t0 - 9 * dy), hot = dest(last: t0 - 34 * dy)
+            let off = dest(mount: nil, last: t0 - 50 * min), offOverdue = dest(mount: nil, last: t0 - 9 * dy), offHot = dest(mount: nil, last: t0 - 34 * dy)
+            let running = TMBackupProgress(running: true, stopping: false)
+            let ready = BackupsTMButton(enabled: true, busy: false, primary: false, help: nil)
+            let attention = BackupsTMButton(enabled: true, busy: false, primary: true, help: nil)
+            let waiting = BackupsTMButton(enabled: false, busy: false, primary: false, help: nil)
+            let spinning = BackupsTMButton(enabled: false, busy: true, primary: false, help: nil)
+            withLanguage(.en) {
+                let noDisk = BackupsTMButton(enabled: false, busy: false, primary: false, help: "Connect Backup SSD first")
+                // No destination, or not read yet: no button.
+                #expect(BackupsPageModel.make(input(nil)).tmButton == nil)
+                #expect(BackupsPageModel.make(input(.some(nil))).tmButton == nil)
+                // Idle.
+                #expect(button(fresh) == ready)
+                #expect(button(dest(last: nil)) == ready, "unknown age is not overdue")
+                #expect(button(fresh, backup: .idle) == ready, "a poll that found nothing running")
+                #expect(button(overdue) == attention)
+                #expect(button(hot) == attention)
+                // Disk not connected: disabled, never primary, tooltip names the disk.
+                #expect(button(off) == noDisk)
+                #expect(button(offOverdue) == noDisk)
+                #expect(button(offHot) == noDisk)
+                #expect(button(dest(name: nil, mount: nil, last: nil))?.help == "Connect the backup disk first")
+                // Starting: spinner, never primary.
+                #expect(button(fresh, action: .starting) == spinning)
+                #expect(button(overdue, action: .starting) == spinning)
+                // Running and stopping: disabled, no spinner, no tooltip, even when the stored mount lags.
+                #expect(button(fresh, backup: running) == waiting)
+                #expect(button(overdue, backup: running) == waiting)
+                #expect(button(off, backup: running) == waiting)
+                #expect(button(off, backup: TMBackupProgress(running: true, stopping: false, destinationMountPoint: "/Volumes/Backup SSD")) == waiting)
+                #expect(button(fresh, backup: TMBackupProgress(running: true, stopping: true)) == waiting)
+                #expect(button(fresh, backup: running, action: .stopping) == waiting)
+                // Failed: retry allowed; a failed Stop during a backup stays disabled.
+                #expect(button(fresh, action: .failed("x")) == ready)
+                #expect(button(overdue, action: .failed("x")) == attention)
+                #expect(button(off, action: .failed("x")) == noDisk)
+                #expect(button(fresh, backup: running, action: .failed("x")) == waiting)
+            }
+            withLanguage(.ru) {
+                #expect(button(off)?.help == "Сначала подключите Backup SSD")
             }
         }
 
@@ -333,6 +380,21 @@ extension SerialTests {
             withLanguage(.ru) {
                 #expect(BackupsPageModel.progress(dest: d, backup: fc, action: .idle).caption == "Поиск изменений · найдено 31\u{2009}711")
                 #expect(BackupsPageModel.progress(dest: d, backup: none, action: .idle).caption == "Поиск изменений…")
+            }
+        }
+
+        @Test func finishingPhasesCaption() {
+            let d = dest(last: nil)
+            let thin = TMBackupProgress(running: true, stopping: false, phase: "ThinningPostBackup")
+            let fin = TMBackupProgress(running: true, stopping: false, phase: "Finishing")
+            let prep = TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes")
+            withLanguage(.en) {
+                for b in [thin, fin] {
+                    let p = BackupsPageModel.progress(dest: d, backup: b, action: .idle)
+                    #expect(p.caption == L.bkFinishing); #expect(p.fraction == nil)
+                }
+                #expect(BackupsPageModel.progress(dest: d, backup: thin, action: .stopping).caption == L.bkStopping)
+                #expect(BackupsPageModel.progress(dest: d, backup: prep, action: .idle).caption == L.bkPreparing)
             }
         }
 

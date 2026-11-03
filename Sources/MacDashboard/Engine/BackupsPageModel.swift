@@ -22,8 +22,11 @@ struct BackupsTile: Equatable {
 /// The Claude card's Back up now button; nil = not shown.
 struct BackupsClaudeButton: Equatable { var busy: Bool; var primary: Bool }
 
+/// The Time Machine card's Back up now button; nil = not shown (no destination, or not read yet). `help` = why it is disabled.
+struct BackupsTMButton: Equatable { var enabled: Bool; var busy: Bool; var primary: Bool; var help: String? }
+
 struct BackupsNote: Equatable {
-    enum Button: Equatable { case setUp, backUpNow(enabled: Bool), openSettingsBackups, openFullDiskAccess }
+    enum Button: Equatable { case setUp, openSettingsBackups, openFullDiskAccess }
     var tone: BackupsTone; var text: String; var button: Button?
 }
 
@@ -54,6 +57,7 @@ struct BackupsPageModel: Equatable {
     var tmNote: BackupsNote? = nil; var tmProgress: BackupsProgress? = nil
     var tmTiles: [BackupsTile] = []           // notset: 3 tiles (snaps, purgeable, dest); else 4 (last, next, dest, snaps)
     var tmFailure: String? = nil              // hot note from TMActionState.failed
+    var tmButton: BackupsTMButton? = nil      // nil in .wait and .notSet
     var claudeState: ClaudeCardState = .missing; var claudeCaption = ""
     var claudeRunProgress: BackupsProgress? = nil
     var claudeNote: BackupsNote? = nil; var claudeTiles: [BackupsTile] = []
@@ -91,10 +95,11 @@ struct BackupsPageModel: Equatable {
             let state = tmState(dest: dest, backup: i.backup, action: i.action, now: i.now)
             m.tmState = state
             m.tmCaption = caption(dest: dest, state: state, updatedAt: i.updatedAt)
+            m.tmButton = tmButton(dest: dest, state: state, action: i.action)
             switch state {
             case .overdue7, .overdue30:
                 let days = dest.lastBackupDate.map { daysSince($0, now: i.now) } ?? 0
-                m.tmNote = overdueNote(dest: dest, days: days, hot: state == .overdue30, action: i.action)
+                m.tmNote = overdueNote(dest: dest, days: days, hot: state == .overdue30)
             case .backing:
                 m.tmProgress = progress(dest: dest, backup: i.backup ?? .idle, action: i.action)
             default: break
@@ -273,8 +278,7 @@ struct BackupsPageModel: Equatable {
         return parts.isEmpty ? updatedCaption(updatedAt) : parts.joined(separator: " · ")
     }
 
-    /// A failed start counts as idle for the button: the attempt may be retried (see TimeMachineController.startBackupNow).
-    static func overdueNote(dest: TMDestination, days: Int, hot: Bool, action: TMActionState = .idle) -> BackupsNote {
+    static func overdueNote(dest: TMDestination, days: Int, hot: Bool) -> BackupsNote {
         let name = dest.name ?? L.bkTheBackupDisk
         let text: String
         if dest.mountPoint == nil {
@@ -282,10 +286,19 @@ struct BackupsPageModel: Equatable {
         } else {
             text = hot ? L.bkNoteOverdueConnectedHot(days) : L.bkNoteOverdueConnected(days)
         }
-        var idle = false
-        switch action { case .idle, .failed: idle = true; default: break }
-        return BackupsNote(tone: hot ? .hot : .amber, text: text,
-                           button: .backUpNow(enabled: dest.mountPoint != nil && idle))
+        return BackupsNote(tone: hot ? .hot : .amber, text: text, button: nil)
+    }
+
+    /// Mirrors TimeMachineController.startBackupNow: needs a mounted destination and no start or stop in flight. `.backing`
+    /// also covers a running backup, which the controller does not check. A failed action counts as idle: it may be retried.
+    /// `dest` is the effective destination: while no backup runs it equals the stored one the controller reads.
+    static func tmButton(dest: TMDestination, state: TMCardState, action: TMActionState) -> BackupsTMButton {
+        let connected = dest.mountPoint != nil
+        let backing = state == .backing
+        let enabled = connected && !backing
+        let overdue = state == .overdue7 || state == .overdue30
+        return BackupsTMButton(enabled: enabled, busy: action == .starting, primary: enabled && overdue,
+                               help: connected || backing ? nil : L.bkConnectFirst(dest.name ?? L.bkTheBackupDisk))
     }
 
     static func progress(dest: TMDestination, backup: TMBackupProgress, action: TMActionState) -> BackupsProgress {
@@ -294,6 +307,7 @@ struct BackupsPageModel: Equatable {
         let finding = backup.phase == "FindingChanges"
         if stopping { caption = L.bkStopping }
         else if finding { caption = backup.changedItems.map { L.bkFindingChanges(fmtGrouped($0)) } ?? L.bkFindingChangesNoCount }
+        else if backup.phase == "ThinningPostBackup" || backup.phase == "Finishing" { caption = L.bkFinishing }
         else if action == .starting && !backup.running { caption = L.bkPreparing }
         else { caption = bytesCaption(done: backup.bytesDone, total: backup.bytesTotal, secondsRemaining: backup.secondsRemaining) }
         return BackupsProgress(text: L.bkBackingTo(dest.name ?? L.bkTheBackupDisk), caption: caption,
