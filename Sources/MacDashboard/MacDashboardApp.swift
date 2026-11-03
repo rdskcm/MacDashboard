@@ -8,6 +8,7 @@ struct MacDashboardApp: App {
     @State private var model: AppModel
     @State private var glass: GlassSettings
     @State private var activity: AppActivityMonitor?
+    @State private var volumes: VolumeMountMonitor?
 
     init() {
         _model = State(wrappedValue: AppModel(actions: .live))
@@ -32,6 +33,7 @@ struct MacDashboardApp: App {
                     } else {
                         model.start()
                         if activity == nil { activity = AppActivityMonitor(model: model) }
+                        if volumes == nil { volumes = VolumeMountMonitor(model: model) }
                         IPhoneModel.shared.start()
                         if ProcessInfo.processInfo.arguments.contains("-notifyProbe") { NotificationCenterClient.shared.runProbe() }
                     }

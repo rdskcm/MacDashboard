@@ -73,7 +73,7 @@ extension SerialTests {
             CommandOutcome(termination: .exited(1), stdout: "", stdoutTruncated: false, stderrHead: stderr)
         }
 
-        // 1 (R4, R5): an idle Mac is probed once per visit; the poll sleeps 2 s on the injected clock
+        // 1 (R4, R5): an idle Mac is probed once in the first 10 s; the poll sleeps 2 s on the injected clock
         @Test func observeStatusProbesOnceWhenIdleAndSleepsOnTheClock() async {
             let (c, _, fake, clock) = make()
             clock.onSleep = { n in if n == 3 { c.stop() } }
@@ -89,6 +89,45 @@ extension SerialTests {
             clock.onSleep = { n in if n == 3 { c.stop() } }
             await c.observeStatus()
             #expect(fake.statusCalls == 0 && clock.sleeps.count == 3)
+        }
+        // R9: an idle Mac is sampled every 10 s (ticks 0, 5, 10)
+        @Test func anIdleMacIsSampledEveryTenSeconds() async {
+            let (c, _, fake, clock) = make()
+            clock.onSleep = { n in if n == 11 { c.stop() } }
+            await c.observeStatus()
+            #expect(fake.statusCalls == 3)
+            #expect(clock.sleeps.allSatisfy { $0 == .seconds(2) })
+        }
+        // R9: a backup macOS started is noticed at the next idle sample, then the 2 s cadence applies
+        @Test func aBackupStartedByMacOSIsNoticedAtTheNextIdleSample() async {
+            let (c, _, fake, clock) = make()
+            fake.statuses = [FakeTimeMachine.exit0, FakeTimeMachine.running]
+            var callsAtSleep: [Int: Int] = [:]
+            var runningAtSleep: [Int: Bool] = [:]
+            clock.onSleep = { n in
+                callsAtSleep[n] = fake.statusCalls
+                runningAtSleep[n] = c.backup?.running == true
+                if n == 8 { c.stop() }
+            }
+            await c.observeStatus()
+            #expect(runningAtSleep[1] == false && runningAtSleep[5] == false)
+            #expect(callsAtSleep[5] == 1 && callsAtSleep[6] == 2)
+            #expect(runningAtSleep[6] == true)
+            #expect(callsAtSleep[7] == 3 && callsAtSleep[8] == 4)      // one call per further sleep
+        }
+        // R9: a sample due during a pause runs at the first tick after resume
+        @Test func anIdleSampleDueDuringAPauseRunsOnResume() async {
+            let (c, host, fake, clock) = make()
+            host.paused = true
+            var callsAtSleep: [Int: Int] = [:]
+            clock.onSleep = { n in
+                callsAtSleep[n] = fake.statusCalls
+                if n == 7 { host.paused = false }
+                if n == 8 { c.stop() }
+            }
+            await c.observeStatus()
+            #expect(callsAtSleep[6] == 0 && callsAtSleep[7] == 0)
+            #expect(fake.statusCalls == 1 && callsAtSleep[8] == 1)
         }
         // 3 (R3, R5): the page leaving cancels the poll and clears a failed action
         @Test func pageLeavingCancelsThePollAndClearsAFailedAction() async {

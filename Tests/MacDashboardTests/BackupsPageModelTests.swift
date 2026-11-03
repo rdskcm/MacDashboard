@@ -237,9 +237,9 @@ extension SerialTests {
                 #expect(BackupsPageModel.bytesCaption(done: 1, total: 0, secondsRemaining: 5) == "preparing…")
                 #expect(BackupsPageModel.bytesCaption(done: 1_800_000_000, total: 12_800_000_000, secondsRemaining: 0) == "1.8 of 12.8 GB")
                 let d = dest(last: nil)
-                let running = TMBackupProgress(running: true, stopping: false, percent: 0.14, bytesDone: 1_800_000_000, bytesTotal: 12_800_000_000)
+                let running = TMBackupProgress(running: true, stopping: false, phase: "Copying", percent: 0.14, bytesDone: 1_800_000_000, bytesTotal: 12_800_000_000)
                 let p = BackupsPageModel.progress(dest: d, backup: running, action: .idle)
-                #expect(p.text == "Backing up to Backup SSD"); #expect(p.fraction == 0.14); #expect(!p.stopping)
+                #expect(p.text == "Backing up to Backup SSD"); #expect(abs((p.fraction ?? -1) - 0.226) < 1e-9); #expect(!p.stopping)
                 #expect(BackupsPageModel.progress(dest: d, backup: running, action: .stopping).caption == "stopping…")
                 #expect(BackupsPageModel.progress(dest: d, backup: TMBackupProgress(running: true, stopping: true), action: .idle).stopping)
                 #expect(BackupsPageModel.progress(dest: d, backup: .idle, action: .starting).caption == "preparing…")
@@ -250,13 +250,75 @@ extension SerialTests {
             }
         }
 
+        @Test func captionShowsMegabytesUnderOneGigabyte() {
+            func cap(_ done: Int64?, _ total: Int64, _ secs: Int? = nil) -> String {
+                BackupsPageModel.bytesCaption(done: done, total: total, secondsRemaining: secs)
+            }
+            let total: Int64 = 146_952_908_800
+            withLanguage(.en) {
+                #expect(cap(45_465_600, total) == "45.5 MB of 147 GB")
+                #expect(cap(21_577_728, total) == "21.6 MB of 147 GB")
+                #expect(cap(0, total) == "0 MB of 147 GB")
+                #expect(cap(nil, total) == "0 MB of 147 GB")
+                #expect(cap(40_000, total) == "0.1 MB of 147 GB")
+                #expect(cap(999_900_000, total) == "999.9 MB of 147 GB")
+                #expect(cap(999_960_000, total) == "1 of 147 GB", "rounds up to a whole GB")
+                #expect(cap(12_000_000, 800_000_000) == "12 of 800 MB")
+                #expect(cap(45_465_600, 12_800_000_000, 600) == "45.5 MB of 12.8 GB · about 10 min left")
+            }
+            withLanguage(.ru) {
+                #expect(cap(45_465_600, total) == "45,5 МБ из 147 ГБ")
+                #expect(cap(12_000_000, 800_000_000) == "12 из 800 МБ")
+            }
+        }
+
+        @Test func fmtCapacityStaysInGigabytes() {
+            withLanguage(.en) {
+                #expect(fmtCapacity(45_465_600) == "0 GB")
+                #expect(fmtCapacityParts(45_465_600).unit == "GB")
+            }
+        }
+
+        @Test func aRunningBackupsMountPointBeatsTheStoredRead() {
+            let stale = dest(mount: nil, last: nil, free: nil)
+            let live = TMBackupProgress(running: true, stopping: false, phase: "Copying", destinationMountPoint: "/Volumes/Live")
+            #expect(BackupsPageModel.effectiveDestination(stale, backup: live).mountPoint == "/Volumes/Live")
+            #expect(BackupsPageModel.effectiveDestination(dest(mount: "/Volumes/Old", last: nil), backup: live).mountPoint == "/Volumes/Live")
+            #expect(BackupsPageModel.effectiveDestination(stale, backup: nil).mountPoint == nil)
+            let finished = TMBackupProgress(running: false, stopping: false, destinationMountPoint: "/Volumes/Live")
+            #expect(BackupsPageModel.effectiveDestination(stale, backup: finished).mountPoint == nil, "an idle sample proves nothing")
+        }
+
+        /// R2: every way into `.backing`, each with a stored read that says «not connected».
+        @Test func aBackupInProgressNeverSaysNotConnected() {
+            withLanguage(.en) {
+                let stale = dest(mount: nil, last: nil, free: nil)
+                let withKey = TMBackupProgress(running: true, stopping: false, phase: "Copying", destinationMountPoint: "/Volumes/Live")
+                let withoutKey = TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes")
+                let cases: [(TMBackupProgress?, TMActionState)] = [
+                    (withKey, .idle), (withoutKey, .idle), (withKey, .stopping), (withoutKey, .stopping), (nil, .starting),
+                ]
+                for (backup, action) in cases {
+                    let m = BackupsPageModel.make(input(.some(.some(stale)), backup: backup, action: action))
+                    #expect(m.tmState == .backing)
+                    #expect(m.tmTiles.first { $0.id == "dest" }?.note != L.bkNotConnected)
+                    #expect(m.tmTiles.first { $0.id == "next" }?.value != L.bkNextWhenConnected)
+                    #expect(m.tmCaption?.contains(L.bkCaptionDiskNotConnected) != true)
+                    #expect(m.tmNote == nil)
+                }
+                // The same stored read with no backup still says it: the correction is not global.
+                let idle = BackupsPageModel.make(input(.some(.some(stale)), backup: .idle))
+                #expect(idle.tmTiles.first { $0.id == "dest" }?.note == L.bkNotConnected)
+            }
+        }
+
         @Test func findingChangesCaption() {
             let d = dest(last: nil)
             let fc = TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53)
             let none = TMBackupProgress(running: true, stopping: false, phase: "FindingChanges")
             withLanguage(.en) {
                 let p = BackupsPageModel.progress(dest: d, backup: fc, action: .idle)
-                #expect(p.caption == "Looking for changes · found 31,711"); #expect(p.fraction == 0.53); #expect(p.text == "Backing up to Backup SSD")
+                #expect(p.caption == "Looking for changes · found 31,711"); #expect(abs((p.fraction ?? -1) - 0.053) < 1e-9); #expect(p.text == "Backing up to Backup SSD")
                 let n = BackupsPageModel.progress(dest: d, backup: none, action: .idle)
                 #expect(n.caption == "Looking for changes…"); #expect(n.fraction == nil)
                 #expect(BackupsPageModel.progress(dest: d, backup: fc, action: .stopping).caption == "stopping…")

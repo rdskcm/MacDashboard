@@ -64,6 +64,28 @@ final class AppActivityMonitor {
     }
 }
 
+/// DISK-MOUNT-LIVE: tells SMART's read path that a volume mounted or unmounted. Created once per process by
+/// MacDashboardApp right after `AppActivityMonitor`, never under -visualFixture; lives as long as the process.
+@MainActor
+final class VolumeMountMonitor {
+    private let model: AppModel
+    private var observers: [NSObjectProtocol] = []
+
+    init(model: AppModel) {
+        self.model = model
+        let center = NSWorkspace.shared.notificationCenter
+        observers = [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification].map { name in
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                let path = (note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL)?.path
+                Task { @MainActor [weak self] in
+                    guard VolumeEvents.isRelevant(path: path) else { return }
+                    self?.model.smart.volumesChanged()
+                }
+            }
+        }
+    }
+}
+
 enum AppLifecycle {
     /// Menus are built by AppKit at launch from the app-domain `AppleLanguages` default; this write only affects the
     /// NEXT launch. Instant in-app strings are handled by L10n — system chrome (menu bar, standard dialogs) catches up
