@@ -80,6 +80,7 @@ final class VolumeMountMonitor {
                 Task { @MainActor [weak self] in
                     guard VolumeEvents.isRelevant(path: path) else { return }
                     self?.model.smart.volumesChanged()
+                    self?.model.claudeRun.volumesChanged()
                 }
             }
         }

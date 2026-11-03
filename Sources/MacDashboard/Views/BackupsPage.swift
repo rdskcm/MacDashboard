@@ -1,8 +1,9 @@
 // Views/BackupsPage.swift
 // REDESIGN-BACKUPS: the Backups section page (handoff 08-backups) on the shared §8 blocks. Every text, tone and
 // tile comes from the pure BackupsPageModel; this file only draws them and forwards actions to the model's TimeMachineController.
-// The only live loop is `model.timeMachine.observeStatus()` (2 s `tmutil status` poll while a backup runs,
-// awaited by this page's `.task`, so it stops when the page leaves).
+// Live loops: `model.timeMachine.observeStatus()` (2 s `tmutil status` poll while a backup runs) and
+// `model.claudeRun.observe()` (BACKUP-CARD-FAILURE: the Claude card's page-scoped poll); both are awaited by this page's `.task`s,
+// so they stop when the page leaves.
 
 import SwiftUI
 
@@ -47,6 +48,7 @@ struct BackupsPage: View {
             }
             // REDESIGN-BACKUPS D2: cancelled with the page, which is exactly the «only while on screen» rule.
             .task { await model.timeMachine.observeStatus() }
+            .task { await model.claudeRun.observe() }
         }
         .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
     }
@@ -58,7 +60,9 @@ struct BackupsPage: View {
 private func backupsInput(_ model: AppModel, now: Date) -> BackupsPageModel.Input {
     .init(tmDest: model.report.tmDest, snapshots: model.report.snapshots, backup: model.timeMachine.backup,
           action: model.timeMachine.action, updatedAt: model.timeMachine.updatedAt, claudeBackup: model.claudeBackup,
-          claudeLogPath: model.claudeLogPath, warnAfterHours: model.settings.backupStaleHours, now: now)
+          claudeLogPath: model.claudeLogPath, warnAfterHours: model.settings.backupStaleHours, now: now,
+          claudeAttempt: model.claudeRun.attempt, claudeJob: model.claudeRun.job, claudeDiskConnected: model.claudeRun.diskConnected,
+          claudeAction: model.claudeRun.action, claudeUsesDefaultLog: model.claudeUsesDefaultLog)
 }
 
 private func toneColor(_ t: BackupsTone) -> Color {
@@ -250,14 +254,34 @@ struct BackupsClaudeCard: View {
     @ViewBuilder
     private func card(now: Date) -> some View {
         let m = BackupsPageModel.make(backupsInput(model, now: now))
-        DS3Card(title: L.commonClaudeBackup, caption: m.claudeCaption) {
+        DS3Card(title: L.commonClaudeBackup, caption: m.claudeCaption, trailing: {
+            if let b = m.claudeButton { backUpNowButton(b) }
+        }, content: {
             VStack(alignment: .leading, spacing: 16) {
+                if let n = m.claudeActionNote { SectionNote(tone: toneColor(n.tone), text: n.text) }
                 if let n = m.claudeNote { note(n) }
+                if !m.claudeRunTiles.isEmpty {
+                    EqualColumnsLayout(columns: 2, spacing: 8) {
+                        ForEach(m.claudeRunTiles, id: \.id) { backupsTileView($0) }
+                    }
+                }
                 EqualColumnsLayout(columns: 3, spacing: 8) {
                     ForEach(m.claudeTiles, id: \.id) { backupsTileView($0) }
                 }
             }
+        })
+    }
+
+    /// The label swaps for a spinner without changing the width (`swap-in-place`).
+    private func backUpNowButton(_ b: BackupsClaudeButton) -> some View {
+        Button { model.claudeRun.startBackupNow() } label: {
+            Text(L.bkBackUpNow).dsSwapInPlace(b.busy) { DS3Spinner(role: b.primary ? .onSolid : .softRing, size: 12) }
         }
+        .buttonStyle(DS3ButtonStyle(kind: b.primary ? .primary : .secondary, height: 30, hPad: 13, fontSize: 12.5))
+        .disabled(b.busy)
+        .accessibilityLabel(L.bkClaudeBackUpNowA11y)
+        .ds3BusyValue(b.busy)
+        .accessibilityIdentifier("backups-claude-backup-now")
     }
 
     @ViewBuilder

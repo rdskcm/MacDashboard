@@ -30,6 +30,8 @@ import Testing
     var collecting = false
     var passEnds = true
     var paused = false
+    /// BACKUP-CARD-FAILURE: what `refreshClaudeBackup` also does (AppModel calls `claudeRun.refreshAttempt()` there).
+    var onClaudeRefresh: @MainActor () async -> Void = {}
     private(set) var updateCalls = 0
     private(set) var awaitCalls = 0
     private(set) var reassessCalls = 0
@@ -50,7 +52,7 @@ import Testing
                    awaitPassEnd: { self.awaitCalls += 1; return self.passEnds },
                    reassess: { self.reassessCalls += 1 },
                    isPaused: { self.paused },
-                   refreshClaudeBackup: { self.claudeRefreshCalls += 1 },
+                   refreshClaudeBackup: { self.claudeRefreshCalls += 1; await self.onClaudeRefresh() },
                    mergeBackgroundIntoCommitted: { self.mergeCalls += 1 },
                    beginBlock: { id, loading, watchdog in self.blockCalls.append(.begin(id, showsLoading: loading, armsWatchdog: watchdog)) },
                    succeedBlock: { self.blockCalls.append(.succeed($0)) },

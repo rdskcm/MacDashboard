@@ -1,6 +1,6 @@
 // tools/harness/scenario_backups.swift
 // REDESIGN-BACKUPS render scenario: the Time Machine card in its states (A–J), the Claude card in its states
-// (K–O) and the page bar (P). Russian by default; BACKUPS_LANG=en renders English; BACKUPS_VIEW=narrow renders
+// (K–O, Q–Z) and the page bar (P). Russian by default; BACKUPS_LANG=en renders English; BACKUPS_VIEW=narrow renders
 // the narrow layout (width 904) for B and D only. See tools/harness/README.md (render.sh).
 
 import AppKit
@@ -41,7 +41,16 @@ MainActor.assumeIsolated {
     let preparing = tm(backingDest, backup: TMBackupProgress(running: true, stopping: false, phase: "PreparingSourceVolumes"))
     let findingChanges = tm(backingDest, backup: TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", changedItems: 31_711, scanFraction: 0.53))
     let failed = tm(dest(last: ref - 9 * 86_400, mounted: true), action: .failed(L.bkStartDidNotBegin))
-    @MainActor func claude(_ s: ClaudeBackupStatus?) -> AppModel { model { $0.claudeBackup = s } }
+    @MainActor func claude(_ s: ClaudeBackupStatus?, attempt: ClaudeBackupAttempt? = nil, disk: Bool? = true, action: ClaudeBackupAction = .idle,
+                           job: Bool = true) -> AppModel {
+        model { m in
+            let fixtureJob = m.claudeRun.job
+            m.claudeBackup = s
+            m.claudeRun.applyFixture(job: job ? fixtureJob : nil, attempt: attempt, diskConnected: disk, action: action)
+        }
+    }
+    let mnt = "/Volumes/Backup SSD"
+    let failedAttempt = ClaudeBackupAttempt(at: ref - 3 * 3600, result: .failed(exit: 23, reason: .filesChanged), mount: mnt)
 
     if env["BACKUPS_VIEW"] == "narrow" {
         harnessRender(width: 904) {
@@ -63,14 +72,25 @@ MainActor.assumeIsolated {
         HarnessSection(label: "I: preparing (no percent)") { BackupsTimeMachineCard(model: preparing, narrow: false) }
         HarnessSection(label: "I2: looking for changes (31 711, 53 %)") { BackupsTimeMachineCard(model: findingChanges, narrow: false) }
         HarnessSection(label: "J: start failed") { BackupsTimeMachineCard(model: failed, narrow: false) }
-        HarnessSection(label: "K: Claude ok") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600))) }
-        HarnessSection(label: "L: Claude stale") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 4 * 86_400))) }
+        HarnessSection(label: "K: Claude ok") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: .init(at: ref - 5 * 3600, result: .ok, mount: mnt))) }
+        HarnessSection(label: "L: Claude stale") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 4 * 86_400), attempt: .init(at: ref - 4 * 86_400, result: .ok, mount: mnt))) }
         HarnessSection(label: "M: Claude none") { BackupsClaudeCard(model: claude(.noSuccessFound)) }
         HarnessSection(label: "N: Claude missing") { BackupsClaudeCard(model: claude(nil)) }
         HarnessSection(label: "O: Claude unreadable") { BackupsClaudeCard(model: claude(.unreadable)) }
+        HarnessSection(label: "Q: Claude failed, fresh snapshot") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: failedAttempt)) }
+        HarnessSection(label: "R: Claude failed, stale") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 4 * 86_400), attempt: failedAttempt)) }
+        HarnessSection(label: "S: Claude running") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: .init(at: ref - 7 * 60, result: .running, mount: mnt))) }
+        HarnessSection(label: "T: Claude interrupted") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: .init(at: ref - 4 * 3600, result: .interrupted, mount: mnt))) }
+        HarnessSection(label: "U: click, starting") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 7 * 3600), attempt: .init(at: ref - 7 * 3600, result: .ok, mount: mnt), action: .starting)) }
+        HarnessSection(label: "V: click, no disk") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 7 * 3600), attempt: .init(at: ref - 7 * 3600, result: .ok, mount: mnt), disk: false, action: .diskNotConnected)) }
+        HarnessSection(label: "W: click, already running") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), attempt: .init(at: ref - 60, result: .running, mount: mnt), action: .alreadyRunning)) }
+        HarnessSection(label: "X: click, no response") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 7 * 3600), attempt: .init(at: ref - 7 * 3600, result: .ok, mount: mnt), disk: nil, action: .noResponse)) }
+        HarnessSection(label: "Y: click, launch failed") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 7 * 3600), attempt: .init(at: ref - 7 * 3600, result: .ok, mount: mnt), action: .launchFailed)) }
+        HarnessSection(label: "Z: no job (a Mac without it)") { BackupsClaudeCard(model: claude(.lastSuccess(ref - 5 * 3600), job: false)) }
         HarnessSection(label: "P1: bar, not set up") { BackupsPageBar(model: notset) {} }
         HarnessSection(label: "P2: bar, ok") { BackupsPageBar(model: ok) {} }
         HarnessSection(label: "P3: bar, overdue 30") { BackupsPageBar(model: over30Off) {} }
         HarnessSection(label: "P4: bar, backing up") { BackupsPageBar(model: backing) {} }
+        HarnessSection(label: "P5: bar, Claude failed") { BackupsPageBar(model: claude(.lastSuccess(ref - 5 * 3600), attempt: failedAttempt)) {} }
     }
 }

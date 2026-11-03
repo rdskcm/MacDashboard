@@ -20,9 +20,16 @@ private func dest(name: String? = "Backup SSD", mount: String? = "/Volumes/Backu
 
 private func input(_ d: TMDestination??, snapshots: [String]? = nil, backup: TMBackupProgress? = nil,
                    action: TMActionState = .idle, updatedAt: Date? = nil, claude: ClaudeBackupStatus? = nil,
-                   warn: Int = 48) -> BackupsPageModel.Input {
+                   warn: Int = 48, attempt: ClaudeBackupAttempt? = nil, job: ClaudeBackupJob? = nil, disk: Bool? = nil,
+                   clickAction: ClaudeBackupAction = .idle, defaultLog: Bool = true) -> BackupsPageModel.Input {
     .init(tmDest: d, snapshots: snapshots, backup: backup, action: action, updatedAt: updatedAt, claudeBackup: claude,
-          claudeLogPath: BackupLog.logURL.path, warnAfterHours: warn, now: t0)
+          claudeLogPath: BackupLog.logURL.path, warnAfterHours: warn, now: t0,
+          claudeAttempt: attempt, claudeJob: job, claudeDiskConnected: disk, claudeAction: clickAction, claudeUsesDefaultLog: defaultLog)
+}
+
+private let runJob = ClaudeBackupJob(label: "x", appPath: "/Apps/ClaudeBackup.app", schedule: [.init(minute: 0, hour: 13)], startsOnMount: true)
+private func att(_ r: ClaudeBackupAttempt.Result, ago: Double = 3 * 3600) -> ClaudeBackupAttempt {
+    .init(at: t0 - ago, result: r, mount: "/Volumes/Backup SSD")
 }
 
 private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
@@ -354,6 +361,135 @@ extension SerialTests {
                 #expect(stale.claudeState == .stale); #expect(stale.claudeNote?.tone == .amber)
                 #expect(stale.claudeNote?.text.contains("2 days") == true)
                 #expect(stale.claudeTiles[0].valueTone == .amber); #expect(stale.claudeTiles[0].note == "over the limit")
+            }
+        }
+
+
+        // MARK: Claude attempt (BACKUP-CARD-FAILURE)
+
+        @Test func claudeFailedNoteTexts() {
+            let table: [(ClaudeBackupAttempt.Reason, String, String)] = [
+                (.diskDisconnected, "the disk disconnected during the copy", "диск отключился во время копирования"),
+                (.diskError, "the disk reported a read or write error", "диск сообщил об ошибке чтения или записи"),
+                (.noSpace, "the backup disk is full", "на диске для копий нет места"),
+                (.noPermission, "macOS refused access to the disk or to files", "macOS не дала доступ к диску или файлам"),
+                (.filesChanged, "files changed while they were being copied", "файлы менялись во время копирования"),
+                (.other, "the copy stopped with error code 23", "копирование остановилось с кодом ошибки 23"),
+            ]
+            for (reason, en, ru) in table {
+                withLanguage(.en) {
+                    let m = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), attempt: att(.failed(exit: 23, reason: reason)), job: runJob))
+                    #expect(m.claudeNote?.text == "The last backup attempt failed: \(en). Older snapshots were not touched.")
+                    #expect(m.claudeNote?.tone == .amber && m.claudeNote?.text.contains("job") == false)
+                }
+                withLanguage(.ru) {
+                    let m = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), attempt: att(.failed(exit: 23, reason: reason)), job: runJob))
+                    #expect(m.claudeNote?.text == "Последняя попытка бэкапа не удалась: \(ru). Старые снимки не затронуты.")
+                }
+            }
+        }
+
+        @Test func claudeNoteChoice() {
+            for lang in AppLanguage.allCases {
+                withLanguage(lang) {
+                    let stale = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 4 * dy), attempt: att(.ok, ago: 4 * dy), job: runJob))
+                    #expect(stale.claudeNote?.text.contains(L.settingsWarnAfterDays(2)) == true)
+                    #expect(stale.claudeNote?.text == L.bkNoteClaudeStaleNoRun(L.settingsWarnAfterDays(2)))
+                    let noJob = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 4 * dy)))
+                    #expect(noJob.claudeNote?.text == L.bkNoteClaudeStale(L.settingsWarnAfterDays(2)))
+                    let staleFailed = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 4 * dy), attempt: att(.failed(exit: 1, reason: .other)), job: runJob))
+                    #expect(staleFailed.claudeNote?.text == L.bkNoteClaudeFailed(BackupLog.reasonText(.other, exit: 1)))
+                    let noneFailed = BackupsPageModel.make(input(nil, claude: .noSuccessFound, attempt: att(.failed(exit: 1, reason: .other)), job: runJob))
+                    #expect(noneFailed.claudeNote?.text == L.bkNoteClaudeFailed(BackupLog.reasonText(.other, exit: 1)))
+                    let fresh = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), attempt: att(.failed(exit: 1, reason: .other)), job: runJob))
+                    #expect(fresh.claudeState == .ok && fresh.claudeNote?.text == L.bkNoteClaudeFailed(BackupLog.reasonText(.other, exit: 1)))
+                    let intr = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), attempt: att(.interrupted), job: runJob))
+                    #expect(intr.claudeNote?.text == L.bkNoteClaudeInterrupted)
+                    let run = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), attempt: att(.running, ago: 300), job: runJob))
+                    #expect(run.claudeNote?.text == L.bkNoteClaudeRunning && run.claudeNote?.tone == .accent)
+                    let missing = BackupsPageModel.make(input(nil, claude: nil, attempt: att(.ok), job: runJob))
+                    #expect(missing.claudeNote?.button == .openSettingsBackups)
+                    let unreadable = BackupsPageModel.make(input(nil, claude: .unreadable, attempt: att(.failed(exit: 1, reason: .other)), job: runJob))
+                    #expect(unreadable.claudeNote?.button == .openFullDiskAccess)
+                }
+            }
+        }
+
+        @Test func claudeRunTilesAndAttemptTile() {
+            withLanguage(.en) {
+                let none = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr)))
+                #expect(none.claudeRunTiles.isEmpty)
+                let withJob = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), job: runJob))
+                #expect(withJob.claudeRunTiles.map(\.id) == ["attempt", "next"] && withJob.claudeTiles.map(\.id) == ["age", "lastSnap", "warn"])
+                #expect(withJob.claudeRunTiles[0].value == BackupsPageModel.dash)
+                let ok = BackupsPageModel.claudeAttemptTile(att(.ok), now: t0)
+                #expect(ok.value == "today, 09:00" && ok.dot == .green && ok.note == "succeeded" && ok.noteTone == .green)
+                let run = BackupsPageModel.claudeAttemptTile(att(.running, ago: 7 * min), now: t0)
+                #expect(run.dot == .accent && run.note == "running for 7 min" && run.noteTone == .accent)
+                let intr = BackupsPageModel.claudeAttemptTile(att(.interrupted), now: t0)
+                #expect(intr.dot == .amber && intr.note == "did not finish" && intr.noteTone == .amber)
+                let fail = BackupsPageModel.claudeAttemptTile(att(.failed(exit: 23, reason: .filesChanged)), now: t0)
+                #expect(fail.dot == .amber && fail.note == "failed, code 23" && fail.noteTone == .amber)
+            }
+        }
+
+        @Test func claudeNextTile() {
+            withLanguage(.en) {
+                func next(job: ClaudeBackupJob? = runJob, _ a: ClaudeBackupAttempt? = nil, success: Double? = 7 * hr, disk: Bool? = true) -> BackupsTile {
+                    BackupsPageModel.claudeNextTile(job: job, attempt: a, status: success.map { .lastSuccess(t0 - $0) }, diskConnected: disk, now: t0)
+                }
+                #expect(next(job: nil).note == "no scheduled job found")
+                #expect(next(att(.running, ago: 60)).value == "after this one")
+                var t = next(disk: false)                                           // past the 6 h pause, disk off
+                #expect(t.value == "when connected" && t.note == "disk not connected" && t.noteTone == .amber)
+                t = next(success: 3 * hr, disk: false)                              // inside the pause
+                #expect(t.value == "tomorrow, 13:00" && t.note == "if the disk is connected")
+                t = next(); #expect(t.value == "today, 13:00" && t.note == "disk connected")
+                t = next(disk: nil); #expect(t.value == "today, 13:00" && t.note == "if the disk is connected")
+                let none = ClaudeBackupJob(label: nil, appPath: nil, schedule: [], startsOnMount: false)
+                #expect(next(job: none).value == "no schedule")
+                let later = ClaudeBackupJob(label: nil, appPath: nil, schedule: [.init(minute: 0, hour: 13, day: 12)], startsOnMount: false)
+                #expect(next(job: later).value == L.shortDateTime(Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 12, hour: 13))!))
+            }
+        }
+
+        @Test func claudeButtonRules() {
+            let noApp = ClaudeBackupJob(label: nil, appPath: nil, schedule: [], startsOnMount: false)
+            func button(job: ClaudeBackupJob? = runJob, _ status: ClaudeBackupStatus? = .lastSuccess(t0 - 5 * hr), a: ClaudeBackupAttempt? = nil,
+                        action: ClaudeBackupAction = .idle, defaultLog: Bool = true) -> BackupsClaudeButton? {
+                BackupsPageModel.make(input(nil, claude: status, attempt: a, job: job, clickAction: action, defaultLog: defaultLog)).claudeButton
+            }
+            #expect(button(job: nil) == nil && button(job: noApp) == nil && button(defaultLog: false) == nil && button(.unreadable) == nil)
+            #expect(button(nil) == BackupsClaudeButton(busy: false, primary: false))
+            #expect(button(action: .starting)?.busy == true && button(a: att(.running, ago: 60))?.busy == true)
+            #expect(button(.lastSuccess(t0 - 4 * dy))?.primary == true && button(.noSuccessFound)?.primary == true)
+            #expect(button(a: att(.failed(exit: 1, reason: .other)))?.primary == true && button(a: att(.interrupted))?.primary == true)
+            #expect(button(a: att(.ok))?.primary == false)
+        }
+
+        @Test func claudeActionNotes() {
+            for lang in AppLanguage.allCases {
+                withLanguage(lang) {
+                    #expect(BackupsPageModel.claudeActionNote(.idle) == nil && BackupsPageModel.claudeActionNote(.starting) == nil)
+                    let n = BackupsPageModel.claudeActionNote
+                    #expect(n(.diskNotConnected) == BackupsNote(tone: .amber, text: L.bkClaudeClickNoDisk, button: nil))
+                    #expect(n(.alreadyRunning) == BackupsNote(tone: .neutral, text: L.bkClaudeClickAlreadyRunning, button: nil))
+                    #expect(n(.noResponse) == BackupsNote(tone: .amber, text: L.bkClaudeClickNoResponse, button: nil))
+                    #expect(n(.launchFailed) == BackupsNote(tone: .hot, text: L.bkClaudeClickLaunchFailed, button: nil))
+                }
+            }
+            withLanguage(.en) { #expect(L.bkClaudeClickNoDisk == "The backup disk is not connected, so no backup started. Connect it and try again.") }
+        }
+
+        @Test func claudeTagWithAttempt() {
+            withLanguage(.en) {
+                typealias R = ClaudeBackupAttempt.Result
+                func tag(_ tm: TMCardState, _ cl: ClaudeCardState, _ r: R?) -> (BackupsTone, String) { BackupsPageModel.tag(tm: tm, claude: cl, attempt: r) }
+                #expect(tag(.ok, .ok, .failed(exit: 1, reason: .other)) == (.amber, "Claude backup failed"))
+                #expect(tag(.ok, .stale, .running) == (.accent, "Claude backup running"))
+                #expect(tag(.ok, .ok, .interrupted) == (.amber, "Claude backup did not finish"))
+                #expect(tag(.backing, .ok, .running) == (.accent, "Backing up…"))
+                #expect(tag(.overdue30, .ok, .failed(exit: 1, reason: .other)) == (.hot, "Backup overdue"))
             }
         }
 

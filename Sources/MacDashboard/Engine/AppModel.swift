@@ -95,7 +95,7 @@ final class AppModel {
             cpu: cpu, load: load, ncpu: ncpu, socTempC: socTempC,
             mem: mem, memPressure: memPressure, swap: swap, disk: disk,
             hasBattery: merged != nil, battery: merged,
-            security: report.security, claudeBackup: claudeBackup, snapshotCount: report.snapshots?.count,
+            security: report.security, claudeBackup: claudeBackup, claudeAttempt: claudeRun.attempt, snapshotCount: report.snapshots?.count,
             now: fixtureNow ?? Date(), parseFailures: report.parseFailures + live.parseFailures,
             details: ReportDetails(report: report, live: live))
     }
@@ -213,6 +213,8 @@ final class AppModel {
     /// ARCH-MODEL-SPLIT block 4: the Time Machine feature (status poll, Back up now / Stop, destination re-read,
     /// «updated» stamp); views read `model.timeMachine.<member>`.
     let timeMachine: TimeMachineController
+    /// BACKUP-CARD-FAILURE: the Claude backup card's live state (job, last attempt, disk, Back up now); views read `model.claudeRun.<member>`.
+    let claudeRun: ClaudeBackupController
     /// ARCH-MODEL-SPLIT block 5: the disk-health feature (300 s SMART sampler, smartmontools install, tools state,
     /// «updated» stamp); views read `model.smart.<member>`.
     let smart: SmartToolsController
@@ -262,6 +264,7 @@ final class AppModel {
         startupItems = StartupItemsController(host: reportHost, time: time)
         let tm = TimeMachineController(host: reportHost, time: time)
         timeMachine = tm
+        claudeRun = ClaudeBackupController(host: reportHost, time: time, deps: .live(settings: settings))
         // Controller→controller write (series convention): SMART's destination reads stamp Time Machine.
         smart = SmartToolsController(host: reportHost, time: time,
                                      deps: .live(markTMUpdated: { tm.recordDestination($0) }))
@@ -288,10 +291,13 @@ final class AppModel {
         let urls = BackupLog.resolvedURLs(custom: settings.claudeLogPath)
         let s = await BackupLog.readStatus(logURL: urls.log, rotatedURL: urls.rotated)
         if claudeBackup != s { claudeBackup = s }
+        await claudeRun.refreshAttempt()
     }
 
     /// The Claude backup log currently read (the user's override or the default).
     var claudeLogPath: String { BackupLog.resolvedURLs(custom: settings.claudeLogPath).log.path }
+    /// False when the user points the card at another log: the job always writes the default one (D16).
+    var claudeUsesDefaultLog: Bool { BackupLog.resolvedURLs(custom: settings.claudeLogPath).log.path == BackupLog.logURL.path }
 
     /// ARCH-SETTINGS-PATH: the one reaction to a change of any assessment setting, called synchronously by
     /// `AppSettings.assessmentSettings.didSet` whoever wrote it (a Settings binding, the System page, Home's menu,
@@ -534,7 +540,7 @@ final class AppModel {
         loadCachedReportFromDisk()
         storage.reprobeProtectedLocations()
         refreshReport(trigger: .automatic)
-        Task { [weak self] in await self?.refreshClaudeBackup() }
+        Task { [weak self] in await self?.refreshClaudeBackup(); await self?.claudeRun.refreshJob() }
 
         // Hourly folder-size count (SIZES-BACKGROUND): StorageController owns the 60 s poll; skipped while paused.
         storage.startSizeSchedule()
@@ -570,6 +576,7 @@ final class AppModel {
         energy.stop()
         startupItems.stop()
         timeMachine.stop()
+        claudeRun.stop()
         crashReports.stop()
         security.stop()
         storage.stop()
@@ -846,7 +853,7 @@ final class AppModel {
         let s = settings.assessmentSettings
         return Assess.assess(report: r, live: live, memPressure: memPressure, topApps: topApps,
                              wakeHolders: wakeHolders, ignoredWakeHolders: s.ignoredWakeHolders,
-                             claudeBackup: claudeBackup, backupStaleHours: s.backupStaleHours,
+                             claudeBackup: claudeBackup, claudeAttempt: claudeRun.attempt, backupStaleHours: s.backupStaleHours,
                              lowSpacePercent: s.lowSpacePercent,
                              claudeLogPath: BackupLog.resolvedURLs(custom: s.claudeLogPath).log.path,
                              now: fixtureNow ?? Date())

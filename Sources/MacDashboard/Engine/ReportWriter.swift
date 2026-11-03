@@ -26,6 +26,7 @@ struct ReportSummaryInput {
     var battery: BatteryInfo?          // already BatteryInfo.merged(live:report:)
     var security: SecurityState?
     var claudeBackup: ClaudeBackupStatus?
+    var claudeAttempt: ClaudeBackupAttempt? = nil
     var snapshotCount: Int?            // report.snapshots?.count; nil = not collected
     var now: Date                      // for the Claude backup age
     var parseFailures: [ParseFailure]  // report.parseFailures + live.parseFailures
@@ -208,6 +209,13 @@ enum ReportWriter {
         case .noSuccessFound?:
             parts.append("\(L.commonClaudeBackup) \(L.attnDetailClaudeBackupNone)")
         case .unreadable?, nil: break
+        }
+        switch i.claudeAttempt?.result {
+        case .failed(let exit, let reason)?:
+            parts.append("\(L.attnDetailClaudeBackupFailed): \(BackupLog.reasonText(reason, exit: exit))")
+        case .interrupted?:
+            parts.append(L.attnDetailClaudeBackupInterrupted)
+        default: break
         }
         if let n = i.snapshotCount { parts.append(L.reportLocalSnapshots(n)) }
         return parts.isEmpty ? dash : parts.joined(separator: " · ")

@@ -1,6 +1,6 @@
 // Engine/BackupLog.swift
 // BACKUP-AGE: parses and reads ~/Library/Logs/claude-backup.log (written by backup_auto.sh)
-// to find the newest successful snapshot. Foundation only; covered by Tests/MacDashboardTests.
+// to find the newest successful snapshot and the last attempt (BACKUP-CARD-FAILURE). Foundation only; covered by Tests/MacDashboardTests.
 import Foundation
 
 /// What the Claude backup log says about the newest successful snapshot (BACKUP-AGE).
@@ -9,6 +9,18 @@ enum ClaudeBackupStatus: Equatable {
     case noSuccessFound
     case unreadable
 }
+
+/// The last real backup run in the log (BACKUP-CARD-FAILURE). SKIP lines are not attempts.
+struct ClaudeBackupAttempt: Equatable, Sendable {
+    enum Reason: Int, Equatable, Sendable { case other, filesChanged, diskError, noPermission, noSpace, diskDisconnected }   // rawValue = priority (D13)
+    enum Result: Equatable, Sendable { case running, interrupted, ok, failed(exit: Int, reason: Reason) }
+    var at: Date          // the START time for running/interrupted, else the time on the OK/FAILED line
+    var result: Result
+    var mount: String?    // from the last START seen; nil when that START is not in the text read
+}
+
+/// What a forced run logged instead of starting (only SKIP lines; a started run shows as an attempt).
+enum ClaudeBackupClickOutcome: Equatable, Sendable { case diskNotConnected, alreadyRunning }
 
 /// Plain enum, NOT @MainActor: its async func runs on the global executor.
 enum BackupLog {
@@ -121,5 +133,129 @@ enum BackupLog {
         if s < 86_400 { return "\(s / 3600) \(L.uptimeUnitHour)" }
         let d = s / 86_400, h = (s % 86_400) / 3600
         return h > 0 ? "\(d) \(L.uptimeUnitDay) \(h) \(L.uptimeUnitHour)" : "\(d) \(L.uptimeUnitDay)"
+    }
+}
+
+extension BackupLog {
+    /// 64 KiB, 2 MiB, then 32 MiB: one failure block can outgrow the rotation threshold (real block: 4 490 lines).
+    static let attemptWindows = [64 * 1024, 2 * 1024 * 1024, 32 * 1024 * 1024]
+    /// Written by backup_auto.sh (`$LOCK/pid`); holds the running script's pid.
+    static let lockPIDURL = URL(fileURLWithPath: "/tmp/.claude-backup.lock/pid")
+    /// Longest real run: 16 min. Past this a live pid is taken as recycled (D1).
+    static let maxRunSeconds: TimeInterval = 3 * 3600
+
+    /// One output line → its failure class; nil = says nothing about the cause.
+    static func reason(forOutputLine line: Substring) -> ClaudeBackupAttempt.Reason? {
+        if line.contains("Volume not mounted") || line.contains("Device not configured") { return .diskDisconnected }
+        if line.contains("No space left on device") { return .noSpace }
+        if line.contains("Operation not permitted") || line.contains("Permission denied") { return .noPermission }
+        if line.contains("Input/output error") { return .diskError }
+        if line.contains("hard link") { return nil }   // D14
+        if line.contains("No such file or directory") || line.contains("vanished") { return .filesChanged }
+        return nil
+    }
+
+    /// The last START / OK / FAILED in `text`; a START with nothing after it comes back as `.running` (see `settled`).
+    static func lastAttempt(in text: String, timeZone: TimeZone = .current) -> ClaudeBackupAttempt? {
+        formatterLock.lock()
+        defer { formatterLock.unlock() }
+        if eventFmt.timeZone != timeZone { eventFmt.timeZone = timeZone; stampFmt.timeZone = timeZone }
+        var attempt: ClaudeBackupAttempt? = nil
+        var mount: String? = nil
+        var inFailedBlock = false
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            if raw.first == " " {
+                if inFailedBlock, case .failed(let exit, let current)? = attempt?.result,
+                   let r = reason(forOutputLine: raw), r.rawValue > current.rawValue {
+                    attempt?.result = .failed(exit: exit, reason: r)
+                }
+                continue
+            }
+            guard raw.dropFirst(19).hasPrefix("  "), let date = eventFmt.date(from: String(raw.prefix(19))) else { continue }
+            inFailedBlock = false                     // every event line ends a failure's output block
+            let tail = raw.dropFirst(21)
+            if tail.hasPrefix("START: ") {
+                mount = String(tail.dropFirst(7))
+                attempt = ClaudeBackupAttempt(at: date, result: .running, mount: mount)
+            } else if tail == "OK" {
+                attempt = ClaudeBackupAttempt(at: date, result: .ok, mount: mount)
+            } else if tail.hasPrefix("FAILED (exit "), let exit = Int(tail.dropFirst(13).prefix { $0.isNumber }) {
+                attempt = ClaudeBackupAttempt(at: date, result: .failed(exit: exit, reason: .other), mount: mount)
+                inFailedBlock = true
+            }
+        }
+        return attempt
+    }
+
+    /// Whether a `.running` attempt is really running (D1). Other results pass through.
+    static func settled(_ a: ClaudeBackupAttempt, lockPIDAlive: Bool, now: Date) -> ClaudeBackupAttempt {
+        guard a.result == .running else { return a }
+        if lockPIDAlive && now.timeIntervalSince(a.at) < maxRunSeconds { return a }
+        var out = a
+        out.result = .interrupted
+        return out
+    }
+
+    static func lockPID(at url: URL) -> Int32? {
+        guard let s = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return Int32(s.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// EPERM = someone else's process, so not our script.
+    static func isProcessAlive(_ pid: Int32) -> Bool { pid > 0 && kill(pid, 0) == 0 }
+
+    /// The newest attempt across the pair: the main log wins as soon as it holds any attempt line.
+    static func attempt(logURL: URL = BackupLog.logURL, rotatedURL: URL = BackupLog.rotatedURL) -> ClaudeBackupAttempt? {
+        for url in [logURL, rotatedURL] where FileManager.default.fileExists(atPath: url.path) {
+            for window in attemptWindows {
+                guard let tail = try? tailText(of: url, maxBytes: window) else { break }
+                if let a = lastAttempt(in: tail.text) { return a }
+                if tail.coversWholeFile { break }
+            }
+        }
+        return nil
+    }
+
+    /// Off the main actor, like `readStatus`.
+    static func readAttempt(logURL: URL = BackupLog.logURL, rotatedURL: URL = BackupLog.rotatedURL,
+                            lockPIDURL: URL = BackupLog.lockPIDURL, now: Date) async -> ClaudeBackupAttempt? {
+        guard let a = attempt(logURL: logURL, rotatedURL: rotatedURL) else { return nil }
+        let alive = lockPID(at: lockPIDURL).map(isProcessAlive) ?? false
+        return settled(a, lockPIDAlive: alive, now: now)
+    }
+
+    /// The newest disk-absent / already-running SKIP stamped at or after `since` (log stamps are whole seconds).
+    static func clickOutcome(in text: String, since: Date, timeZone: TimeZone = .current) -> ClaudeBackupClickOutcome? {
+        formatterLock.lock()
+        defer { formatterLock.unlock() }
+        if eventFmt.timeZone != timeZone { eventFmt.timeZone = timeZone; stampFmt.timeZone = timeZone }
+        let floorSince = Date(timeIntervalSince1970: floor(since.timeIntervalSince1970))
+        var out: ClaudeBackupClickOutcome? = nil
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: true) where raw.first != " " {
+            guard raw.dropFirst(19).hasPrefix("  "), let date = eventFmt.date(from: String(raw.prefix(19))), date >= floorSince else { continue }
+            let tail = raw.dropFirst(21)
+            if tail.hasPrefix("SKIP: disk not connected") { out = .diskNotConnected }
+            else if tail.hasPrefix("SKIP: another run is in progress") { out = .alreadyRunning }
+        }
+        return out
+    }
+
+    static func readClickOutcome(logURL: URL = BackupLog.logURL, since: Date) async -> ClaudeBackupClickOutcome? {
+        guard let tail = try? tailText(of: logURL, maxBytes: windows[0]) else { return nil }
+        return clickOutcome(in: tail.text, since: since)
+    }
+
+    /// Stat off the main actor (D7).
+    static func pathExists(_ path: String) async -> Bool { FileManager.default.fileExists(atPath: path) }
+
+    static func reasonText(_ r: ClaudeBackupAttempt.Reason, exit: Int) -> String {
+        switch r {
+        case .diskDisconnected: return L.bkClaudeReasonDiskGone
+        case .diskError: return L.bkClaudeReasonDiskError
+        case .noSpace: return L.bkClaudeReasonNoSpace
+        case .noPermission: return L.bkClaudeReasonNoPermission
+        case .filesChanged: return L.bkClaudeReasonFilesChanged
+        case .other: return L.bkClaudeReasonOther(exit)
+        }
     }
 }
