@@ -233,3 +233,9 @@ content-backups-claude-run-dark	2026-11-03	27.2	Xcode 27.2	9c1eb56-dirty
 content-backups-claude-run-light	2026-11-03	27.2	Xcode 27.2	9c1eb56-dirty
 content-backups-claude-click-dark	2026-11-03	27.2	Xcode 27.2	9c1eb56-dirty
 content-backups-claude-click-light	2026-11-03	27.2	Xcode 27.2	9c1eb56-dirty
+content-history-since-dark	2026-11-03	27.2	Xcode 27.2	5104e8b-dirty
+content-history-since-light	2026-11-03	27.2	Xcode 27.2	5104e8b-dirty
+content-history-since-states-dark	2026-11-03	27.2	Xcode 27.2	5104e8b-dirty
+content-history-since-states-light	2026-11-03	27.2	Xcode 27.2	5104e8b-dirty
+content-history-since-narrow-dark	2026-11-03	27.2	Xcode 27.2	5104e8b-dirty
+content-history-since-narrow-light	2026-11-03	27.2	Xcode 27.2	5104e8b-dirty
