@@ -330,7 +330,8 @@ enum VisualFixture {
                 disk_free_gb: 460 - used,
                 battery_pct: 100 - i / 40,
                 cycles: 100 + i * 2 / 3,
-                swap: "\((i * 37) % 1500 + 200)MB/2048MB",
+                // CHART-RANGE-START: Swap starts 60 days before the reference date, so Swap at 3M, 1Y and All show the «since» note.
+                swap: i < 440 ? nil : "\((i * 37) % 1500 + 200)MB/2048MB",
                 macos: i < 250 ? "15.6" : "26.1"
             ))
         }

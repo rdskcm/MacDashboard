@@ -56,6 +56,7 @@ private func input(_ e: [MacHistoryEntry], metric: HistoryMetric = .disk, range:
 private func make(_ i: HistoryPageModel.Input) -> HistoryPageModel { HistoryPageModel.make(i, calendar: cal) }
 
 private func pt(_ date: String, _ v: Double) -> HistoryChartPoint { .init(id: date, date: day(date), value: v) }
+private func chart(_ m: HistoryPageModel) -> HistoryChartData? { if case .chart(let d) = m.block { return d } else { return nil } }
 
 extension SerialTests {
     struct HistoryPageModelTests {
@@ -329,6 +330,168 @@ extension SerialTests {
                 let m = make(input(e, metric: .battery))
                 #expect(m.block == .empty(title: "Not enough data yet", sub: "0 samples · the chart needs at least 2"))
                 #expect(m.enabledRanges == [.month, .all] && m.caption == "30 days")
+            }
+        }
+
+        // MARK: CHART-RANGE-START
+
+        /// The user's case on 2026-10-30: samples on Sep 30 and Oct 3, none between, so 1M starts on Oct 3.
+        @Test func sinceGapCrossesWindowStart() {
+            let gone: Set<String> = ["2026-10-01", "2026-10-02", "2026-10-04"]
+            let e = entries(60, end: "2026-10-30").filter { !gone.contains($0.date) }
+            withLanguage(.en) {
+                let m = make(input(e, range: .month))
+                #expect(m.enabledRanges.contains(.month))
+                #expect(m.sinceNote == "since Oct 3" && m.caption == "28 days")
+                #expect(chart(m)?.xDomain == (day("2026-10-03")...day("2026-10-30")))
+                #expect(chart(m)?.points.first?.id == "2026-10-03")
+                #expect(chart(m)?.ticks.compactMap(\.label) == ["Oct 5", "Oct 12", "Oct 19", "Oct 26"])
+            }
+            withLanguage(.ru) {
+                let m = make(input(e, range: .month))
+                #expect(m.sinceNote == "с 3 октября" && m.caption == "28 дней")
+            }
+        }
+
+        /// Swap has values only for the last 40 of 120 days; the other metrics of the same entries are unaffected.
+        @Test func sinceMetricStartsLater() {
+            withLanguage(.en) {
+                let e = entries(120) { i, e in if i < 80 { e.swap = nil } }
+                let q = make(input(e, metric: .swap, range: .quarter))
+                #expect(q.sinceNote == "since Sep 12" && q.caption == "40 days")
+                #expect(chart(q)?.xDomain == (day("2026-09-12")...day("2026-10-21")))
+                #expect(chart(q)?.ticks.compactMap(\.label) == ["Sep 19", "Sep 26", "Oct 3", "Oct 10", "Oct 17"])
+                #expect(q.enabledRanges == [.month, .quarter, .all])
+                let all = make(input(e, metric: .swap, range: .all))
+                #expect(all.sinceNote == "since Sep 12" && chart(all)?.xDomain == chart(q)?.xDomain)
+                #expect(make(input(e, metric: .swap, range: .month)).sinceNote == nil)
+                let disk = make(input(e, metric: .disk, range: .quarter))
+                #expect(disk.sinceNote == nil && disk.caption == "90 days")
+                #expect(chart(disk)?.xDomain == HistoryPageModel.window(e, range: .quarter, calendar: cal))
+                let diskAll = make(input(e, metric: .disk, range: .all))
+                #expect(diskAll.sinceNote == nil && diskAll.caption == "120 days")
+            }
+        }
+
+        /// History exactly as long as the range, and longer: domain, ticks and caption as before, no note.
+        @Test func sinceNoNoteWhenRangeIsCovered() {
+            withLanguage(.en) {
+                let exact = make(input(entries(30), range: .month))
+                #expect(exact.sinceNote == nil && exact.caption == "30 days")
+                let e = entries(500)
+                for r in HistoryRange.allCases {
+                    let m = make(input(e, range: r))
+                    let w = HistoryPageModel.window(e, range: r, calendar: cal)!
+                    #expect(m.sinceNote == nil)
+                    #expect(chart(m)?.xDomain == w)
+                    #expect(chart(m)?.ticks == HistoryPageModel.xTicks(window: w, range: r, narrow: false, calendar: cal))
+                }
+            }
+        }
+
+        /// A gap inside the window keeps the full axis; the line bridges it.
+        @Test func sinceGapInsideWindowHasNoNote() {
+            withLanguage(.en) {
+                let gone: Set<String> = ["2026-10-10", "2026-10-11"]
+                let m = make(input(entries(60).filter { !gone.contains($0.date) }, range: .month))
+                #expect(m.sinceNote == nil && m.caption == "30 days")
+                #expect(chart(m)?.xDomain == (day("2026-09-22")...day("2026-10-21")))
+                #expect(chart(m)?.points.count == 28)
+            }
+        }
+
+        /// One or no sample in the window: the empty panel, nominal caption, no note. Two samples: a chart.
+        @Test func sinceFewSamples() {
+            withLanguage(.en) {
+                let one = make(input(entries(60) { i, e in if i < 59 { e.disk_used_gb = nil } }, range: .month))
+                #expect(one.block == .empty(title: "Not enough data yet", sub: "1 sample · the chart needs at least 2"))
+                #expect(one.sinceNote == nil && one.caption == "30 days")
+                let none = make(input(entries(60) { _, e in e.battery_pct = nil }, metric: .battery, range: .month))
+                #expect(none.sinceNote == nil && none.caption == "30 days")
+                let two = make(input(entries(60) { i, e in if i < 58 { e.disk_used_gb = nil } }, range: .month))
+                #expect(two.sinceNote == "since Oct 20" && two.caption == "2 days")
+                #expect(chart(two)?.xDomain == (day("2026-10-20")...day("2026-10-21")))
+                #expect(chart(two)?.ticks.isEmpty == true)
+            }
+        }
+
+        /// Table view keeps the nominal window and caption, and has no note.
+        @Test func sinceTableUnaffected() {
+            withLanguage(.en) {
+                let gone: Set<String> = ["2026-10-01", "2026-10-02", "2026-10-04"]
+                let e = entries(60, end: "2026-10-30").filter { !gone.contains($0.date) }
+                let m = make(input(e, range: .month, view: .table, showAll: true))
+                #expect(m.sinceNote == nil && m.caption == "30 days" && m.deltaCaption == nil)
+                if case .table(let t) = m.block { #expect(t.totalRows == 27) } else { Issue.record("not a table") }
+            }
+        }
+
+        /// Ticks by plotted length; Swap only on the last `keep` of 120 days, 3M. End day 2026-10-21.
+        @Test func sinceTicksByWindowLength() {
+            withLanguage(.en) {
+                func data(_ keep: Int) -> HistoryChartData? {
+                    let e = entries(120) { i, e in if i < 120 - keep { e.swap = nil } }
+                    return chart(make(input(e, metric: .swap, range: .quarter)))
+                }
+                func labels(_ keep: Int) -> [String] { data(keep)?.ticks.compactMap(\.label) ?? [] }
+                #expect(labels(2) == [])
+                #expect(labels(3) == ["Oct 20"])
+                #expect(labels(4) == ["Oct 20"])
+                #expect(labels(5) == ["Oct 19"])
+                #expect(labels(6) == ["Oct 17"])
+                #expect(labels(20) == ["Oct 3", "Oct 10", "Oct 17"])
+                #expect(labels(27) == ["Oct 3", "Oct 10", "Oct 17"])        // Sep 26 is under 4 % from the left edge
+                #expect(labels(28) == ["Sep 26", "Oct 3", "Oct 10", "Oct 17"])
+                #expect(labels(46) == ["Oct"])                              // over 45 days: month style
+                for keep in [2, 3, 4, 5, 6, 20, 27, 28, 40, 45, 46, 60] {
+                    guard let d = data(keep) else { Issue.record("no chart for \(keep)"); continue }
+                    #expect(d.ticks.allSatisfy { d.xDomain.contains($0.date) })
+                }
+            }
+        }
+
+        /// Shortened slightly on 3M: month labels stay.
+        @Test func sinceQuarterKeepsMonthLabels() {
+            withLanguage(.en) {
+                let m = make(input(entries(120).filter { $0.date != "2026-07-24" }, range: .quarter))
+                #expect(m.sinceNote == "since Jul 25" && m.caption == "89 days")
+                #expect(chart(m)?.ticks.compactMap(\.label) == ["Aug", "Sep", "Oct"])
+            }
+        }
+
+        /// The year appears only when it is not `now`'s year (2026 in `input`).
+        @Test func sinceShowsOtherYear() {
+            let gone: Set<String> = ["2025-10-22", "2025-10-23", "2025-10-24"]
+            let e = entries(500).filter { !gone.contains($0.date) }
+            withLanguage(.en) {
+                let m = make(input(e, range: .year))
+                #expect(m.sinceNote == "since Oct 25, 2025" && m.caption == "362 days")
+            }
+            withLanguage(.ru) { #expect(make(input(e, range: .year)).sinceNote == "с 25 октября 2025") }
+        }
+
+        /// The delta is still first to last sample by date.
+        @Test func sinceDeltaUnchanged() {
+            withLanguage(.en) {
+                let gone: Set<String> = ["2026-10-01", "2026-10-02"]
+                let e = entries(60, end: "2026-10-30") { i, e in e.disk_used_gb = 100 + i }.filter { !gone.contains($0.date) }
+                #expect(make(input(e, range: .month)).deltaCaption == "+30 GB per month")
+            }
+        }
+
+        @Test func sinceA11y() {
+            withLanguage(.en) { #expect(L.historyChartSinceA11y("since Oct 3") == "Chart shows data since Oct 3") }
+            withLanguage(.ru) { #expect(L.historyChartSinceA11y("с 3 октября") == "На графике данные с 3 октября") }
+        }
+
+        /// `visual-fixture-coverage`: the fixture shows the note on Swap 3M, and only where intended.
+        @Test func sinceInVisualFixture() {
+            withLanguage(.en) {
+                let e = VisualFixture.make().history.mac_history
+                let q = make(input(e, metric: .swap, range: .quarter))
+                #expect(q.sinceNote == "since Nov 17, 2025" && q.caption == "60 days")
+                #expect(make(input(e, metric: .swap, range: .month)).sinceNote == nil)
+                #expect(make(input(e, metric: .disk, range: .quarter)).sinceNote == nil)
             }
         }
     }

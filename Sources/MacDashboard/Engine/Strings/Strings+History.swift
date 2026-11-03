@@ -9,6 +9,7 @@ protocol HistoryStrings {
     var historyTagUnreadable: String { get }                   // "file unreadable"
     var historyTagReading: String { get }                      // "reading…"
     func historySince(day: Int, month: Int, year: Int?) -> String   // "since Sep 2, 2025" / "с 2 сентября 2025"
+    func historyChartSinceA11y(_ since: String) -> String      // "Chart shows data since Oct 3"
     var historyTitleDisk: String { get }                       // "Disk: used"
     var historyTitleBattery: String { get }                    // "Battery: maximum capacity"
     var historyTitleCycles: String { get }                     // "Battery: charge cycles"
@@ -65,6 +66,7 @@ extension StringsEN: HistoryStrings {
     func historySince(day: Int, month: Int, year: Int?) -> String {
         "since \(historyMonthLabel(month)) \(day)" + (year.map { ", \($0)" } ?? "")
     }
+    func historyChartSinceA11y(_ since: String) -> String { "Chart shows data \(since)" }
     var historyTitleDisk: String { "Disk: used" }
     var historyTitleBattery: String { "Battery: maximum capacity" }
     var historyTitleCycles: String { "Battery: charge cycles" }
@@ -132,6 +134,7 @@ extension StringsRU: HistoryStrings {
         let genitive = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
         return "с \(day) \(genitive[min(max(month, 1), 12) - 1])" + (year.map { " \($0)" } ?? "")
     }
+    func historyChartSinceA11y(_ since: String) -> String { "На графике данные \(since)" }
     var historyTitleDisk: String { "Диск: занято" }
     var historyTitleBattery: String { "Батарея: максимальная ёмкость" }
     var historyTitleCycles: String { "Батарея: циклы зарядки" }
