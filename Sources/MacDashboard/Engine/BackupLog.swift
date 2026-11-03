@@ -145,6 +145,8 @@ extension BackupLog {
     static let attemptWindows = [64 * 1024, 2 * 1024 * 1024, 32 * 1024 * 1024]
     /// Written by backup_auto.sh (`$LOCK/pid`); holds the running script's pid.
     static let lockPIDURL = URL(fileURLWithPath: "/tmp/.claude-backup.lock/pid")
+    /// Written by backup_auto.sh (`$LOCK/progress`): "<KiB written> <KiB of the previous snapshot>".
+    static let progressURL = URL(fileURLWithPath: "/tmp/.claude-backup.lock/progress")
     /// Longest real run: 16 min. Past this a live pid is taken as recycled (D1).
     static let maxRunSeconds: TimeInterval = 3 * 3600
 
@@ -261,6 +263,18 @@ extension BackupLog {
 
     static func readSize(logURL: URL = BackupLog.logURL, rotatedURL: URL = BackupLog.rotatedURL) async -> ClaudeBackupSize? {
         size(logURL: logURL, rotatedURL: rotatedURL)
+    }
+
+    /// The sampler's "<current> <total>" line as a fraction. Capped below 1: copying is not done until the log says OK.
+    static func progressFraction(in text: String) -> Double? {
+        let parts = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ", omittingEmptySubsequences: false)
+        guard parts.count == 2, let cur = Int64(parts[0]), let total = Int64(parts[1]), total > 0, cur >= 0 else { return nil }
+        return min(Double(cur) / Double(total), 0.99)
+    }
+
+    static func readProgress(at url: URL = BackupLog.progressURL) async -> Double? {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return progressFraction(in: text)
     }
 
     /// The newest disk-absent / already-running SKIP stamped at or after `since` (log stamps are whole seconds).

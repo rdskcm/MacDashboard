@@ -118,7 +118,8 @@ protocol BackupsStrings {
     var bkClaudeNextNoJob: String { get }
     func bkNoteClaudeFailed(_ reason: String) -> String
     var bkNoteClaudeInterrupted: String { get }
-    var bkNoteClaudeRunning: String { get }
+    var bkClaudeProgressText: String { get }
+    var bkClaudeProgressFinishing: String { get }
     func bkNoteClaudeStaleNoRun(_ limit: String) -> String
     var bkClaudeReasonDiskGone: String { get }
     var bkClaudeReasonDiskError: String { get }
@@ -246,7 +247,8 @@ extension StringsEN: BackupsStrings {
     var bkClaudeNextNoJob: String { "no scheduled job found" }
     func bkNoteClaudeFailed(_ reason: String) -> String { "The last backup attempt failed: \(reason). Older snapshots were not touched." }
     var bkNoteClaudeInterrupted: String { "The last backup attempt did not finish: it stopped before reporting a result. Older snapshots were not touched." }
-    var bkNoteClaudeRunning: String { "A backup is running. This card updates when it finishes." }
+    var bkClaudeProgressText: String { "Creating a backup" }
+    var bkClaudeProgressFinishing: String { "finishing" }
     func bkNoteClaudeStaleNoRun(_ limit: String) -> String { "The last Claude backup is older than \(limit), and no run has started since. Check that the backup disk is connected." }
     var bkClaudeReasonDiskGone: String { "the disk disconnected during the copy" }
     var bkClaudeReasonDiskError: String { "the disk reported a read or write error" }
@@ -381,7 +383,8 @@ extension StringsRU: BackupsStrings {
     var bkClaudeNextNoJob: String { "задача не найдена" }
     func bkNoteClaudeFailed(_ reason: String) -> String { "Последняя попытка бэкапа не удалась: \(reason). Старые снимки не затронуты." }
     var bkNoteClaudeInterrupted: String { "Последняя попытка бэкапа не завершилась: она остановилась, не сообщив результат. Старые снимки не затронуты." }
-    var bkNoteClaudeRunning: String { "Идёт бэкап. Карточка обновится, когда он закончится." }
+    var bkClaudeProgressText: String { "Создаётся копия" }
+    var bkClaudeProgressFinishing: String { "завершение" }
     func bkNoteClaudeStaleNoRun(_ limit: String) -> String { "Последний бэкап Claude старше \(limit), и с тех пор запусков не было. Проверьте, подключён ли диск для копий." }
     var bkClaudeReasonDiskGone: String { "диск отключился во время копирования" }
     var bkClaudeReasonDiskError: String { "диск сообщил об ошибке чтения или записи" }

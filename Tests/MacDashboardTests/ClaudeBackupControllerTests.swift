@@ -12,16 +12,18 @@ import Testing
     var job: ClaudeBackupJob? = ClaudeBackupJob(label: "x", appPath: "/Apps/ClaudeBackup.app", schedule: [], startsOnMount: true)
     var attempt: ClaudeBackupAttempt? = nil
     var size: ClaudeBackupSize? = nil
+    var progress: Double? = nil
     var outcome: ClaudeBackupClickOutcome? = nil
     var launchResult = FakeClaudeBackup.exit0
     var existing: Set<String> = []
-    private(set) var jobReads = 0, attemptReads = 0, outcomeReads = 0, existsReads = 0
+    private(set) var progressReads = 0, jobReads = 0, attemptReads = 0, outcomeReads = 0, existsReads = 0
     private(set) var launched: [String] = []
 
     var deps: ClaudeBackupController.Dependencies {
         .init(findJob: { self.jobReads += 1; return self.job },
               readAttempt: { _ in self.attemptReads += 1; return self.attempt },
               readSize: { self.size },
+              readProgress: { self.progressReads += 1; return self.progress },
               readClickOutcome: { _ in self.outcomeReads += 1; return self.outcome },
               launch: { app in self.launched.append(app); return self.launchResult },
               pathExists: { self.existsReads += 1; return self.existing.contains($0) })
@@ -97,6 +99,20 @@ extension SerialTests {
             fake.size = nil
             await c.refreshAttempt()
             #expect(c.size == nil)
+        }
+
+        @Test func refreshAttemptReadsProgressOnlyWhileRunning() async {
+            let (c, _, fake, _) = make()
+            fake.progress = 0.4
+            fake.attempt = .init(at: Date(), result: .ok, mount: "/Volumes/x")
+            await c.refreshAttempt()
+            #expect(fake.progressReads == 0 && c.progress == nil)
+            fake.attempt = .init(at: Date(), result: .running, mount: "/Volumes/x")
+            await c.refreshAttempt()
+            #expect(fake.progressReads == 1 && c.progress == 0.4)
+            fake.attempt = .init(at: Date(), result: .ok, mount: "/Volumes/x")
+            await c.refreshAttempt()
+            #expect(fake.progressReads == 1 && c.progress == nil)
         }
 
         @Test func visualFixtureReadsNothing() async {

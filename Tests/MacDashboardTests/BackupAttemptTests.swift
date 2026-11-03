@@ -119,6 +119,20 @@ extension SerialTests {
             #expect(!BackupLog.isProcessAlive(0))
         }
 
+        @Test func progressFractionParsing() {
+            #expect(BackupLog.progressFraction(in: "50 100\n") == 0.5)
+            #expect(BackupLog.progressFraction(in: "150 100") == 0.99)
+            for bad in ["5 0", "", "abc", "1 2 3", "-1 100"] { #expect(BackupLog.progressFraction(in: bad) == nil) }
+        }
+
+        @Test func readProgressFromFile() async {
+            let d = tempDir(); defer { try? FileManager.default.removeItem(at: d) }
+            let f = d.appendingPathComponent("progress")
+            #expect(await BackupLog.readProgress(at: f) == nil)
+            write("25 100\n", to: f)
+            #expect(await BackupLog.readProgress(at: f) == 0.25)
+        }
+
         @Test func filesAcrossTheRotatedLog() async {
             let d = tempDir(); defer { try? FileManager.default.removeItem(at: d) }
             let log = d.appendingPathComponent("c.log"), rot = d.appendingPathComponent("c.log.1"), pid = d.appendingPathComponent("pid")

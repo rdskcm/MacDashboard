@@ -61,7 +61,7 @@ private func backupsInput(_ model: AppModel, now: Date) -> BackupsPageModel.Inpu
     .init(tmDest: model.report.tmDest, snapshots: model.report.snapshots, backup: model.timeMachine.backup,
           action: model.timeMachine.action, updatedAt: model.timeMachine.updatedAt, claudeBackup: model.claudeBackup,
           claudeLogPath: model.claudeLogPath, warnAfterHours: model.settings.backupStaleHours, now: now,
-          claudeAttempt: model.claudeRun.attempt, claudeSize: model.claudeRun.size, claudeJob: model.claudeRun.job, claudeDiskConnected: model.claudeRun.diskConnected,
+          claudeAttempt: model.claudeRun.attempt, claudeSize: model.claudeRun.size, claudeProgress: model.claudeRun.progress, claudeJob: model.claudeRun.job, claudeDiskConnected: model.claudeRun.diskConnected,
           claudeAction: model.claudeRun.action, claudeUsesDefaultLog: model.claudeUsesDefaultLog)
 }
 
@@ -146,9 +146,9 @@ struct BackupsTimeMachineCard: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if let n = m.tmNote { note(n) }
                     if let p = m.tmProgress {
-                        BackupsProgressBlock(progress: p, stopBusy: model.timeMachine.action == .stopping) {
+                        BackupsProgressBlock(progress: p, stopBusy: model.timeMachine.action == .stopping, onStop: {
                             model.timeMachine.stopBackupNow()
-                        }
+                        })
                     }
                     if let f = m.tmFailure { SectionNote(tone: DS3.hot, text: f) }
                     EqualColumnsLayout(columns: m.tmState == .notSet ? 3 : (narrow ? 2 : 4), spacing: 8) {
@@ -188,7 +188,7 @@ struct BackupsTimeMachineCard: View {
 private struct BackupsProgressBlock: View {
     let progress: BackupsProgress
     let stopBusy: Bool
-    let onStop: () -> Void
+    let onStop: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -199,20 +199,24 @@ private struct BackupsProgressBlock: View {
                     .foregroundStyle(DS3.accentInk)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(progress.caption)
-                    .font(.system(size: 12.5))
-                    .monospacedDigit()
-                    .foregroundStyle(DS3.muted)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                Button { onStop() } label: {
-                    Text(L.bkStop).dsSwapInPlace(stopBusy) { DS3Spinner(role: .softRing, size: 12) }
+                if !progress.caption.isEmpty {
+                    Text(progress.caption)
+                        .font(.system(size: 12.5))
+                        .monospacedDigit()
+                        .foregroundStyle(DS3.muted)
+                        .lineLimit(1)
+                        .layoutPriority(1)
                 }
-                .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
-                .disabled(stopBusy || progress.stopping)
-                .accessibilityLabel(L.bkStopA11y)
-                .ds3BusyValue(stopBusy)
-                .accessibilityIdentifier("backups-tm-stop")
+                if let onStop {
+                    Button { onStop() } label: {
+                        Text(L.bkStop).dsSwapInPlace(stopBusy) { DS3Spinner(role: .softRing, size: 12) }
+                    }
+                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 30, hPad: 13, fontSize: 12.5))
+                    .disabled(stopBusy || progress.stopping)
+                    .accessibilityLabel(L.bkStopA11y)
+                    .ds3BusyValue(stopBusy)
+                    .accessibilityIdentifier("backups-tm-stop")
+                }
             }
             if let f = progress.fraction {
                 DS3Bar(fraction: f, height: 6, fill: AnyShapeStyle(DS3.accent))
@@ -259,6 +263,7 @@ struct BackupsClaudeCard: View {
         }, content: {
             VStack(alignment: .leading, spacing: 16) {
                 if let n = m.claudeActionNote { SectionNote(tone: toneColor(n.tone), text: n.text) }
+                if let p = m.claudeRunProgress { BackupsProgressBlock(progress: p, stopBusy: false, onStop: nil) }
                 if let n = m.claudeNote { note(n) }
                 if !m.claudeRunTiles.isEmpty {
                     EqualColumnsLayout(columns: 3, spacing: 8) {

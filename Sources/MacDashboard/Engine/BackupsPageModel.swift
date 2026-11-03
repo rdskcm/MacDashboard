@@ -42,6 +42,7 @@ struct BackupsPageModel: Equatable {
         var now: Date
         var claudeAttempt: ClaudeBackupAttempt? = nil
         var claudeSize: ClaudeBackupSize? = nil
+        var claudeProgress: Double? = nil
         var claudeJob: ClaudeBackupJob? = nil
         var claudeDiskConnected: Bool? = nil
         var claudeAction: ClaudeBackupAction = .idle
@@ -54,6 +55,7 @@ struct BackupsPageModel: Equatable {
     var tmTiles: [BackupsTile] = []           // notset: 3 tiles (snaps, purgeable, dest); else 4 (last, next, dest, snaps)
     var tmFailure: String? = nil              // hot note from TMActionState.failed
     var claudeState: ClaudeCardState = .missing; var claudeCaption = ""
+    var claudeRunProgress: BackupsProgress? = nil
     var claudeNote: BackupsNote? = nil; var claudeTiles: [BackupsTile] = []
     var claudeRunTiles: [BackupsTile] = []     // BACKUP-CARD-FAILURE: last attempt + next run; empty on a Mac without the job
     var claudeActionNote: BackupsNote? = nil   // the outcome of the last Back up now click
@@ -117,6 +119,11 @@ struct BackupsPageModel: Equatable {
             claudeNextTile(job: i.claudeJob, attempt: i.claudeAttempt, status: i.claudeBackup, diskConnected: i.claudeDiskConnected, now: i.now),
             claudeSizeTile(i.claudeSize),
         ]
+        if i.claudeAttempt?.result == .running {
+            let caption: String
+            if let f = i.claudeProgress { caption = f >= 0.99 ? L.bkClaudeProgressFinishing : "\(Int(f * 100)) %" } else { caption = "" }
+            m.claudeRunProgress = BackupsProgress(text: L.bkClaudeProgressText, caption: caption, fraction: i.claudeProgress, stopping: false)
+        }
         m.claudeActionNote = claudeActionNote(i.claudeAction)
         m.claudeButton = claudeButton(job: i.claudeJob, usesDefaultLog: i.claudeUsesDefaultLog, state: m.claudeState,
                                       attempt: i.claudeAttempt, action: i.claudeAction)
@@ -332,9 +339,7 @@ struct BackupsPageModel: Equatable {
             return BackupsNote(tone: .amber, text: L.bkNoteClaudeFailed(BackupLog.reasonText(reason, exit: exit)), button: nil)
         case .interrupted?:
             return BackupsNote(tone: .amber, text: L.bkNoteClaudeInterrupted, button: nil)
-        case .running?:
-            return BackupsNote(tone: .accent, text: L.bkNoteClaudeRunning, button: nil)
-        case .ok?, nil:
+        case .ok?, .running?, nil:
             break
         }
         switch state {

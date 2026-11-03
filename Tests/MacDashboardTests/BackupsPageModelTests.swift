@@ -21,10 +21,10 @@ private func dest(name: String? = "Backup SSD", mount: String? = "/Volumes/Backu
 private func input(_ d: TMDestination??, snapshots: [String]? = nil, backup: TMBackupProgress? = nil,
                    action: TMActionState = .idle, updatedAt: Date? = nil, claude: ClaudeBackupStatus? = nil,
                    warn: Int = 48, attempt: ClaudeBackupAttempt? = nil, job: ClaudeBackupJob? = nil, disk: Bool? = nil,
-                   clickAction: ClaudeBackupAction = .idle, defaultLog: Bool = true) -> BackupsPageModel.Input {
+                   clickAction: ClaudeBackupAction = .idle, defaultLog: Bool = true, progress: Double? = nil) -> BackupsPageModel.Input {
     .init(tmDest: d, snapshots: snapshots, backup: backup, action: action, updatedAt: updatedAt, claudeBackup: claude,
           claudeLogPath: BackupLog.logURL.path, warnAfterHours: warn, now: t0,
-          claudeAttempt: attempt, claudeJob: job, claudeDiskConnected: disk, claudeAction: clickAction, claudeUsesDefaultLog: defaultLog)
+          claudeAttempt: attempt, claudeProgress: progress, claudeJob: job, claudeDiskConnected: disk, claudeAction: clickAction, claudeUsesDefaultLog: defaultLog)
 }
 
 private let runJob = ClaudeBackupJob(label: "x", appPath: "/Apps/ClaudeBackup.app", schedule: [.init(minute: 0, hour: 13)], startsOnMount: true)
@@ -389,6 +389,23 @@ extension SerialTests {
             }
         }
 
+        @Test func claudeRunProgressPanel() {
+            func run(_ p: Double?, _ r: ClaudeBackupAttempt.Result = .running) -> BackupsPageModel {
+                BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), attempt: att(r, ago: 300), job: runJob, progress: p))
+            }
+            withLanguage(.en) {
+                let a = run(0.62)
+                #expect(a.claudeRunProgress?.caption == "62 %" && a.claudeRunProgress?.fraction == 0.62)
+                #expect(a.claudeRunProgress?.text == L.bkClaudeProgressText && a.claudeRunProgress?.stopping == false)
+                #expect(a.claudeNote == nil)
+                #expect(run(0.99).claudeRunProgress?.caption == L.bkClaudeProgressFinishing)
+                let n = run(nil)
+                #expect(n.claudeRunProgress != nil && n.claudeRunProgress?.fraction == nil && n.claudeRunProgress?.caption == "")
+                #expect(run(0.5, .ok).claudeRunProgress == nil)
+                #expect(run(nil, .interrupted).claudeRunProgress == nil)
+            }
+        }
+
         @Test func claudeNoteChoice() {
             for lang in AppLanguage.allCases {
                 withLanguage(lang) {
@@ -406,7 +423,7 @@ extension SerialTests {
                     let intr = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), attempt: att(.interrupted), job: runJob))
                     #expect(intr.claudeNote?.text == L.bkNoteClaudeInterrupted)
                     let run = BackupsPageModel.make(input(nil, claude: .lastSuccess(t0 - 5 * hr), attempt: att(.running, ago: 300), job: runJob))
-                    #expect(run.claudeNote?.text == L.bkNoteClaudeRunning && run.claudeNote?.tone == .accent)
+                    #expect(run.claudeNote == nil)
                     let missing = BackupsPageModel.make(input(nil, claude: nil, attempt: att(.ok), job: runJob))
                     #expect(missing.claudeNote?.button == .openSettingsBackups)
                     let unreadable = BackupsPageModel.make(input(nil, claude: .unreadable, attempt: att(.failed(exit: 1, reason: .other)), job: runJob))

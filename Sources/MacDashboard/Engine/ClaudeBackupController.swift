@@ -13,6 +13,7 @@ final class ClaudeBackupController {
         var findJob: @MainActor () async -> ClaudeBackupJob?
         var readAttempt: @MainActor (_ now: Date) async -> ClaudeBackupAttempt?
         var readSize: @MainActor () async -> ClaudeBackupSize?
+        var readProgress: @MainActor () async -> Double?
         var readClickOutcome: @MainActor (_ since: Date) async -> ClaudeBackupClickOutcome?
         var launch: @MainActor (_ appPath: String) async -> CommandOutcome
         var pathExists: @MainActor (_ path: String) async -> Bool
@@ -28,6 +29,7 @@ final class ClaudeBackupController {
                     let u = BackupLog.resolvedURLs(custom: settings.claudeLogPath)
                     return await BackupLog.readSize(logURL: u.log, rotatedURL: u.rotated)
                 },
+                readProgress: { await BackupLog.readProgress() },
                 readClickOutcome: { since in
                     await BackupLog.readClickOutcome(logURL: BackupLog.resolvedURLs(custom: settings.claudeLogPath).log, since: since)
                 },
@@ -39,6 +41,7 @@ final class ClaudeBackupController {
     private(set) var job: ClaudeBackupJob? = nil
     private(set) var attempt: ClaudeBackupAttempt? = nil
     private(set) var size: ClaudeBackupSize? = nil
+    private(set) var progress: Double? = nil
     private(set) var diskConnected: Bool? = nil   // nil = unknown (no mount path in the log read)
     private(set) var action: ClaudeBackupAction = .idle
 
@@ -104,6 +107,8 @@ final class ClaudeBackupController {
         if attempt != a { attempt = a }
         let s = await deps.readSize()
         if size != s { size = s }
+        let p = a?.result == .running ? await deps.readProgress() : nil
+        if progress != p { progress = p }
     }
 
     func refreshJob() async {
@@ -156,8 +161,8 @@ final class ClaudeBackupController {
     func volumesChanged() { refreshDue = true }
 
     /// Visual fixture only.
-    func applyFixture(job: ClaudeBackupJob?, attempt: ClaudeBackupAttempt?, diskConnected: Bool?, action: ClaudeBackupAction, size: ClaudeBackupSize? = nil) {
-        self.size = size; self.job = job; self.attempt = attempt; self.diskConnected = diskConnected; self.action = action
+    func applyFixture(job: ClaudeBackupJob?, attempt: ClaudeBackupAttempt?, diskConnected: Bool?, action: ClaudeBackupAction, size: ClaudeBackupSize? = nil, progress: Double? = nil) {
+        self.size = size; self.progress = progress; self.job = job; self.attempt = attempt; self.diskConnected = diskConnected; self.action = action
     }
 
     func stop() {
