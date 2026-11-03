@@ -181,8 +181,21 @@ struct HistoryCardView: View {
                 case .all: return L.historyRangeAll
                 }
             }
-            if let d = m.deltaCaption {
-                Text(d).font(.system(size: 12.5)).monospacedDigit().foregroundStyle(DS3.muted).lineLimit(1)
+            HStack(spacing: 5) {
+                if let d = m.deltaCaption {
+                    Text(d).font(.system(size: 12.5)).monospacedDigit().foregroundStyle(DS3.muted).lineLimit(1)
+                }
+                if let s = m.sinceNote {
+                    // The note explains where the axis starts, so on a tight row the delta truncates first.
+                    if m.deltaCaption != nil {
+                        Text(verbatim: "·").font(.system(size: 12.5)).foregroundStyle(DS3.muted)
+                            .layoutPriority(1).accessibilityHidden(true)
+                    }
+                    Text(s).font(.system(size: 12.5)).monospacedDigit().foregroundStyle(DS3.muted).lineLimit(1)
+                        .layoutPriority(1)
+                        .accessibilityLabel(L.historyChartSinceA11y(s))
+                        .accessibilityIdentifier("history-since-note")
+                }
             }
         }
     }
@@ -383,7 +396,7 @@ private struct HistoryBlockEnter: ViewModifier {
 
 // MARK: - Chart
 
-/// Time-based x over the range window, DS3 axes, hover rule/point/tooltip as CA layers (`HistoryHoverLayer`).
+/// Time-based x over the plotted window (`HistoryPageModel.plottedWindow`), DS3 axes, hover rule/point/tooltip as CA layers (`HistoryHoverLayer`).
 private struct HistoryChart: View {
     let data: HistoryChartData
     let initialHover: Int?

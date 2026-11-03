@@ -435,6 +435,11 @@ extension SerialTests {
             let historyUnreadable = fixtureHistory([]); historyUnreadable.history.applyFixture(unreadable: true, refreshing: false)
             let historyReading = fixtureHistory([]); historyReading.history.applyFixture(unreadable: true, refreshing: true)
             let historyNoBattery = fixtureHistory(fixtureDays.map { var e = $0; e.battery_pct = nil; e.cycles = nil; return e })
+            // CHART-RANGE-START: the 1M window's first two days are missing; Swap only on the last four days.
+            let historyGap = fixtureHistory(Array(fixtureDays.dropLast(30)) + Array(fixtureDays.suffix(28)))
+            let historyShortSwap = fixtureHistory(fixtureDays.enumerated().map { i, d in
+                var e = d; if i < fixtureDays.count - 4 { e.swap = nil }; return e
+            })
             /// Index of the largest swap value inside the 1M window (the «top» tooltip pin).
             let swapTopIndex: Int = {
                 let pts = HistoryPageModel.visiblePoints(fixtureDays, metric: .swap, range: .month, calendar: .current)
@@ -840,6 +845,16 @@ extension SerialTests {
                         HarnessSection(label: "History: no battery data, Battery metric") { HistoryCardView(model: historyNoBattery, router: nav, narrow: false, initialMetric: .battery) }
                     }
                 }
+                // CHART-RANGE-START: one card alone, so its height can be compared with `content-history-disk-quarter`.
+                run.snap("content-history-since", mode, width: 1094) { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .swap, initialRange: .quarter) }
+                run.snap("content-history-since-states", mode, width: 1094) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        HarnessSection(label: "History: a gap crosses the 1M start: axis from the first sample") { HistoryCardView(model: historyGap, router: nav, narrow: false, initialMetric: .disk, initialRange: .month) }
+                        HarnessSection(label: "History: Swap has four days, 3M: one label") { HistoryCardView(model: historyShortSwap, router: nav, narrow: false, initialMetric: .swap, initialRange: .quarter) }
+                        HarnessSection(label: "History: tooltip on the first sample of a shortened axis") { HistoryCardView(model: historyAll, router: nav, narrow: false, initialMetric: .swap, initialRange: .quarter, initialHover: 0) }
+                    }
+                }
+                run.snap("content-history-since-narrow", mode, width: 844) { HistoryCardView(model: historyGap, router: nav, narrow: true, initialMetric: .battery, initialRange: .month) }
                 run.snap("content-history-bars", mode, width: 1150) {
                     VStack(spacing: 12) {
                         HistoryPageBar(model: historyAll) {}; HistoryPageBar(model: historyOneDay) {}; HistoryPageBar(model: historyNoDays) {}

@@ -82,6 +82,7 @@ struct HistoryPageModel: Equatable {
     var disabledHelp: String?          // reason for the disabled ranges (nil when all enabled)
     var effectiveRange: HistoryRange?  // nil ⇒ < 2 samples
     var deltaCaption: String?          // chart mode only
+    var sinceNote: String?             // chart mode only, when the axis starts later than the nominal window
     var block: Block
 
     static let collapsedRows = 10
@@ -136,6 +137,19 @@ struct HistoryPageModel: Equatable {
         guard let days = range.days else { return first...last }
         guard let start = calendar.date(byAdding: .day, value: -(days - 1), to: last) else { return nil }
         return start...last
+    }
+
+    /// CHART-RANGE-START: the days the chart plots. Starts on the metric's first visible point when that is later
+    /// than the nominal window's start (a gap crossing the start, or a metric that starts later than the file). The
+    /// end stays on the last entry's day. `points` are chronological and inside `nominal`.
+    static func plottedWindow(nominal: ClosedRange<Date>, points: [HistoryChartPoint]) -> ClosedRange<Date> {
+        guard let first = points.first?.date, first > nominal.lowerBound, first < nominal.upperBound else { return nominal }
+        return first...nominal.upperBound
+    }
+
+    /// Calendar days in `window`, both ends counted.
+    static func calendarDays(_ window: ClosedRange<Date>, calendar: Calendar) -> Int {
+        (calendar.dateComponents([.day], from: window.lowerBound, to: window.upperBound).day ?? 0) + 1
     }
 
     static func visiblePoints(_ entries: [MacHistoryEntry], metric: HistoryMetric, range: HistoryRange,
@@ -221,7 +235,14 @@ struct HistoryPageModel: Equatable {
 
     // MARK: x ticks
 
-    static func xTicks(window: ClosedRange<Date>, range: HistoryRange, narrow: Bool, calendar: Calendar) -> [HistoryXTick] {
+    /// CHART-RANGE-START: a shortened window this long or shorter uses week labels whatever the range.
+    static let weekLabelMaxDays = 45
+    /// CHART-RANGE-START: a week label closer than this to the left edge would clip (half of the widest label on the
+    /// narrow plot).
+    static let weekLabelLeftEdge = 0.04
+
+    static func xTicks(window: ClosedRange<Date>, range: HistoryRange, narrow: Bool, shortened: Bool = false,
+                       calendar: Calendar) -> [HistoryXTick] {
         let start = window.lowerBound, end = window.upperBound
         let total = end.timeIntervalSince(start)
         guard total > 0 else { return [] }
@@ -237,8 +258,14 @@ struct HistoryPageModel: Equatable {
             if d <= start || x < 0.015 || x > 0.985 { continue }
             starts.append((d, m, y))
         }
-        if range == .month {
-            let weeks: [HistoryXTick] = [25, 18, 11, 4].compactMap { back in
+        let days = calendarDays(window, calendar: calendar)
+        if range == .month || (shortened && days <= weekLabelMaxDays) {
+            let span = days - 1
+            // Days back from the end: 25, 18, 11, 4 for a full 1M window (oldest first).
+            let clearOfEdge = stride(from: 4, through: span, by: 7).reversed()
+                .filter { Double(span - $0) / Double(span) >= weekLabelLeftEdge }
+            let backs = clearOfEdge.isEmpty && span >= 2 ? [span / 2] : clearOfEdge    // 3 to 5 days: one middle label
+            let weeks: [HistoryXTick] = backs.compactMap { back in
                 guard let d = calendar.date(byAdding: .day, value: -back, to: end) else { return nil }
                 let c = calendar.dateComponents([.day, .month], from: d)
                 return .weekLabel(date: d, label: L.historyShortDate(day: c.day ?? 1, month: c.month ?? 1, year: nil))
@@ -300,16 +327,18 @@ struct HistoryPageModel: Equatable {
 
     // MARK: page bar (D20)
 
+    /// «since Oct 3» / «since Sep 2, 2025»: the year only when it is not `now`'s year.
+    static func sinceLabel(_ d: Date, now: Date, calendar: Calendar) -> String {
+        let c = calendar.dateComponents([.year, .month, .day], from: d)
+        let sameYear = c.year == calendar.component(.year, from: now)
+        return L.historySince(day: c.day ?? 1, month: c.month ?? 1, year: sameYear ? nil : c.year)
+    }
+
     static func bar(entries: [MacHistoryEntry], unreadable: Bool, refreshing: Bool, now: Date,
                     calendar: Calendar = .current) -> Bar {
         if unreadable && refreshing { return Bar(sub: fileName, tone: .accent, tag: L.historyTagReading) }
         if unreadable { return Bar(sub: fileName, tone: .hot, tag: L.historyTagUnreadable) }
-        var tag = ""
-        if let first = entries.first, let d = parseDay(first.date) {
-            let c = calendar.dateComponents([.year, .month, .day], from: d)
-            let sameYear = c.year == calendar.component(.year, from: now)
-            tag = L.historySince(day: c.day ?? 1, month: c.month ?? 1, year: sameYear ? nil : c.year)
-        }
+        let tag = entries.first.flatMap { parseDay($0.date) }.map { sinceLabel($0, now: now, calendar: calendar) } ?? ""
         return Bar(sub: L.historySub(entries.count), tone: .neutral, tag: tag)
     }
 
@@ -337,11 +366,12 @@ struct HistoryPageModel: Equatable {
             case .swap: title = L.historyTitleSwap
             }
         }
-        let caption = effective.map { L.historyDaysCaption(windowDays(range: $0, spanDays: span)) }
+        var caption = effective.map { L.historyDaysCaption(windowDays(range: $0, spanDays: span)) }
             ?? L.historySamples(entries.count)
 
         var block: Block
         var delta: String?
+        var note: String?
         if i.unreadable {
             block = i.refreshing ? .wait : .error(path: i.historyPath)
         } else if let r = effective, let w = window(entries, range: r, calendar: calendar) {
@@ -351,10 +381,17 @@ struct HistoryPageModel: Equatable {
                 let pts = visiblePoints(entries, metric: i.metric, range: r, calendar: calendar)
                 if pts.count >= 2 {
                     let scale = yScale(values: pts.map(\.value), integer: i.metric == .battery || i.metric == .cycles)
-                    block = .chart(HistoryChartData(points: pts, xDomain: w, yScale: scale,
-                                                    ticks: xTicks(window: w, range: r, narrow: i.narrow, calendar: calendar),
+                    let plotted = plottedWindow(nominal: w, points: pts)
+                    let shortened = plotted != w
+                    block = .chart(HistoryChartData(points: pts, xDomain: plotted, yScale: scale,
+                                                    ticks: xTicks(window: plotted, range: r, narrow: i.narrow,
+                                                                  shortened: shortened, calendar: calendar),
                                                     metric: i.metric))
                     delta = deltaPerMonth(pts).map { deltaCaption($0, metric: i.metric) }
+                    if shortened {
+                        note = sinceLabel(plotted.lowerBound, now: i.now, calendar: calendar)
+                        caption = L.historyDaysCaption(calendarDays(plotted, calendar: calendar))
+                    }
                 } else {
                     block = .empty(title: L.historyEmptyTitle, sub: L.historyEmptySub(pts.count))
                 }
@@ -367,6 +404,6 @@ struct HistoryPageModel: Equatable {
         switch block { case .error, .wait: isState = true; default: isState = false }
         return HistoryPageModel(title: title, caption: caption, showsMetricControl: i.view == .chart,
                                 showsRangeRow: !isState, enabledRanges: enabled, disabledHelp: help,
-                                effectiveRange: effective, deltaCaption: delta, block: block)
+                                effectiveRange: effective, deltaCaption: delta, sinceNote: note, block: block)
     }
 }
