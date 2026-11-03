@@ -64,6 +64,14 @@ func fmtCapacityParts(_ bytes: Int64) -> (value: String, unit: String) {
     return (fmtNum(gb, decimals: 1), L.byteUnitGB)
 }
 
+/// Backup progress amounts (DISK-MOUNT-LIVE): decimal MB under 1 GB so early progress does not read as zero, then exactly
+/// `fmtCapacityParts`. The unit is decided after rounding, like `fmtCapacityParts`; a non-zero amount shows at least 0.1 MB.
+func fmtBackupBytesParts(_ bytes: Int64) -> (value: String, unit: String) {
+    let mb = Double(bytes) / 1_000_000
+    guard (mb * 10).rounded() / 10 < 1000 else { return fmtCapacityParts(bytes) }
+    return (fmtNum(bytes > 0 ? max(mb, 0.1) : 0, decimals: 1), L.byteUnitMB)
+}
+
 /// Deterministic Russian byte formatter: КБ/МБ/ГБ/ТБ, one decimal place
 /// (trimmed), comma as decimal separator. Intentionally NOT ByteCountFormatter,
 /// which is locale-dependent and uses Latin unit abbreviations.

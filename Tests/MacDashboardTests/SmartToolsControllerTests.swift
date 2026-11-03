@@ -206,6 +206,83 @@ extension SerialTests {
             c.applyFixture(updatedAt: clock.now, tools: .needsHomebrew, installing: true, failure: .timedOut)
             #expect(c.updatedAt == clock.now && c.toolsState == .needsHomebrew && c.installing && c.installFailure == .timedOut)
         }
+        // DISK-MOUNT-LIVE R1, R5: debounce, read, follow-up read through the same landing
+        @Test func volumeEventReadsAfterTheDebounceThenFollowsUp() async {
+            let (c, host, fake, clock) = make()
+            c.volumesChanged()
+            await c.volumeReadTask?.value
+            #expect(clock.sleeps == [VolumeEvents.debounce, VolumeEvents.followUp])
+            #expect(fake.collectCalls == 2 && host.awaitCalls == 2 && fake.recorded.count == 2)
+            #expect(host.report.smart == fake.disks && c.updatedAt != nil)
+        }
+        // R5: a burst costs one plan
+        @Test func aBurstOfVolumeEventsCoalesces() async {
+            let (c, _, fake, _) = make()
+            for _ in 0..<5 { c.volumesChanged() }
+            await c.volumeReadTask?.value
+            #expect(fake.collectCalls == 2)
+        }
+        // R5: an event during a read discards that read and restarts
+        @Test func aVolumeEventDuringAReadRestartsThePlan() async {
+            let (c, host, fake, _) = make()
+            fake.holdCollect = true
+            c.volumesChanged()
+            await settle { fake.collectCalls == 1 }
+            c.volumesChanged()
+            await settle { fake.collectCalls == 2 }
+            fake.holdCollect = false
+            fake.releaseCollect()
+            await c.volumeReadTask?.value
+            #expect(fake.collectCalls == 3)        // the discarded read, then the new plan's two
+            #expect(host.awaitCalls == 2)          // the discarded read never landed
+        }
+        // R6: paused → no spawn; one plan on resume, without the debounce
+        @Test func aPausedVolumeEventSpawnsNothingAndReadsOnResume() async {
+            let (c, host, fake, clock) = make()
+            host.paused = true
+            for _ in 0..<3 { c.volumesChanged() }
+            #expect(c.volumeReadTask == nil && fake.collectCalls == 0)
+            host.paused = false
+            c.resumeVolumeRead()
+            await c.volumeReadTask?.value
+            #expect(fake.collectCalls == 2 && clock.sleeps == [VolumeEvents.followUp])
+            let done = c.volumeReadTask
+            c.resumeVolumeRead()                   // consumed: a second resume starts nothing
+            #expect(c.volumeReadTask == done && fake.collectCalls == 2)
+        }
+        // R6: a pause that begins during the debounce defers the read
+        @Test func aPauseDuringTheDebounceDefersTheRead() async {
+            let (c, host, fake, clock) = make()
+            clock.onSleep = { n in if n == 1 { host.paused = true } }
+            c.volumesChanged()
+            await c.volumeReadTask?.value
+            #expect(fake.collectCalls == 0)
+            host.paused = false
+            c.resumeVolumeRead()
+            await c.volumeReadTask?.value
+            #expect(fake.collectCalls == 2)
+        }
+        // R7: a failed read keeps the old values
+        @Test func aFailedVolumeReadKeepsTheOldValues() async {
+            let (c, host, fake, _) = make()
+            let old = fake.disks
+            host.report.smart = old
+            fake.disks = []; fake.tmDest = nil
+            c.volumesChanged()
+            await c.volumeReadTask?.value
+            #expect(host.report.smart == old && fake.recorded.isEmpty)
+        }
+        @Test func stopCancelsTheVolumeRead() async {
+            let (c, host, fake, _) = make()
+            c.volumesChanged()
+            let task = c.volumeReadTask
+            c.stop()
+            await task?.value
+            #expect(fake.collectCalls == 0 && c.volumeReadTask == nil)
+            host.paused = false
+            c.resumeVolumeRead()
+            #expect(c.volumeReadTask == nil)
+        }
         // 14 (R11) Opt-in: MACDASH_LIVE=1 swift test --filter liveCanarySmartTools
         // Runs the production probes and the SMART + TM read on this Mac. Reads only: never runs `brew install`.
         @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))

@@ -66,6 +66,10 @@ final class SmartToolsController {
     @ObservationIgnored private(set) var refreshTask: Task<Void, Never>?
     /// The in-flight install; `stop()` cancels it (CommandRunner kills brew's process group). Tests await it.
     @ObservationIgnored private(set) var installTask: Task<Void, Never>?
+    /// The read plan of the newest volume event; a new event or `stop()` cancels it. Tests await it.
+    @ObservationIgnored private(set) var volumeReadTask: Task<Void, Never>?
+    /// A volume event arrived while paused; `resumeVolumeRead()` consumes it (`no-unseen-work`).
+    @ObservationIgnored private var volumeReadPending = false
 
     private let host: ReportHost
     private let time: TimeSource
@@ -116,11 +120,13 @@ final class SmartToolsController {
 
     /// Lands one read after the in-flight pass has ended (a pass would overwrite `report.smart` when it commits).
     /// No re-assess: the fast tick assesses every ~2 s, and `report.smart` is committed before it because this waits.
-    private func land(disks: [SmartDisk], tmDest: TMDestination??) async {
+    /// `keepOldOnFailedRead` (volume events): an empty disk list (disk0 is always listed) or a failed destination
+    /// read leaves the old value, so a busy `diskutil` during a mount burst does not blank a card.
+    private func land(disks: [SmartDisk], tmDest: TMDestination??, keepOldOnFailedRead: Bool = false) async {
         _ = await host.awaitPassEnd()
         guard !Task.isCancelled else { return }
-        host.write(\.smart, .some(disks))
-        deps.markTMUpdated(tmDest)
+        if !(keepOldOnFailedRead && disks.isEmpty) { host.write(\.smart, .some(disks)) }
+        if !(keepOldOnFailedRead && tmDest == nil) { deps.markTMUpdated(tmDest) }
         await host.refreshClaudeBackup()
         guard !Task.isCancelled else { return }
         updatedAt = time.now()
@@ -154,6 +160,51 @@ final class SmartToolsController {
         }
     }
 
+    // MARK: - Volume events (DISK-MOUNT-LIVE)
+
+    /// A relevant volume mounted or unmounted (`VolumeEvents.isRelevant` already passed). The newest event restarts the
+    /// plan (debounce, read, follow-up read), so a burst costs one plan. Paused: nothing spawns; `resumeVolumeRead()` reads.
+    func volumesChanged() {
+        volumeReadTask?.cancel()
+        volumeReadTask = nil
+        if host.isPaused() {
+            volumeReadPending = true
+            return
+        }
+        startVolumeReads(debounce: true)
+    }
+
+    /// The app resumed (`AppModel.setPaused(false)`): one plan if an event arrived meanwhile, with no debounce.
+    func resumeVolumeRead() {
+        guard volumeReadPending else { return }
+        startVolumeReads(debounce: false)
+    }
+
+    private func startVolumeReads(debounce: Bool) {
+        volumeReadPending = false
+        volumeReadTask = Task { [weak self] in await self?.runVolumeReads(debounce: debounce) }
+    }
+
+    private func runVolumeReads(debounce: Bool) async {
+        if debounce { await time.sleep(VolumeEvents.debounce) }
+        guard await readVolumesOnce() else { return }
+        await time.sleep(VolumeEvents.followUp)
+        _ = await readVolumesOnce()
+    }
+
+    /// One read through the sampler's path. False ends the plan: superseded, stopped, or paused (pending again).
+    private func readVolumesOnce() async -> Bool {
+        guard !Task.isCancelled else { return false }
+        if host.isPaused() {
+            volumeReadPending = true
+            return false
+        }
+        let (disks, tmDest) = await deps.collect()
+        guard !Task.isCancelled else { return false }
+        await land(disks: disks, tmDest: tmDest, keepOldOnFailedRead: true)
+        return !Task.isCancelled
+    }
+
     // MARK: - Pass hooks
 
     /// The coordinator's report pass landed its `.smart` section (the pass writes `report` itself): stamp «updated».
@@ -174,10 +225,11 @@ final class SmartToolsController {
         self.updatedAt = updatedAt; toolsState = tools; self.installing = installing; installFailure = failure
     }
 
-    /// Cancels the sampler, the re-check and the install; the coordinator's `stop()` calls it.
+    /// Cancels the sampler, the re-check, the install and the volume read; the coordinator's `stop()` calls it.
     func stop() {
         samplerTask?.cancel(); samplerTask = nil
         refreshTask?.cancel(); refreshTask = nil
         installTask?.cancel(); installTask = nil
+        volumeReadTask?.cancel(); volumeReadTask = nil; volumeReadPending = false
     }
 }

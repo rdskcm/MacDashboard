@@ -770,7 +770,9 @@ final class AppModel {
 
     /// The monitor's verdict: true when the app is not frontmost or has no effectively visible non-panel window.
     func setPaused(_ paused: Bool) {
-        if isPaused != paused { isPaused = paused }
+        guard isPaused != paused else { return }
+        isPaused = paused
+        if !paused { smart.resumeVolumeRead() }
     }
 
     /// App became active: the storage controller ends the Full Disk Access wait and re-probes the protected locations (REDESIGN-STORAGE D14).

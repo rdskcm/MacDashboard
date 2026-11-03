@@ -49,6 +49,50 @@ struct TimeMachineStatusTests {
         #expect(p.percent == nil)
     }
 
+    @Test func barShareIsReadInBothForms() throws {
+        let copying = try #require(TimeMachineStatus.parse(text: try fixture("tmutil-status-macos27.0-copying.txt")))
+        #expect(abs((copying.barShare ?? -1) - 0.9) < 1e-9)
+        let scan = try #require(TimeMachineStatus.parse(text: try fixture("tmutil-status-macos27.0-findingchanges.txt")))
+        #expect(abs((scan.barShare ?? -1) - 0.1) < 1e-9)
+        #expect(TimeMachineStatus.parse(text: try fixture("tmutil-status-backing-synthetic.txt"))?.barShare == nil)
+        #expect(TimeMachineStatus.parse(text: "{ Running = 1; FractionOfProgressBar = \"0\"; }")?.barShare == nil)
+        #expect(TimeMachineStatus.parse(text: "{ Running = 1; FractionOfProgressBar = \"1.5\"; }")?.barShare == nil)
+    }
+
+    @Test func overallFractionPerPhase() {
+        func p(_ phase: String?, percent: Double? = nil, scan: Double? = nil, share: Double? = nil) -> TMBackupProgress {
+            TMBackupProgress(running: true, stopping: false, phase: phase, percent: percent, scanFraction: scan, barShare: share)
+        }
+        func near(_ a: Double?, _ b: Double) -> Bool { abs((a ?? -1) - b) < 1e-4 }
+        // The live sample compared with the macOS menu: 41.1 %.
+        #expect(near(TimeMachineStatus.overallFraction(p("Copying", percent: 0.34509, share: 0.9)), 0.41058))
+        #expect(near(TimeMachineStatus.overallFraction(p("FindingChanges", scan: 0.5411, share: 0.1)), 0.05411))
+        // The key is what decides, and the constants apply when it is absent.
+        #expect(near(TimeMachineStatus.overallFraction(p("Copying", percent: 0.5, share: 0.8)), 0.6))
+        #expect(near(TimeMachineStatus.overallFraction(p("Copying", percent: 0.34509)), 0.41058))
+        #expect(near(TimeMachineStatus.overallFraction(p("FindingChanges", scan: 1)), 0.1))
+        // Every other phase, and a missing input: the moving line.
+        for phase in ["PreparingSourceVolumes", "Finishing", "ThinningPostBackup", "Stopping"] {
+            #expect(TimeMachineStatus.overallFraction(p(phase, percent: 0.5, scan: 0.5, share: 0.9)) == nil, "\(phase)")
+        }
+        #expect(TimeMachineStatus.overallFraction(p(nil, percent: 0.5)) == nil)
+        #expect(TimeMachineStatus.overallFraction(p("Copying")) == nil)
+        #expect(TimeMachineStatus.overallFraction(p("FindingChanges")) == nil)
+    }
+
+    /// The samples around the transition in inputs/DISK-MOUNT-LIVE-rig/tmstatus.log (16:18:13 to 16:18:37).
+    @Test func theBarDoesNotFallWhenCopyingStarts() {
+        let samples = [
+            TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", scanFraction: 0.5411460430169746, barShare: 0.1),
+            TMBackupProgress(running: true, stopping: false, phase: "FindingChanges", scanFraction: 1, barShare: 0.1),
+            TMBackupProgress(running: true, stopping: false, phase: "Copying", percent: 4.224406603789782e-05, barShare: 0.9),
+            TMBackupProgress(running: true, stopping: false, phase: "Copying", percent: 0.1647264620475237, barShare: 0.9),
+        ]
+        let bars = samples.compactMap(TimeMachineStatus.overallFraction)
+        #expect(bars.count == 4)
+        #expect(bars == bars.sorted())
+    }
+
     @Test func topLevelPercentFallback() {
         #expect(TimeMachineStatus.parse(text: "{ Running = 1; Percent = \"0.25\"; }")?.percent == 0.25)
         #expect(TimeMachineStatus.parse(text: "{ Running = 1; Percent = \"0.25\"; Progress = { Percent = \"0.5\"; }; }")?.percent == 0.5)

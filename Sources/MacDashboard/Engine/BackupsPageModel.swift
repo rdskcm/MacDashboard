@@ -72,7 +72,8 @@ struct BackupsPageModel: Equatable {
                             note: L.bkPurgeableNote),
                 BackupsTile(id: "dest", label: L.timeMachineDestination, value: dash, valueTone: .neutral),
             ]
-        case .some(.some(let dest)):
+        case .some(.some(let stored)):
+            let dest = effectiveDestination(stored, backup: i.backup)
             let state = tmState(dest: dest, backup: i.backup, action: i.action, now: i.now)
             m.tmState = state
             m.tmCaption = caption(dest: dest, state: state, updatedAt: i.updatedAt)
@@ -104,6 +105,14 @@ struct BackupsPageModel: Equatable {
     }
 
     // MARK: Time Machine helpers
+
+    /// A running backup's own mount point beats the stored read, which can lag the mount (DISK-MOUNT-LIVE).
+    static func effectiveDestination(_ stored: TMDestination, backup: TMBackupProgress?) -> TMDestination {
+        guard backup?.running == true, let live = backup?.destinationMountPoint else { return stored }
+        var dest = stored
+        dest.mountPoint = live
+        return dest
+    }
 
     /// floor(seconds / 86400), never negative.
     static func daysSince(_ d: Date, now: Date) -> Int {
@@ -185,13 +194,13 @@ struct BackupsPageModel: Equatable {
         return t
     }
 
-    /// `state` only colours the «not connected» note (amber when overdue, red when long overdue).
+    /// `state` colours the «not connected» note (amber when overdue, red when long overdue) and removes it during a backup.
     static func destinationTile(dest: TMDestination, state: TMCardState = .ok) -> BackupsTile {
         var t = BackupsTile(id: "dest", label: L.timeMachineDestination, value: dest.name ?? dash)
         if dest.name == nil { t.valueTone = .neutral }
         if dest.mountPoint != nil {
             if let free = dest.freeBytes { t.note = L.bkFree(fmtCapacity(free)) }
-        } else {
+        } else if state != .backing {   // a backup in progress proves the destination is there
             t.note = L.bkNotConnected
             t.noteTone = state == .overdue30 ? .hot : (state == .overdue7 ? .amber : nil)
         }
@@ -260,15 +269,15 @@ struct BackupsPageModel: Equatable {
         else if action == .starting && !backup.running { caption = L.bkPreparing }
         else { caption = bytesCaption(done: backup.bytesDone, total: backup.bytesTotal, secondsRemaining: backup.secondsRemaining) }
         return BackupsProgress(text: L.bkBackingTo(dest.name ?? L.bkTheBackupDisk), caption: caption,
-                               fraction: finding && !stopping ? backup.scanFraction : backup.percent, stopping: stopping)
+                               fraction: finding && stopping ? nil : TimeMachineStatus.overallFraction(backup), stopping: stopping)
     }
 
     static func bytesCaption(done: Int64?, total: Int64?, secondsRemaining: Int?) -> String {
         guard let total, total > 0 else { return L.bkPreparing }
-        let d = fmtCapacityParts(done ?? 0), t = fmtCapacityParts(total)
+        let d = fmtBackupBytesParts(done ?? 0), t = fmtBackupBytesParts(total)
         var s = d.unit == t.unit
             ? L.bkProgressBytes(d.value, "\(t.value) \(t.unit)")
-            : L.bkProgressBytes(fmtCapacity(done ?? 0), fmtCapacity(total))
+            : L.bkProgressBytes("\(d.value) \(d.unit)", "\(t.value) \(t.unit)")
         if let secs = secondsRemaining, secs > 0 {
             s += " · " + L.bkTimeLeft(BackupLog.durationText(seconds: secs))
         }

@@ -48,6 +48,8 @@ final class TimeMachineController {
     /// The in-flight destination re-read; `stop()` cancels it. Tests await it.
     @ObservationIgnored private(set) var refreshTask: Task<Void, Never>?
 
+    private static let idleSampleTicks = 5   // 5 × the 2 s sleep = 10 s
+
     private let host: ReportHost
     private let time: TimeSource
     private let deps: Dependencies
@@ -59,8 +61,8 @@ final class TimeMachineController {
     // MARK: - Status poll
 
     /// REDESIGN-BACKUPS D2/D3: awaited by BackupsPage's `.task`; returns when that task is cancelled (the page left) or
-    /// `stop()` cancels the poll. Spawns `tmutil status` only for the first probe, while a backup runs, or while a
-    /// start/stop is in flight, and never while the app is paused (`no-unseen-work`). 2 s between samples.
+    /// `stop()` cancels the poll. Spawns `tmutil status` for the first probe, every 2 s while a backup runs or a
+    /// start/stop is in flight, every 10 s on an idle Mac, and never while the app is paused (`no-unseen-work`).
     func observeStatus() async {
         guard !VisualFixture.isRequested else { return }   // fixture data only; never spawn tmutil (HIDDEN-CONTENT-WORK)
         pollTask?.cancel()                                  // one poll at a time: the newest page visit owns it
@@ -77,9 +79,11 @@ final class TimeMachineController {
 
     private func poll() async {
         var pollsSinceStart = 0
+        var idleTicks = 0
         while !Task.isCancelled {
-            let needed = backup == nil || backup?.running == true || action == .starting || action == .stopping
-            if needed && !host.isPaused() {
+            let active = backup == nil || backup?.running == true || action == .starting || action == .stopping
+            if (active || idleTicks >= Self.idleSampleTicks) && !host.isPaused() {
+                idleTicks = 0
                 let outcome = await deps.status()
                 guard !Task.isCancelled else { return }
                 let wasRunning = backup?.running == true
@@ -95,6 +99,7 @@ final class TimeMachineController {
                 }
                 if wasRunning && !sample.running { refreshNow() }
             }
+            idleTicks += 1          // counts through a pause too, so a sample due during it runs right after resume
             await time.sleep(.seconds(2))
         }
     }
