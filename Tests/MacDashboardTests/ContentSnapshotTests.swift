@@ -14,6 +14,8 @@ extension SerialTests {
     struct SnapshotTests {
         @Test @MainActor func contentStates() throws {
             let outDir = try #require(SnapshotEnv.outDir)
+            SnapshotEnv.pinOverlayScrollers()
+            try #require(NSScroller.preferredScrollerStyle == .overlay, "scroller pin did not take effect in this process")
             // D7: never against the real home (AppModel() reads the history file at init).
             let realHome = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? ""
             try #require(!realHome.isEmpty && NSHomeDirectory() != realHome,
@@ -254,6 +256,7 @@ extension SerialTests {
                 }
             }
             let batWorn = battery()                                              // charging, 76 % → amber note
+            let batSerial17 = battery { $0.serial = "SYNQ4213A7Q1MXQWM" }   // 17 chars, the longest seen; synthetic
             let batNormal = battery { $0.maxCapacityMAh = 4491; $0.currentCapacityMAh = 3683; $0.healthPercent = 88 }
             let batOnBattery = battery {
                 $0.externalConnected = false; $0.isCharging = false; $0.adapter = nil; $0.charger = nil
@@ -635,7 +638,23 @@ extension SerialTests {
                     VStack(spacing: 16) { BatteryNowCard(model: batWorn, narrow: false); BatteryHealthCard(model: batWorn, narrow: false); BatteryChargingCard(model: batWorn) }
                 }
                 run.snap("content-battery-rest", mode, width: 1094) {
-                    VStack(spacing: 16) { BatteryLifetimeCard(model: batWorn); BatteryPassportCard(model: batWorn); BatteryHistoryCard(model: batWorn, router: NavigationRouter()) }
+                    VStack(spacing: 16) { BatteryLifetimeCard(model: batWorn); BatteryPassportCard(model: batWorn); BatteryPassportCard(model: batWorn, initiallyShown: true, initiallyCopied: true); BatteryHistoryCard(model: batWorn, router: NavigationRouter()) }
+                }
+                run.snap("content-battery-passport-min", mode, width: 884) {
+                    VStack(spacing: 16) {
+                        BatteryPassportCard(model: batSerial17)
+                        BatteryPassportCard(model: batSerial17, initiallyShown: true, initiallyCopied: true)
+                    }
+                }
+                do {
+                    L10nStore.shared.language = .ru
+                    defer { L10nStore.shared.language = .en }
+                    run.snap("content-battery-passport-min-ru", mode, width: 884) {
+                        VStack(spacing: 16) {
+                            BatteryPassportCard(model: batSerial17)
+                            BatteryPassportCard(model: batSerial17, initiallyShown: true, initiallyCopied: true)
+                        }
+                    }
                 }
                 run.snap("content-battery-normal", mode, width: 1094) {
                     BatteryHealthCard(model: batNormal, narrow: false)

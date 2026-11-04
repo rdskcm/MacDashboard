@@ -91,7 +91,9 @@ extension SerialTests {
                 #expect(m.chargingTiles[4].dot == .green)
                 #expect(m.lifetimeTiles.map(\.value) == ["12 / 29 / 47 °C", "3,960 mA", "5,210 mA", "10.2–13.1 V", "6,480 h"])
                 #expect(m.lifetimeTiles.last?.note == "estimate")
-                #expect(m.passportTiles.map(\.value) == ["Samsung SDI", "F8Y4213A7Q1MXLKA", "Mar 2024"])
+                #expect(m.passportTiles.map(\.value) == ["Samsung SDI", "•••• XLKA", "Mar 2024"])
+                #expect(m.passportTiles.map(\.fullValue) == [nil, "F8Y4213A7Q1MXLKA", nil],
+                        "passport: only the serial tile carries its full value")
                 #expect(m.passportTiles.last?.note == "code 2410")
                 #expect(m.showsDetailCards)
                 #expect(!m.showsWait)

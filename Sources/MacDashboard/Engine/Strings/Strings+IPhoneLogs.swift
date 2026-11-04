@@ -174,11 +174,11 @@ extension StringsEN: IPhoneLogsStrings {
     var iphoneIdentityTitle: String { "Device and parts" }
     var iphoneIdentityConnectToRead: String { "Connect the iPhone by cable to read its device details." }
     var iphoneIdentityRefreshA11y: String { "Refresh the device details" }
-    var iphoneIdentityShow: String { "Show in full" }
+    var iphoneIdentityShow: String { "Show" }
     var iphoneIdentityHide: String { "Hide" }
     var iphoneIdentityCopy: String { "Copy" }
     var iphoneIdentityCopied: String { "Copied" }
-    func iphoneRevealA11y(_ label: String) -> String { "Show in full: \(label)" }
+    func iphoneRevealA11y(_ label: String) -> String { "Show value: \(label)" }
     func iphoneHideA11y(_ label: String) -> String { "Hide value: \(label)" }
     func iphoneCopyA11y(_ label: String) -> String { "Copy value: \(label)" }
     func iphoneIdentityLabel(_ l: IdentityLabel) -> String {
@@ -341,11 +341,11 @@ extension StringsRU: IPhoneLogsStrings {
     var iphoneIdentityTitle: String { "Устройство и детали" }
     var iphoneIdentityConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать данные устройства." }
     var iphoneIdentityRefreshA11y: String { "Обновить данные устройства" }
-    var iphoneIdentityShow: String { "Показать полностью" }
+    var iphoneIdentityShow: String { "Показать" }
     var iphoneIdentityHide: String { "Скрыть" }
     var iphoneIdentityCopy: String { "Копировать" }
     var iphoneIdentityCopied: String { "Скопировано" }
-    func iphoneRevealA11y(_ label: String) -> String { "Показать полностью: \(label)" }
+    func iphoneRevealA11y(_ label: String) -> String { "Показать значение: \(label)" }
     func iphoneHideA11y(_ label: String) -> String { "Скрыть значение: \(label)" }
     func iphoneCopyA11y(_ label: String) -> String { "Копировать значение: \(label)" }
     func iphoneIdentityLabel(_ l: IdentityLabel) -> String {

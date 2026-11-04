@@ -1,5 +1,5 @@
 // Engine/IPhoneData.swift
-// IPHONE-MODULE: the pure half of the iPhone module — device key hashing, masking,
+// IPHONE-MODULE: the pure half of the iPhone module — device key hashing,
 // crash-log header classification, AFC time conversion, battery-history merge, the
 // relay request builder, registry value extraction, the colour lookup and the
 // remembered-device store. Foundation + CryptoKit only (no SwiftUI), so the file is
@@ -26,10 +26,20 @@ enum IdentityLabel: String, CaseIterable {
         default: return true
         }
     }
+
+    /// SERIAL-MASK-LAST4: the masked on-screen form of a value of this label, shown until the user reveals it.
+    /// IMEIs keep their TAC, every other secret label shows its last 4 characters (`IdentifierMask`); non-secret
+    /// values are returned unchanged.
+    func displayValue(_ raw: String) -> String {
+        switch self {
+        case .imei, .imei2: return IdentifierMask.imei(raw)
+        default: return isSecret ? IdentifierMask.serial(raw) : raw
+        }
+    }
 }
 
-/// One identity row. Memory only (R13, D10): never persisted, logged or put on the pasteboard
-/// except by the explicit copy click.
+/// One identity row. `value` is the raw value; a secret row shows `label.displayValue(value)` until the user reveals
+/// it. Memory only (R13, D10): never persisted or logged, and put on the pasteboard only by the explicit copy click.
 struct IPhoneIdentityField: Equatable, Identifiable {
     let id: String
     let label: IdentityLabel
@@ -299,23 +309,13 @@ enum IPhoneData {
         return out
     }
 
-    // MARK: - Device key and masking
+    // MARK: - Device key
 
     /// First 16 lowercase hex characters of SHA-256 over the UDID's UTF-8 bytes. The key
     /// matches the same phone on every connection without storing the UDID (D9, R13).
     static func deviceKey(udid: String) -> String {
         let digest = SHA256.hash(data: Data(udid.utf8))
         return String(digest.map { String(format: "%02x", $0) }.joined().prefix(16))
-    }
-
-    /// D11: first 3 + «•••» + last 4 for values of 8+ characters; shorter values become
-    /// all «•» (one per character).
-    static func mask(_ s: String) -> String {
-        let chars = Array(s)
-        if chars.count >= 8 {
-            return String(chars.prefix(3)) + "•••" + String(chars.suffix(4))
-        }
-        return String(repeating: "•", count: chars.count)
     }
 
     // MARK: - Crash-log classification

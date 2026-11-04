@@ -353,5 +353,69 @@ extension SerialTests {
             #expect(o.stdout == "cleanup\n",
                     "drain: output written after SIGINT is kept (was \(o.stdout.debugDescription))")
         }
+
+        // CI-TZ-FLAKE regression: the runner must not depend on free worker threads of the global GCD
+        // pool. DispatchIO reads ran there, so while the pool was saturated (the heavy `concurrentPerform`
+        // render tests in the same process) a child that exited after 20 ms had its output unread at the
+        // deadline and the run was reported `.timedOut` with empty stdout.
+        // The pool is filled with BLOCKED blocks (no CPU load), submitted from a plain Thread. They are
+        // released from the `onLine` callback (job queue) or by a hard stop on a plain Thread after 10 s,
+        // never from the test task, whose own resumption needs the pool. Old reader: the line can only
+        // arrive after the hard stop. Read sources on the job queue: it arrives within milliseconds,
+        // so the blocks are held for about the readiness wait (under a second) and about 20 ms.
+        @Test func exitedChildOutputIsReadWhileGCDPoolIsSaturated() async {
+            final class Gate: @unchecked Sendable {
+                private let lock = NSLock()
+                private(set) var started = 0
+                private(set) var hardStopFired = false
+                private(set) var lineSeen = false
+                private(set) var lineSeenBeforeHardStop = false
+                private var released = false
+                let blocks = DispatchSemaphore(value: 0)
+                let done = DispatchSemaphore(value: 0)
+                let total: Int
+                init(total: Int) { self.total = total }
+                func didStart() { lock.lock(); started += 1; lock.unlock() }
+                var startedCount: Int { lock.lock(); defer { lock.unlock() }; return started }
+                func lineArrived() {
+                    lock.lock(); if !lineSeen { lineSeen = true; lineSeenBeforeHardStop = !hardStopFired }; lock.unlock()
+                    release()
+                }
+                func hardStop() { lock.lock(); hardStopFired = true; lock.unlock(); release() }
+                func release() {
+                    lock.lock(); let first = !released; released = true; lock.unlock()
+                    if first { for _ in 0..<total { blocks.signal() } }
+                }
+            }
+            func waitSync(_ s: DispatchSemaphore) { s.wait() }          // the test thread blocks here on purpose
+            let gate = Gate(total: 300)
+            let ready = DispatchSemaphore(value: 0)
+            let qosClasses: [DispatchQoS.QoSClass] = [.userInteractive, .userInitiated, .default, .utility]
+            let filler = Thread {
+                for i in 0..<gate.total {
+                    DispatchQueue.global(qos: qosClasses[i % qosClasses.count]).async { gate.didStart(); gate.blocks.wait() }
+                }
+                // Saturated once the started count has not grown for 400 ms (the pool's thread limit is reached).
+                var last = -1, stable = 0
+                while stable < 8 {
+                    Thread.sleep(forTimeInterval: 0.05)
+                    let n = gate.startedCount
+                    if n == last && n >= ProcessInfo.processInfo.activeProcessorCount { stable += 1 } else { stable = 0 }
+                    last = n
+                }
+                ready.signal()
+            }
+            let stopper = Thread {
+                if gate.done.wait(timeout: .now() + 10) == .timedOut { gate.hardStop() }
+            }
+            filler.start(); stopper.start()
+            waitSync(ready)
+            let o = await CommandRunner.run("/bin/echo", ["ok"], timeout: 30, onLine: { _, _ in gate.lineArrived() })
+            gate.release()
+            gate.done.signal()
+            #expect(gate.lineSeenBeforeHardStop, "saturated pool: the output line arrived without any pool worker being freed")
+            #expect(o.termination == .exited(0), "saturated pool: the exited child is not timed out (was \(o.termination))")
+            #expect(o.stdout == "ok\n", "saturated pool: its output is kept (was \(o.stdout.debugDescription))")
+        }
     }
 }

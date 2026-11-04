@@ -229,7 +229,7 @@ struct LineSplitter {
 }
 
 /// One run's state machine. EVERY stored property is read and written only on `queue`
-/// (both DispatchIO channels, the deadline and drain timers, the cancel hop and the waiter's reap hop all target it;
+/// (both read sources, the deadline and drain timers, the cancel hop and the waiter's reap hop all target it;
 /// the waiter thread itself reads no stored property except the immutable `queue`; `qos` is immutable, like `queue`), which is what makes
 /// `@unchecked Sendable` sound without a lock.
 /// Invariant: a signal is sent only in phase `.running`, i.e. before the leader is reaped,
@@ -247,7 +247,19 @@ private final class CommandJob: @unchecked Sendable {
     private var stderrBuf = CappedBuffer(cap: CommandRunner.stderrHeadCap)
     private var stdoutLines = LineSplitter()
     private var stderrLines = LineSplitter()
-    private var channels: [DispatchIO] = []
+    /// One per pipe read end. Plain read sources on `queue`, not DispatchIO: DispatchIO performs its
+    /// reads on the global GCD pool, and when that pool is saturated (CPU-heavy `concurrentPerform`
+    /// work in the same process) the reads of an already exited child are not delivered for seconds,
+    /// so the deadline reported `.timedOut` with the output dropped (CI-TZ-FLAKE). `queue` is a
+    /// serial queue of its own and keeps running when the pool is busy.
+    private final class Stream {
+        let source: DispatchSourceRead
+        let isStderr: Bool
+        var ended = false
+        init(source: DispatchSourceRead, isStderr: Bool) { self.source = source; self.isStderr = isStderr }
+    }
+    private var streams: [Stream] = []
+    private var readBuffer = [UInt8](repeating: 0, count: 64 * 1024)   // reused by every read; `queue` is serial
     private var openStreams = 0
     private var outputCut = false          // stopReading() ran while a stream was still open
     private var timer: DispatchSourceTimer?
@@ -286,7 +298,7 @@ private final class CommandJob: @unchecked Sendable {
         Darwin.close(out[1]); Darwin.close(err[1])                 // parent keeps only the read ends
         guard rc == 0 else { Darwin.close(out[0]); Darwin.close(err[0]); finish(.launchFailed(rc)); return }
         phase = .running(pid)
-        channels = [makeReader(fd: out[0], isStderr: false), makeReader(fd: err[0], isStderr: true)]
+        streams = [makeReader(fd: out[0], isStderr: false), makeReader(fd: err[0], isStderr: true)]
         openStreams = 2
         startWaiter(pid)
         let t = DispatchSource.makeTimerSource(queue: queue)
@@ -295,19 +307,27 @@ private final class CommandJob: @unchecked Sendable {
         t.resume(); timer = t
     }
 
-    private func makeReader(fd: Int32, isStderr: Bool) -> DispatchIO {
-        let io = DispatchIO(type: .stream, fileDescriptor: fd, queue: queue,
-                            cleanupHandler: { _ in Darwin.close(fd) })
-        io.setLimit(lowWater: 1)                          // deliver as soon as bytes arrive (streaming)
-        io.read(offset: 0, length: Int.max, queue: queue) { done, data, _ in
-            if let data, !data.isEmpty {
-                var chunk = Data()
-                data.enumerateBytes { buf, _, _ in chunk.append(buf) }
-                self.consume(chunk, isStderr: isStderr)
-            }
-            if done { io.close(); self.streamEnded(isStderr: isStderr) }
+    private func makeReader(fd: Int32, isStderr: Bool) -> Stream {
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)   // our read end only; the child's write end is a separate description
+        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
+        let stream = Stream(source: source, isStderr: isStderr)
+        source.setCancelHandler { Darwin.close(fd) }
+        source.setEventHandler { [self] in
+            // Level-triggered: one read per event, so a flooding child cannot hold `queue` against the timers.
+            let n = readBuffer.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, $0.count) }
+            if n > 0 { consume(Data(readBuffer[0..<n]), isStderr: isStderr); return }
+            if n < 0 && (errno == EAGAIN || errno == EINTR) { return }
+            endStream(stream)                                  // 0 = EOF, or a read error
         }
-        return io
+        source.resume()
+        return stream
+    }
+
+    private func endStream(_ stream: Stream) {
+        guard !stream.ended else { return }
+        stream.ended = true
+        stream.source.cancel()                                 // the cancel handler closes the fd
+        streamEnded(isStderr: stream.isStderr)
     }
 
     private func consume(_ chunk: Data, isStderr: Bool) {
@@ -403,7 +423,7 @@ private final class CommandJob: @unchecked Sendable {
 
     private func stopReading() {
         if openStreams > 0 { outputCut = true }     // output still unread: what we have is incomplete
-        for io in channels { io.close(flags: .stop) }
+        for stream in streams { endStream(stream) }
     }
 
     private func finishIfComplete() {
@@ -421,7 +441,7 @@ private final class CommandJob: @unchecked Sendable {
         timer?.cancel(); timer = nil
         escalation?.cancel(); escalation = nil
         drain?.cancel(); drain = nil
-        channels = []
+        streams = []
         let c = completion; completion = nil
         c?(outcome)
     }

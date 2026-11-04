@@ -124,7 +124,9 @@ built; not visible in the app yet) contacts exactly these hosts:
 
 Every request also shows the server your Mac's IP address and
 `MacDashboard/<version>` as its user agent. Your phone's UDID, ECID, serial
-number and name are never sent anywhere. Nothing else touches the network.
+number and name are never sent anywhere. On screen, serial numbers show only
+their last 4 characters and an IMEI only its first 8 digits (the model's type
+code) until you click "Show". Nothing else touches the network.
 
 **There is no AI assistant in the app.** An unfinished one, never part of a
 release, was removed from the code; its last state is kept under the git tag

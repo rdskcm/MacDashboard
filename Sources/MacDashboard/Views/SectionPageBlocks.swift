@@ -118,6 +118,11 @@ struct SectionTile: View {
     var noteInk: Color = DS3.greenInk
     var dot: Color? = nil
     var valueInk: Color = DS3.ink
+    /// SERIAL-MASK-LAST4: optional control in the label row, right-aligned (the Battery serial tile's Show / Hide and
+    /// copy). nil everywhere else, so every other tile renders exactly as before. It is laid out in the label's
+    /// 19 pt and offset, so it adds no height; its trailing edge sits 5 pt in from the tile's right edge (the 30 pt
+    /// circle is concentric with the 20 pt corner) and its centre 20 pt below the top edge.
+    var labelAccessory: AnyView? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -132,6 +137,12 @@ struct SectionTile: View {
                     .foregroundStyle(DS3.inkSoft)
                     .lineLimit(1)
                     .frame(height: 19)
+                    // Pushes the accessory right. A Spacer here would add a second 7 pt of row spacing.
+                    .frame(maxWidth: labelAccessory == nil ? nil : .infinity, alignment: .leading)
+                if let labelAccessory {
+                    // 11 = 16 tile padding - 5 inset; 3.5 = 23.5 label line centre - 20 corner centre.
+                    labelAccessory.frame(height: 19).padding(.trailing, -11).offset(y: -3.5).layoutPriority(1)
+                }
             }
             Text(value)
                 .font(.system(size: 17, weight: .bold))

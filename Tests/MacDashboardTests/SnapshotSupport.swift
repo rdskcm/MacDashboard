@@ -12,6 +12,15 @@ enum SnapshotEnv {
         guard let p = ProcessInfo.processInfo.environment["MACDASH_SNAPSHOTS"], !p.isEmpty else { return nil }
         return URL(fileURLWithPath: p, isDirectory: true)
     }
+
+    /// Overlay scrollers regardless of whether a mouse is connected (same pin as tools/visual/smoke.sh); argument
+    /// domain, in-process only, no system setting changes. Idempotent; call before the first render.
+    static let scrollerPinValue = "WhenScrolling"
+    static func pinOverlayScrollers() {
+        var d = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        d["AppleShowScrollBars"] = scrollerPinValue
+        UserDefaults.standard.setVolatileDomain(d, forName: UserDefaults.argumentDomain)
+    }
 }
 
 /// Red caption above a section (copy of tools/harness/HarnessKit.swift `HarnessLabel`/`HarnessSection`).
@@ -209,6 +218,11 @@ final class SnapshotRun {
 
 // SNAPSHOT-DARK-OFFSCREEN R9: failure paths of the window capture. In the gated suite (D9): they need a window server.
 extension SerialTests.SnapshotTests {
+    /// Fails loudly if the scroller pin stops working (content-iphone-logs changes with the scroller style).
+    @Test @MainActor func scrollerStyleIsOverlay() throws {
+        SnapshotEnv.pinOverlayScrollers()
+        #expect(NSScroller.preferredScrollerStyle == .overlay, "scroller pin did not take effect in this process")
+    }
     @Test func captureOfMissingWindowThrows() {
         #expect(throws: WindowCaptureError.self) {
             try captureWindowPNG(windowNumber: Int(Int32.max), pixelWidth: 10, pixelHeight: 10)

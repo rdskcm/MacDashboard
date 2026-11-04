@@ -107,6 +107,7 @@ fi
 
 GIT_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD)"
 if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then GIT_COMMIT="${GIT_COMMIT}-dirty"; fi
+SCROLLBARS_GLOBAL="$(defaults read -g AppleShowScrollBars 2>/dev/null || echo unset)"
 XCODEBUILD_V="$(xcodebuild -version 2>/dev/null | head -1 || true)"
 [ -n "$XCODEBUILD_V" ] || XCODEBUILD_V="none (CLT only)"
 {
@@ -119,6 +120,7 @@ XCODEBUILD_V="$(xcodebuild -version 2>/dev/null | head -1 || true)"
   echo "reduce_transparency: $(defaults read com.apple.universalaccess reduceTransparency 2>/dev/null || echo 0)"
   echo "increase_contrast: $(defaults read com.apple.universalaccess increaseContrast 2>/dev/null || echo 0)"
   echo "accent_color: $(defaults read -g AppleAccentColor 2>/dev/null || echo multicolor)"
+  echo "scrollbars: WhenScrolling (pinned in-process via argument domain; global=$SCROLLBARS_GLOBAL)"
   echo "rule: channel_tolerance=24 max_changed_pixels=0"
 } > "$OUT/build-info.txt"
 

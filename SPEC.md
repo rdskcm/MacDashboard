@@ -121,6 +121,12 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    every redirect hop, and comes only from Apple's catalogue. Adding a host or a field is a
    spec change here, in `network-stance` and in both READMEs. `softwareupdate -l` and the
    Homebrew commands are separate tools the app runs, disclosed in the README.
+
+   On screen, a device or part identifier is masked by default: `••••` and its last 4 characters (serial
+   numbers, part numbers, the Mac battery serial) or its 8-digit TAC and one `•` per remaining digit (IMEI)
+   (`Engine/IdentifierMask.swift`, block SERIAL-MASK-LAST4). The full value is shown only after «Show» and goes
+   to the pasteboard only on the copy click (`Views/IdentifierRevealControls.swift`); it is never stored or
+   logged. The report's unrecognised-output excerpts mask serials and UUIDs whole.
 7. min deployment: **macOS 26 (Tahoe)** from v3.0, so the app may use macOS 26 API such as Liquid Glass with no fallback (v2.3.x stays on macOS 14). Build:
    SwiftPM, Apple Silicon (arm64) binary, hand-rolled .app bundle, codesign with the local signing identity if present, otherwise ad-hoc (§9).
 
