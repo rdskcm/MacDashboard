@@ -34,13 +34,11 @@ struct HomeAdviceDispatchTests {
         let d = m.homeAdviceDispatch
         d.showTrashConfirm = true
         d.showFirewallConfirm = true
-        d.showBrewConfirm = true
         d.completedAdviceIDs.insert("Корзина")
         d.trashError = "x"
         d.dismissConfirmations()
         #expect(!d.showTrashConfirm)
         #expect(!d.showFirewallConfirm)
-        #expect(!d.showBrewConfirm)
         #expect(d.done("Корзина|1,4 ГБ"))
         #expect(d.trashError == "x")
     }

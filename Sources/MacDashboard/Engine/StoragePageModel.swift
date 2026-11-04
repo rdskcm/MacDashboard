@@ -7,18 +7,26 @@ enum SpaceLevel: Equatable, Sendable { case ok, low, critical }
 
 /// The ONLY low-space rule (Assess, Home through Assess, Storage page). Source (user 2026-10-19): hot 10 % ≈ the
 /// 25–35 GB free a macOS update needs on a 256 GB disk (third-party estimates; Apple publishes none); amber
-/// 20 % default = SSD free-space headroom (vendor over-provisioning guidance).
+/// 20 % default = SSD free-space headroom (vendor over-provisioning guidance). TRIAGE-THRESHOLDS-REVIEW D1 added the
+/// absolute caps.
 enum StorageSpace {
     static let criticalPercent = 10
-    /// Critical first: with lowPercent == 10 there is no amber band. Strict less-than, integer maths.
-    /// `Double` avoids `Int64` overflow at `avail * 100`; the comparison is exact for byte counts below 2^53.
+    /// TRIAGE-THRESHOLDS-REVIEW (D1): a level fires only when free space is under BOTH its share of capacity
+    /// AND its cap, so a large disk is not flagged while hundreds of GB are free. Decimal bytes, the unit fmtCapacity
+    /// shows. 20 GB ≈ room for one macOS update, 40 GB the comfortable end (assumption, see the block spec T1).
+    static let criticalCapBytes: Int64 = 20_000_000_000
+    static let lowCapBytes: Int64 = 40_000_000_000
+    /// Critical first. Strict less-than on both conditions. `Double` avoids `Int64` overflow at `avail * 100`;
+    /// the comparison is exact for byte counts below 2^53.
     static func level(avail: Int64, size: Int64, lowPercent: Int) -> SpaceLevel? {
         guard size > 0 else { return nil }
         let a = Double(avail) * 100, s = Double(size)
-        if a < s * Double(criticalPercent) { return .critical }
-        if a < s * Double(lowPercent) { return .low }
+        if a < s * Double(criticalPercent) && avail < criticalCapBytes { return .critical }
+        if a < s * Double(lowPercent) && avail < lowCapBytes { return .low }
         return .ok
     }
+    /// D8: Downloads / Caches suggestions and the snapshots chip only while space is short.
+    static func suggestsFreeing(_ level: SpaceLevel?) -> Bool { level == .low || level == .critical }
 }
 
 /// smartmontools install failure, typed so the page model words it in the current language.
@@ -77,6 +85,29 @@ struct KVTile: Equatable {
     var label: String
     var value: String
     var tone: KVTone
+}
+
+/// TRIAGE-THRESHOLDS-REVIEW T15: the ONE "drive failing" rule (Assessment, ReportCollector, Storage page).
+/// NVMe SMART/Health log byte 0: bit 0 spare below threshold, 1 temperature outside its thresholds, 2 reliability
+/// degraded, 3 read-only, 4 volatile memory backup failed, 5 persistent memory region unreliable. Bit 1 is a current
+/// temperature condition, not a failure. Bits 6-7 are reserved.
+enum SmartRules {
+    static let failingWarningMask: UInt64 = 0x3D
+    static let temperatureWarningBit: UInt64 = 0x02
+    /// "0x04" → 4; nil → nil; any other non-nil string → failingWarningMask (fail-visible, as before).
+    static func warningBits(attr: String?) -> UInt64? {
+        guard let attr else { return nil }
+        let t = attr.trimmingCharacters(in: .whitespaces).lowercased()
+        let hex = t.hasPrefix("0x") ? String(t.dropFirst(2)) : t
+        return UInt64(hex, radix: 16) ?? failingWarningMask
+    }
+    static func isFailing(warningBits: UInt64?, mediaErrors: UInt64?) -> Bool {
+        ((warningBits ?? 0) & failingWarningMask) != 0 || (mediaErrors ?? 0) > 0
+    }
+    static func isTemperatureOnly(_ warningBits: UInt64?) -> Bool {
+        guard let b = warningBits else { return false }
+        return (b & failingWarningMask) == 0 && (b & temperatureWarningBit) != 0
+    }
 }
 
 enum StoragePageModel {
@@ -248,7 +279,7 @@ enum StoragePageModel {
 
     static func driveState(_ d: SmartDisk, smartctlPresent: Bool) -> DriveState {
         guard let h = d.health else { return smartctlPresent ? .unavailable : .noData }
-        if (h.criticalWarning ?? 0) != 0 || (h.mediaErrors ?? 0) > 0 { return .failing }
+        if SmartRules.isFailing(warningBits: h.criticalWarning, mediaErrors: h.mediaErrors) { return .failing }
         if let pu = h.percentageUsed, pu >= 80 { return .worn(pu) }
         return .ok
     }
@@ -295,7 +326,7 @@ enum StoragePageModel {
             tile(L.storageKVWritten, h?.dataUnitsWritten, { fmtTB(dataUnits: $0) }),
             tile(L.storageKVMediaErrors, h?.mediaErrors, { fmtGrouped($0) }, { $0 == 0 ? .good : .hot }),
             tile(L.storageKVErrorLog, h?.errorLogEntries, { fmtGrouped($0) }, { $0 == 0 ? .good : .plain }),
-            tile(L.storageKVCritical, h?.criticalWarning, { $0 == 0 ? L.storageNo : L.storageYes }, { $0 == 0 ? .good : .hot }),
+            tile(L.storageKVCritical, h?.criticalWarning, { $0 == 0 ? L.storageNo : L.storageYes }, { $0 == 0 ? .good : (SmartRules.isTemperatureOnly($0) ? .amber : .hot) }),
         ]
     }
 

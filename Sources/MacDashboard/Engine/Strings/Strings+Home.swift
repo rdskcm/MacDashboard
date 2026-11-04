@@ -32,7 +32,6 @@ protocol HomeStrings {
     var homeStateNotSetUp: String { get }
     var homeStateKeepsAwake: String { get }
     func homeStateWorn(_ pct: Int) -> String
-    func homeStatePackagesOutdated(_ n: Int) -> String
     var homeStateUpdateAvailable: String { get }
     func homeStateUpdatesAvailable(_ n: Int) -> String
     var homeMemoryObject: String { get }
@@ -45,13 +44,11 @@ protocol HomeStrings {
     func homeGB(_ s: String) -> String
     var homeVerbDetails: String { get }
     var homeVerbFreeUp: String { get }
-    var homeVerbUpdate: String { get }
     var homeVerbSettings: String { get }
     var homeTagFirewallOff: String { get }
     var homeTagDriveFailing: String { get }
     var homeTagTMNotSetUp: String { get }
     var homeTagWorn: String { get }
-    var homeTagBrewOutdated: String { get }
     var homeTagUpdateAvailable: String { get }
     var homeTagLowMemory: String { get }
     var homeTagService: String { get }
@@ -147,7 +144,6 @@ extension StringsEN: HomeStrings {
     var homeStateNotSetUp: String { "not set up" }
     var homeStateKeepsAwake: String { "keeps the Mac awake" }
     func homeStateWorn(_ pct: Int) -> String { "\(pct)% worn" }
-    func homeStatePackagesOutdated(_ n: Int) -> String { n == 1 ? "1 package outdated" : "\(n) packages outdated" }
     var homeStateUpdateAvailable: String { "update available" }
     func homeStateUpdatesAvailable(_ n: Int) -> String { "\(n) updates available" }
     var homeMemoryObject: String { "Memory" }
@@ -160,13 +156,11 @@ extension StringsEN: HomeStrings {
     func homeGB(_ s: String) -> String { "\(s) GB" }
     var homeVerbDetails: String { "Details" }
     var homeVerbFreeUp: String { "Free up" }
-    var homeVerbUpdate: String { "Update" }
     var homeVerbSettings: String { "Settings…" }
     var homeTagFirewallOff: String { "Firewall off" }
     var homeTagDriveFailing: String { "drive failing" }
     var homeTagTMNotSetUp: String { "TM not set up" }
     var homeTagWorn: String { "Worn" }
-    var homeTagBrewOutdated: String { "Homebrew outdated" }
     var homeTagUpdateAvailable: String { "Update available" }
     var homeTagLowMemory: String { "Low memory" }
     var homeTagService: String { "Service" }
@@ -269,7 +263,6 @@ extension StringsRU: HomeStrings {
     var homeStateNotSetUp: String { "не настроена" }
     var homeStateKeepsAwake: String { "не даёт уснуть" }
     func homeStateWorn(_ pct: Int) -> String { "износ \(pct) %" }
-    func homeStatePackagesOutdated(_ n: Int) -> String { "\(n) " + ruPlural(n, "пакет устарел", "пакета устарели", "пакетов устарели") }
     var homeStateUpdateAvailable: String { "доступно обновление" }
     func homeStateUpdatesAvailable(_ n: Int) -> String { "доступно обновлений: \(n)" }
     var homeMemoryObject: String { "Памяти" }
@@ -282,13 +275,11 @@ extension StringsRU: HomeStrings {
     func homeGB(_ s: String) -> String { "\(s) ГБ" }
     var homeVerbDetails: String { "Подробнее" }
     var homeVerbFreeUp: String { "Освободить" }
-    var homeVerbUpdate: String { "Обновить" }
     var homeVerbSettings: String { "Настройки…" }
     var homeTagFirewallOff: String { "брандмауэр выключен" }
     var homeTagDriveFailing: String { "сбой диска" }
     var homeTagTMNotSetUp: String { "TM не настроена" }
     var homeTagWorn: String { "износ" }
-    var homeTagBrewOutdated: String { "Homebrew устарел" }
     var homeTagUpdateAvailable: String { "есть обновление" }
     var homeTagLowMemory: String { "Мало памяти" }
     var homeTagService: String { "Сервис" }

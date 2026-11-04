@@ -37,9 +37,6 @@ final class AdviceActionDispatch {
     /// captured when the action is dispatched and cleared only when it completes.
     private var trashTargetID: String? = nil
     var showFirewallConfirm = false
-    /// Whether the brew-upgrade confirmation is up (SPEC §1.6 row 5). Same plain-Bool
-    /// shape as the firewall gate above — brew needs no target id the way trash does.
-    var showBrewConfirm = false
     /// Advice ids whose action already completed successfully this session
     /// (currently only `.emptyTrash`) — the plate keeps rendering (assessment
     /// still lists it until the next report refresh drops it) but shows a done
@@ -80,9 +77,6 @@ final class AdviceActionDispatch {
         case .settingsPane(let u): AdviceActionRunner.openPane(u)
         case .openApp(let p): AdviceActionRunner.openApp(p)
         case .revealPath(let p): AdviceActionRunner.reveal(p)
-        case .brewUpgrade:
-            guard model.report.brewOutdated?.isEmpty == false else { return }
-            showBrewConfirm = true
         case .emptyTrash:
             trashTargetID = id
             showTrashConfirm = true
@@ -167,21 +161,15 @@ final class AdviceActionDispatch {
     func dismissConfirmations() {
         cancelEmptyTrash()
         showFirewallConfirm = false
-        showBrewConfirm = false
     }
 
     func busy(for action: AdviceAction?) -> Bool {
         switch action {
-        case .brewUpgrade: return model.brew.upgrading
         case .enableFirewall: return model.security.firewallApplying
         case .enableGatekeeper: return model.security.gatekeeperApplying
         case .emptyTrash: return trashEmptying || trashCounting
         default: return false
         }
-    }
-
-    func busyDetail(for action: AdviceAction?) -> String? {
-        action == .brewUpgrade && model.brew.upgrading ? model.brew.progress.map(brewProgressText) : nil
     }
 
     func done(_ id: String) -> Bool { completedAdviceIDs.contains(Self.adviceKey(id)) }
@@ -209,10 +197,6 @@ private struct AdviceActionDialogs: ViewModifier {
             } message: {
                 Text(L.adviceFirewallConfirmMessage)
             }
-            .brewUpgradeConfirm(isPresented: Binding(
-                get: { dispatch.showBrewConfirm },
-                set: { dispatch.showBrewConfirm = $0 }
-            ), model: dispatch.model)
     }
 }
 

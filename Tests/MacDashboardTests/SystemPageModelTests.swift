@@ -66,7 +66,7 @@ extension SerialTests {
                 #expect(make(input()).tag == .green && make(input()).tagText == "All good")
                 #expect(make(input()).sub == "sleep, startup items, Homebrew, energy")
                 let brew = make(input(outdated: outdated))
-                #expect(brew.tag == .amber && brew.tagText == "Outdated packages")
+                #expect(brew.tag == .neutral && brew.tagText == "Outdated packages")
                 let upd = make(input(outdated: outdated, upgrading: true))
                 #expect(upd.tag == .accent && upd.tagText == "Updating…")
                 let stale = make(input(autostart: auto(user: [plist(userHome + "a.plist", orphan: true)]),
@@ -258,9 +258,14 @@ extension SerialTests {
                 #expect(upFail.brewRows.count == 1 && upFail.tag == .amber)
 
                 let stopped = make(input(outdated: ["node"], notice: "Upgrade stopped: 2 of 3 packages upgraded"))
-                #expect(stopped.brewState == .stopped("Upgrade stopped: 2 of 3 packages upgraded") && stopped.tag == .amber)
+                #expect(stopped.brewState == .stopped("Upgrade stopped: 2 of 3 packages upgraded") && stopped.tag == .neutral)
                 #expect(stopped.brewCaption == "4.6.0 · 1 of 48 packages outdated")
                 #expect(make(input(outdated: [], notice: "n")).tag == .green)
+                // A failed upgrade (amber) beats plain outdated packages (neutral).
+                #expect(SystemPageModel.tag(energyFailed: false, warnableSleep: false, staleFound: false,
+                                            brewUpdating: false, brewOutdated: true, brewUpgradeFailed: true) == (.amber, "Outdated packages"))
+                #expect(SystemPageModel.tag(energyFailed: false, warnableSleep: false, staleFound: false,
+                                            brewUpdating: false, brewOutdated: true, brewUpgradeFailed: false) == (.neutral, "Outdated packages"))
 
                 #expect(make(input(brewStatus: .installed(version: nil), outdated: ["a"])).brewCaption
                         == "version unknown · 1 of 48 packages outdated")

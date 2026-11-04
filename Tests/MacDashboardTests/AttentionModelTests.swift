@@ -141,7 +141,11 @@ extension SerialTests {
                 for lang in AppLanguage.allCases {
                     L10nStore.shared.language = lang
                     let (reportFull, liveFull) = attnFullBadFixture(diskPct: 0.94)   // -> diskFull
-                    let (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.85)   // -> diskFullSoon
+                    var (reportSoon, liveSoon) = attnFullBadFixture(diskPct: 0.87)   // 13 % = 35.7 GB -> diskFullSoon
+                    // No report holds both TM kinds: this one carries the overdue kind, the 0.94 one `.timeMachine`.
+                    var dest = TMDestination(name: "Backup", kind: "Local", mountPoint: "/Volumes/B", quotaBytes: nil, lastBackup: nil)
+                    dest.lastBackupDate = Date().addingTimeInterval(-10 * 86_400)
+                    reportSoon.tmDest = .some(.some(dest))
                     let itemsFull = Assess.assess(report: reportFull, live: liveFull, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
                     let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
                     let allItems = itemsFull + itemsSoon
@@ -151,6 +155,7 @@ extension SerialTests {
                         #expect(!item.label.isEmpty, "AttentionModel coverage (\(lang)): \(item.kind.rawValue) label non-empty")
                         #expect(!item.detail.isEmpty, "AttentionModel coverage (\(lang)): \(item.kind.rawValue) detail non-empty")
                         #expect(!item.fullText.isEmpty, "AttentionModel coverage (\(lang)): \(item.kind.rawValue) fullText non-empty")
+                        #expect(item.why != nil, "AttentionModel coverage (\(lang)): \(item.kind.rawValue) why non-nil")
                     }
                 }
             }

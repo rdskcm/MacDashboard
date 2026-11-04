@@ -1,4 +1,4 @@
-Critical
+Needs attention
 Report
 Refresh report
 This Mac
@@ -9,14 +9,13 @@ Report
 Show in Finder
 Copy
 Done
-Mac status, 5 tasks, need attention, Critical, 1, Warnings, 4, checked at 10:30
+Mac status, 4 tasks, need attention, Critical, 0, Warnings, 4, checked at 10:30
 mac_report.txt · updated 10:30 AM
-Enable… — Firewall
-MacDashboard report — MacBook Air (Apple M3) Generated Jan 15, 2026, 10:30 · macOS 26.1 (25B78) STATUS Critical · 5 tasks !! Firewall off ! Battery 24% worn ! Homebrew 3 packages outdated ! Time Machine not set up ! caffeinate keeps the Mac awake CPU 25.7% · load 2.10 · 8 cores · SoC 48 °C MEMORY 9.5 of 16 GB · pressure low · swap 512 MB STORAGE 76.8 of 256 GB free · purgeable 3.1 GB BATTERY 82%, charging · capacity 76% · 312 cycles SECURITY FileVault · Gatekeeper · SIP · Firewall off BACKUPS Claude backup 2 h ago · 3 local snapshots UPTIME 3 days 4 hours ===== SYSTEM =====
 Details — Battery
-Update — Homebrew
+MacDashboard report — MacBook Air (Apple M3) Generated Jan 15, 2026, 10:30 · macOS 26.1 (25B78) STATUS Needs attention · 4 tasks ! Battery 24% worn ! Firewall off ! Time Machine not set up ! caffeinate keeps the Mac awake CPU 25.7% · load 2.10 · 8 cores · SoC 48 °C MEMORY 9.5 of 16 GB · pressure low · swap 512 MB STORAGE 76.8 of 256 GB free · purgeable 3.1 GB BATTERY 82%, charging · capacity 76% · 312 cycles SECURITY FileVault · Gatekeeper · SIP · Firewall off BACKUPS Claude backup 2 h ago · 3 local snapshots UPTIME 3 days 4 hours ===== SYSTEM ===== ProductName: macOS
+Enable… — Firewall
 Set up… — Time Machine
-Show all (5)
+Show — caffeinate
 Now
 every 2 s
 CPU, 25.7%, 48 °C, load 2.10 · 8 cores

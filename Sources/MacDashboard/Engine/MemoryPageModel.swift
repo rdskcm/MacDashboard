@@ -3,14 +3,8 @@
 import Foundation
 
 /// Memory thresholds (GAP-2 "thresholds in one place"): the ONLY pressure → tone mapping (Memory page and
-/// Home's Now-card chip both call `pressureTone`) and the swap-high rule.
+/// Home's Now-card chip both call `pressureTone`).
 enum MemoryLoad {
-    /// Swap is high when used > 50 % of the current swap total (04-memory:14). Strictly greater.
-    static let swapHighFraction = 0.5
-    static func isSwapHigh(_ s: SwapInfo?) -> Bool {
-        guard let s, s.total > 0 else { return false }
-        return Double(s.used) > Double(s.total) * swapHighFraction
-    }
     /// normal → low, warn → medium, critical → high, unreadable → nil (never guessed).
     static func pressureTone(_ p: MemoryPressureLevel?) -> MemoryPressureTone? {
         switch p {
@@ -133,7 +127,7 @@ struct MemoryPageModel: Equatable {
                     let pct = Int((Double(s.used) / Double(s.total) * 100).rounded())
                     swapTile = MemoryTileModel(label: L.memSwap, value: fmtBytes(s.used),
                                                note: L.memSwapOf(L.homePercent("\(pct)"), fmtBytes(s.total)),
-                                               amber: MemoryLoad.isSwapHigh(s), dimmed: false)
+                                               amber: false, dimmed: false)
                 } else {
                     swapTile = MemoryTileModel(label: L.memSwap, value: fmtBytes(s.used), note: nil, amber: false, dimmed: false)
                 }

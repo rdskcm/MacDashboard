@@ -26,8 +26,8 @@ enum NotifyCategory: String, CaseIterable, Hashable {
         case .fileVaultOff, .gatekeeperOff, .sipOff, .firewallOff: return .protection
         case .diskFull, .diskFullSoon: return .disk
         case .batteryCapacity, .batteryCondition: return .battery
-        case .timeMachine, .claudeBackup: return .backup
-        case .updates, .brewOutdated: return .updates
+        case .timeMachine, .timeMachineOverdue, .claudeBackup: return .backup
+        case .updates: return .updates
         case .crashes: return .crashes
         case .swapHigh, .smartErrors, .smartWear, .wakeHolders: return nil
         }
@@ -38,19 +38,37 @@ enum NotifyCategory: String, CaseIterable, Hashable {
 /// One edge-triggered detector over committed assessments. Value type: the model owns one; tests make their own.
 /// `update` must be called only with assessments the model considers complete (R2); the first call seeds and reports nothing.
 struct NotificationEdgeDetector: Equatable {
+    /// D9: the same kind notifies at most once per this interval.
+    static let renotifyCooldown: TimeInterval = 24 * 3600
+    /// D9: kinds that are one condition at two severities; a step down inside a family never notifies.
+    static func familyRank(_ k: AttentionKind) -> (family: String, rank: Int)? {
+        switch k {
+        case .diskFull: return ("disk", 2)
+        case .diskFullSoon: return ("disk", 1)
+        default: return nil
+        }
+    }
     private(set) var seeded = false
     private(set) var present: Set<AttentionKind> = []
+    private(set) var lastNotified: [AttentionKind: Date] = [:]
 
     /// Records `items`' kinds as present and returns the items (one per kind, first wins, in `items` order) whose kind
     /// was absent before AND whose category is in `enabled`. Kinds of disabled categories still become present (a later
     /// switch-on does not back-fire). Kinds with no category are recorded but never returned.
-    mutating func update(items: [AttentionItem], enabled: Set<NotifyCategory>) -> [AttentionItem] {
+    /// A kind notified less than `renotifyCooldown` ago, or a lower-rank member of a family whose higher-rank member
+    /// was present, is recorded but not returned.
+    mutating func update(items: [AttentionItem], enabled: Set<NotifyCategory>, now: Date) -> [AttentionItem] {
         var next = Set<AttentionKind>()
         var fresh: [AttentionItem] = []
         for item in items where !next.contains(item.kind) {
             next.insert(item.kind)
             guard seeded, !present.contains(item.kind),
                   let cat = NotifyCategory.category(for: item.kind), enabled.contains(cat) else { continue }
+            if let fr = Self.familyRank(item.kind),
+               present.contains(where: { Self.familyRank($0).map { $0.family == fr.family && $0.rank > fr.rank } ?? false }) { continue }
+            // A clock set backward gives a negative interval: that is not "notified recently", so it does not suppress.
+            if let last = lastNotified[item.kind], (0..<Self.renotifyCooldown).contains(now.timeIntervalSince(last)) { continue }
+            lastNotified[item.kind] = now
             fresh.append(item)
         }
         present = next

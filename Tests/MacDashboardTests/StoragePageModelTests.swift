@@ -30,6 +30,39 @@ private func disk(_ device: String, _ h: SmartHealth?) -> SmartDisk {
 
 extension SerialTests {
     struct StoragePageModelTests {
+        @Test func spaceLevelCaps() {
+            typealias C = (size: Int64, avail: Int64, pct: Int, want: SpaceLevel)
+            let cases: [C] = [
+                (1_000_000_000_000, 40_000_000_000, 20, .ok), (1_000_000_000_000, 39_999_999_999, 20, .low),
+                (1_000_000_000_000, 20_000_000_000, 20, .low), (1_000_000_000_000, 19_999_999_999, 20, .critical),
+                (1_000_000_000_000, 30_000_000_000, 10, .low), (2_000_000_000_000, 300_000_000_000, 20, .ok),
+                (256_000_000_000, 64_000_000_000, 20, .ok), (256_000_000_000, 39_999_999_999, 20, .low),
+                (256_000_000_000, 20_480_000_000, 20, .low), (256_000_000_000, 19_999_999_999, 20, .critical),
+                (100_000_000_000, 20_000_000_000, 20, .ok), (100_000_000_000, 19_999_999_999, 20, .low),
+                (100_000_000_000, 10_000_000_000, 20, .low), (100_000_000_000, 9_999_999_999, 20, .critical),
+            ]
+            for c in cases {
+                #expect(StorageSpace.level(avail: c.avail, size: c.size, lowPercent: c.pct) == c.want, "size \(c.size) avail \(c.avail) pct \(c.pct)")
+            }
+            #expect(StorageSpace.suggestsFreeing(.low) && StorageSpace.suggestsFreeing(.critical))
+            #expect(!StorageSpace.suggestsFreeing(.ok) && !StorageSpace.suggestsFreeing(nil))
+        }
+
+        @Test func smartRules() {
+            #expect(SmartRules.warningBits(attr: nil) == nil)
+            #expect(SmartRules.warningBits(attr: "0x00") == 0)
+            #expect(SmartRules.warningBits(attr: "0x02") == 2)
+            #expect(SmartRules.warningBits(attr: "0x04") == 4)
+            #expect(SmartRules.warningBits(attr: "garbage") == 0x3D)
+            #expect(!SmartRules.isFailing(warningBits: 0x02, mediaErrors: 0))
+            for b: UInt64 in [0x01, 0x04, 0x08, 0x10, 0x20, 0x03] { #expect(SmartRules.isFailing(warningBits: b, mediaErrors: 0), "\(b)") }
+            #expect(!SmartRules.isFailing(warningBits: 0x40, mediaErrors: 0), "bit 6 is reserved")
+            #expect(!SmartRules.isFailing(warningBits: nil, mediaErrors: nil))
+            #expect(SmartRules.isFailing(warningBits: 0, mediaErrors: 1))
+            #expect(SmartRules.isTemperatureOnly(0x02))
+            #expect(!SmartRules.isTemperatureOnly(0x03) && !SmartRules.isTemperatureOnly(0) && !SmartRules.isTemperatureOnly(nil))
+        }
+
         @Test func spaceLevel() {
             let size: Int64 = 1000
             #expect(StorageSpace.level(avail: 250, size: size, lowPercent: 20) == .ok)
@@ -167,6 +200,7 @@ extension SerialTests {
 
         @Test func driveStates() {
             #expect(StoragePageModel.driveState(disk("internal", health(nil, nil, \.criticalWarning, 4)), smartctlPresent: true) == .failing)
+            #expect(StoragePageModel.driveState(disk("internal", health(nil, nil, \.criticalWarning, 2)), smartctlPresent: true) == .ok)
             #expect(StoragePageModel.driveState(disk("internal", health(nil, nil, \.mediaErrors, 1)), smartctlPresent: true) == .failing)
             #expect(StoragePageModel.driveState(disk("internal", health(\.percentageUsed, 80)), smartctlPresent: true) == .worn(80))
             #expect(StoragePageModel.driveState(disk("internal", health(\.percentageUsed, 79)), smartctlPresent: true) == .ok)
@@ -202,6 +236,8 @@ extension SerialTests {
                 #expect(tones(health(nil, nil, \.errorLogEntries, 0))[10] == .good && tones(health(nil, nil, \.errorLogEntries, 112))[10] == .plain)
                 let c0 = StoragePageModel.kvTiles(health()), c1 = StoragePageModel.kvTiles(health(nil, nil, \.criticalWarning, 1))
                 #expect(c0[11].value == "no" && c0[11].tone == .good && c1[11].value == "yes" && c1[11].tone == .hot)
+                let c2 = StoragePageModel.kvTiles(health(nil, nil, \.criticalWarning, 2))
+                #expect(c2[11].tone == .amber)
                 #expect(c0[0].value == "39 °C" && c0[4].value == "1,234" && c0[7].value == "38.2 TB")
                 let none = StoragePageModel.kvTiles(nil)
                 #expect(none.count == 12 && none.allSatisfy { $0.value == "—" && $0.tone == .muted })

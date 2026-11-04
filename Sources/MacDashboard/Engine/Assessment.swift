@@ -1,6 +1,6 @@
 // Engine/Assessment.swift
-// Port of the legacy `assess()` (mac_dashboard.py lines 516-606). Same thresholds,
-// same Russian wording, same crit > serious > warn ordering and summary text.
+// Started as a port of the legacy `assess()`; thresholds reviewed in TRIAGE-THRESHOLDS-REVIEW (block spec has the table).
+// Same crit > serious > warn ordering and summary text.
 // Pure and total: absent data ⇒ silent/good, never a fabricated warning. SPEC §6.
 
 import Foundation
@@ -52,8 +52,9 @@ enum Assess {
         func verb(_ action: AdviceAction?) -> String { AttentionModel.verb(for: action, lang: lang) }
 
         // --- disk (live is the freshest source; report carries none) ---
+        let spaceLevel = live.disk.flatMap { $0.size > 0 ? StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: lowSpacePercent) : nil }
         if let disk = live.disk, disk.size > 0 {
-            switch StorageSpace.level(avail: disk.avail, size: disk.size, lowPercent: lowSpacePercent) {
+            switch spaceLevel {
             case .critical:
                 a.diskSev = .crit
                 let action = AdviceAction.settingsPane(AdvicePanes.storage)
@@ -61,7 +62,7 @@ enum Assess {
                 pairs.append((Problem(sev: .crit, text: text, action: action),
                                AttentionItem(kind: .diskFull, sev: .crit, label: L.attnLabelDiskFull,
                                              detail: L.attnDetailDiskFull(pct(disk.pct)), fullText: text,
-                                             verb: verb(action), action: action)))
+                                             verb: verb(action), action: action, why: L.attnWhyDiskFull)))
             case .low:
                 a.diskSev = .warn
                 let action = AdviceAction.settingsPane(AdvicePanes.storage)
@@ -69,7 +70,7 @@ enum Assess {
                 pairs.append((Problem(sev: .warn, text: text, action: action),
                                AttentionItem(kind: .diskFullSoon, sev: .warn, label: L.attnLabelDiskFullSoon,
                                              detail: L.attnDetailDiskFullSoon(pct(disk.pct)), fullText: text,
-                                             verb: verb(action), action: action)))
+                                             verb: verb(action), action: action, why: L.attnWhyDiskFullSoon)))
             case .ok, nil:
                 break
             }
@@ -79,13 +80,17 @@ enum Assess {
         // size is not a shortage signal on modern macOS; an unreadable level stays silent.
         if let sev = memoryPressureSeverity(memPressure) {
             a.swapSev = sev
-            let action = AdviceAction.openApp(AdviceApps.activityMonitor)
-            let text = L.assessMemPressure(critical: sev == .serious,
-                                           apps: topApps.map { "\($0.name) (\(fmt($0.bytes)))" })
-            pairs.append((Problem(sev: sev, text: text, action: action),
-                          AttentionItem(kind: .swapHigh, sev: sev, label: L.attnLabelSwapHigh,
-                                        detail: sev == .serious ? L.attnDetailMemPressureCritical : L.attnDetailMemPressureWarn,
-                                        fullText: text, verb: verb(action), action: action)))
+            // D2: a warn level only sets `swapSev`; the row, notification and Problem appear at critical.
+            if sev == .serious {
+                let action = AdviceAction.openApp(AdviceApps.activityMonitor)
+                let text = L.assessMemPressure(critical: sev == .serious,
+                                               apps: topApps.map { "\($0.name) (\(fmt($0.bytes)))" })
+                pairs.append((Problem(sev: sev, text: text, action: action),
+                              AttentionItem(kind: .swapHigh, sev: sev, label: L.attnLabelSwapHigh,
+                                            detail: L.attnDetailMemPressureCritical,
+                                            fullText: text, verb: verb(action), action: action,
+                                            why: L.attnWhyMemPressure)))
+            }
         }
 
         // --- battery: static fields from the report, falling back field by field to the live sample (BatteryInfo.merged) ---
@@ -98,7 +103,7 @@ enum Assess {
                 pairs.append((Problem(sev: .serious, text: text, action: action),
                                AttentionItem(kind: .batteryCapacity, sev: .serious, label: L.attnLabelBatteryCapacity,
                                              detail: L.attnDetailBatteryCapacity(cap), fullText: text,
-                                             verb: verb(action), action: action)))
+                                             verb: verb(action), action: action, why: L.attnWhyBatteryWorn)))
             } else if cap < 80, (batt?.cycles ?? 0) < batteryEarlyWearCycles {
                 a.battSev = .warn
                 let action = AdviceAction.settingsPane(AdvicePanes.battery)
@@ -106,7 +111,7 @@ enum Assess {
                 pairs.append((Problem(sev: .warn, text: text, action: action),
                                AttentionItem(kind: .batteryCapacity, sev: .warn, label: L.attnLabelBatteryCapacity,
                                              detail: L.attnDetailBatteryCapacity(cap), fullText: text,
-                                             verb: verb(action), action: action)))
+                                             verb: verb(action), action: action, why: L.attnWhyBatteryWorn)))
             }
         }
         if let cond = batt?.condition, !cond.isEmpty, cond != "Normal" {
@@ -116,7 +121,7 @@ enum Assess {
             pairs.append((Problem(sev: .serious, text: text, action: action),
                            AttentionItem(kind: .batteryCondition, sev: .serious, label: L.attnLabelBatteryCondition,
                                          detail: L.attnDetailBatteryCondition(cond), fullText: text,
-                                         verb: verb(action), action: action)))
+                                         verb: verb(action), action: action, why: L.attnWhyBatteryService)))
         }
 
         // --- security (nil = unknown ⇒ silent; only an explicit false warns) ---
@@ -127,7 +132,7 @@ enum Assess {
                 pairs.append((Problem(sev: .serious, text: text, action: action),
                                AttentionItem(kind: .fileVaultOff, sev: .serious, label: L.attnLabelFileVaultOff,
                                              detail: L.attnDetailFileVaultOff, fullText: text,
-                                             verb: verb(action), action: action)))
+                                             verb: verb(action), action: action, why: L.attnWhyFileVault)))
             }
             if sec.gatekeeper == false {
                 let action = AdviceAction.enableGatekeeper
@@ -135,22 +140,22 @@ enum Assess {
                 pairs.append((Problem(sev: .serious, text: text, action: action),
                                AttentionItem(kind: .gatekeeperOff, sev: .serious, label: L.attnLabelGatekeeperOff,
                                              detail: L.attnDetailGatekeeperOff, fullText: text,
-                                             verb: verb(action), action: action)))
+                                             verb: verb(action), action: action, why: L.attnWhyGatekeeper)))
             }
             if sec.sip == false {
                 let text = L.assessSipOff
                 pairs.append((Problem(sev: .serious, text: text),
                                AttentionItem(kind: .sipOff, sev: .serious, label: L.attnLabelSipOff,
                                              detail: L.attnDetailSipOff, fullText: text,
-                                             verb: verb(nil), action: nil)))
+                                             verb: verb(nil), action: nil, why: L.attnWhySip)))
             }
             if sec.firewall == false {
                 let action = AdviceAction.enableFirewall
                 let text = L.assessFirewallOff
-                pairs.append((Problem(sev: .serious, text: text, action: action),
-                               AttentionItem(kind: .firewallOff, sev: .serious, label: L.attnLabelFirewallOff,
+                pairs.append((Problem(sev: .warn, text: text, action: action),
+                               AttentionItem(kind: .firewallOff, sev: .warn, label: L.attnLabelFirewallOff,
                                              detail: L.attnDetailFirewallOff, fullText: text,
-                                             verb: verb(action), action: action)))
+                                             verb: verb(action), action: action, why: L.attnWhyFirewall)))
             }
         }
 
@@ -161,17 +166,7 @@ enum Assess {
             pairs.append((Problem(sev: .warn, text: text, action: action),
                            AttentionItem(kind: .updates, sev: .warn, label: L.attnLabelUpdates,
                                          detail: L.attnDetailUpdates(upd.count), fullText: text,
-                                         verb: verb(action), action: action)))
-        }
-
-        // --- homebrew ---
-        if let outdated = report.brewOutdated, !outdated.isEmpty {
-            let action = AdviceAction.brewUpgrade
-            let text = L.assessBrewOutdatedTip(outdated.count)
-            pairs.append((Problem(sev: .warn, text: text, action: action),
-                           AttentionItem(kind: .brewOutdated, sev: .warn, label: L.attnCapBrew,
-                                         detail: L.attnCapBrewValue(outdated.count), fullText: text,
-                                         verb: verb(action), action: action)))
+                                         verb: verb(action), action: action, why: L.attnWhyUpdates)))
         }
 
         // --- crashes ---
@@ -208,7 +203,8 @@ enum Assess {
             pairs.append((Problem(sev: .warn, text: text, action: action),
                            AttentionItem(kind: .crashes, sev: .warn, label: L.attnLabelCrashes,
                                          detail: L.attnDetailCrashes(panicCount + ownCount), fullText: text,
-                                         verb: verb(action), action: action)))
+                                         verb: verb(action), action: action,
+                                         why: panicCount > 0 ? L.attnWhyKernelPanic : L.attnWhyOwnCrash)))
         }
 
         // --- Time Machine (double optional: .some(nil) = checked & not configured) ---
@@ -218,7 +214,22 @@ enum Assess {
             pairs.append((Problem(sev: .warn, text: text, action: action),
                            AttentionItem(kind: .timeMachine, sev: .warn, label: L.attnLabelTimeMachine,
                                          detail: L.attnDetailTimeMachine, fullText: text,
-                                         verb: verb(action), action: action)))
+                                         verb: verb(action), action: action, why: L.attnWhyTimeMachine)))
+        }
+
+        // --- Time Machine overdue (TRIAGE-THRESHOLDS-REVIEW D7): the Backups page's own 7 / 30-day rule ---
+        if case .some(.some(let dest)) = report.tmDest, let last = dest.lastBackupDate {
+            let state = BackupsPageModel.tmState(dest: dest, backup: nil, action: .idle, now: now)
+            if state == .overdue7 || state == .overdue30 {
+                let sev: Severity = state == .overdue30 ? .serious : .warn
+                let days = BackupsPageModel.daysSince(last, now: now)
+                let action = AdviceAction.settingsPane(AdvicePanes.timeMachine)
+                let text = L.assessTimeMachineOverdue(days)
+                pairs.append((Problem(sev: sev, text: text, action: action),
+                              AttentionItem(kind: .timeMachineOverdue, sev: sev, label: L.attnLabelTimeMachine,
+                                            detail: L.bkDaysAgo(days), fullText: text, verb: verb(action), action: action,
+                                            why: L.attnWhyTimeMachineOverdue)))
+            }
         }
 
         // --- Claude backup age (BACKUP-AGE): read from the backup log, never the disk ---
@@ -244,7 +255,8 @@ enum Assess {
             }
             pairs.append((Problem(sev: .warn, text: text, action: action),
                           AttentionItem(kind: .claudeBackup, sev: .warn, label: L.attnLabelClaudeBackup,
-                                        detail: detail, fullText: text, verb: verb(action), action: action)))
+                                        detail: detail, fullText: text, verb: verb(action), action: action,
+                                        why: L.attnWhyClaudeBackup)))
         }
 
         // --- SMART / disks ---
@@ -252,21 +264,20 @@ enum Assess {
             for d in disks {
                 a.smartSev = worse(a.smartSev, d.severity)
                 let media = attrInt(d, "Media and Data Integrity Errors") ?? 0
-                let crit = attr(d, "Critical Warning")
-                if (crit != nil && crit != "0x00") || media > 0 {
+                if SmartRules.isFailing(warningBits: SmartRules.warningBits(attr: attr(d, "Critical Warning")), mediaErrors: UInt64(max(0, media))) {
                     let action = AdviceAction.openApp(AdviceApps.diskUtility)
                     let text = L.assessSmartDiskErrors(d.title)
                     pairs.append((Problem(sev: .crit, text: text, action: action),
                                    AttentionItem(kind: .smartErrors, sev: .crit, label: L.attnLabelSmartErrors(d.title),
                                                  detail: L.attnDetailSmartErrors, fullText: text,
-                                                 verb: verb(action), action: action)))
+                                                 verb: verb(action), action: action, why: L.attnWhySmartErrors)))
                 } else if let pu = attrInt(d, "Percentage Used"), pu >= 80 {
                     let action = AdviceAction.openApp(AdviceApps.diskUtility)
                     let text = L.assessSmartDiskWearHigh(d.title, pu)
                     pairs.append((Problem(sev: .warn, text: text, action: action),
                                    AttentionItem(kind: .smartWear, sev: .warn, label: L.attnLabelSmartWear(d.title),
                                                  detail: L.attnDetailSmartWear(pu), fullText: text,
-                                                 verb: verb(action), action: action)))
+                                                 verb: verb(action), action: action, why: L.attnWhySmartWear)))
                 } else if isExternal(d), d.attrs.isEmpty, d.severity == .warn {
                     // Note: the Tip keeps action == nil (no logic drift from today's
                     // behaviour); the capsule gets an action so it stays actionable —
@@ -293,14 +304,15 @@ enum Assess {
                           AttentionItem(kind: .wakeHolders, sev: .warn, label: L.attnLabelWakeHolders,
                                         detail: L.attnDetailWakeHolders(entries[0], more: warnHolders.count - 1),
                                         fullText: text, verb: verb(action), action: action,
-                                        wakeHolderKeys: warnHolders.map(\.key))))
+                                        wakeHolderKeys: warnHolders.map(\.key),
+                                        why: L.attnWhyWakeHolders)))
         }
 
         // --- disk-space tips (home / caches) ---
         if let dirs = report.homeDirs {
             for d in dirs {
                 let name = (d.path as NSString).lastPathComponent
-                if name == "Downloads", d.bytes > 10 * GIB {
+                if name == "Downloads", d.bytes > 10 * GIB, StorageSpace.suggestsFreeing(spaceLevel) {
                     var share = ""
                     if let disk = live.disk, disk.size > 0 {
                         share = L.assessDownloadsShareSuffix(pct(Double(d.bytes) / Double(disk.size)))
@@ -318,7 +330,7 @@ enum Assess {
                 }
             }
         }
-        if let d = report.homeCaches, d.bytes > 3 * GIB {
+        if let d = report.homeCaches, d.bytes > 3 * GIB, StorageSpace.suggestsFreeing(spaceLevel) {
             let action = AdviceAction.revealPath(d.path)
             tips.append(Tip(text: L.assessCachesTip(fmt(d.bytes)), action: action))
             capsules.append(TipCapsule(object: L.attnCapCaches, value: fmt(d.bytes), verb: verb(action),

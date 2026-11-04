@@ -6,13 +6,13 @@
 
 import Foundation
 
-/// The 17 attention kinds (the design's 16 keys; `diskFull`/`diskFullSoon` are both key `disk`),
+/// The 17 attention kinds (the design's 16 keys plus `timeMachineOverdue`; `diskFull`/`diskFullSoon` are both key `disk`),
 /// in the fixed order the spec assigns them (also the order `Assess.assess` evaluates their branches).
 enum AttentionKind: String, CaseIterable {
     case diskFull, diskFullSoon,
          swapHigh, // memory pressure (name kept for id stability)
          batteryCapacity, batteryCondition, fileVaultOff,
-         gatekeeperOff, sipOff, firewallOff, updates, brewOutdated, crashes, timeMachine, claudeBackup, smartErrors, smartWear,
+         gatekeeperOff, sipOff, firewallOff, updates, crashes, timeMachine, timeMachineOverdue, claudeBackup, smartErrors, smartWear,
          wakeHolders
 }
 
@@ -29,6 +29,11 @@ struct AttentionItem: Identifiable, Equatable {
     /// `.wakeHolders` only: the holders this item names, in its order — the targets of the
     /// plate's per-app «Не предупреждать» menu (SLEEP-IGNORE-APP). Empty for every other kind.
     var wakeHolderKeys: [WakeHolderKey] = []
+    /// TRIAGE-THRESHOLDS-REVIEW: one or two plain sentences on why this matters to the user; every kind built by
+    /// `Assess.assess` sets it. Optional only so existing memberwise calls compile. Not part of `id`.
+    var why: String? = nil
+    /// The tooltip / notification body: `fullText`, then `why` when present.
+    var fullTextWithWhy: String { why.map { fullText + " " + $0 } ?? fullText }
     var id: String { "\(kind.rawValue)|\(label)|\(detail)" }
 }
 
@@ -160,8 +165,6 @@ enum AttentionModel {
             return s.attnVerbEmpty
         case .enableFirewall, .enableGatekeeper:
             return s.attnVerbEnable
-        case .brewUpgrade:
-            return s.attnVerbUpgrade
         }
     }
 }

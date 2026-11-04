@@ -34,14 +34,6 @@ private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
 
 extension SerialTests {
     struct MemoryPageModelTests {
-        @Test func swapHigh() {
-            #expect(!MemoryLoad.isSwapHigh(nil))
-            #expect(!MemoryLoad.isSwapHigh(SwapInfo(total: 0, used: 0, free: 0)))
-            #expect(!MemoryLoad.isSwapHigh(SwapInfo(total: 2 * GiB, used: GiB, free: GiB)))
-            #expect(MemoryLoad.isSwapHigh(SwapInfo(total: 2 * GiB, used: GiB + 1, free: GiB - 1)))
-            #expect(MemoryLoad.isSwapHigh(SwapInfo(total: 8 * GiB, used: gib(5.2), free: 8 * GiB - gib(5.2))))
-        }
-
         @Test func pressureTone() {
             #expect(MemoryLoad.pressureTone(.normal) == .low)
             #expect(MemoryLoad.pressureTone(.warn) == .medium)
@@ -89,13 +81,13 @@ extension SerialTests {
             }
         }
 
-        @Test func swapHighTile() {
+        @Test func swapTileNeverAmber() {
             withLanguage(.en) {
                 let s = SwapInfo(total: 8 * GiB, used: gib(5.2), free: 8 * GiB - gib(5.2))
                 let t = MemoryPageModel.make(memInput(swap: s)).tiles[2]
                 #expect(t.value == "5.2 GB")
                 #expect(t.note == "65% of 8 GB")
-                #expect(t.amber)
+                #expect(!t.amber, "D3: the swap tile is never amber")
             }
         }
 

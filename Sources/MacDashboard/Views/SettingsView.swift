@@ -483,7 +483,7 @@ struct SettingsView: View {
                     .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(DS3.line, lineWidth: 1))
                     .accessibilityLabel(L.settingsSnapshotLabel)
             }
-            SettingsRow(label: L.settingsLowSpaceLabel) {
+            SettingsRow(label: L.settingsLowSpaceLabel, sub: L.settingsLowSpaceSub(Int(StorageSpace.lowCapBytes / 1_000_000_000))) {
                 DSSlidingSegmented(
                     options: AppSettings.allowedLowSpacePercents,
                     selection: $settings.lowSpacePercent,

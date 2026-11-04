@@ -12,7 +12,6 @@ enum AdviceAction: Equatable {
     case emptyTrash             // UI: confirmation → Finder empty trash
     case enableFirewall         // UI: confirmation → PrivilegedRunner
     case enableGatekeeper       // UI: PrivilegedRunner (no confirmation; the Touch ID prompt is the confirmation)
-    case brewUpgrade            // UI: BrewController.upgradeNow()
 }
 
 enum AdvicePanes {

@@ -177,7 +177,7 @@ extension SerialTests {
             }
             let stOK = storageOK()
             let stLow = storageOK { $0.disk = storageDisk(freePercent: 15) }
-            let stCritical = storageOK { $0.disk = storageDisk(freePercent: 8) }
+            let stCritical = storageOK { $0.disk = storageDisk(freePercent: 7) }
             let stNoDisk = storageOK { $0.disk = nil; $0.report.smart = nil }
             let stCounting = fixtureHome { $0.applyFixtureFolders(nil, block: BlockState(.folders, createdAt: homeRef)) }
             let stTimeout = fixtureHome {
@@ -906,16 +906,25 @@ extension SerialTests {
                     }
                 }
                 run.snap("content-home-snapshots-low", mode, width: 1094) {
-                    HomeAttentionCard(model: fixtureHome { $0.disk = DiskInfo(size: 256 * GIB, avail: 40 * GIB, dataUsed: nil, sysUsed: nil) },
+                    HomeAttentionCard(model: fixtureHome { $0.disk = DiskInfo(size: 256 * GIB, avail: 35 * GIB, dataUsed: nil, sysUsed: nil) },
                                       router: NavigationRouter(), width: LiveWindowWidth(1150))
                 }
                 run.snap("content-home-attention", mode, width: 1094) {
                     VStack(alignment: .leading, spacing: 24) {
-                        HarnessSection(label: "Home: critical, 6 tasks") {
+                        HarnessSection(label: "Home: attention, 4 tasks") {
                             HomeAttentionCard(model: m, router: NavigationRouter(), width: LiveWindowWidth(1150))
                         }
                         HarnessSection(label: "Home: Show all expanded") {
                             HomeAttentionCard(model: m, router: NavigationRouter(), width: LiveWindowWidth(1150), initialShowAll: true)
+                        }
+                        HarnessSection(label: "Home: Time Machine overdue (12 days)") {
+                            let tmLate = fixtureHome {
+                                var dest = TMDestination(name: "Backup", kind: "Local", mountPoint: "/Volumes/Backup", quotaBytes: nil, lastBackup: nil)
+                                dest.lastBackupDate = homeRef.addingTimeInterval(-12 * 86_400)
+                                $0.report.tmDest = .some(.some(dest))
+                                reassess($0)
+                            }
+                            HomeAttentionCard(model: tmLate, router: NavigationRouter(), width: LiveWindowWidth(1150))
                         }
                         HarnessSection(label: "Home: all good") {
                             HomeAttentionSlot(model: fixtureHome { $0.assessment = Assessment() },

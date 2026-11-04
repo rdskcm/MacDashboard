@@ -227,7 +227,7 @@ private struct ProtectionTile: View {
         // The surface branches inside the background only: the button above keeps its identity across on/off.
         .background {
             if tile.error {
-                Color.clear.ds3TintPanel(DS3.hot, from: 0.14, to: 0.05, ring: 0.45, cornerRadius: 20)
+                Color.clear.ds3TintPanel(tile.dot == .amber ? DS3.amber : DS3.hot, from: 0.14, to: 0.05, ring: 0.45, cornerRadius: 20)
             } else {
                 Color.clear
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(DS3.row))
