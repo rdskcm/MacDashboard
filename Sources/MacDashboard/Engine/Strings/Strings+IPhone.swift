@@ -68,6 +68,9 @@ protocol IPhoneStrings {
     var iphoneHistoryChart: String { get }
     var iphoneHistoryTable: String { get }
     var iphoneHistoryViewA11y: String { get }
+    var iphoneHistoryRangeHalfYear: String { get }
+    var iphoneHistoryRangeA11y: String { get }
+    var iphoneHistoryNoHealth: String { get }
     func iphoneChartCycles(_ n: Int) -> String
     var iphoneChartSourceImport: String { get }
     func iphoneChartMonth(_ m: Int) -> String
@@ -138,6 +141,9 @@ extension StringsEN: IPhoneStrings {
     var iphoneHistoryChart: String { "Chart" }
     var iphoneHistoryTable: String { "Table" }
     var iphoneHistoryViewA11y: String { "Battery history view" }
+    var iphoneHistoryRangeHalfYear: String { "6M" }
+    var iphoneHistoryRangeA11y: String { "Battery history range" }
+    var iphoneHistoryNoHealth: String { "No battery health values in this period." }
     func iphoneChartCycles(_ n: Int) -> String { "\(n) \(n == 1 ? "cycle" : "cycles")" }
     var iphoneChartSourceImport: String { "Sysdiagnose" }
     func iphoneChartMonth(_ m: Int) -> String {
@@ -211,6 +217,9 @@ extension StringsRU: IPhoneStrings {
     var iphoneHistoryChart: String { "График" }
     var iphoneHistoryTable: String { "Таблица" }
     var iphoneHistoryViewA11y: String { "Вид истории батареи" }
+    var iphoneHistoryRangeHalfYear: String { "6М" }
+    var iphoneHistoryRangeA11y: String { "Период истории батареи" }
+    var iphoneHistoryNoHealth: String { "За этот период нет значений здоровья батареи." }
     func iphoneChartCycles(_ n: Int) -> String { "\(n) \(ruPlural(n, "цикл", "цикла", "циклов"))" }
     var iphoneChartSourceImport: String { "sysdiagnose" }
     func iphoneChartMonth(_ m: Int) -> String {

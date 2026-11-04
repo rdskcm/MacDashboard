@@ -30,6 +30,43 @@ enum HistoryRange: CaseIterable {
     }
 }
 
+/// A range switch whose segments are calendar-day windows ending on the newest sample. History (`HistoryRange`) and
+/// the iPhone battery history (`IPhoneHistoryRange`) share the enable, fallback and tooltip rule (IPHONE-HISTORY-RANGE).
+protocol DayWindowRange: CaseIterable, Hashable {
+    /// Calendar days in the window, counting the newest sample's day; nil = no window (All).
+    var days: Int? { get }
+}
+
+extension HistoryRange: DayWindowRange {}
+
+enum DayWindowRule {
+    /// Enabled iff there are >= 2 samples and (the range is All or the data covers at least `days` calendar days,
+    /// first...last inclusive). History D21.
+    static func enabled<R: DayWindowRange>(_: R.Type, sampleCount: Int, spanDays: Int) -> Set<R> {
+        guard sampleCount >= 2 else { return [] }
+        let covered = spanDays + 1
+        return Set(R.allCases.filter { r in r.days.map { $0 <= covered } ?? true })
+    }
+
+    /// `selected` when enabled, else the last enabled range in `allCases` order (All whenever there are >= 2
+    /// samples); nil when none is enabled.
+    static func effective<R: DayWindowRange>(selected: R, enabled: Set<R>) -> R? {
+        if enabled.contains(selected) { return selected }
+        return Array(R.allCases).last { enabled.contains($0) }
+    }
+
+    /// Tooltip of the disabled segments; nil when every segment is enabled. < 2 samples: "Needs at least 2
+    /// samples". Otherwise "Only N months of data" (covered days / 30.44, rounded), or "Only N days of data" while
+    /// the data covers less than 30 days (IPHONE-HISTORY-RANGE D5: the month form read "0 months" there).
+    static func disabledHelp<R: DayWindowRange>(_ type: R.Type, sampleCount: Int, spanDays: Int) -> String? {
+        if sampleCount < 2 { return L.historyNeedsTwo }
+        guard enabled(type, sampleCount: sampleCount, spanDays: spanDays).count < R.allCases.count else { return nil }
+        let covered = spanDays + 1
+        if covered < 30 { return L.historyOnlyDays(covered) }
+        return L.historyOnlyMonths(Int((Double(covered) / HistoryPageModel.daysPerMonth).rounded()))
+    }
+}
+
 enum HistorySeries {
 
     /// One (date, value) point per entry that has a non-nil value for `metric`.

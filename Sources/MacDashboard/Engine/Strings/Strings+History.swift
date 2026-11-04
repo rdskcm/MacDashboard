@@ -21,6 +21,7 @@ protocol HistoryStrings {
     func historyEmptySub(_ samples: Int) -> String             // "1 sample · the chart needs at least 2"
     var historyNeedsTwo: String { get }                        // "Needs at least 2 samples"
     func historyOnlyMonths(_ n: Int) -> String                 // "Only 4 months of data"
+    func historyOnlyDays(_ n: Int) -> String                   // "Only 12 days of data"
     var historyRangeMonth: String { get }                      // "1M"   (kept, value changes)
     var historyRangeQuarter: String { get }                    // "3M"
     var historyRangeYear: String { get }                       // "1Y"
@@ -78,6 +79,7 @@ extension StringsEN: HistoryStrings {
     func historyEmptySub(_ samples: Int) -> String { "\(historySamples(samples)) · the chart needs at least 2" }
     var historyNeedsTwo: String { "Needs at least 2 samples" }
     func historyOnlyMonths(_ n: Int) -> String { "Only \(n) \(n == 1 ? "month" : "months") of data" }
+    func historyOnlyDays(_ n: Int) -> String { "Only \(n) \(n == 1 ? "day" : "days") of data" }
     var historyRangeMonth: String { "1M" }
     var historyRangeQuarter: String { "3M" }
     var historyRangeYear: String { "1Y" }
@@ -146,9 +148,10 @@ extension StringsRU: HistoryStrings {
     func historyEmptySub(_ samples: Int) -> String { "\(historySamples(samples)) · для графика нужно минимум 2" }
     var historyNeedsTwo: String { "Нужно минимум 2 замера" }
     func historyOnlyMonths(_ n: Int) -> String { "Данных только за \(n) \(ruPlural(n, "месяц", "месяца", "месяцев"))" }
-    var historyRangeMonth: String { "1 мес" }
-    var historyRangeQuarter: String { "3 мес" }
-    var historyRangeYear: String { "1 год" }
+    func historyOnlyDays(_ n: Int) -> String { "Данных только за \(n) \(ruPlural(n, "день", "дня", "дней"))" }
+    var historyRangeMonth: String { "1М" }
+    var historyRangeQuarter: String { "3М" }
+    var historyRangeYear: String { "1Г" }
     var historyRangeAll: String { "Всё" }
     var historyRangeA11y: String { "Период" }
     var historyMetricPickerDisk: String { "Диск" }

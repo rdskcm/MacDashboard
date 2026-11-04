@@ -114,16 +114,13 @@ struct HistoryPageModel: Equatable {
     /// A range is enabled iff there are ≥ 2 samples and (it is All or the data covers at least `range.days`
     /// calendar days, first…last inclusive).
     static func enabledRanges(sampleCount: Int, spanDays: Int) -> Set<HistoryRange> {
-        guard sampleCount >= 2 else { return [] }
-        let covered = spanDays + 1
-        return Set(HistoryRange.allCases.filter { r in r.days.map { $0 <= covered } ?? true })
+        DayWindowRule.enabled(HistoryRange.self, sampleCount: sampleCount, spanDays: spanDays)
     }
 
     /// `selected` when enabled, else the last enabled range in `HistoryRange.allCases` order (All whenever there are
     /// ≥ 2 samples: «122 days of data, 1Y selected → All»); nil when none is enabled.
     static func effectiveRange(selected: HistoryRange, enabled: Set<HistoryRange>) -> HistoryRange? {
-        if enabled.contains(selected) { return selected }
-        return HistoryRange.allCases.last { enabled.contains($0) }
+        DayWindowRule.effective(selected: selected, enabled: enabled)
     }
 
     /// Calendar days in the window: `range.days`, or first…last inclusive for All.
@@ -349,12 +346,7 @@ struct HistoryPageModel: Equatable {
         let span = spanDays(entries) ?? 0
         let enabled = enabledRanges(sampleCount: entries.count, spanDays: span)
         let effective = effectiveRange(selected: i.range, enabled: enabled)
-        let covered = span + 1
-        let help: String?
-        if entries.count < 2 { help = L.historyNeedsTwo }
-        else if enabled.count < HistoryRange.allCases.count {
-            help = L.historyOnlyMonths(Int((Double(covered) / daysPerMonth).rounded()))
-        } else { help = nil }
+        let help = DayWindowRule.disabledHelp(HistoryRange.self, sampleCount: entries.count, spanDays: span)
 
         let title: String
         if i.view == .table { title = L.historyAllMetrics }

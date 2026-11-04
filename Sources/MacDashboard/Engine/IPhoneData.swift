@@ -87,6 +87,22 @@ struct BatteryPoint: Codable, Equatable {
     var source: String              // "live" | "import"
 }
 
+/// IPHONE-HISTORY-RANGE: the battery-history range switch (mockup section 3.8). Case order IS the segment order.
+/// Not `HistoryRange`: the iPhone mockup has a 6M segment and a 91-day 3M (`rangeHist`).
+enum IPhoneHistoryRange: DayWindowRange {
+    case month, quarter, halfYear, year, all
+
+    var days: Int? {
+        switch self {
+        case .month: return 30
+        case .quarter: return 91
+        case .halfYear: return 182
+        case .year: return 365
+        case .all: return nil
+        }
+    }
+}
+
 /// The only persisted device record (R13); the crash-log type cache is a separate rebuildable file.
 struct IPhoneDeviceRecord: Codable, Equatable, Identifiable {
     var id: String                  // deviceKey
@@ -460,6 +476,47 @@ enum IPhoneData {
             byDay[p.day] = p
         }
         return byDay.values.sorted { $0.day < $1.day }
+    }
+
+    /// IPHONE-HISTORY-RANGE: the points of `range` — `range.days` calendar days ending on the newest valid point's
+    /// day (not today), first...newest inclusive, compared as "yyyy-MM-dd" strings. Input order is kept. All, an
+    /// empty list or a list without a valid day returns `points` unchanged.
+    static func historyPoints(_ points: [BatteryPoint], in range: IPhoneHistoryRange) -> [BatteryPoint] {
+        guard let days = range.days,
+              let newest = points.lazy.map(\.day).filter({ historyDate($0) != nil }).max(),
+              let end = historyDate(newest),
+              let start = Calendar.current.date(byAdding: .day, value: -(days - 1), to: end)
+        else { return points }
+        let first = historyDay(start)
+        return points.filter { $0.day >= first && $0.day <= newest }
+    }
+
+    /// Calendar days from the oldest to the newest valid point (newest - oldest); nil without a valid day.
+    static func historySpanDays(_ points: [BatteryPoint]) -> Int? {
+        let numbers = points.compactMap { HomeModel.dayNumber($0.day) }
+        guard let lo = numbers.min(), let hi = numbers.max() else { return nil }
+        return hi - lo
+    }
+
+    /// What the history card shows for `selected`: History's enable / fallback / tooltip rule (`DayWindowRule`)
+    /// over the points with a valid day, and the points of the effective range (all points when no range is
+    /// enabled, i.e. < 2 points: the chart draws the single point, D4).
+    struct HistoryRangeState: Equatable {
+        let enabled: Set<IPhoneHistoryRange>
+        let effective: IPhoneHistoryRange?      // nil: fewer than 2 points with a valid day
+        let disabledHelp: String?
+        let shown: [BatteryPoint]
+    }
+
+    static func historyRangeState(_ points: [BatteryPoint], selected: IPhoneHistoryRange) -> HistoryRangeState {
+        let count = points.filter { HomeModel.dayNumber($0.day) != nil }.count
+        let span = historySpanDays(points) ?? 0
+        let enabled = DayWindowRule.enabled(IPhoneHistoryRange.self, sampleCount: count, spanDays: span)
+        let effective = DayWindowRule.effective(selected: selected, enabled: enabled)
+        return HistoryRangeState(
+            enabled: enabled, effective: effective,
+            disabledHelp: DayWindowRule.disabledHelp(IPhoneHistoryRange.self, sampleCount: count, spanDays: span),
+            shown: historyPoints(points, in: effective ?? .all))
     }
 
     // MARK: - Sysdiagnose import (Stage 5)
