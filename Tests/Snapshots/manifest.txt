@@ -22,7 +22,7 @@ content-home-sections-dark	2026-11-04	27.2	Xcode 27.2	ab64412-dirty
 content-home-now-dark	2026-11-04	27.2	Xcode 27.2	81ba45d-dirty
 content-iphone-tiles-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-notices-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
-content-iphone-battery-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
+content-iphone-battery-dark	2026-11-04	27.2	Xcode 27.2	79fe127-dirty
 content-iphone-history-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-logs-dark	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
 content-iphone-import-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
@@ -53,7 +53,7 @@ content-home-sections-light	2026-11-04	27.2	Xcode 27.2	ab64412-dirty
 content-home-now-light	2026-11-04	27.2	Xcode 27.2	81ba45d-dirty
 content-iphone-tiles-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-notices-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
-content-iphone-battery-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
+content-iphone-battery-light	2026-11-04	27.2	Xcode 27.2	79fe127-dirty
 content-iphone-history-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-logs-light	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
 content-iphone-import-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty

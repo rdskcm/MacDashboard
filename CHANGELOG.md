@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### New
 
+- [feat] iPhone battery card: on iOS 27 the temperature is read again (iOS 27 moved it to a separate registry node; the app now asks for that node when the main one lacks it), and while the phone charges the State tile shows the power going into the battery, e.g. «Charging +2.4 W». Its tooltip spells out the voltage and current behind the figure and, where the phone reports it, what is drawn from the cable (iOS 27) or what the power source offers (iOS 26).
 - [feat] The header's iPhone segment is now «Devices»; Esc, ⌘[ and a second click on the segment return from a device page to the list.
 - [feat] Settings › iPhone: «Auto-read on connect» (off = on attach the app only identifies the phone and reads the battery and crash logs on request).
 - [feat] Kept iPhone sysdiagnose archives live in `~/Documents/MacDashboard/iPhone` (or a folder chosen in Settings › iPhone); archives kept so far are moved there once. The first write to Documents can show macOS's Files & Folders prompt.

@@ -243,6 +243,41 @@ enum IPhoneData {
         return now.timeIntervalSince(last) >= minInterval
     }
 
+    // MARK: - Charging power texts (IPHONE-BATTERY-DETAILS)
+
+    /// Below this the State tile shows no power note (fully charged, charging paused): the figure would round to 0.0 W.
+    static let powerNoteMinW = 0.05
+
+    /// The State tile's note: `powerW` (= Voltage mV × Amperage mA / 10^6, `BatteryInspector.parse`) with the Mac
+    /// page's explicit sign, only while the gauge says charging and the figure is at least `powerNoteMinW`.
+    /// Decision 3: «Plugged in» never carries a note; its figure is in `powerHelpText`.
+    static func powerNoteText(powerW: Double?, isCharging: Bool) -> String? {
+        guard isCharging, let p = powerW, p >= powerNoteMinW else { return nil }
+        return L.batteryWatts(BatteryPageModel.signed(fmtNum(p, decimals: 1), p))
+    }
+
+    /// The State tile's tooltip, one or two lines, nil when there is nothing to say.
+    /// Line 1 (battery side, when `powerW` exists): «Battery: +2.4 W = 3.9 V × +0.62 A».
+    /// Line 2 (cable side): iOS 27 `ChargerData.ChargerPower` (mW) with `ChargerEfficiency` when present;
+    /// else iOS 26.x `AdapterDetails.Watts` as «offers up to» (it is the source's PD offer, not the draw).
+    static func powerHelpText(_ b: BatteryDetail) -> String? {
+        var lines: [String] = []
+        if let p = b.powerW, let v = b.voltageMV, let a = b.amperageMA {
+            lines.append(L.iphonePowerBatteryLine(
+                L.batteryWatts(BatteryPageModel.signed(fmtNum(abs(p), decimals: 1), p)),
+                fmtNum(Double(v) / 1000, decimals: 2),
+                BatteryPageModel.signed(fmtNum(abs(Double(a)) / 1000, decimals: 2), Double(a))))
+        }
+        if let mw = b.charger?.chargerPowerMW, mw > 0 {
+            var line = L.iphonePowerCableLine(L.batteryWatts(fmtNum(Double(mw) / 1000, decimals: 1)))
+            if let eff = b.charger?.chargerEfficiencyPercent { line += L.iphonePowerEfficiencySuffix(eff) }
+            lines.append(line)
+        } else if let watts = b.adapter?.watts, watts > 0 {
+            lines.append(L.iphonePowerSourceLine(L.batteryWatts(fmtGrouped(watts))))
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
     // MARK: - Battery history chart (IPHONE-DESIGN)
 
     struct HealthChartScale: Equatable {
@@ -571,6 +606,38 @@ enum IPhoneData {
               !payload.isEmpty
         else { return nil }
         return payload
+    }
+
+    // MARK: - Per-class battery queries (IPHONE-BATTERY-DETAILS)
+
+    /// Keys iOS 27 moved off the `AppleSmartBattery` entry into the `AppleSmartBatteryPack` class node
+    /// (findings C-27-1..3). The merge fills exactly these; capacity and health keys are never touched.
+    static let packLiveKeys = ["Temperature", "VirtualTemperature", "Voltage", "Amperage", "InstantAmperage"]
+
+    /// True when the main reply lacks a live key at the top level (iOS 27 shape: no Temperature and no Voltage).
+    /// iOS 26.x replies carry both, so they keep the single-request read.
+    static func batteryNeedsPerClassQueries(_ main: [String: Any]) -> Bool {
+        main["Temperature"] == nil || main["Voltage"] == nil
+    }
+
+    /// `main` wins per key. Each `packLiveKeys` key absent from `main` is taken from the pack node's top level
+    /// (iOS 27.0.1 shape) or else from its `BatteryData` (the macOS 27 pack shape). `ChargerData` is merged per
+    /// key: `main`'s values win, the charger node's `ChargerData` fills the rest. A nil `pack` / `charger` (iOS
+    /// 26.x: Success without payload) leaves `main` unchanged. Nothing else is copied.
+    static func mergeBatteryPayloads(main: [String: Any], pack: [String: Any]?, charger: [String: Any]?) -> [String: Any] {
+        var out = main
+        if let pack {
+            let packData = pack["BatteryData"] as? [String: Any]
+            for key in packLiveKeys where out[key] == nil {
+                if let v = pack[key] ?? packData?[key] { out[key] = v }
+            }
+        }
+        if let fill = charger?["ChargerData"] as? [String: Any] {
+            var merged = fill
+            if let own = out["ChargerData"] as? [String: Any] { merged.merge(own) { _, mainValue in mainValue } }
+            out["ChargerData"] = merged
+        }
+        return out
     }
 
     // MARK: - Value extraction

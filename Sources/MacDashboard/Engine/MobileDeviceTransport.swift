@@ -355,9 +355,19 @@ final class MobileDeviceTransport {
         }
     }
 
-    /// One relay connection, each request in order; nil replies for failures.
-    private func relay(_ dev: Ptr, _ requests: [IPhoneRelayRequest]) -> [[String: Any]?] {
-        withRelay(dev) { send in requests.map { send($0) } } ?? [[String: Any]?](repeating: nil, count: requests.count)
+    /// The battery registry payload: the `AppleSmartBattery` entry, completed from the `AppleSmartBatteryPack` and
+    /// `AppleChargerData` class nodes when the entry lacks the live keys (iOS 27 moved temperature, voltage,
+    /// amperage and the charger data there — IPHONE-BATTERY-DETAILS). One relay connection, one to three requests
+    /// in order, all of the existing `IORegistry` shape (R10). nil when the service did not start or the main
+    /// reply had no payload; a failed per-class request only leaves its keys missing.
+    private func readBatteryPayload(_ dev: Ptr) -> [String: Any]? {
+        withRelay(dev) { send -> [String: Any]? in
+            guard let main = IPhoneData.relayPayload(send(.ioRegistryName("AppleSmartBattery"))) else { return nil }
+            guard IPhoneData.batteryNeedsPerClassQueries(main) else { return main }
+            let pack = IPhoneData.relayPayload(send(.ioRegistryClass("AppleSmartBatteryPack")))
+            let charger = IPhoneData.relayPayload(send(.ioRegistryClass("AppleChargerData")))
+            return IPhoneData.mergeBatteryPayloads(main: main, pack: pack, charger: charger)
+        } ?? nil
     }
 
     // MARK: - Crash-log AFC (read-only)
@@ -484,6 +494,7 @@ final class MobileDeviceTransport {
 
     /// Identity keys + the AppleSmartBattery registry entry. `battery` is nil when the
     /// relay did not answer with Status Success, or when `includeBattery` is false (then `batteryRead` is false).
+    /// On iOS 27 the live keys come from the per-class nodes (`readBatteryPayload`).
     func readSnapshot(_ h: IPhoneHandle,
                       includeBattery: Bool = true,
                       completion: @escaping @MainActor (Result<IPhoneSnapshot, IPhoneReadError>) -> Void) {
@@ -494,8 +505,7 @@ final class MobileDeviceTransport {
                 }
                 var battery: BatteryDetail?
                 if includeBattery {
-                    let reply = relay(dev, [.ioRegistryName("AppleSmartBattery")]).first ?? nil
-                    battery = IPhoneData.relayPayload(reply).map { BatteryInspector.parse(dict: $0) }
+                    battery = readBatteryPayload(dev).map { BatteryInspector.parse(dict: $0) }
                 }
                 return IPhoneSnapshot(
                     udid: udid,
