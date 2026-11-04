@@ -12,6 +12,7 @@ All notable changes to this project are documented in this file.
 - [feat] Kept iPhone sysdiagnose archives live in `~/Documents/MacDashboard/iPhone` (or a folder chosen in Settings › iPhone); archives kept so far are moved there once. The first write to Documents can show macOS's Files & Folders prompt.
 - [feat] Battery tiles on the iPhone page show the charge, cycle and temperature tones.
 - [feat] iPhone firmware, engine only (nothing is visible in the app yet): on a click, Apple's catalogue gives the iOS build Apple restores the phone's model to; a separate, labelled click asks ipsw.me which builds are still signed (it sends the model identifier only). Apple's build can be downloaded to `~/Downloads` over https from Apple's firmware servers only, after size and free-space checks, verified against every checksum both sources publish, without ever replacing an existing file. The network is used only on these clicks; the hosts and what they receive are listed in the README.
+- [feat] iPhone battery history: a 1M / 3M / 6M / 1Y / All switch filters the chart and the table. A range ends on the newest point; ranges longer than the data are greyed out; the page opens on All.
 
 ### Changed
 
@@ -20,11 +21,13 @@ All notable changes to this project are documented in this file.
 - [major] Home: the section tiles no longer repeat what the Now card shows — CPU shows the 15-minute load, Memory purgeable and file cache, Storage the Trash, Battery its condition and maximum capacity.
 - [major] Attention rules reviewed for false alarms: low disk space needs both a share of capacity and an absolute amount (amber below 40 GB, red below 20 GB, as well as the percentage), so large disks are no longer flagged with hundreds of GB free; the firewall being off is amber instead of red; memory pressure warns only at the red level; the swap tile no longer turns amber; CPU "High load" needs a minute above 85 %; a drive that is only hot is no longer called failing; an overdue Time Machine backup now reaches Home; Downloads, Caches and local-snapshot suggestions appear only when space is short; notifications repeat at most once a day; outdated Homebrew packages are a "You can" suggestion instead of an attention item and no longer notify or turn the System page orange; every attention item's tooltip and notification says why it matters.
 - [major] Serial numbers show only their last 4 characters (`•••• A1B2`) and an IMEI only its first 8 digits, the model's type code (`12345678 •••••••`), until you click «Show»: every serial, part number and IMEI on the iPhone «Device and parts» card, and the Mac battery serial on the Battery page, which now also has «Show» and a copy button. Leaving the page masks them again.
+- [minor] History: the Russian range labels are now the short «1М · 3М · 1Г · Всё», the same as on the iPhone battery history.
 
 ### Fixed
 
 - A command that had already finished could be reported as timed out, with its output lost, while all of the system's shared worker threads were busy. Command output no longer waits for those threads.
 - For contributors: test copies made by `tools/bench-app.sh` are named `MacDashboardBench.app`, and `tools/ls-prune.sh` also removes their LaunchServices registrations (including ones whose folder is already deleted), so opening the app by name (`open -a MacDashboard`, AppleScript) starts the installed copy instead of an old test copy. `tools/visual/smoke.sh` now runs the prune at exit, as `tools/perf/gate.sh` already did.
+- [major] History: with less than a month of data, the tooltip on a greyed-out range said «Only 0 months of data»; it now gives the days.
 
 ### Before you update
 

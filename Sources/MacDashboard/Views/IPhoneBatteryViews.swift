@@ -200,42 +200,75 @@ struct IPhoneBatteryHistoryCard: View {
 
     let points: [BatteryPoint]
     @State private var view: HistoryView
+    @State private var range: IPhoneHistoryRange
     private let initialHover: Int?
 
-    init(points: [BatteryPoint], initialView: HistoryView = .chart, initialHover: Int? = nil) {
+    init(points: [BatteryPoint], initialView: HistoryView = .chart, initialRange: IPhoneHistoryRange = .all,
+         initialHover: Int? = nil) {
         self.points = points
         self.initialHover = initialHover
         _view = State(initialValue: initialView)
+        _range = State(initialValue: initialRange)
     }
 
     private var sorted: [BatteryPoint] { points.sorted { $0.day < $1.day } }
 
     var body: some View {
+        let r = IPhoneData.historyRangeState(sorted, selected: range)
         DS3Card(title: L.iphoneHistoryTitle,
-                caption: points.isEmpty ? nil : L.iphoneHistoryCaption(points.count),
+                caption: points.isEmpty ? nil : L.iphoneHistoryCaption(r.shown.count),
                 trailing: {
                     if !points.isEmpty {
-                        DSSlidingSegmented(options: [HistoryView.chart, .table], selection: $view, size: .section,
-                                           groupLabel: L.iphoneHistoryViewA11y) {
-                            $0 == .chart ? L.iphoneHistoryChart : L.iphoneHistoryTable
+                        HStack(spacing: 10) {
+                            rangeControl(r)
+                            viewControl
                         }
                     }
                 }) {
             if points.isEmpty {
                 IPhoneMessagePanel(text: L.iphoneHistoryEmpty)
             } else if view == .chart {
-                IPhoneHealthChart(points: sorted, initialHover: initialHover)
+                IPhoneHealthChart(points: r.shown, initialHover: initialHover)
+                    .id(r.effective ?? .all)
             } else {
-                table
+                table(r.shown).id(r.effective ?? .all)
             }
         }
     }
 
-    private var table: some View {
+    private var viewControl: some View {
+        DSSlidingSegmented(options: [HistoryView.chart, .table], selection: $view, size: .section,
+                           groupLabel: L.iphoneHistoryViewA11y) {
+            $0 == .chart ? L.iphoneHistoryChart : L.iphoneHistoryTable
+        }
+    }
+
+    /// The lens shows the fallback range; the stored selection is untouched until the user picks (as History R4).
+    private func rangeControl(_ r: IPhoneData.HistoryRangeState) -> some View {
+        let binding = Binding<IPhoneHistoryRange>(get: { r.effective ?? range }, set: { range = $0 })
+        return DSSlidingSegmented(options: IPhoneHistoryRange.allCases, selection: binding, size: .section,
+                                  groupLabel: L.iphoneHistoryRangeA11y,
+                                  identifier: { "iphone-history-range-\($0)" },
+                                  disabled: { !r.enabled.contains($0) }, disabledHelp: r.disabledHelp) {
+            Self.rangeLabel($0)
+        }
+    }
+
+    static func rangeLabel(_ r: IPhoneHistoryRange) -> String {
+        switch r {
+        case .month: return L.historyRangeMonth
+        case .quarter: return L.historyRangeQuarter
+        case .halfYear: return L.iphoneHistoryRangeHalfYear
+        case .year: return L.historyRangeYear
+        case .all: return L.historyRangeAll
+        }
+    }
+
+    private func table(_ rows: [BatteryPoint]) -> some View {
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
-                    ForEach(Array(sorted.reversed().enumerated()), id: \.offset) { _, p in
+                    ForEach(Array(rows.reversed().enumerated()), id: \.offset) { _, p in
                         IPhoneHistoryTableRow(point: p)
                     }
                 } header: {
@@ -343,7 +376,7 @@ private struct IPhoneHealthChart: View {
         if let series {
             plot(series)
         } else {
-            IPhoneMessagePanel(text: L.iphoneHistoryEmpty)
+            IPhoneMessagePanel(text: L.iphoneHistoryNoHealth)
         }
     }
 
