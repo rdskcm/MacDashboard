@@ -1,8 +1,8 @@
 // Views/IPhoneIdentityCard.swift
 // IPHONE-DESIGN: device and parts identity as an info grid and a serial-number grid. Serial-type values are
-// masked by default; reveal and copy are per value. Values live in memory only (R13, D10).
+// masked by default (SERIAL-MASK-LAST4: last 4 characters, IMEI keeps its TAC); Show / Hide and copy are per
+// value (IdentifierRevealControls). Values live in memory only (R13, D10).
 
-import AppKit
 import SwiftUI
 
 struct IPhoneIdentityCard: View {
@@ -12,7 +12,7 @@ struct IPhoneIdentityCard: View {
     let wide: Bool
     /// Revealed ids reset when the user leaves the device page or the phone is unplugged.
     @State private var revealed: Set<String>
-    @State private var copiedID: String?
+    private let initiallyCopied: String?
 
     /// `initiallyRevealed` and `initiallyCopied` exist for the harness render; the page always passes none.
     init(model: IPhoneModel, deviceKey: String, wide: Bool = false,
@@ -21,7 +21,7 @@ struct IPhoneIdentityCard: View {
         self.deviceKey = deviceKey
         self.wide = wide
         _revealed = State(initialValue: initiallyRevealed)
-        _copiedID = State(initialValue: initiallyCopied)
+        self.initiallyCopied = initiallyCopied
     }
 
     private var isConnected: Bool { model.connected[deviceKey] != nil }
@@ -102,14 +102,13 @@ struct IPhoneIdentityCard: View {
     private func secretRow(_ f: IPhoneIdentityField) -> some View {
         let label = L.iphoneIdentityLabel(f.label)
         let shown = revealed.contains(f.id)
-        let copied = copiedID == f.id
         return HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(DS3.inkSoft)
                     .lineLimit(1)
-                Text(shown ? f.value : IPhoneData.mask(f.value))
+                Text(shown ? f.value : f.label.displayValue(f.value))
                     .font(.system(size: 14, weight: .medium, design: .monospaced))
                     .tracking(0.28)
                     .foregroundStyle(DS3.ink)
@@ -117,28 +116,9 @@ struct IPhoneIdentityCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 4) {
-                Button(shown ? L.iphoneIdentityHide : L.iphoneIdentityShow) {
-                    if revealed.contains(f.id) { revealed.remove(f.id) } else { revealed.insert(f.id) }
-                }
-                .buttonStyle(DS3ButtonStyle(kind: .text, height: 30, hPad: 11, fontSize: 12.5))
-                .accessibilityLabel(shown ? L.iphoneHideA11y(label) : L.iphoneRevealA11y(label))
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(f.value, forType: .string)
-                    copiedID = f.id
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(1500))
-                        if copiedID == f.id { copiedID = nil }
-                    }
-                } label: {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(copied ? DS3.accentInk : DS3.ink)
-                }
-                .buttonStyle(DS3CircleButtonStyle(diameter: 30))
-                .help(copied ? L.iphoneIdentityCopied : L.iphoneIdentityCopy)
-                .accessibilityLabel(L.iphoneCopyA11y(label))
+            IdentifierRevealControls(label: label, fullValue: f.value, shown: shown,
+                                     initiallyCopied: initiallyCopied == f.id) {
+                if revealed.contains(f.id) { revealed.remove(f.id) } else { revealed.insert(f.id) }
             }
         }
         .padding(.leading, 16)

@@ -26,12 +26,6 @@ extension SerialTests {
             #expect(!key.contains(udid) && !udid.lowercased().contains(key), "iPhone: deviceKey does not contain the input")
             #expect(key != IPhoneData.deviceKey(udid: udid + "0"), "iPhone: different inputs give different keys")
 
-            // --- mask ---
-            #expect(IPhoneData.mask("D7LABCDE4PYM") == "D7L•••4PYM", "iPhone: mask 12 chars -> first 3 + ••• + last 4")
-            #expect(IPhoneData.mask("ABCDEFGH") == "ABC•••EFGH", "iPhone: mask 8 chars is the shortest unmasked-edge form")
-            #expect(IPhoneData.mask("ABCDEFG") == "•••••••", "iPhone: mask 7 chars -> 7 bullets")
-            #expect(IPhoneData.mask("") == "", "iPhone: mask empty -> empty")
-
             // --- bugType / hasJSONHeader ---
             func d(_ s: String) -> Data { Data(s.utf8) }
             #expect(IPhoneData.bugType(fromHeader: d("{\"bug_type\":\"309\",\"x\":1}\nbody")) == "309", "iPhone: bugType string 309")

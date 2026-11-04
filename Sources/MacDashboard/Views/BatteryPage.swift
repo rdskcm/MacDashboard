@@ -263,13 +263,33 @@ struct BatteryLifetimeCard: View {
 @MainActor
 struct BatteryPassportCard: View {
     let model: AppModel
+    /// SERIAL-MASK-LAST4: the serial tile is masked until Show; resets when the card leaves the screen.
+    @State private var serialShown: Bool
+    private let initiallyCopied: Bool
+
+    /// `initiallyShown` and `initiallyCopied` exist for the harness render; the page always passes neither.
+    init(model: AppModel, initiallyShown: Bool = false, initiallyCopied: Bool = false) {
+        self.model = model
+        _serialShown = State(initialValue: initiallyShown)
+        self.initiallyCopied = initiallyCopied
+    }
 
     var body: some View {
         let m = BatteryPageModel.make(batteryPageInput(model))
         if m.showsDetailCards && !m.passportTiles.isEmpty {
             DS3Card(title: L.batteryDetailPassportSection) {
                 EqualColumnsLayout(columns: 3, spacing: 8) {
-                    ForEach(m.passportTiles.indices, id: \.self) { tile(m.passportTiles[$0]) }
+                    ForEach(m.passportTiles.indices, id: \.self) { i in
+                        let t = m.passportTiles[i]
+                        if let full = t.fullValue {
+                            SectionTile(label: t.label, value: serialShown ? full : t.value, noteInk: DS3.muted,
+                                        labelAccessory: AnyView(IdentifierRevealControls(
+                                            label: t.label, fullValue: full, shown: serialShown,
+                                            initiallyCopied: initiallyCopied) { serialShown.toggle() }))
+                        } else {
+                            tile(t)
+                        }
+                    }
                 }
             }
         } else {

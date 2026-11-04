@@ -32,7 +32,12 @@ enum BatteryNoteButton: Equatable { case tryAgain, batterySettings }
 
 struct BatteryHeroModel: Equatable { var label: String; var value: String; var fraction: Double; var note: String; var tone: BatteryTone; var dimmed: Bool }
 /// `valueTone` nil → ink; `.neutral` → muted (the «—» tiles); `.green/.amber/.hot` → the -ink variant. `dot` nil → no dot.
-struct BatteryTileModel: Equatable { var label: String; var value: String; var note: String?; var valueTone: BatteryTone?; var dot: BatteryTone? }
+struct BatteryTileModel: Equatable {
+    var label: String; var value: String; var note: String?; var valueTone: BatteryTone?; var dot: BatteryTone?
+    /// SERIAL-MASK-LAST4: set only on an identifier tile. `value` is then the masked form and this is the raw value
+    /// the view shows after Show and copies; nil on every other tile.
+    var fullValue: String? = nil
+}
 struct BatteryNoteModel: Equatable { var tone: BatteryTone; var text: String; var button: BatteryNoteButton }
 struct BatteryHistoryRow: Equatable { var id: String /* "yyyy-MM" */; var label: String /* "Oct 2026" */; var value: String /* "76%" */ }
 
@@ -299,7 +304,13 @@ struct BatteryPageModel: Equatable {
         }
         var out: [BatteryTileModel] = []
         if let code = d.manufacturerCode { out.append(tile(L.batteryDetailManufacturer, manufacturerNames[code] ?? code)) }
-        if let s = d.serial { out.append(tile(L.batteryDetailSerial, s)) }
+        if let s = d.serial {
+            let masked = IdentifierMask.serial(s)
+            if !masked.isEmpty {
+                out.append(BatteryTileModel(label: L.batteryDetailSerial, value: masked, note: nil,
+                                            valueTone: nil, dot: nil, fullValue: s.trimmingCharacters(in: .whitespacesAndNewlines)))
+            }
+        }
         if let y = d.mfgYear, let w = d.mfgWeek, let code = d.mfgCode {
             if let m = mfgMonth(year: y, week: w) {
                 out.append(tile(L.batteryDetailMfgDate, m, note: L.batCode(code)))
