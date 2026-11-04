@@ -23,4 +23,4 @@ every 2 s
 CPU, 25.7%, 48 °C, load 2.10 · 8 cores
 Memory, 9.5 GB of 16, pressure low, act. 6, wired 2.5, inact. 4.5, swap 512 MB of 2 GB · compressed 1 GB
 Storage, 76.8 GB free, healthy, data 160, sys. 18, oth. 1, of 256 GB · free up 3.1 GB
-Battery, 76% capacity, worn, of new, wear threshold 80%, 312 cycles · charge 82%
+Battery, 76% of new, worn, wear threshold 80%, 312 cycles · charge 82%
