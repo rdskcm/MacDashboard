@@ -121,11 +121,12 @@ extension SerialTests {
                 }
                 let m = BatteryPageModel.make(batInput(detail: d))
                 #expect(m.nowHero?.label == "On battery · 6 h 20 min remaining")
-                #expect(m.nowHero?.tone == .amber)
+                #expect(m.nowHero?.tone == .accent)
+                #expect(m.nowHero?.tone != .amber && m.nowTiles.allSatisfy { $0.valueTone != .amber })
                 #expect(m.nowTiles[0].value == "\u{2212}7.9 W")
-                #expect(m.nowTiles[0].valueTone == .amber)
+                #expect(m.nowTiles[0].valueTone == nil)
                 #expect(m.nowTiles[1].value == "\u{2212}604 mA")
-                #expect(m.nowTiles[1].valueTone == .amber)
+                #expect(m.nowTiles[1].valueTone == nil)
                 #expect(!m.showsCharging)
                 #expect(m.symbol == "battery.75percent")
             }

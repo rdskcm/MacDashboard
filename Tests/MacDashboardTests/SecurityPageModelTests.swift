@@ -224,6 +224,7 @@ extension SerialTests {
                                                           value: "×2", tone: .amber, path: "/x/MacDashboard-1.ips"))
                 #expect(m.crashRows[1].name == "Kernel panic" && m.crashRows[1].tone == .hot && m.crashRows[1].sub == "Jan 12, 22:17")
                 #expect(m.crashRows[2].sub == "" && m.crashRows[2].path == nil)
+                #expect(m.crashRows[2].tone == .neutral, "Xcode crash raises no attention: muted dot")
                 #expect(m.crashFoot == "Click a row to open the report in Console.")
                 #expect(make(input(crashes: groups, opened: "/x/MacDashboard-1.ips")).crashFoot == "Opened in Console: MacDashboard-1.ips")
                 #expect(make(input(crashes: [crash("a")])).crashesCaption == "1 crash · own app and kernel panics")

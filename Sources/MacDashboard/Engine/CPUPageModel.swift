@@ -186,12 +186,11 @@ struct CPUPageModel: Equatable {
         }
     }
 
-    enum ProcBar: Equatable { case amber, green, accent, series }
+    enum ProcBar: Equatable { case green, accent, series }
 
     static func procBar(_ row: ProcEntry, metric: Metric) -> ProcBar {
         guard metric == .cpu else { return .series }
         let cpu = row.cpu ?? 0
-        if cpu > 15 { return .amber }
         if cpu > 8 { return .green }
         return .accent
     }

@@ -115,5 +115,18 @@ extension SerialTests {
             #expect(!fmtShortDay(now).contains(yy), "current year: no 2-digit year")
             #expect(fmtShortDay(prev).contains(String(format: "%02d", (year - 1) % 100)), "previous year: year shown")
         }
+
+        @Test func reportAndIPhoneDecimalsFollowLanguage() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            L10nStore.shared.language = .ru
+            #expect(iphoneOneDecimal(91.25) == "91,3")
+            #expect(ReportWriter.fmtSeconds(1.5) == "1,5 " + L.uptimeUnitSecond)
+            #expect(ReportWriter.fmtBytes(1536) == "1,5 " + L.byteUnitKB)
+            L10nStore.shared.language = .en
+            #expect(iphoneOneDecimal(91.25) == "91.3")
+            #expect(ReportWriter.fmtSeconds(1.5) == "1.5 " + L.uptimeUnitSecond)
+            #expect(ReportWriter.fmtBytes(1536) == "1.5 " + L.byteUnitKB)
+        }
     }
 }

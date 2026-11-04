@@ -528,7 +528,7 @@ private struct IPhoneHealthChart: View {
 
 /// One decimal, half-up, with the locale's decimal separator.
 func iphoneOneDecimal(_ v: Double) -> String {
-    String(format: "%.1f", (v * 10).rounded() / 10).replacingOccurrences(of: ".", with: L.decimalSeparator)
+    fmtFixed((v * 10).rounded() / 10, decimals: 1)
 }
 
 /// IPHONE-DESIGN: battery row 0.8 : 2 with a 200 pt minimum for the first child; both get the row height.

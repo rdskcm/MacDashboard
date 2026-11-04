@@ -343,7 +343,7 @@ struct StorageFoldersCard: View {
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
         .background(alignment: .leading) {
-            BarFillLayer(spans: [BarSpan(key: "share", fraction: CGFloat(min(r.fraction, 1)), alpha: 0.16, color: DS3.amber)],
+            BarFillLayer(spans: [BarSpan(key: "share", fraction: CGFloat(min(r.fraction, 1)), alpha: 0.16, color: DS3.s1)],
                          layout: .single(minWidth: 0, cornerRadius: 0), animated: !reduceMotion)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

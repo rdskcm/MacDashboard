@@ -79,6 +79,7 @@ private func panelTone(_ t: BatteryTone) -> (Color, Color) {
     case .amber: return (DS3.amber, DS3.amberInk)
     case .hot: return (DS3.hot, DS3.hotInk)
     case .neutral: return (DS3.muted, DS3.inkSoft)
+    case .accent: return (DS3.accent, DS3.accentInk)
     }
 }
 
@@ -89,6 +90,7 @@ private func valueInk(_ t: BatteryTone?) -> Color {
     case .green?: return DS3.greenInk
     case .amber?: return DS3.amberInk
     case .hot?: return DS3.hotInk
+    case .accent?: return DS3.accentInk
     }
 }
 
@@ -97,6 +99,7 @@ private func dotColor(_ t: BatteryTone?) -> Color? {
     case .green?: return DS3.green
     case .amber?: return DS3.amber
     case .hot?: return DS3.hot
+    case .accent?: return DS3.accent
     default: return nil
     }
 }
@@ -107,6 +110,7 @@ private func noteTone(_ t: BatteryTone) -> Color {
     case .hot: return DS3.hot
     case .green: return DS3.green
     case .neutral: return DS3.muted
+    case .accent: return DS3.accent
     }
 }
 

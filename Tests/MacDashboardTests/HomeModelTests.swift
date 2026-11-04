@@ -216,8 +216,21 @@ extension SerialTests {
             let stor = tiles.first { $0.page == .storage }!
             #expect(stor.tagTone == .hot && stor.tagText == "drive failing", "storage tag from its first (hottest) task")
             let cpu = tiles.first { $0.page == .cpu }!
-            #expect(cpu.kvs[0].value == fmtFixed(2.1, decimals: 2) && cpu.kvs[1].value == "412" && cpu.sub == "Apple M3 · 8 cores")
-            #expect(cpu.accessibilityText == "\(cpu.name), Apple M3 · 8 cores, \(cpu.tagText), Load \(fmtFixed(2.1, decimals: 2)), Processes 412")
+            #expect(cpu.kvs[0].label == L.homeKVLoad15 && cpu.kvs[0].value == fmtFixed(1, decimals: 2) && cpu.kvs[1].value == "412" && cpu.sub == "Apple M3 · 8 cores")
+            #expect(cpu.accessibilityText == "\(cpu.name), Apple M3 · 8 cores, \(cpu.tagText), Load 15 min \(fmtFixed(1, decimals: 2)), Processes 412")
+            let mem = tiles.first { $0.page == .memory }!
+            #expect(mem.kvs.map(\.label) == [L.memPurgeable, L.memFileCache])
+            #expect(mem.kvs[0].value == fmtBytes(live.mem!.purgeable) && mem.kvs[1].value == fmtBytes(live.mem!.fileBacked))
+            let bat = tiles.first { $0.page == .battery }!
+            #expect(bat.kvs.map(\.label) == [L.batteryCapCondition, L.batteryCapMax])
+            #expect(bat.kvs[1].value == "—", "no battery read yet")
+            var withMAh = input; withMAh.batteryMaxMAh = 3874
+            #expect(HomeModel.tiles(withMAh, tasks: tasks, scan: .ok(at: now)).first { $0.page == .battery }!.kvs[1].value == L.batMAh(fmtGrouped(3874)))
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            var withTrash = report; withTrash.homeDirs = [DirSize(path: home + "/.Trash", bytes: 1_500_000_000)]
+            let storTrash = HomeModel.tiles(homeInput(withTrash, live), tasks: tasks, scan: .ok(at: now)).first { $0.page == .storage }!
+            #expect(storTrash.kvs[0].label == L.storageTrashLabel && storTrash.kvs[0].value == fmtCapacity(1_500_000_000))
+            #expect(stor.kvs[0].value == "—", "no home folder count yet")
 
             let skel = HomeModel.tiles(input, tasks: tasks, scan: .firstScan)
             #expect(skel.allSatisfy { $0.accessibilityText == [$0.name, $0.sub].filter { !$0.isEmpty }.joined(separator: ", ") })
@@ -354,10 +367,35 @@ extension SerialTests {
             // 4-in-a-row keeps three items; the compressed item appears in 2x2 and 3-column layouts only.
             #expect(cells[1].legend.map(\.series) == [.s1, .s2, .s4] && short[1].legend.count == 3)
             let two = nowCells(report, live, pressure: .normal, narrow: true)
-            #expect(two[1].legend.map(\.series) == [.s1, .s2, .s3, .s4])
+            #expect(two[1].legend.map(\.series) == [.s1, .s2, .s6, .s4])
             #expect(two[1].legend[2].text == "compressed 1.5")
             let three = nowCells(report, live, pressure: .normal, hasBattery: false)
-            #expect(three[1].legend.map(\.series) == [.s1, .s2, .s3, .s4])
+            #expect(three[1].legend.map(\.series) == [.s1, .s2, .s6, .s4])
+        }
+
+
+        @Test func sectionFacesDoNotRepeatNow() {
+            var (report, live) = nowFixture()
+            // memFixture sets fileBacked == inactive (both total / 8): a fixture coincidence, not a repeat.
+            live.mem?.fileBacked = 3 * GIB
+            let cells = nowCells(report, live, pressure: .normal)
+            let tiles = HomeModel.tiles(homeInput(report, live), tasks: [], scan: .ok(at: Date()))
+            for (page, kind) in [(Page.cpu, HomeNowKind.cpu), (.memory, .memory), (.storage, .storage), (.battery, .battery)] {
+                guard let t = tiles.first(where: { $0.page == page }), let c = cells.first(where: { $0.kind == kind }) else { continue }
+                let nowText = ([c.big, c.of, c.foot] + c.legend.map(\.text)).joined(separator: " | ")
+                for kv in t.kvs where kv.value != "—" {
+                    #expect(!nowText.contains(kv.value), "\(page): «\(kv.value)» already in Now")
+                }
+            }
+        }
+        @Test func dataSegmentsAreNeverWarningColoured() {
+            let (report, live) = nowFixture()
+            let cells = nowCells(report, live, pressure: .normal)
+            let data: Set<HomeSeries> = [.s1, .s2, .s4, .s5, .sfree, .s6, .track]
+            for c in cells where c.kind == .memory || c.kind == .storage {
+                #expect(c.segments.allSatisfy { data.contains($0.series) }, "\(c.kind) segments")
+                #expect(c.legend.allSatisfy { data.contains($0.series) }, "\(c.kind) legend")
+            }
         }
 
         @Test func nowCellAccessibilityText() {

@@ -60,10 +60,11 @@ enum DS3 {
     static let greenInk = Color(light: Color(hex: 0x0A7454), dark: Color(hex: 0x4FD3A6))
     // REDESIGN-HOME 00-shared §1 series colours
     static let s1 = Color(light: Color(hex: 0x2A78D6), dark: Color(hex: 0x3987E5))      // active / data
-    static let s2 = Color(light: Color(hex: 0x1BAF7A), dark: Color(hex: 0x199E70))      // wired
-    static let s3 = Color(light: Color(hex: 0xEDA100), dark: Color(hex: 0xC98500))      // compressed / other
-    static let s4 = Color(light: Color(hex: 0x008300), dark: Color(hex: 0x1E9A1E))      // inactive
-    static let s5 = Color(light: Color(hex: 0x4A3AA7), dark: Color(hex: 0x9085E9))      // speculative
+    static let s2 = Color(light: Color(hex: 0xC81E5A), dark: Color(hex: 0xFF4D6D))      // wired
+    static let s4 = Color(light: Color(hex: 0x5F5A52), dark: Color(hex: 0x948E83))      // inactive (reclaimable, calm)
+    static let s5 = Color(light: Color(hex: 0x4A3AA7), dark: Color(hex: 0x9085E9))      // other (Home disk bar)
+    static let s6 = Color(light: Color(hex: 0x74B816), dark: Color(hex: 0xA3E635))      // other / compressed
+    static let s7 = Color(light: Color(hex: 0xB5AFA4), dark: Color(hex: 0xD6D1C7))      // speculative (reclaimable, calm)
     static let sfree = Color(light: Color(hex: 0x9A958C), dark: Color(hex: 0x6B665E))   // system
 
     static let rimHi = Color(light: Color.white.opacity(1), dark: Color.white.opacity(0.55))

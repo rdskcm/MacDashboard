@@ -25,8 +25,9 @@ enum BatteryHealth {
 
 enum BatteryPagePhase: Equatable { case reading, live, failed(BlockFailure, lastGoodAt: Date?) }
 enum BatteryTagKind: Equatable { case healthy, worn, service, reading, failed }
-/// Tones the view maps to DS3 colours (green / amber / hot; neutral = muted panel / dimmed value).
-enum BatteryTone: Equatable { case green, amber, hot, neutral }
+/// Tones the view maps to DS3 colours (green / amber / hot; neutral = muted panel / dimmed value;
+/// accent = the live hero while discharging, neutral blue).
+enum BatteryTone: Equatable { case green, amber, hot, neutral, accent }
 enum BatteryNoteButton: Equatable { case tryAgain, batterySettings }
 
 struct BatteryHeroModel: Equatable { var label: String; var value: String; var fraction: Double; var note: String; var tone: BatteryTone; var dimmed: Bool }
@@ -212,7 +213,7 @@ struct BatteryPageModel: Equatable {
         if let lpm = d.lowPowerMode {
             noteParts.append(L.batteryDetailLowPower + " " + (lpm ? L.energyValueOn : L.energyValueOff))
         }
-        let tone: BatteryTone = d.percent == nil ? .neutral : (d.externalConnected ? .green : .amber)
+        let tone: BatteryTone = d.percent == nil ? .neutral : (d.externalConnected ? .green : .accent)
         return BatteryHeroModel(
             label: statusLine(d), value: d.percent.map { L.homePercent("\($0)") } ?? dash,
             fraction: d.percent.map { min(max(Double($0) / 100, 0), 1) } ?? 0,
@@ -220,7 +221,7 @@ struct BatteryPageModel: Equatable {
             tone: tone, dimmed: d.percent == nil)
     }
 
-    private static func directionTone(_ v: Double) -> BatteryTone? { v > 0 ? .green : (v < 0 ? .amber : nil) }
+    private static func directionTone(_ v: Double) -> BatteryTone? { v > 0 ? .green : nil }
 
     /// Explicit sign: "+" for positive, U+2212 for negative, none for zero.
     static func signed(_ s: String, _ v: Double) -> String {

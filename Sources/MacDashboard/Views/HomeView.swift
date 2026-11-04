@@ -47,6 +47,7 @@ extension HomeInput {
                          load: model.load, ncpu: model.ncpu, processCount: model.processCount,
                          mem: model.mem, swap: model.swap, disk: model.disk,
                          hasBattery: battery != nil, battery: model.battery,
+                         batteryMaxMAh: model.batteryDetail?.maxCapacityMAh,
                          system: model.headerSystem, claudeBackup: model.claudeBackup,
                          backupStaleHours: model.settings.backupStaleHours, lowSpacePercent: model.settings.lowSpacePercent,
                          history: [], now: model.now(),
@@ -109,6 +110,7 @@ struct HomeView: View {
             .padding(.bottom, 36)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .task { await model.readBatteryOnceForHome() }
     }
 
     private var nowSlot: some View {
