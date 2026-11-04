@@ -226,7 +226,7 @@ struct SecurityPageModel: Equatable {
                                         name: g.isPanic ? L.secKernelPanic : g.process,
                                         sub: g.lastReportAt.map { crashDateText($0, now: i.now) } ?? "",
                                         value: "×\(g.count)",
-                                        tone: g.isPanic ? .hot : .amber,
+                                        tone: g.isPanic ? .hot : (ReportCollector.crashRaisesAttention(g) ? .amber : .neutral),
                                         path: g.newestReportPath,
                                         actionable: actionable,
                                         working: working?.id == g.id && working?.kind != .unhide ? working?.kind : nil,

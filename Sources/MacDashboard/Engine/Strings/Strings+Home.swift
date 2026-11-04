@@ -76,6 +76,7 @@ protocol HomeStrings {
     var homeSystemSub: String { get }
     var homeHistorySub: String { get }
     var homeKVLoad: String { get }
+    var homeKVLoad15: String { get }
     var homeKVProcesses: String { get }
     var homeKVPurgeable: String { get }
     var homeKVFailing: String { get }
@@ -190,6 +191,7 @@ extension StringsEN: HomeStrings {
     var homeSystemSub: String { "sleep, login items, Homebrew" }
     var homeHistorySub: String { "daily samples" }
     var homeKVLoad: String { "Load" }
+    var homeKVLoad15: String { "Load 15 min" }
     var homeKVProcesses: String { "Processes" }
     var homeKVPurgeable: String { "Purgeable" }
     var homeKVFailing: String { "failing" }
@@ -311,6 +313,7 @@ extension StringsRU: HomeStrings {
     var homeSystemSub: String { "сон, автозагрузка, Homebrew" }
     var homeHistorySub: String { "ежедневные замеры" }
     var homeKVLoad: String { "Нагрузка" }
+    var homeKVLoad15: String { "Нагрузка 15 мин" }
     var homeKVProcesses: String { "Процессов" }
     var homeKVPurgeable: String { "Очищаемое" }
     var homeKVFailing: String { "сбой диска" }

@@ -12,6 +12,12 @@ All notable changes to this project are documented in this file.
 - [feat] Battery tiles on the iPhone page show the charge, cycle and temperature tones.
 - [feat] iPhone firmware, engine only (nothing is visible in the app yet): on a click, Apple's catalogue gives the iOS build Apple restores the phone's model to; a separate, labelled click asks ipsw.me which builds are still signed (it sends the model identifier only). Apple's build can be downloaded to `~/Downloads` over https from Apple's firmware servers only, after size and free-space checks, verified against every checksum both sources publish, without ever replacing an existing file. The network is used only on these clicks; the hosts and what they receive are listed in the README.
 
+### Changed
+
+- [major] Numbers: the report's process table and every remaining decimal now use the app language's separator (comma in Russian, point in English).
+- [major] Colours: orange now marks only things that need attention. The charge hero on battery, discharge values, CPU and folder share bars and the «other» part of the disk bar no longer use it; crashes of other apps are grey. The memory bar has a new legend: bright colours for memory in use, grey for memory that can be reclaimed.
+- [major] Home: the section tiles no longer repeat what the Now card shows — CPU shows the 15-minute load, Memory purgeable and file cache, Storage the Trash, Battery its condition and maximum capacity.
+
 ### Fixed
 
 - For contributors: test copies made by `tools/bench-app.sh` are named `MacDashboardBench.app`, and `tools/ls-prune.sh` also removes their LaunchServices registrations (including ones whose folder is already deleted), so opening the app by name (`open -a MacDashboard`, AppleScript) starts the installed copy instead of an old test copy. `tools/visual/smoke.sh` now runs the prune at exit, as `tools/perf/gate.sh` already did.

@@ -742,6 +742,16 @@ final class AppModel {
         }
     }
 
+    /// MOCKUP-CONSISTENCY S6: one ioreg read for the Home Battery tile's «Maximum» when no detail exists yet. Awaited
+    /// by HomeView's `.task`, cancelled with it when Home unmounts; Home re-mounts each time it is shown, so the guard
+    /// keeps this to one read per app run unless the Battery page never ran. Nothing under the visual fixture (the
+    /// fixture detail must stay; same guard as `runBatteryLoop`), nothing on a Mac without a battery.
+    func readBatteryOnceForHome() async {
+        guard !VisualFixture.isRequested, batteryDetail == nil,
+              battery != nil || homeReport.battery != nil else { return }
+        await readBatteryNow()
+    }
+
     /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up).
     /// Its caller is the Processes card's Quit flow (REDESIGN-CPU); the CPU and Memory «Try again» callers were removed in REFRESH-BUTTONS-AUDIT, and
     /// the «Применить» button of the retired process-limit setting was removed in

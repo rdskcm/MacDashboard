@@ -323,8 +323,8 @@ extension SerialTests {
                 }
                 sec(L.reportSectionServiceDirs, ["    5,0 ГБ  /Users/u/Library/Caches", "   12,5 ГБ  /Users/u/Library/Developer", L.storageFoldersNoFDA("/a/x, /b/y"), L.reportFoldersCountedAt(u)], "SERVICEDIRS")
                 sec(L.reportSectionMemory, ["Mach Virtual Memory Statistics: (page size of 16384 bytes)", rwVM("Pages free", 100), rwVM("Pages active", 200), rwVM("Pages inactive", 300), rwVM("Pages speculative", 4), rwVM("Pages wired down", 50), rwVM("Pages purgeable", 7), rwVM("Pages occupied by compressor", 60), rwVM("File-backed pages", 80), "vm.swapusage: total = 2048.00M  used = 512.00M  free = 1536.00M"], "MEMORY")
-                sec(L.reportSectionTopMem, [rwCol("MEM", 8) + rwCol("%CPU", 7) + "COMMAND", rwCol("3,0 ГБ", 8) + rwCol("12.3", 7) + "Safari", rwCol("?", 8) + rwCol("?", 7) + "kernel_task"], "TOPMEM")
-                sec(L.reportSectionTopCPU, [rwCol("%CPU", 7) + rwCol("MEM", 8) + "COMMAND", rwCol("12.3", 7) + rwCol("3,0 ГБ", 8) + "Safari", rwCol("?", 7) + rwCol("?", 8) + "kernel_task"], "TOPCPU")
+                sec(L.reportSectionTopMem, [rwCol("MEM", 8) + rwCol("%CPU", 7) + "COMMAND", rwCol("3,0 ГБ", 8) + rwCol("12,3", 7) + "Safari", rwCol("?", 8) + rwCol("?", 7) + "kernel_task"], "TOPMEM")
+                sec(L.reportSectionTopCPU, [rwCol("%CPU", 7) + rwCol("MEM", 8) + "COMMAND", rwCol("12,3", 7) + rwCol("3,0 ГБ", 8) + "Safari", rwCol("?", 7) + rwCol("?", 8) + "kernel_task"], "TOPCPU")
                 sec(L.reportSectionLoginItems, ["Dropbox", "Rectangle"], "LOGINITEMS")
                 sec(L.reportSectionAgents, [L.reportAgentsUserHeader, "com.a.plist", "com.b.plist [ORPHAN]", L.reportAgentsSystemHeader, "com.c.plist", "com.d.plist"], "AGENTS")
                 sec(L.reportSectionBackground, [rwCol("PID", 7) + "Label", rwCol("123", 7) + "com.x.helper", rwCol("-", 7) + "com.y.agent"], "BACKGROUND")

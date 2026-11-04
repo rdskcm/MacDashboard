@@ -364,13 +364,13 @@ enum ReportWriter {
             lines.append(padRight("MEM", 8) + padRight("%CPU", 7) + "COMMAND")
             for p in top10 {
                 let mem = p.memBytes.map(fmtBytes) ?? "?"
-                let cpu = p.cpu.map { String(format: "%.1f", $0) } ?? "?"
+                let cpu = p.cpu.map { fmtFixed($0, decimals: 1) } ?? "?"
                 lines.append(padRight(mem, 8) + padRight(cpu, 7) + p.name)
             }
         case .cpu:
             lines.append(padRight("%CPU", 7) + padRight("MEM", 8) + "COMMAND")
             for p in top10 {
-                let cpu = p.cpu.map { String(format: "%.1f", $0) } ?? "?"
+                let cpu = p.cpu.map { fmtFixed($0, decimals: 1) } ?? "?"
                 let mem = p.memBytes.map(fmtBytes) ?? "?"
                 lines.append(padRight(cpu, 7) + padRight(mem, 8) + p.name)
             }
@@ -576,8 +576,7 @@ enum ReportWriter {
     // MARK: - Formatting helpers
 
     static func fmtSeconds(_ s: TimeInterval) -> String {
-        String(format: "%.1f", max(0, s)).replacingOccurrences(of: ".", with: L.decimalSeparator)
-            + " " + L.uptimeUnitSecond
+        fmtFixed(max(0, s), decimals: 1) + " " + L.uptimeUnitSecond
     }
 
     /// Human byte size, "96,4 ГБ" style: comma decimal, КБ/МБ/ГБ/ТБ, base 1024, one
@@ -596,7 +595,7 @@ enum ReportWriter {
         if idx == 0 {
             return "\(sign)\(Int64(value)) \(units[idx])"
         }
-        let str = String(format: "%.1f", value).replacingOccurrences(of: ".", with: L.decimalSeparator)
+        let str = fmtFixed(value, decimals: 1)
         return "\(sign)\(str) \(units[idx])"
     }
 

@@ -92,6 +92,7 @@ struct HomeInput {
     var disk: DiskInfo?
     var hasBattery: Bool
     var battery: BatteryInfo?
+    var batteryMaxMAh: Int? = nil   // BatteryDetail.maxCapacityMAh; nil until a battery read landed
     var system: SystemInfo?
     var claudeBackup: ClaudeBackupStatus?
     var backupStaleHours: Int
@@ -428,12 +429,12 @@ enum HomeModel {
             let chip = i.system?.chip ?? ""
             let sub = chip.isEmpty ? L.homeCoresOnly(i.ncpu) : L.homeCPUSub(chip, i.ncpu)
             return (.green, L.homeTagNormal, sub,
-                    [kv(L.homeKVLoad, i.load?.first.map { fmtFixed($0, decimals: 2) }),
+                    [kv(L.homeKVLoad15, i.load.flatMap { $0.count > 2 ? fmtFixed($0[2], decimals: 2) : nil }),
                      kv(L.homeKVProcesses, i.processCount.map { "\($0)" })])
         case .memory:
             return (.green, L.homeTagNormal, fmtBytes(i.system?.memBytes ?? i.mem?.total),
-                    [kv("Swap", i.swap.map { fmtBytes($0.used) }),
-                     kv(L.commonCompressed, i.mem.map { fmtBytes($0.compressor) })])
+                    [kv(L.memPurgeable, i.mem.map { fmtBytes($0.purgeable) }),
+                     kv(L.memFileCache, i.mem.map { fmtBytes($0.fileBacked) })])
         case .storage:
             let smart: HomeKV
             if has(.smartErrors) {
@@ -447,15 +448,16 @@ enum HomeModel {
             } else {
                 smart = HomeKV(label: "SMART", value: dash, tone: .neutral)
             }
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            let trash = r.homeDirs?.first { $0.path == home + "/.Trash" }.map { fmtCapacity($0.bytes) }
             return (.green, L.homeTagHealthy, L.homeStorageSub,
-                    [kv(L.homeKVPurgeable, i.disk?.purgeable.map { fmtCapacity($0) }), smart])
+                    [kv(L.storageTrashLabel, trash), smart])
         case .battery:
             let b = BatteryInfo.merged(live: i.battery, report: r.battery)
             let cond = has(.batteryCondition)
-            let capTone: HomeTone? = cond ? .hot : (has(.batteryCapacity) ? .amber : nil)
             return (.green, L.homeTagHealthy, L.homeBatterySub,
-                    [kv(L.commonCycles, b?.cycles.map { "\($0)" }, cond ? .hot : nil),
-                     kv(L.homeKVCapacity, b?.maxCapacity.map { L.homePercent("\($0)") }, capTone)])
+                    [kv(L.batteryCapCondition, BatteryPageModel.conditionText(b?.condition), cond ? .hot : nil),
+                     kv(L.batteryCapMax, i.batteryMaxMAh.map { L.batMAh(fmtGrouped($0)) })])
         case .security:
             let on = protectionOn(r.security)
             let updates: String?
@@ -502,8 +504,9 @@ enum HomeModel {
 
 // MARK: - HOME-C: the Now card
 
-/// Views map: s1…s4 / sfree → DS3.s1…s4 / DS3.sfree, track → DS3.track, green/amber/hot → DS3.green/amber/hot.
-enum HomeSeries: Equatable { case s1, s2, s3, s4, sfree, track, green, amber, hot }
+/// Views map: s1, s2, s4, s5, s6 / sfree → DS3.s1, s2, s4, s5, s6 / DS3.sfree, track → DS3.track,
+/// green/amber/hot → DS3.green/amber/hot.
+enum HomeSeries: Equatable, Hashable { case s1, s2, s4, s5, s6, sfree, track, green, amber, hot }
 enum HomeNowKind: String, Equatable { case cpu, memory, storage, battery }
 struct HomeNowSegment: Equatable { let series: HomeSeries; let value: Double }
 struct HomeLegendItem: Equatable { let series: HomeSeries; let text: String }
@@ -604,7 +607,7 @@ extension HomeModel {
                              HomeLegendItem(series: .s2, text: L.homeLegendWired(g(mem.wired))),
                              HomeLegendItem(series: .s4, text: L.homeLegendInactive(g(mem.inactive), short: short))]
             if narrow || !input.hasBattery {
-                memLegend.insert(HomeLegendItem(series: .s3, text: L.homeLegendCompressed(g(mem.compressor), short: short)), at: 2)
+                memLegend.insert(HomeLegendItem(series: .s6, text: L.homeLegendCompressed(g(mem.compressor), short: short)), at: 2)
             }
             let foot: String
             if let s = input.swap, s.total > 0 { foot = L.homeMemFoot(fmtBytes(s.used), fmtBytes(s.total), fmtBytes(mem.compressor)) }
@@ -615,7 +618,7 @@ extension HomeModel {
                 big: fmtBytes(mem.usedBytes), of: L.homeOf("\(Int((Double(mem.total) / gib).rounded()))"), loading: false,
                 segments: [HomeNowSegment(series: .s1, value: Double(mem.active)),
                            HomeNowSegment(series: .s2, value: Double(mem.wired)),
-                           HomeNowSegment(series: .s3, value: Double(mem.compressor)),
+                           HomeNowSegment(series: .s6, value: Double(mem.compressor)),
                            HomeNowSegment(series: .s4, value: Double(mem.inactive)),
                            HomeNowSegment(series: .track, value: Double(rest))],
                 batteryBar: nil,
@@ -642,10 +645,10 @@ extension HomeModel {
             if let data = disk.dataUsed, let system = disk.sysUsed {
                 let other = max(0, used - data - system)
                 segments = [HomeNowSegment(series: .s1, value: Double(data)), HomeNowSegment(series: .sfree, value: Double(system)),
-                            HomeNowSegment(series: .s3, value: Double(other)), HomeNowSegment(series: .track, value: Double(disk.avail))]
+                            HomeNowSegment(series: .s5, value: Double(other)), HomeNowSegment(series: .track, value: Double(disk.avail))]
                 legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(data))),
                           HomeLegendItem(series: .sfree, text: L.homeLegendSystem(gb(system), short: short)),
-                          HomeLegendItem(series: .s3, text: L.homeLegendOther(gb(other), short: short))]
+                          HomeLegendItem(series: .s5, text: L.homeLegendOther(gb(other), short: short))]
             } else {
                 segments = [HomeNowSegment(series: .s1, value: Double(used)), HomeNowSegment(series: .track, value: Double(disk.avail))]
                 legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(used)))]

@@ -301,9 +301,9 @@ struct MemoryCompositionCard: View {
         switch k {
         case .active: return DS3.s1
         case .wired: return DS3.s2
-        case .other: return DS3.s3
+        case .other: return DS3.s6
         case .inactive: return DS3.s4
-        case .speculative: return DS3.s5
+        case .speculative: return DS3.s7
         case .free: return DS3.track
         }
     }

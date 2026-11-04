@@ -307,10 +307,9 @@ private struct ProcessRowView: View {
         case .mem: return Double(row.memBytes ?? 0)
         }
     }
-    /// Bar colour per `CPUPageModel.procBar` (D9): CPU mode amber / green / blue by share, memory one blue-grey.
+    /// Bar colour per `CPUPageModel.procBar` (D9): CPU mode green / blue by share, memory one blue-grey.
     private var gaugeColor: Color {
         switch CPUPageModel.procBar(row, metric: primary) {
-        case .amber: return DS3.amber
         case .green: return DS3.green
         case .accent: return DS3.accent
         case .series: return DS3.s1

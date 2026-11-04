@@ -222,7 +222,8 @@ extension SerialTests {
 
         @Test func procBar() {
             func row(_ cpu: Double?) -> ProcEntry { ProcEntry(name: "x", cpu: cpu, memBytes: 1, pid: 5) }
-            #expect(CPUPageModel.procBar(row(15.1), metric: .cpu) == .amber)
+            #expect(CPUPageModel.procBar(row(15.1), metric: .cpu) == .green)
+            #expect(CPUPageModel.procBar(row(90), metric: .cpu) == .green)
             #expect(CPUPageModel.procBar(row(15.0), metric: .cpu) == .green)
             #expect(CPUPageModel.procBar(row(8.1), metric: .cpu) == .green)
             #expect(CPUPageModel.procBar(row(8.0), metric: .cpu) == .accent)
