@@ -15,7 +15,7 @@ tools/perf/gate.sh [--app PATH] [--baseline PATH] [--scenarios LIST] [--runs N] 
 tools/perf/gate.sh -h
 ```
 
-Typical run, on AC power with Low Power Mode off, about 8 minutes per scenario (3 runs x 2 arms x ~75 s), **do not use the Mac while it runs**
+Typical run, with Low Power Mode off (on AC or on battery; the report shows which), about 8 minutes per scenario (3 runs x 2 arms x ~75 s), **do not use the Mac while it runs**
 (it moves the real pointer and sends AX actions):
 
 ```
@@ -39,16 +39,16 @@ and the last stdout line `GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|
 
 ## 3. Exit codes
 
-`0` pass (NOISY rows do not fail) · `1` any FAIL (absolute or regression rule) · `3` INVALID run: the power check after a run (or a `Using Batt`
-entry in `pmset -g log` during it) failed twice; the numbers are discarded, never averaged · `4` the defaults domain
-`com.rdskcm.mac-dashboard` differs before/after (the gate runs bench copies and never writes that domain, so 4 means another process changed it; the diff is printed) · `5` ERROR: at least one scenario was not measured, because an AX element (press, frame, wait or scroll probe) was still missing after one retry, or one run's trace or analysis failed (no trace, export failed, analyze.py failed, scenario marks missing); the other scenarios ran and are reported · `64` usage ·
+`0` pass (NOISY rows do not fail) · `1` any FAIL (absolute or regression rule) · `3` INVALID run: the power check after a run (or a `Using AC` / `Using Batt`
+entry in `pmset -g log` that differs from the source the gate started on, during it) failed twice; the numbers are discarded, never averaged · `4` the defaults domain
+`com.rdskcm.mac-dashboard` differs before/after (the gate runs bench copies and never writes that domain, so 4 means another process changed it; the diff is printed) · `5` ERROR: at least one scenario was not measured, because an AX element (press, frame, wait or scroll probe) was still missing after one retry, or one run's trace or analysis failed (no trace, export failed, analyze.py failed, scenario marks missing), or a scroll window left its range (§4, Scroll method); the other scenarios ran and are reported · `64` usage ·
 `65` precondition refused · `70` runtime error before or around a run (cannot create the run directory, bench copy or helper build failed, the fixture could not be built, the app exited at launch, the window could not be pinned, the final verdict step failed), or a shell error: an exit 1 that does not come from the final verdict (bash exits 1 on a set -u abort) is reported as 70, so 1 always means a measured FAIL.
 When several apply: 3 over 4 over 5 over 1. An AX miss is retried once after the app is brought to the front (for a
 Home tile after a fresh `main-mode-mac` press); this retry is robustness. The 2026-10-20 and 2026-10-30 misses (6 or 7 of 8 Home
 tiles, presses with no effect) came from a second MacDashboard process: System Events, asked for the gate's pid, returned the other process's window contents (GATE-AX-MISS). The gate now uses native AX by pid (`ax`) and refuses to start beside another MacDashboard process. After pinning, the AX window frame must equal the pid's on-screen CG window frame, else that run is ERROR (`pin: the AX window of pid … is not its on-screen window`). A second miss writes `<tag>-axdiag/`, stops that app, marks the scenario ERROR
 and the gate continues with the next scenario. A trace or analysis failure is not retried: the run is ERROR at once, with the log named in errors.tsv. There is never a coordinate fallback.
 
-Preconditions (65): AC power and Low Power Mode 0 · screen unlocked · main display at least 1280x800 pt · Accessibility
+Preconditions (65): Low Power Mode 0 (battery is allowed and shown in the report: "Power: measured on battery. Compare only with runs on battery."; a run of 15 minutes or more on battery prints a warning to connect the power adapter) · screen unlocked · main display at least 1280x800 pt · Accessibility
 enabled (`ax 0 trusted`) · `xcrun xctrace version` works · no other `gate.sh` running · no MacDashboard process the gate did not start (installed app, dev build, another session's bench copy; listed with pid, parent, start time and command by `tools/perf/foreign-copies.sh list` — quit them first; the gate never closes them, `night.sh` does; `GATE_TEST_ALLOW_FOREIGN=1` runs beside them, for the GATE-AX-MISS verification only) · bench home not inside `~/Library`.
 
 ## 4. Scenarios
@@ -62,9 +62,9 @@ All run on the synthetic bench home with the window pinned to 1000x733 pt at (0,
 | G3 | scroll to the bottom of Home, `t0` 2 s after the scroll, 9 s quiet | Time Profiler, Hitches | main busy ms/s over [t0, t0+7), app % there, `scrollable` |
 | G4 | History page (Home → History tile), range All (365+ points), pointer sweep 5 s over the centre of the chart's AX frame (`history-chart`) | Time Profiler, Hitches | hitches/s, main busy ms/s |
 | G5 | Report sheet (`report-sheet`, opened with `main-report` after the launch report pass has finished), pointer held 4 s on its header row (`ctrl`, 300 pt left of the button) and on its «Show in Finder» button (`capsule`, `report-show-in-finder`; the label dates from the rainbow capsule before REDESIGN-REPORT); traced (G5) and untraced (G5-top) runs | CA Commits, CA Server (+TP, Hitches) | commits/s median, server passes/s; untraced app %, WS % per window |
-| G6 | iPhone page, Table and hover scenarios (3 runs) | Time Profiler, Hitches | hitches, ms, main busy total, `rgba64_shade_conic` samples |
-| G7 | This Mac scroll | Time Profiler, Hitches | hitches, ms, main busy total, `scrollable` |
-| GP:<page> | G7's scroll scenario on the page opened from `home-tile-<page>`; a page whose content fits the window is recorded as an idle page (`scrollable 0`, report heading "IDLE PAGE") | Time Profiler, Hitches | hitches, ms, main busy total, `scrollable` |
+| G6 | iPhone page, Table and hover scenarios (3 runs). Page: two segments of a triangle wave inside the page's real range. Table: the table's own scroll area, inside its range, the page held still with the table fully visible. Hover: a wave inside the range ending at 0.37 of it, then a pointer sweep | Time Profiler, Hitches | hitches, ms, main busy total, `rgba64_shade_conic` samples, `scrollable`, `range_pt`, `end_contact_pct`, `pos_reads`, `motion_s` |
+| G7 | This Mac scroll: four segments of a triangle wave inside the page's real range (the last over the right column), 120 events each | Time Profiler, Hitches | hitches, ms, main busy total, `scrollable`, `range_pt`, `end_contact_pct`, `pos_reads`, `motion_s` |
+| GP:<page> | G7's scroll scenario on the page opened from `home-tile-<page>`; a page whose content fits the window is recorded as an idle page (`scrollable 0`, report heading "IDLE PAGE"); a page with a bar whose range is too short for the gesture is recorded the same way, posts no events and shows its `range_pt` | Time Profiler, Hitches | hitches, ms, main busy total, `scrollable`, `range_pt`, `end_contact_pct`, `pos_reads`, `motion_s` |
 | G9 | CPU page idle (Home → CPU tile), 22 s, then `top -l 41` | none | app %, WindowServer % |
 | G10 | Home, window width 1060 ↔ 940 pt twice at 60 Hz via AX (`drv resize`), four crossings of the 1000 pt tier | Time Profiler, Hitches | hitches, ms, main busy total; report-only `sweep_wall_s`, `app_cpu_s`, `ws_cpu_s` (the sweep call only; approximate: CPU-s = `top` mean % × wall with `top` at 1 Hz; `n/a` when no sample of that process fell inside the window) |
 Retired: G8 (System page breathing Outdated capsule) — PERF-GATE-RETARGET, after REDESIGN-SYSTEM removed the capsule.
@@ -75,6 +75,19 @@ the candidate median must not exceed the baseline median by more than the margin
 G4 G6 G7 GP; app % + 0.5 for G1 G3 G9). A row over its margin is FAIL only when the exact one-sided Mann-Whitney test gives p <= 0.05
 (with 3 v 3 runs: every candidate run above every baseline run); otherwise it is NOISY and does not block. A NOISY row is re-run with `--runs 5`.
 G10 has no absolute limit; regression rule only, on main busy total x 1.15 (hitches are reported, not gated: a build that is already saturated during a live resize hides the animation cost in them). With `--runs` 1 or 2 a regression is always NOISY; absolute limits still apply. WindowServer numbers are reported, never gated (+-2 pt noise). Scroll scenarios (G3, G7, GP) record `scrollable` per run (1 = the scroll area under the pointer has a vertical scroll bar, 0 = nothing to scroll); when the two arms differ in it, or an arm is mixed, the regression rule is skipped for that scenario ("no regression check") and only absolute limits apply.
+
+### Scroll method
+
+Rule `scroll-bench-in-range`: a scroll frame measurement first reads the page's real scroll range and stays inside it, with the position logged during the window. A control window has the same range as the page it is compared with. Fixed scroll distances are not valid.
+
+- **Range.** Before the trace attaches, `drv probe <pid> 500 450 [inner]` reads the range of the scroll area under the point: range = position change / scroll-bar change across one short leg, both read at rest. It also measures points per event (`ppe`) and the coast after the gesture ends, per build and arm, from two legs of different length (the coast cancels). The range is never computed from the extent of child element frames (short by 84-97 pt). The table's range (G6-table) is the known travel (60 events x `ppe` + coast) divided by the table bar's change. The probe's legs run with no trace attached; it leaves the page at the lower turn point.
+- **Wave.** `drv wave` posts wheel events at `dy` 6 (about 294 pt/s on the built-in display) at about 49 events/s (the existing 1/60 s sleep loop), on every page. The direction flips between two turn points at measured coast + 15 pt from each end, without an `ended` event at a turn; each segment ends with one `ended`. The event count is the same on every page (G7 4 x 120, G6 page 2 x 180, G6 table 168 + 180 + 180, G6 hover 168), so motion time does not depend on page height. A page qualifies when the span between the turn points is at least 60 pt (about 152 pt of range on the built-in display).
+- **Log.** During the events (not in the gaps) one attribute, the scroll-bar value, is read from one cached element at 10 Hz and written to `<run>-pos.log` (`S`/`E` mark each segment, `P` each read). All element lookup happens before `t0`. The log verifies the result; it does not steer the gesture. `analyze.py pos` gives `end_contact_pct` (reads within 3 pt of an end), `pos_reads` and `motion_s`. Logging cost (SCROLL-BENCH-EDGES V3, one build as both arms, candidate at 40 Hz and baseline at 10 Hz, GP:system, 2 runs, on battery): `read_cost` 0.2528 busy samples per read, `logging_share` 0.91 % of `main_busy_total` (limit 2 %), medians 2615.5 and 2672, reads 94 and 317.5.
+- **Invalid window.** More than 5 % of the position reads within 3 pt of an end, or fewer than 50 % of the expected reads, gives no figure for the scenario: the run is ERROR with the reason (`scroll window left the page's range`) and the gate exits 5. There is no automatic re-record, since the gesture is deterministic. Night counts it as not fully measured, so the next night repeats it. One read at an end stays visible in `end_contact_pct` without failing the run.
+- **Idle and too-short pages.** No vertical bar under (500,450): idle page, today's events, `scrollable 0`, no `range_pt` (G6-*: ERROR). A bar with a range too short for the gesture: `scrollable 0`, `range_pt` shown, no events (G6-*: ERROR). Arms whose ranges differ by more than 10 % keep their regression verdict; the report heading says "RANGE DIFFERS" (speed and motion time are equal, so the comparison stays fair).
+- **Verification overrides.** `GATE_TEST_RANGE_SCALE` multiplies the range given to `drv wave` (forces a window out of its range), `GATE_TEST_CAND_POS_HZ` sets the candidate arm's logging rate. They are for verification only; `night.sh` unsets them.
+
+Correction: Scroll figures from before SCROLL-BENCH-EDGES (2026-11-04) do not count as the cost of scrolling a page: those windows spent 19-92 % of their time at a page end. Which past figures stop counting and which stay valid is listed in `inputs/SCROLL-BENCH-EDGES-rig/FINDINGS-2026-11-04.md`, Q5, in the planning project.
 
 ## 5. Permissions (as `tools/visual/README.md` §3)
 
@@ -88,7 +101,7 @@ The terminal app that runs the gate needs Screen Recording and Accessibility (th
 - It never closes another MacDashboard process; it refuses to start instead (exit 65). `night.sh` closes them (§8).
 - It never installs and never touches `~/Applications/MacDashboard.app`. At exit it calls `tools/ls-prune.sh`.
 - The defaults domain is exported before and after and compared; a change is exit 4, never restored.
-- AX presses happen only before `xctrace` attaches. Helpers `drv`/`hold`/`ax` are compiled fresh into `$OUT/.bin/`; `ax` (`ax.swift`) addresses the app only by pid (`AXUIElementCreateApplication`), never through System Events.
+- AX presses happen only before `xctrace` attaches; one scroll-bar value read at 10 Hz also runs during scroll windows (read-only). Helpers `drv`/`hold`/`ax` are compiled fresh into `$OUT/.bin/`; `ax` (`ax.swift`) addresses the app only by pid (`AXUIElementCreateApplication`), never through System Events.
 
 ## 7. Known limits
 
@@ -96,14 +109,14 @@ The terminal app that runs the gate needs Screen Recording and Accessibility (th
 - `top` timestamps have 1 s samples, so G5 windows hold 3-4 samples each.
 - The G3 window is [t0, t0+7) s, i.e. 2-9 s after the scroll ends (R5). A different reading, [t0+2, t0+9), is 4-11 s after it.
 - Hitch numbers include whatever the Mac does in the background; a run with the Mac in use is not comparable.
-- `scrollable` relies on macOS listing a vertical scroll bar in the AX tree only when the content overflows (true on all nine pages on 2026-10-23, c557d89).
+- The table's range is an estimate of the lazy content (`LazyVStack`), good enough because the wave travels a few thousand points in a far larger range and contact is judged from the bar. The post rate is about 49 events/s on every display (timer-driven, not following the refresh rate). `scrollable` relies on macOS listing a vertical scroll bar in the AX tree only when the content overflows (true on all nine pages on 2026-10-23, c557d89).
 - Security and Backups content comes from the host Mac's real state (updates, crash reports, Time Machine), so GP-security and GP-backups can switch between idle page and scroll from night to night.
 
 ## 8. Night runner
 
 `night.sh` is the one launcher for unattended night work: on an idle Mac it runs the gate on `origin/main` when main changed, then the queued night jobs until 09:00, and writes one report for the whole night to `tools/perf/out/night.noindex/latest.md` (copies in `reports/<YYYYMMDD>.md`; a second run on the same date writes `reports/<YYYYMMDD>-2.md`, then `-3` …, never overwriting; `latest.md` is the newest; first line `NIGHT <date>: <gate verdict | SKIPPED | INTERRUPTED | ERROR …>; jobs: …`).
 
-- Preconditions: AC power and Low Power Mode off, screen unlocked, user idle, Claude Code not working (D28), no other gate or night run. A closed lid means no run (the first check after waking writes a SKIPPED report).
+- Preconditions: AC power and Low Power Mode off (AC because the charge may run out during the night), screen unlocked, user idle, Claude Code not working (D28), no other gate or night run. A closed lid means no run (the first check after waking writes a SKIPPED report).
 - D22: a LaunchAgent runs `night.sh --check` every 60 s; between 00:00 and 03:00 it starts one run per night by opening `night.command` in Terminal, so the run inherits Terminal's Accessibility, Screen Recording and Automation grants (keep them).
 - D23: idle threshold 10 min, or the display-sleep time minus 2 min when that is shorter (minimum 60 s).
 - D24: `caffeinate -d -i -s` holds the Mac and display awake for the whole run; the report records the assertion.

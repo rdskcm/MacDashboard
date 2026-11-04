@@ -17,7 +17,7 @@
 #   -h, --help   this text
 # Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed
 #       during the run | 5 ERROR: at least one scenario not measured (an AX element was still missing after one
-#       retry, or a trace or analysis step of one run failed; the other scenarios ran and are reported) | 64 usage |
+#       retry, or a trace or analysis step of one run failed, or a scroll window left its range; the other scenarios ran and are reported) | 64 usage |
 #       65 precondition refused | 70 runtime error (setup, app launch or window pin, fixture, final verdict) or a shell error (exit 1 before the verdict is reported as 70).
 #       When several apply: 3 over 4 over 5 over 1.
 # Preconditions refuse (65) while any MacDashboard process runs that the gate did not start (tools/perf/foreign-copies.sh
@@ -42,7 +42,7 @@ KEEP=0
 G1_MAX="5.6"
 
 NPASS=0; NFAIL=0; NNOISY=0; INVALID=0; NERROR=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0; VERDICT_DONE=0
-PIDS=""; HOMEDIR=""; BIN=""; PID=""; CAND_APP=""; BASE_APP=""; CUR_PREFIX=""
+PIDS=""; HOMEDIR=""; BIN=""; PID=""; CAND_APP=""; BASE_APP=""; CUR_PREFIX=""; POS_CHECK=0
 
 usage() { sed -n '2,/^[^#]/{/^#/p;}' "$0" | sed 's/^# \{0,1\}//'; }
 log() { echo "[$(date +%T)] $*" | tee -a "${OUT:-/dev/null}/gate.log" 2>/dev/null; }
@@ -211,7 +211,14 @@ for f in summary.tsv report.md runs.tsv; do   # a reused --out keeps the previou
 done
 : > "$OUT/runs.tsv"; : > "$OUT/invalid.log"; : > "$OUT/gate.log"; : > "$OUT/errors.tsv"; : > "$OUT/error-runs.tsv"
 [ -z "$FOREIGN_NOTE" ] || log "$FOREIGN_NOTE"
-"$PERF/power.sh" before "$OUT/power.log" "gate start" || refuse "power: need AC power and Low Power Mode off ($(tail -1 "$OUT/power.log"))"
+"$PERF/power.sh" before "$OUT/power.log" "gate start" || refuse "power: need Low Power Mode off ($(tail -1 "$OUT/power.log"))"
+GATE_POWER="$("$PERF/power.sh" source)"
+# planned minutes: scenario items x runs x arms x about 75 s per run (README)
+_n_items=$(echo $ITEMS | wc -w | tr -d ' ')
+_n_arms=1; [ -n "$BASELINE" ] && _n_arms=2
+PLAN_MIN=$(( (_n_items * ${RUNS:-3} * _n_arms * 75 + 59) / 60 ))
+LONGRUN_WARN="$("$PERF/power.sh" longrun "$PLAN_MIN")"
+[ -z "$LONGRUN_WARN" ] || log "$LONGRUN_WARN"
 
 # ---------------------------------------------------------------- helpers (compiled fresh every run)
 BIN="$OUT/.bin"
@@ -311,11 +318,13 @@ ax_frame() {   # kind value -> "x y w h" (global points, top-left origin) | 1 af
   echo "$out"
 }
 
-# Honest scroll (PERF-GATE-RETARGET): the scroll scenarios scroll at (500,450) (and at (800,450), same scroll area).
-# A scroll area there without a vertical scroll bar means the content fits the window and the scroll moves nothing:
-# the run is then recorded as an idle-page measurement (scrollable 0), never as a scroll. AX read only, before xctrace
-# attaches. No scroll area under the point is retried once, then the run is ERROR (diagnostics written).
-probe_scroll() {   # buf tag -> 0 (for S_SCROLL items "scrollable 1|0" appended to buf) | 1 missed twice
+# Honest scroll (PERF-GATE-RETARGET, SCROLL-BENCH-EDGES): no bar under (500,450) means the content fits the window: the run is
+# an idle-page measurement (scrollable 0), never a scroll. No scroll area is retried once, then ERROR (diagnostics written).
+# S_WAVE items then read the real range with `drv probe` (before xctrace attaches, so its short legs are not measured)
+# and get the SCROLL_* variables the scenario's `drv wave` needs. G3 (S_WAVE 0) only records scrollable.
+probe_scroll() {   # buf tag arm -> 0 (for S_SCROLL items "scrollable 1|0" appended to buf) | 1 missed twice
+  unset SCROLL_RANGE_PT SCROLL_PPE SCROLL_COAST_PT SCROLL_X SCROLL_Y SCROLL_INNER SCROLL_POSLOG SCROLL_POS_HZ SCROLL_SHORT
+  POS_CHECK=0
   [ "$S_SCROLL" = 1 ] || return 0
   local out; out="$(ax vscroll 500,450)"
   if [ "$out" != bar ] && [ "$out" != nobar ]; then
@@ -324,11 +333,49 @@ probe_scroll() {   # buf tag -> 0 (for S_SCROLL items "scrollable 1|0" appended 
     out="$(ax vscroll 500,450)"
   fi
   case "$out" in
-    bar)   echo "scrollable 1" >> "$1" ;;
-    nobar) echo "scrollable 0" >> "$1"
-           log "$2: nothing to scroll under (500,450): recorded as an idle-page measurement (scrollable 0)" ;;
+    bar)   ;;
+    nobar) [ "$S_MUSTSCROLL" = 1 ] && { ax_miss "$2: no scroll bar under (500,450) on a scenario that must scroll"; return 1; }
+           echo "scrollable 0" >> "$1"
+           log "$2: nothing to scroll under (500,450): recorded as an idle-page measurement (scrollable 0)"; return 0 ;;
     *)     ax_miss "AX vscroll found no scroll area under (500,450) after one retry (got: $out)"; return 1 ;;
   esac
+  [ "$S_WAVE" = 1 ] || { echo "scrollable 1" >> "$1"; return 0; }
+  out="$("$BIN/drv" probe "$PID" 500 450 $S_PROBE_MODE 2>&1)"
+  case "$out" in
+    range=*short=1*)
+      local r="${out#range=}"; r="${r%% *}"
+      [ "$S_MUSTSCROLL" = 1 ] && { ax_miss "$2: range $r pt is too short on a scenario that must scroll"; return 1; }
+      printf 'scrollable 0\nrange_pt %s\n' "$r" >> "$1"; export SCROLL_SHORT=1
+      log "$2: range $r pt is too short for the gesture: recorded as an idle-page measurement, no events" ;;
+    range=*)
+      local k v f
+      for f in $out; do
+        k="${f%%=*}"; v="${f#*=}"
+        case "$k" in
+          range) SCROLL_RANGE_PT="$v" ;; ppe) SCROLL_PPE="$v" ;; coast) SCROLL_COAST_PT="$v" ;;
+          x) SCROLL_X="$v" ;; y) SCROLL_Y="$v" ;; inner) SCROLL_INNER="$v" ;;
+        esac
+      done
+      printf 'scrollable 1\nrange_pt %s\n' "$SCROLL_RANGE_PT" >> "$1"
+      [ -z "${GATE_TEST_RANGE_SCALE:-}" ] || SCROLL_RANGE_PT="$(awk -v r="$SCROLL_RANGE_PT" -v s="$GATE_TEST_RANGE_SCALE" 'BEGIN{printf "%.1f", r*s}')"
+      SCROLL_POSLOG="$CUR_PREFIX-pos.log"; SCROLL_POS_HZ=10
+      if [ "$3" = cand ] && [ -n "${GATE_TEST_CAND_POS_HZ:-}" ]; then SCROLL_POS_HZ="$GATE_TEST_CAND_POS_HZ"; fi
+      export SCROLL_RANGE_PT SCROLL_PPE SCROLL_COAST_PT SCROLL_X SCROLL_Y SCROLL_INNER SCROLL_POSLOG SCROLL_POS_HZ
+      POS_CHECK=1
+      log "$2: $out" ;;
+    *) ax_miss "$2: drv probe could not read the scroll range (got: $out)"; return 1 ;;
+  esac
+}
+
+# A scroll window that left its range has no figure: the run becomes ERROR (SCROLL-BENCH-EDGES). Called from analyze_item.
+check_pos() {   # prefix buf an -> 0 | 1 with ERR_WHY / ERR_DIAG set
+  [ "$POS_CHECK" = 1 ] || return 0
+  if [ ! -f "$1-pos.log" ]; then
+    ERR_WHY="no position log: $(grep -m1 '^drv-error' "$1-drv.txt" 2>/dev/null || echo 'the scroll wave wrote none')"; ERR_DIAG="$1-drv.txt"; return 1
+  fi
+  az "$2" "" "$3" -- pos "$1-pos.log" || return 1
+  local why; why="$(sed -n 's/^POS-INVALID //p' "$3" | head -1)"
+  [ -z "$why" ] || { ERR_WHY="scroll window left the page's range: $why"; ERR_DIAG="$1-pos.log"; return 1; }
 }
 
 park_pointer() { "$BIN/hold" 1100 500 0.4 >/dev/null 2>&1; }   # drv move with 0 s is a no-op
@@ -415,11 +462,13 @@ topsamp() {   # N pid -> "S <epoch>" per sample, "P <epoch> <pid> <cmd> <cpu>" f
 route_cpu() { route_mac || return 1; ax_press id home-tile-cpu || return 1; sleep 2; }
 
 # Sets S_ROUTE S_PRE (extra wait after the route, s) S_SECS (record length) S_SCEN S_ARGS S_TABLES S_INSTR.
-# S_SCROLL (1 = scroll scenario, probe_scroll records scrollable).
+# S_SCROLL (1 = scroll scenario, probe_scroll records scrollable), S_WAVE (1 = the scenario runs `drv wave`: probe_scroll reads the
+# range first), S_MUSTSCROLL (1 = no bar or a too-short range is an ERROR), S_PROBE_MODE (inner = probe the table's own scroll area).
 TP_INSTR=(--instrument 'Time Profiler' --instrument Hitches)
 CA_INSTR=(--instrument 'Core Animation Commits' --instrument 'Core Animation Server' --instrument 'Time Profiler')
 define_item() {
   S_ROUTE=mac; S_PRE=3; S_ARGS=""; S_TABLES="time-profile hitches"; S_INSTR=("${TP_INSTR[@]}"); S_SCROLL=0
+  S_WAVE=0; S_MUSTSCROLL=0; S_PROBE_MODE=""
   case "$1" in
     G1) S_PRE=22 ;;
     G9) S_ROUTE=cpu; S_PRE=22 ;;
@@ -431,12 +480,12 @@ define_item() {
     G5) S_ROUTE=report; S_PRE=22; S_SECS=22; S_SCEN=scen-rainbow.sh
         S_TABLES="coreanimation-commit-interval coreanimation-server-interval"
         S_INSTR=(--instrument 'Time Profiler' --instrument Hitches --instrument 'Core Animation Commits' --instrument 'Core Animation Server') ;;
-    G6-page)  S_ROUTE=iphone; S_PRE=2; S_SECS=17; S_SCEN=scen-page.sh ;;
-    G6-table) S_ROUTE=table;  S_PRE=2; S_SECS=24; S_SCEN=scen-table.sh ;;
-    G6-hover) S_ROUTE=iphone; S_PRE=2; S_SECS=20; S_SCEN=scen-hover.sh ;;
+    G6-page)  S_ROUTE=iphone; S_PRE=2; S_SECS=17; S_SCEN=scen-page.sh; S_SCROLL=1; S_WAVE=1; S_MUSTSCROLL=1 ;;
+    G6-table) S_ROUTE=table;  S_PRE=2; S_SECS=24; S_SCEN=scen-table.sh; S_SCROLL=1; S_WAVE=1; S_MUSTSCROLL=1; S_PROBE_MODE=inner ;;
+    G6-hover) S_ROUTE=iphone; S_PRE=2; S_SECS=20; S_SCEN=scen-hover.sh; S_SCROLL=1; S_WAVE=1; S_MUSTSCROLL=1 ;;
     G10) S_PRE=3; S_SECS=20; S_SCEN=scen-resize.sh ;;   # sweep ~8 s nominal, +50% when the app is saturated; starts 3 s in
-    G7) S_SECS=21; S_SCEN=scen-mac-scroll.sh; S_SCROLL=1 ;;
-    GP-*) S_ROUTE="page:${1#GP-}"; S_SECS=21; S_SCEN=scen-mac-scroll.sh; S_SCROLL=1 ;;
+    G7) S_SECS=21; S_SCEN=scen-mac-scroll.sh; S_SCROLL=1; S_WAVE=1 ;;
+    GP-*) S_ROUTE="page:${1#GP-}"; S_SECS=21; S_SCEN=scen-mac-scroll.sh; S_SCROLL=1; S_WAVE=1 ;;
   esac
 }
 
@@ -477,7 +526,7 @@ attempt() {
     local why; why="$(head -1 "$prefix-axdiag/miss.txt" 2>/dev/null)"
     run_error "$item" "$tag" "$prefix" "${why:-window pin check failed}" "$prefix-axdiag"; return 2
   fi
-  if ! do_route || ! probe_scroll "$buf" "$tag"; then   # S6: an AX element still missing after one retry -> this scenario is ERROR, the gate goes on
+  if ! do_route || ! probe_scroll "$buf" "$tag" "$arm"; then   # S6: an AX element still missing after one retry -> this scenario is ERROR, the gate goes on
     stop_app
     local why; why="$(head -1 "$prefix-axdiag/miss.txt" 2>/dev/null)"
     run_error "$item" "$tag" "$prefix" "${why:-route failed}" "$prefix-axdiag"; return 2
@@ -513,9 +562,9 @@ attempt() {
 
   local valid=1
   "$PERF/power.sh" after "$OUT/power.log" "$tag after" || valid=0
-  "$PERF/power.sh" between "$pstart" "$pend" 2>>"$OUT/power.log" || valid=0
+  "$PERF/power.sh" between "$pstart" "$pend" "$GATE_POWER" 2>>"$OUT/power.log" || valid=0
   if [ "$valid" = 0 ]; then
-    echo "$tag: power changed during the run (after-check or Using Batt in [$pstart,$pend])" >> "$OUT/invalid.log"
+    echo "$tag: the power source changed or Low Power Mode came on during the run (the gate started on $GATE_POWER)" >> "$OUT/invalid.log"
     log "$tag: INVALID (power)"
     rm -f "$buf"; cleanup_run "$prefix"; return 1
   fi
@@ -593,6 +642,7 @@ analyze_item() {   # item prefix buf -> 0 | 1 with ERR_WHY / ERR_DIAG set (expor
       az "$buf.top" "" "$an" -- top "$prefix-top.txt" "$PID_LAST" "$t0" "$t1" || { rm -f "$buf.top"; return 1; }
       grep -E '^(app_pct|ws_pct) ' "$buf.top" >> "$buf"; rm -f "$buf.top" ;;
     G6-*)
+      check_pos "$prefix" "$buf" "$an" || return 1
       export_tables "$prefix" || return 1
       az "$buf" "" "$an" -- tp "$prefix" rgba64_shade_conic || return 1 ;;
     G10)
@@ -608,6 +658,7 @@ analyze_item() {   # item prefix buf -> 0 | 1 with ERR_WHY / ERR_DIAG set (expor
         w=b-a; printf "sweep_wall_s %.2f\n", w; if (ap != "") printf "app_cpu_s %.2f\n", ap*w/100; else print "app_cpu_s n/a"; if (wp != "") printf "ws_cpu_s %.2f\n", wp*w/100; else print "ws_cpu_s n/a" }' "$buf.top" >> "$buf"
       rm -f "$buf.top" ;;
     G7|GP-*)
+      check_pos "$prefix" "$buf" "$an" || return 1
       export_tables "$prefix" || return 1
       az "$buf" "" "$an" -- tp "$prefix" || return 1 ;;
   esac
@@ -625,6 +676,8 @@ default_runs() { echo "${RUNS:-3}"; }
 {
   echo "# Perf gate report"
   echo
+  [ -z "$LONGRUN_WARN" ] || { echo "$LONGRUN_WARN"; echo; }
+  [ "$GATE_POWER" != Batt ] || { echo "Power: measured on battery. Compare only with runs on battery."; echo; }
   echo "- date: $(date '+%Y-%m-%d %H:%M:%S %z')"
   echo "- candidate: \`$APP\`"
   echo "- baseline: \`${BASELINE:-none}\`"
@@ -690,7 +743,7 @@ fi
     echo
   fi
   if [ -s "$OUT/errors.tsv" ]; then
-    echo "ERROR scenarios (not measured, no verdict: an AX element was still missing after one retry, or a trace or analysis step failed; their earlier runs are in error-runs.tsv):"
+    echo "ERROR scenarios (not measured, no verdict: an AX element was still missing after one retry, or a trace or analysis step failed, or a scroll window left its range; their earlier runs are in error-runs.tsv):"
     echo
     awk -F'\t' '{h = ($2 ~ /-base[0-9]+$/ && $4 ~ /-axdiag$/) ? " — baseline arm: a baseline built before the PERF-GATE-RETARGET merge can lack this element (README §2)" : ""; print "- " $1 " (" $2 "): " $3 " — diagnostics: `" $4 "`" h}' "$OUT/errors.tsv"
     echo

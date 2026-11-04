@@ -82,7 +82,7 @@ ensure_excluded() {
 }
 
 # ---------------------------------------------------------------- shared checks
-power_ok() { local l="$NIGHT/state/power.log"; [ "$DRY" = 1 ] && l=/dev/null; "$PERF/power.sh" before "$l" night >/dev/null 2>&1; }
+power_ok() { local l="$NIGHT/state/power.log"; [ "$DRY" = 1 ] && l=/dev/null; "$PERF/power.sh" ac "$l" night >/dev/null 2>&1; }
 unlocked() { local r; r="$(ioreg -n Root -d1)"; ! grep -q '"IOConsoleLocked" *= *Yes' <<< "$r"; }
 idle_secs() { ioreg -c IOHIDSystem -d 4 | awk '/"HIDIdleTime"/ {print int($NF/1000000000); exit}'; }
 idle_threshold() {
@@ -319,7 +319,7 @@ hold_tick() {   # hour night -> keeps, starts or ends the evening hold; dims / r
     return 0
   fi
   if [ -f "$NIGHT/runs/$night/started" ]; then hold_release "$night" "tonight's run has started"; return 0; fi
-  if ! "$PERF/power.sh" before /dev/null night >/dev/null 2>&1; then hold_release "$night" "on battery or Low Power Mode on"; return 0; fi
+  if ! "$PERF/power.sh" ac /dev/null night >/dev/null 2>&1; then hold_release "$night" "on battery or Low Power Mode on"; return 0; fi
   if ! unlocked; then hold_release "$night" "screen locked: tonight's run cannot start until it is unlocked"; return 0; fi
   if p="$(hold_live)"; then [ "$DRY" = 0 ] || echo "hold: caffeinate pid $p is holding"
   else busy && return 0; hold_start "$night" "$h" || return 0; fi
@@ -603,7 +603,7 @@ run_gate() {
   # 7. gate
   GOUT="$PERF/out/night-$DATE"
   [ ! -e "$GOUT" ] || GOUT="$GOUT-$(date +%H%M%S)"
-  env -u GATE_TEST_ALLOW_FOREIGN "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MacDashboardBench.app" ${BASE:+--baseline "$BASE"} \
+  env -u GATE_TEST_ALLOW_FOREIGN -u GATE_TEST_RANGE_SCALE -u GATE_TEST_CAND_POS_HZ "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MacDashboardBench.app" ${BASE:+--baseline "$BASE"} \
     --scenarios "${LIST:-all}" --runs "${N:-3}" --out "$GOUT" > "$NIGHT/runs/$DATE/gate.out" 2>&1
   GRC=$?
   GLINE="$(grep '^GATE:' "$NIGHT/runs/$DATE/gate.out" | tail -1)"

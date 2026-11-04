@@ -1,11 +1,5 @@
 #!/bin/bash
-# G6 table: iPhone page with the Table toggle on; scrolls in the page and the table.
+# G6 table: iPhone page with the Table toggle on. Scrolls the table's own scroll area inside its range; drv probe inner moved
+# the page so the table is fully visible and gave the point over it. The page does not move in the window.
 . "$(dirname "$0")/scen-lib.sh"
-mark t0
-runh "$BIN/drv" scroll 800 200 2 -15
-runh "$BIN/drv" scroll 800 200 0.8 8
-runh sleep 2
-runh "$BIN/drv" scroll 400 560 3 -10
-runh sleep 3
-runh "$BIN/drv" scroll 800 380 3 10
-mark t1
+runm "$BIN/drv" wave "$PID" "$SCROLL_X,$SCROLL_Y,168,2" "$SCROLL_X,$SCROLL_Y,180,3" "$SCROLL_X,$SCROLL_Y,180,0"
