@@ -15,10 +15,9 @@ Homebrew 3 packages outdated, System
 Set up… — Time Machine
 Time Machine not set up, Backups
 Show all (5)
-Free up space 18.3 GB
-Local snapshots 3
-Homebrew 3 outdated
-Full Disk Access needed
+Free up 18.3 GB
+Update Homebrew (3)
+Grant Full Disk Access
 You can
 Now
 every 2 s

@@ -16,6 +16,10 @@ final class TimeMachineController {
         /// The destination (`collectTMDestInfo`; nil = tmutil failed) and the local snapshot names
         /// (`collectLocalSnapshotNames`; nil = failed), read through one fresh ReportCollector never shared with a sampler.
         var collect: @MainActor () async -> (dest: TMDestination??, snapshots: [String]?)
+        /// One `tmutil` delete of one validated date. The default refuses: only `.live` can delete, and only in the app itself.
+        var deleteSnapshot: @MainActor (_ date: String) async -> CommandOutcome = { _ in .launchFailed(EPERM) }
+        /// A fresh local snapshot list at the confirm click (nil = the read failed).
+        var listSnapshots: @MainActor () async -> [String]? = { nil }
 
         static let live = Dependencies(
             status: { await ParsedCommand.tmutilStatus.run() },
@@ -25,7 +29,15 @@ final class TimeMachineController {
                 let dest = await collector.collectTMDestInfo()
                 let snapshots = await collector.collectLocalSnapshotNames()
                 return (dest, snapshots)
-            })
+            },
+            deleteSnapshot: { date in
+                guard SnapshotDeletion.mayRunRealDelete(bundleID: Bundle.main.bundleIdentifier, visualFixture: VisualFixture.isRequested) else {
+                    return .launchFailed(EPERM)
+                }
+                return await CommandRunner.run(SnapshotDeletion.tmutilPath, SnapshotDeletion.arguments(date: date),
+                                               timeout: SnapshotDeletion.timeoutSeconds, environment: SnapshotDeletion.environment)
+            },
+            listSnapshots: { await ReportCollector().collectLocalSnapshotNames() })
     }
 
     /// Last `tmutil status` sample while the Backups page polls; nil = not probed on this visit.
@@ -36,6 +48,10 @@ final class TimeMachineController {
     private(set) var updatedAt: Date? = nil
     /// Re-entrancy guard for `refreshNow()`.
     private var refreshing = false
+    /// The inline «Delete N snapshots» confirmation is up. Lives here, not in the card, because Home's chip opens it before the card exists.
+    private(set) var showDeleteConfirm = false
+    /// The running or last deletion run.
+    private(set) var deleteState: SnapshotDeleteState = .idle
 
     /// The poll `observeStatus()` runs and awaits; `stop()` cancels it. Tests read it.
     @ObservationIgnored private(set) var pollTask: Task<Void, Never>?
@@ -47,6 +63,8 @@ final class TimeMachineController {
     @ObservationIgnored private var nextCommandID = 0
     /// The in-flight destination re-read; `stop()` cancels it. Tests await it.
     @ObservationIgnored private(set) var refreshTask: Task<Void, Never>?
+    /// The deletion run in flight; `stop()` cancels it. Tests await it.
+    @ObservationIgnored private(set) var deleteTask: Task<Void, Never>?
 
     private static let idleSampleTicks = 5   // 5 × the 2 s sleep = 10 s
 
@@ -75,6 +93,8 @@ final class TimeMachineController {
         pollTask = nil
         backup = nil
         if case .failed = action { action = .idle }
+        if case .finished = deleteState { deleteState = .idle }   // the note does not outlive the visit
+        if showDeleteConfirm { showDeleteConfirm = false }        // nor does a request (Home's chip) the page never showed
     }
 
     private func poll() async {
@@ -89,6 +109,7 @@ final class TimeMachineController {
                 let wasRunning = backup?.running == true
                 let sample = outcome.nonEmptyText.flatMap { TimeMachineStatus.parse(text: $0) } ?? .idle
                 if backup != sample { backup = sample }
+                if sample.running && showDeleteConfirm { showDeleteConfirm = false }   // the button is disabled now; the panel goes with it
                 switch action {
                 case .starting:
                     if sample.running { action = .idle; pollsSinceStart = 0 }
@@ -109,7 +130,9 @@ final class TimeMachineController {
     /// REDESIGN-BACKUPS R3: `tmutil startbackup` (no root per tmutil(8)); the poll confirms it began.
     func startBackupNow() {
         switch action { case .idle, .failed: break; case .starting, .stopping: return }   // a failed attempt may be retried
+        guard deleteState != .deleting else { return }   // deletion together with a starting backup is untested
         guard case .some(.some(let dest)) = host.read().tmDest, dest.mountPoint != nil else { return }
+        if showDeleteConfirm { showDeleteConfirm = false }
         action = .starting
         runCommand("startbackup") { L.bkStartFailed($0) }
     }
@@ -140,6 +163,75 @@ final class TimeMachineController {
     /// First non-blank line of a command's stderr, or a generic reason.
     private static func firstLine(_ s: String) -> String {
         s.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? L.bkFailedNoReason
+    }
+
+    // MARK: - Delete local snapshots (STORAGE-ACTIONS-COPY Stage 2)
+
+    /// The header button and Home's chip. Opens the confirmation; nothing is deleted here. The request lives for one
+    /// Backups visit: `observeStatus()` clears it when that visit ends, whether or not the panel mounted. Does nothing while a run is
+    /// in flight or a known backup is running (Home does not know `backup`: `runSnapshotDelete` asks again at the click).
+    func requestSnapshotDelete() {
+        guard deleteState != .deleting, backup?.running != true, action != .starting, action != .stopping else { return }
+        if case .finished = deleteState { deleteState = .idle }
+        showDeleteConfirm = true
+    }
+
+    func cancelSnapshotDelete() {
+        if showDeleteConfirm { showDeleteConfirm = false }
+    }
+
+    /// The panel's Delete button, its only call site. `names` are the ones the panel showed. Without an open confirmation it does nothing.
+    func confirmSnapshotDelete(names: [String]) {
+        guard showDeleteConfirm, deleteState != .deleting else { return }
+        showDeleteConfirm = false
+        deleteState = .deleting
+        deleteTask = Task { [weak self] in
+            guard let self else { return }
+            let result = await self.runSnapshotDelete(confirmed: names)
+            guard !Task.isCancelled else { return }
+            await self.refreshTask?.value                 // an earlier re-read would make `refreshNow()` return without reading
+            guard !Task.isCancelled else { return }
+            self.refreshNow()
+            await self.refreshTask?.value
+            guard !Task.isCancelled else { return }
+            // A run that ends with no page observing has no visit left to clear its note: leave none.
+            self.deleteState = self.pollTask == nil ? .idle : .finished(result)
+            self.deleteTask = nil
+        }
+    }
+
+    /// One `tmutil` run per date, in order. Fresh answers, not the cached ones: `backup` is nil until the Backups page's
+    /// poll has probed, and the list may be hours old while macOS removes snapshots on its own.
+    private func runSnapshotDelete(confirmed: [String]) async -> SnapshotDeleteResult {
+        let status = await deps.status()
+        if status.nonEmptyText.flatMap({ TimeMachineStatus.parse(text: $0) })?.running == true {
+            return SnapshotDeleteResult(deleted: 0, failed: confirmed.count, failure: .backupRunning)
+        }
+        let current = await deps.listSnapshots()
+        let plan = SnapshotDeletion.plan(confirmed: confirmed, current: current)
+        var result = SnapshotDeleteResult(deleted: 0, failed: plan.unparsable, failure: plan.unparsable > 0 ? .tool(nil) : nil, unparsable: plan.unparsable)
+        for (index, date) in plan.dates.enumerated() {
+            guard !Task.isCancelled else { return result }
+            let remaining = plan.dates.count - index
+            if backup?.running == true {                 // the page's poll saw a backup start during the run
+                result.failed += remaining
+                result.failure = .backupRunning
+                return result
+            }
+            let outcome = await deps.deleteSnapshot(date)
+            switch SnapshotDeletion.verdict(outcome) {
+            case .deleted:
+                result.deleted += 1
+            case .failed(let failure, let stopsTheRun):
+                result.failed += 1
+                result.failure = failure
+                if stopsTheRun {
+                    result.failed += remaining - 1
+                    return result
+                }
+            }
+        }
+        return result
     }
 
     // MARK: - Destination
@@ -182,12 +274,20 @@ final class TimeMachineController {
         self.updatedAt = updatedAt; self.backup = backup; self.action = action
     }
 
+    /// Visual fixture only: the confirmation and the deletion states.
+    func applyFixtureSnapshotDelete(confirm: Bool = false, state: SnapshotDeleteState = .idle) {
+        showDeleteConfirm = confirm; deleteState = state
+    }
+
     /// Cancels the poll, every in-flight start/stop command and the re-read; the coordinator's `stop()` calls it.
     func stop() {
         pollTask?.cancel()
         pollTask = nil
         for task in commandTasks.values { task.cancel() }
         commandTasks = [:]
+        deleteTask?.cancel()
+        deleteTask = nil
+        if deleteState == .deleting { deleteState = .idle }
         refreshTask?.cancel()
         refreshTask = nil
     }

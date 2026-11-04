@@ -324,6 +324,19 @@ extension SerialTests {
                 $0.report.tmDest = .some(bkDest(last: homeRef - 9 * 86_400, mounted: true))
                 $0.timeMachine.applyFixture(updatedAt: homeRef, backup: nil, action: .failed(L.bkStartDidNotBegin))
             }
+            // STORAGE-ACTIONS-COPY Stage 2: the delete button, the confirmation and the outcomes. States only: nothing here calls `confirmSnapshotDelete`.
+            let bkDeleteOne = backups {
+                $0.report.tmDest = .some(bkDest(last: homeRef - 50 * 60, mounted: true))
+                $0.report.snapshots = ["com.apple.TimeMachine.2026-01-15-090000.local"]
+            }
+            let bkUnread = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 50 * 60, mounted: true)); $0.report.snapshots = nil }
+            @MainActor func bkDelete(confirm: Bool = false, state: SnapshotDeleteState = .idle) -> AppModel {
+                backups {
+                    $0.report.tmDest = .some(bkDest(last: homeRef - 50 * 60, mounted: true))
+                    $0.timeMachine.applyFixtureSnapshotDelete(confirm: confirm, state: state)
+                }
+            }
+            let bkFailLine = "Failed to delete local snapshot '2026-01-15-090000'"
             let bkClaudeStale = backups {
                 $0.claudeBackup = .lastSuccess(homeRef - 4 * 86_400)
                 $0.claudeRun.applyFixture(job: $0.claudeRun.job, attempt: .init(at: homeRef - 4 * 86_400, result: .ok, mount: "/Volumes/Backup SSD"), diskConnected: true, action: .idle)
@@ -737,6 +750,37 @@ extension SerialTests {
                 run.snap("content-backups-narrow", mode, width: 904) {
                     VStack(spacing: 16) { BackupsTimeMachineCard(model: bkOk, narrow: true); BackupsTimeMachineCard(model: bkOverdue7, narrow: true) }
                 }
+                run.snap("content-backups-narrowest", mode, width: 844) {
+                    BackupsTimeMachineCard(model: bkOk, narrow: true)
+                }
+                run.snap("content-backups-delete-enabled", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        BackupsTimeMachineCard(model: bkOk, narrow: false); BackupsTimeMachineCard(model: bkNotSet, narrow: false)
+                        BackupsTimeMachineCard(model: bkDeleteOne, narrow: false)
+                    }
+                }
+                run.snap("content-backups-delete-confirm", mode, width: 1094) {
+                    BackupsTimeMachineCard(model: bkDelete(confirm: true), narrow: false)
+                }
+                run.snap("content-backups-delete-confirm-narrowest", mode, width: 844) {
+                    BackupsTimeMachineCard(model: bkDelete(confirm: true), narrow: true)
+                }
+                run.snap("content-backups-delete-busy", mode, width: 1094) {
+                    BackupsTimeMachineCard(model: bkDelete(state: .deleting), narrow: false)
+                }
+                run.snap("content-backups-delete-results", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        BackupsTimeMachineCard(model: bkDelete(state: .finished(SnapshotDeleteResult(deleted: 3, failed: 0, failure: nil))), narrow: false)
+                        BackupsTimeMachineCard(model: bkDelete(state: .finished(SnapshotDeleteResult(deleted: 1, failed: 2, failure: .tool(bkFailLine)))), narrow: false)
+                        BackupsTimeMachineCard(model: bkDelete(state: .finished(SnapshotDeleteResult(deleted: 0, failed: 3, failure: .tool(bkFailLine)))), narrow: false)
+                        BackupsTimeMachineCard(model: bkDelete(state: .finished(SnapshotDeleteResult(deleted: 0, failed: 3, failure: .permission))), narrow: false)
+                    }
+                }
+                run.snap("content-backups-delete-disabled", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        BackupsTimeMachineCard(model: bkBacking, narrow: false); BackupsTimeMachineCard(model: bkUnread, narrow: false)
+                    }
+                }
                 run.snap("content-backups-bars", mode, width: 1150) {
                     VStack(spacing: 12) {
                         BackupsPageBar(model: bkNotSet) {}; BackupsPageBar(model: bkOk) {}; BackupsPageBar(model: bkOverdue7) {}
@@ -860,6 +904,10 @@ extension SerialTests {
                         HistoryPageBar(model: historyAll) {}; HistoryPageBar(model: historyOneDay) {}; HistoryPageBar(model: historyNoDays) {}
                         HistoryPageBar(model: historyUnreadable) {}; HistoryPageBar(model: historyReading) {}
                     }
+                }
+                run.snap("content-home-snapshots-low", mode, width: 1094) {
+                    HomeAttentionCard(model: fixtureHome { $0.disk = DiskInfo(size: 256 * GIB, avail: 40 * GIB, dataUsed: nil, sysUsed: nil) },
+                                      router: NavigationRouter(), width: LiveWindowWidth(1150))
                 }
                 run.snap("content-home-attention", mode, width: 1094) {
                     VStack(alignment: .leading, spacing: 24) {

@@ -17,7 +17,6 @@ Details — Battery
 Update — Homebrew
 Set up… — Time Machine
 Show all (5)
-Full Disk Access needed
 Now
 every 2 s
 CPU, 25.7%, 48 °C, load 2.10 · 8 cores

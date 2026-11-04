@@ -72,6 +72,24 @@ protocol BackupsStrings {
     var bkPurgeableNote: String { get }
     func bkLatestSnapshotToday(_ t: String) -> String
     func bkLatestSnapshot(_ d: String) -> String
+    var bkSnapshotsExplanation: String { get }
+    var bkDeleteVerb: String { get }
+    func bkSnapshotCount(_ n: Int) -> String
+    func bkDeleteSnapshots(_ n: Int) -> String
+    var bkDeleteSnapshotsNoCount: String { get }
+    func bkDeleteConfirmTitle(_ n: Int) -> String
+    var bkDeleteConfirmText: String { get }
+    var bkDeleteWaitBackup: String { get }
+    var bkDeleteListUnread: String { get }
+    var bkDeletingHelp: String { get }
+    func bkSnapshotsDeleted(_ n: Int) -> String
+    func bkSnapshotsDeletedPartly(_ deleted: Int, _ total: Int, _ why: String) -> String
+    func bkSnapshotsDeleteFailed(_ n: Int, _ why: String) -> String
+    var bkSnapshotsNeedFDA: String { get }
+    var bkSnapshotsBackupRunning: String { get }
+    func bkSnapshotsTimedOut(_ seconds: Int) -> String
+    var bkSnapshotsCheckFDA: String { get }
+    var bkSnapshotsAlreadyGone: String { get }
     var bkBackUpNow: String { get }
     var bkBackUpNowA11y: String { get }
     func bkConnectFirst(_ disk: String) -> String
@@ -202,6 +220,24 @@ extension StringsEN: BackupsStrings {
     var bkPurgeableNote: String { "snapshots and caches" }
     func bkLatestSnapshotToday(_ t: String) -> String { "latest today at \(t)" }
     func bkLatestSnapshot(_ d: String) -> String { "latest \(d)" }
+    var bkSnapshotsExplanation: String { "Restore points on this Mac’s disk. macOS deletes them on its own when it needs the space." }
+    var bkDeleteVerb: String { "Delete" }
+    func bkSnapshotCount(_ n: Int) -> String { "\(n) \(n == 1 ? "snapshot" : "snapshots")" }
+    func bkDeleteSnapshots(_ n: Int) -> String { "Delete \(bkSnapshotCount(n))" }
+    var bkDeleteSnapshotsNoCount: String { "Delete snapshots" }
+    func bkDeleteConfirmTitle(_ n: Int) -> String { "Delete \(n) local \(n == 1 ? "snapshot" : "snapshots")?" }
+    var bkDeleteConfirmText: String { "Deleted snapshots can’t be brought back. Backups on an external disk are not touched. While automatic backups are on, macOS creates new snapshots, so the count will go up again." }
+    var bkDeleteWaitBackup: String { "A backup is running. Delete snapshots when it finishes." }
+    var bkDeleteListUnread: String { "The snapshot list hasn’t been read yet." }
+    var bkDeletingHelp: String { "Snapshots are being deleted." }
+    func bkSnapshotsDeleted(_ n: Int) -> String { "Deleted \(bkSnapshotCount(n))." }
+    func bkSnapshotsDeletedPartly(_ deleted: Int, _ total: Int, _ why: String) -> String { "Deleted \(deleted) of \(total) snapshots. The others are still on the disk: \(why)" }
+    func bkSnapshotsDeleteFailed(_ n: Int, _ why: String) -> String { "Couldn’t delete \(bkSnapshotCount(n)): \(why)" }
+    var bkSnapshotsNeedFDA: String { "the app needs Full Disk Access. Turn it on in Privacy & Security, then try again." }
+    var bkSnapshotsBackupRunning: String { "a backup is running. Try again when it finishes." }
+    func bkSnapshotsTimedOut(_ seconds: Int) -> String { "tmutil did not answer in \(seconds) s." }
+    var bkSnapshotsCheckFDA: String { "Check that the app has Full Disk Access." }
+    var bkSnapshotsAlreadyGone: String { "macOS has already removed these snapshots." }
     var bkBackUpNow: String { "Back up now" }
     var bkBackUpNowA11y: String { "Start a Time Machine backup now" }
     func bkConnectFirst(_ disk: String) -> String { "Connect \(disk) first" }
@@ -332,6 +368,24 @@ extension StringsRU: BackupsStrings {
     var bkPurgeableNote: String { "снимки и кэши" }
     func bkLatestSnapshotToday(_ t: String) -> String { "последний сегодня в \(t)" }
     func bkLatestSnapshot(_ d: String) -> String { "последний \(d)" }
+    var bkSnapshotsExplanation: String { "Точки восстановления на диске этого Mac. macOS удаляет их сама, когда нужно место." }
+    var bkDeleteVerb: String { "Удалить" }
+    func bkSnapshotCount(_ n: Int) -> String { "\(n) \(ruPlural(n, "снимок", "снимка", "снимков"))" }
+    func bkDeleteSnapshots(_ n: Int) -> String { "Удалить \(bkSnapshotCount(n))" }
+    var bkDeleteSnapshotsNoCount: String { "Удалить снимки" }
+    func bkDeleteConfirmTitle(_ n: Int) -> String { "Удалить \(n) \(ruPlural(n, "локальный снимок", "локальных снимка", "локальных снимков"))?" }
+    var bkDeleteConfirmText: String { "Удалённые снимки нельзя вернуть. Копии на внешнем диске не затрагиваются. Пока включено автоматическое копирование, macOS создаёт новые снимки, поэтому их число снова вырастет." }
+    var bkDeleteWaitBackup: String { "Идёт копирование. Удалить снимки можно, когда оно закончится." }
+    var bkDeleteListUnread: String { "Список снимков ещё не прочитан." }
+    var bkDeletingHelp: String { "Снимки удаляются." }
+    func bkSnapshotsDeleted(_ n: Int) -> String { "\(ruPlural(n, "Удалён", "Удалено", "Удалено")) \(bkSnapshotCount(n))." }
+    func bkSnapshotsDeletedPartly(_ deleted: Int, _ total: Int, _ why: String) -> String { "Удалено \(deleted) из \(total). Остальные снимки остались на диске: \(why)" }
+    func bkSnapshotsDeleteFailed(_ n: Int, _ why: String) -> String { "Не удалось удалить \(bkSnapshotCount(n)): \(why)" }
+    var bkSnapshotsNeedFDA: String { "приложению нужен полный доступ к диску. Включите его в разделе «Конфиденциальность и безопасность» и повторите." }
+    var bkSnapshotsBackupRunning: String { "идёт копирование. Повторите, когда оно закончится." }
+    func bkSnapshotsTimedOut(_ seconds: Int) -> String { "tmutil не ответил за \(seconds) с." }
+    var bkSnapshotsCheckFDA: String { "Проверьте, что у приложения есть полный доступ к диску." }
+    var bkSnapshotsAlreadyGone: String { "macOS уже удалила эти снимки." }
     var bkBackUpNow: String { "Создать копию" }
     var bkBackUpNowA11y: String { "Начать резервное копирование Time Machine сейчас" }
     func bkConnectFirst(_ disk: String) -> String { "Сначала подключите \(disk)" }
