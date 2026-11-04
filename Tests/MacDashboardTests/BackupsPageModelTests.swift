@@ -190,6 +190,124 @@ extension SerialTests {
             }
         }
 
+        @Test func deleteSnapshotsButton() {
+            let names = (1...3).map { "com.apple.TimeMachine.2026-05-09-0\($0)0000.local" }
+            func make(_ d: TMDestination??, names: [String]?, backup: TMBackupProgress? = nil, delete: SnapshotDeleteState = .idle, open: Bool = false) -> BackupsPageModel {
+                var i = input(d, backup: backup)
+                i.deleteNames = names; i.snapshotDelete = delete; i.deleteConfirmOpen = open
+                return BackupsPageModel.make(i)
+            }
+            let ok: TMDestination?? = .some(.some(dest(last: t0 - 2 * hr)))
+            let running = TMBackupProgress(running: true, stopping: false, phase: "Copying")
+            withLanguage(.en) {
+                let enabled = BackupsTMDeleteButton(title: "Delete 3 snapshots", enabled: true, busy: false, help: nil)
+                #expect(make(ok, names: names).tmDeleteButton == enabled)
+                #expect(make(.some(nil), names: names).tmDeleteButton == enabled, "not set up: snapshots may remain")
+                #expect(make(.some(nil), names: names).tmButton == nil)
+                #expect(make(.some(.some(dest(mount: nil, last: t0 - 40 * dy))), names: names).tmDeleteButton == enabled, "overdue, disk away")
+                #expect(make(ok, names: ["com.apple.TimeMachine.2026-05-09-010000.local"]).tmDeleteButton?.title == "Delete 1 snapshot")
+                #expect(make(nil, names: names).tmDeleteButton == nil, "wait")
+                #expect(make(ok, names: []).tmDeleteButton == nil, "none")
+                #expect(make(ok, names: nil).tmDeleteButton == BackupsTMDeleteButton(title: "Delete snapshots", enabled: false, busy: false, help: "The snapshot list hasn’t been read yet."))
+                #expect(make(ok, names: names, backup: running).tmDeleteButton == BackupsTMDeleteButton(title: "Delete 3 snapshots", enabled: false, busy: false, help: "A backup is running. Delete snapshots when it finishes."))
+                let busy = make(ok, names: names, delete: .deleting)
+                #expect(busy.tmDeleteButton == BackupsTMDeleteButton(title: "Delete 3 snapshots", enabled: false, busy: true, help: nil))
+                #expect(busy.tmButton?.enabled == false && busy.tmButton?.help == "Snapshots are being deleted.")
+                #expect(make(ok, names: [], delete: .deleting).tmDeleteButton?.busy == true, "the re-read landed before the run ended")
+                #expect(make(ok, names: names).tmSnapshotsExplanation != nil, "the Stage 1 line stays")
+            }
+            withLanguage(.ru) {
+                #expect(make(ok, names: names).tmDeleteButton?.title == "Удалить 3 снимка")
+            }
+        }
+
+        @Test func deleteConfirmation() {
+            let names = (1...3).map { "com.apple.TimeMachine.2026-05-09-0\($0)0000.local" }
+            func make(_ d: TMDestination??, names: [String]?, backup: TMBackupProgress? = nil, open: Bool) -> BackupsPageModel {
+                var i = input(d, backup: backup)
+                i.deleteNames = names; i.deleteConfirmOpen = open
+                return BackupsPageModel.make(i)
+            }
+            let ok: TMDestination?? = .some(.some(dest(last: t0 - 2 * hr)))
+            withLanguage(.en) {
+                let c = make(ok, names: names, open: true).tmDeleteConfirm
+                #expect(c?.title == "Delete 3 local snapshots?")
+                #expect(c?.text == "Deleted snapshots can’t be brought back. Backups on an external disk are not touched. While automatic backups are on, macOS creates new snapshots, so the count will go up again.")
+                #expect(c?.confirmA11y == "Delete 3 snapshots" && c?.names == names)
+                #expect(make(ok, names: names, open: false).tmDeleteConfirm == nil)
+                #expect(make(ok, names: nil, open: true).tmDeleteConfirm == nil, "unread")
+                #expect(make(ok, names: [], open: true).tmDeleteConfirm == nil, "none left")
+                #expect(make(ok, names: names, backup: TMBackupProgress(running: true, stopping: false, phase: "Copying"), open: true).tmDeleteConfirm == nil, "backup running")
+                #expect(make(.some(nil), names: names, open: true).tmDeleteConfirm?.names == names, "not set up")
+            }
+            withLanguage(.ru) {
+                let c = make(ok, names: names, open: true).tmDeleteConfirm
+                #expect(c?.title == "Удалить 3 локальных снимка?")
+                #expect(c?.text == "Удалённые снимки нельзя вернуть. Копии на внешнем диске не затрагиваются. Пока включено автоматическое копирование, macOS создаёт новые снимки, поэтому их число снова вырастет.")
+                #expect(make(ok, names: ["com.apple.TimeMachine.2026-05-09-010000.local"], open: true).tmDeleteConfirm?.title == "Удалить 1 локальный снимок?")
+            }
+        }
+
+        @Test func deleteOutcomeNotes() {
+            func note(_ deleted: Int, _ failed: Int, _ failure: SnapshotDeleteFailure?) -> BackupsNote? {
+                BackupsPageModel.tmDeleteNote(.finished(SnapshotDeleteResult(deleted: deleted, failed: failed, failure: failure)))
+            }
+            let line = "Failed to delete local snapshot '2026-11-03-043250'"
+            #expect(BackupsPageModel.tmDeleteNote(.idle) == nil && BackupsPageModel.tmDeleteNote(.deleting) == nil)
+            withLanguage(.en) {
+                #expect(note(3, 0, nil) == BackupsNote(tone: .green, text: "Deleted 3 snapshots.", button: nil))
+                #expect(note(1, 0, nil)?.text == "Deleted 1 snapshot.")
+                #expect(note(0, 0, nil) == BackupsNote(tone: .green, text: "macOS has already removed these snapshots.", button: nil))
+                #expect(note(1, 2, .tool(line)) == BackupsNote(tone: .hot, text: "Deleted 1 of 3 snapshots. The others are still on the disk: \(line)", button: nil))
+                #expect(note(0, 3, .tool(line)) == BackupsNote(tone: .hot, text: "Couldn’t delete 3 snapshots: \(line). Check that the app has Full Disk Access.", button: .openFullDiskAccess))
+                #expect(note(0, 3, .tool(nil))?.text == "Couldn’t delete 3 snapshots: tmutil gave no reason. Check that the app has Full Disk Access.")
+                #expect(note(0, 3, .tool("Operation failed."))?.text == "Couldn’t delete 3 snapshots: Operation failed. Check that the app has Full Disk Access.")
+                let unreadable = BackupsPageModel.tmDeleteNote(.finished(SnapshotDeleteResult(deleted: 0, failed: 2, failure: .tool(nil), unparsable: 2)))
+                #expect(unreadable?.button == nil && unreadable?.text.contains("Full Disk Access") == false, "unreadable names are not an access problem")
+                let mixed = BackupsPageModel.tmDeleteNote(.finished(SnapshotDeleteResult(deleted: 0, failed: 3, failure: .tool(line), unparsable: 1)))
+                #expect(mixed?.button == .openFullDiskAccess, "tmutil itself failed on one")
+                #expect(note(0, 3, .permission) == BackupsNote(tone: .hot, text: "Couldn’t delete 3 snapshots: the app needs Full Disk Access. Turn it on in Privacy & Security, then try again.", button: .openFullDiskAccess))
+                #expect(note(1, 2, .permission)?.button == .openFullDiskAccess)
+                #expect(note(0, 1, .backupRunning) == BackupsNote(tone: .hot, text: "Couldn’t delete 1 snapshot: a backup is running. Try again when it finishes.", button: nil))
+                #expect(note(0, 2, .timedOut)?.button == nil)
+                #expect(note(0, 2, .timedOut)?.text == "Couldn’t delete 2 snapshots: tmutil did not answer in 60 s.")
+            }
+            withLanguage(.ru) {
+                #expect(note(1, 0, nil)?.text == "Удалён 1 снимок.")
+                #expect(note(3, 0, nil)?.text == "Удалено 3 снимка.")
+                #expect(note(5, 0, nil)?.text == "Удалено 5 снимков.")
+                #expect(note(1, 2, .tool(line))?.text == "Удалено 1 из 3. Остальные снимки остались на диске: \(line)")
+                #expect(note(0, 3, .permission)?.text == "Не удалось удалить 3 снимка: приложению нужен полный доступ к диску. Включите его в разделе «Конфиденциальность и безопасность» и повторите.")
+            }
+        }
+
+        @Test func snapshotsExplanation() {
+            let textEN = "Restore points on this Mac’s disk. macOS deletes them on its own when it needs the space."
+            let textRU = "Точки восстановления на диске этого Mac. macOS удаляет их сама, когда нужно место."
+            func shown(_ s: TMSchedule?) -> String? {
+                BackupsPageModel.make(input(.some(.some(dest(last: t0 - 50 * min, schedule: s))))).tmSnapshotsExplanation
+            }
+            withLanguage(.en) {
+                #expect(shown(.automatic(intervalSeconds: 3600)) == textEN)
+                #expect(shown(.automatic(intervalSeconds: 86_400)) == textEN)
+                #expect(shown(.automatic(intervalSeconds: 604_800)) == textEN)
+                #expect(shown(.manual) == textEN)
+                #expect(shown(nil) == textEN, "schedule unreadable without Full Disk Access")
+                #expect(BackupsPageModel.make(input(nil)).tmSnapshotsExplanation == nil, "wait: no tiles")
+                let snap = ["com.apple.TimeMachine.2026-05-09-090000.local"]
+                #expect(BackupsPageModel.make(input(.some(nil), snapshots: snap)).tmSnapshotsExplanation == textEN, "not set, with old snapshots")
+                let overdue = BackupsPageModel.make(input(.some(.some(dest(mount: nil, last: t0 - 40 * dy)))))
+                #expect(overdue.tmState == .overdue30); #expect(overdue.tmSnapshotsExplanation == textEN)
+                let backing = BackupsPageModel.make(input(.some(.some(dest(last: t0 - 2 * hr))), action: .starting))
+                #expect(backing.tmState == .backing); #expect(backing.tmSnapshotsExplanation == textEN)
+                let unread = BackupsPageModel.make(input(.some(.some(dest(last: t0 - 2 * hr))), snapshots: nil))
+                #expect(unread.tmTiles.first { $0.id == "snaps" }?.value == "—"); #expect(unread.tmSnapshotsExplanation == textEN)
+                let zero = BackupsPageModel.make(input(.some(.some(dest(last: t0 - 2 * hr))), snapshots: []))
+                #expect(zero.tmTiles.first { $0.id == "snaps" }?.value == "0"); #expect(zero.tmSnapshotsExplanation == textEN)
+            }
+            withLanguage(.ru) { #expect(shown(.automatic(intervalSeconds: 3600)) == textRU) }
+        }
+
         // MARK: caption
 
         @Test func caption() {

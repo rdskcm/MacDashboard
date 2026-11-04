@@ -233,6 +233,12 @@ struct HomeAttentionCard: View {
         }
     }
 
+    /// What a «You can» chip does. Static so a test can press it without a window. The confirmation opens first, then the page.
+    static func activate(_ chip: HomeChip, timeMachine: TimeMachineController, router: NavigationRouter) {
+        if chip.opensDeleteConfirm { timeMachine.requestSnapshotDelete() }
+        router.navigate(to: chip.destination)
+    }
+
     private func youCan(_ chips: [HomeChip]) -> some View {
         FlowLayout(spacing: 8) {
             Text(L.homeYouCan)
@@ -241,7 +247,7 @@ struct HomeAttentionCard: View {
                 .padding(.trailing, 2)
                 .frame(height: 28)
             ForEach(chips) { chip in
-                Button { router.navigate(to: chip.destination) } label: {
+                Button { Self.activate(chip, timeMachine: model.timeMachine, router: router) } label: {
                     HStack(spacing: 6) {
                         Text(chip.object).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(DS3.ink)
                         if let v = chip.value {
@@ -256,7 +262,7 @@ struct HomeAttentionCard: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel([chip.object, chip.value].compactMap { $0 }.joined(separator: " "))
+                .accessibilityLabel(chip.accessibilityText)
             }
         }
     }

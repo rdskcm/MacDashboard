@@ -15,7 +15,9 @@ protocol HomeStrings {
     func homeTileLastCheck(_ t: String) -> String
     func homeShowAll(_ n: Int) -> String
     var homeYouCan: String { get }
-    var homeFreeUpSpace: String { get }
+    var homeFreeUp: String { get }
+    var homeUpdateHomebrew: String { get }
+    var homeGrantFullDiskAccess: String { get }
     func homeBrewOutdatedShort(_ n: Int) -> String
     var homeNothingNeedsAttention: String { get }
     var homeFirstScanTitle: String { get }
@@ -127,7 +129,9 @@ extension StringsEN: HomeStrings {
     func homeTileLastCheck(_ t: String) -> String { "last check \(t)" }
     func homeShowAll(_ n: Int) -> String { "Show all (\(n))" }
     var homeYouCan: String { "You can" }
-    var homeFreeUpSpace: String { "Free up space" }
+    var homeFreeUp: String { "Free up" }
+    var homeUpdateHomebrew: String { "Update Homebrew" }
+    var homeGrantFullDiskAccess: String { "Grant Full Disk Access" }
     func homeBrewOutdatedShort(_ n: Int) -> String { "\(n) outdated" }
     var homeNothingNeedsAttention: String { "Nothing needs your attention" }
     var homeFirstScanTitle: String { "Scanning this Mac for the first time…" }
@@ -246,7 +250,9 @@ extension StringsRU: HomeStrings {
     func homeTileLastCheck(_ t: String) -> String { "проверка в \(t)" }
     func homeShowAll(_ n: Int) -> String { "Показать все (\(n))" }
     var homeYouCan: String { "Можно сделать" }
-    var homeFreeUpSpace: String { "Освободить место" }
+    var homeFreeUp: String { "Освободить" }
+    var homeUpdateHomebrew: String { "Обновить Homebrew" }
+    var homeGrantFullDiskAccess: String { "Дать полный доступ к диску" }
     func homeBrewOutdatedShort(_ n: Int) -> String { "\(n) устар." }
     var homeNothingNeedsAttention: String { "Ничего не требует внимания" }
     var homeFirstScanTitle: String { "Первая проверка Mac…" }

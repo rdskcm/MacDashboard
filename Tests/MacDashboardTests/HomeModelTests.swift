@@ -38,7 +38,7 @@ private func homeInput(_ report: FullReport, _ live: LiveSnapshot, assessment: A
     HomeInput(assessment: assessment ?? homeAssess(report, live), report: report, scan: scan,
               load: [2.1, 1, 1], ncpu: 8, processCount: 412, mem: live.mem, swap: live.swap, disk: live.disk,
               hasBattery: hasBattery, battery: live.battery, system: SystemInfo(chip: "Apple M3", memBytes: 16 * GIB),
-              claudeBackup: nil, backupStaleHours: 24, history: history, now: now)
+              claudeBackup: nil, backupStaleHours: 24, lowSpacePercent: AppSettings.defaultLowSpacePercent, history: history, now: now)
 }
 
 private func dayString(_ offset: Int, from base: Date) -> String {
@@ -134,7 +134,10 @@ extension SerialTests {
         }
 
         @Test func chips() {
-            let (r, live) = homeBadFixture(diskPct: 0.80)
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            let (r, live) = homeBadFixture(diskPct: 0.85)   // 15 % free: low, so the snapshots chip shows
             var report = r
             let home = FileManager.default.homeDirectoryForCurrentUser.path
             report.homeDirs = [DirSize(path: home + "/Downloads", bytes: 14 * GIB),
@@ -146,11 +149,52 @@ extension SerialTests {
             #expect(chips.map(\.id) == ["freeUp", "snapshots", "brew", "fda"])
             let sum = 14 * GIB + GIB + GIB / 2 + 4 * GIB + GIB / 5
             #expect(chips[0].value == fmtBytes(sum))
-            #expect(chips[1].value == "3" && chips[2].value == L.homeBrewOutdatedShort(3) && chips[3].value == nil)
+            #expect(chips[1].value == "3 snapshots" && chips[2].value == "(3)" && chips[3].value == nil)
+            #expect(chips.map(\.object) == ["Free up", "Delete", "Update Homebrew", "Grant Full Disk Access"])
+            #expect(chips.map(\.accessibilityText) == ["Free up 19.7 GB", "Delete 3 snapshots", "Update Homebrew (3)", "Grant Full Disk Access"])
+            #expect(chips.map(\.opensDeleteConfirm) == [false, true, false, false])
+            #expect(chips[1].destination == Destination(.backups, focus: .tm))
+            #expect(chips[2].destination == Destination(.system, focus: .brew))
+            #expect(chips[3].destination == Destination(.storage, focus: .folders, foldersSegment: .home))
+            #expect(StringsEN().homeBrewOutdatedShort(3) == "3 outdated", "the System tile keeps its text")
+            #expect(StringsRU().homeBrewOutdatedShort(3) == "3 устар.", "the System tile keeps its text")
+            L10nStore.shared.language = .ru
+            #expect(HomeModel.chips(homeInput(report, live)).map(\.accessibilityText)
+                    == ["Освободить 19,7 ГБ", "Удалить 3 снимка", "Обновить Homebrew (3)", "Дать полный доступ к диску"])
+            L10nStore.shared.language = .en
             #expect(chips[0].destination == Destination(.storage, focus: .folders, foldersSegment: .home))
             report.homeDirs = [DirSize(path: home + "/Downloads", bytes: 5 * GIB)]
             report.homeCaches = nil
             #expect(!HomeModel.chips(homeInput(report, live)).contains { $0.id == "freeUp" }, "5 GiB Downloads: no chip")
+        }
+
+
+        @Test func snapshotsChipShowsOnlyWhenSpaceIsShort() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            func text(diskPct: Double, names: [String]?) -> String? {
+                let (r, live) = homeBadFixture(diskPct: diskPct)
+                var report = r
+                report.snapshots = names
+                return HomeModel.chips(homeInput(report, live)).first { $0.id == "snapshots" }?.accessibilityText
+            }
+            let three = ["a", "b", "c"]
+            #expect(text(diskPct: 0.50, names: three) == nil, "space ok")
+            #expect(text(diskPct: 0.85, names: three) == "Delete 3 snapshots", "low")
+            #expect(text(diskPct: 0.95, names: three) == "Delete 3 snapshots", "critical")
+            #expect(text(diskPct: 0.85, names: ["a"]) == "Delete 1 snapshot")
+            #expect(text(diskPct: 0.85, names: []) == nil)
+            #expect(text(diskPct: 0.85, names: nil) == nil)
+            var (report, live) = homeBadFixture(diskPct: 0.85)
+            report.snapshots = three
+            var strict = homeInput(report, live)
+            strict.lowSpacePercent = 10
+            #expect(!HomeModel.chips(strict).contains { $0.id == "snapshots" }, "15 % free is fine at a 10 % setting")
+            live.disk = nil
+            #expect(!HomeModel.chips(homeInput(report, live)).contains { $0.id == "snapshots" }, "disk not read yet")
+            #expect((1...2).map { StringsRU().bkSnapshotCount($0) } == ["1 снимок", "2 снимка"])
+            #expect([3, 5, 11, 21].map { StringsRU().bkDeleteSnapshots($0) } == ["Удалить 3 снимка", "Удалить 5 снимков", "Удалить 11 снимков", "Удалить 21 снимок"])
         }
 
         @Test func tiles() {

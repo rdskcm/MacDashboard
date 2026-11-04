@@ -22,6 +22,14 @@ import Testing
     /// When set, `command` / `collect` park until released (not cancellation-aware, like a running process).
     var holdCommand = false
     var holdCollect = false
+    /// What `listSnapshots` returns (nil = the read failed) and each `deleteSnapshot` outcome by date; absent = exit 0.
+    var currentSnapshots: [String]? = nil
+    var deleteResults: [String: CommandOutcome] = [:]
+    var holdDelete = false
+    private(set) var deletes: [String] = []
+    private(set) var deleteParked = false
+    private var deleteGate: CheckedContinuation<Void, Never>?
+    func releaseDelete() { deleteGate?.resume(); deleteGate = nil }
     private(set) var statusCalls = 0
     private(set) var commands: [String] = []
     private(set) var collectCalls = 0
@@ -52,7 +60,15 @@ import Testing
                     await withCheckedContinuation { self.collectGate = $0; self.collectParked = true }
                 }
                 return self.collected
-            })
+            },
+            deleteSnapshot: { date in
+                self.deletes.append(date)
+                if self.holdDelete {
+                    await withCheckedContinuation { self.deleteGate = $0; self.deleteParked = true }
+                }
+                return self.deleteResults[date] ?? FakeTimeMachine.exit0
+            },
+            listSnapshots: { self.currentSnapshots })
     }
 }
 
@@ -296,6 +312,219 @@ extension SerialTests {
             c.markUpdated()
             #expect(host.updateCalls == 1 && c.updatedAt == clock.now)
         }
+        // STORAGE-ACTIONS-COPY Stage 2. Every test here runs through the fake; `liveDeleteIsRefused` proves the live closure refuses.
+        private func snap(_ time: String) -> String { "com.apple.TimeMachine.2026-11-03-\(time).local" }
+        private func exit70(_ line: String) -> CommandOutcome {
+            CommandOutcome(termination: .exited(70), stdout: "", stdoutTruncated: false, stderrHead: line + "\n")
+        }
+
+        /// The Backups page is open (a run that ends with no page observing leaves no note). Paused, so the poll adds no status reads.
+        private func openPage(_ c: TimeMachineController, _ host: FakeHost) async -> Task<Void, Never> {
+            host.paused = true
+            let visit = Task { await c.observeStatus() }
+            await settle { c.pollTask != nil }
+            return visit
+        }
+
+        @Test func noDeleteWithoutTheConfirmation() async {
+            let (c, _, fake, _) = make()
+            fake.currentSnapshots = [snap("043250")]
+            c.confirmSnapshotDelete(names: [snap("043250")])
+            await c.deleteTask?.value
+            #expect(fake.deletes.isEmpty && fake.statusCalls == 0 && c.deleteState == .idle)
+            c.requestSnapshotDelete()
+            #expect(c.showDeleteConfirm && fake.deletes.isEmpty, "opening the panel deletes nothing")
+            c.cancelSnapshotDelete()
+            c.confirmSnapshotDelete(names: [snap("043250")])
+            await c.deleteTask?.value
+            #expect(fake.deletes.isEmpty && c.deleteState == .idle, "a cancelled panel deletes nothing")
+        }
+
+        @Test func deletesEachDateInOrderThenReReads() async {
+            let (c, host, fake, _) = make()
+            let visit = await openPage(c, host); defer { visit.cancel() }
+            fake.currentSnapshots = [snap("043250"), snap("053250")]
+            fake.collected = (nil, [])
+            host.report.snapshots = [snap("043250"), snap("053250")]
+            c.requestSnapshotDelete()
+            c.confirmSnapshotDelete(names: [snap("043250"), snap("053250")])
+            #expect(!c.showDeleteConfirm && c.deleteState == .deleting)
+            await c.deleteTask?.value
+            #expect(fake.deletes == ["2026-11-03-043250", "2026-11-03-053250"])
+            #expect(c.deleteState == .finished(SnapshotDeleteResult(deleted: 2, failed: 0, failure: nil)))
+            #expect(fake.statusCalls == 1, "one status read at the click, no polling")
+            #expect(fake.collectCalls == 1 && host.report.snapshots == [] && host.reassessCalls == 1)
+        }
+
+        @Test func anEarlierReReadDoesNotSwallowTheOneAfterTheRun() async {
+            let (c, host, fake, _) = make()
+            fake.currentSnapshots = [snap("043250")]
+            fake.collected = (nil, [snap("043250")])
+            fake.holdCollect = true
+            c.refreshNow()
+            await settle { fake.collectParked }
+            c.requestSnapshotDelete()
+            c.confirmSnapshotDelete(names: [snap("043250")])
+            await settle { fake.deletes.count == 1 }
+            fake.holdCollect = false
+            fake.collected = (nil, [])
+            fake.releaseCollect()
+            await c.deleteTask?.value
+            #expect(fake.collectCalls == 2 && host.report.snapshots == [])
+        }
+
+        @Test func noSecondRunWhileOneIsInFlight() async {
+            let (c, host, fake, _) = make()
+            host.report.tmDest = .some(dest(mounted: true))
+            fake.currentSnapshots = [snap("043250")]
+            fake.holdDelete = true
+            c.requestSnapshotDelete()
+            c.confirmSnapshotDelete(names: [snap("043250")])
+            await settle { fake.deleteParked }
+            c.requestSnapshotDelete()
+            #expect(!c.showDeleteConfirm)
+            c.confirmSnapshotDelete(names: [snap("043250")])
+            c.startBackupNow()
+            #expect(fake.commands.isEmpty && c.action == .idle, "no backup starts during a run")
+            fake.releaseDelete()
+            await c.deleteTask?.value
+            #expect(fake.deletes.count == 1)
+        }
+
+        @Test func partialFailureContinuesAndCountsHonestly() async {
+            let (c, host, fake, _) = make()
+            let visit = await openPage(c, host); defer { visit.cancel() }
+            let names = [snap("043250"), snap("053250"), snap("063250")]
+            fake.currentSnapshots = names
+            fake.deleteResults["2026-11-03-053250"] = exit70("Failed to delete local snapshot '2026-11-03-053250'")
+            c.requestSnapshotDelete()
+            c.confirmSnapshotDelete(names: names)
+            await c.deleteTask?.value
+            #expect(fake.deletes.count == 3)
+            #expect(c.deleteState == .finished(SnapshotDeleteResult(deleted: 2, failed: 1, failure: .tool("Failed to delete local snapshot '2026-11-03-053250'"))))
+        }
+
+        @Test func permissionFailureAndTimeoutStopTheRun() async {
+            let names = [snap("043250"), snap("053250"), snap("063250")]
+            for (result, failure) in [
+                (CommandOutcome(termination: .exited(1), stdout: "", stdoutTruncated: false, stderrHead: "requires Full Disk Access\n"), SnapshotDeleteFailure.permission),
+                (CommandOutcome(termination: .timedOut, stdout: "", stdoutTruncated: false, stderrHead: ""), SnapshotDeleteFailure.timedOut),
+            ] {
+                let (c, host, fake, _) = make()
+                let visit = await openPage(c, host); defer { visit.cancel() }
+                fake.currentSnapshots = names
+                fake.deleteResults["2026-11-03-053250"] = result
+                c.requestSnapshotDelete()
+                c.confirmSnapshotDelete(names: names)
+                await c.deleteTask?.value
+                #expect(fake.deletes == ["2026-11-03-043250", "2026-11-03-053250"])
+                #expect(c.deleteState == .finished(SnapshotDeleteResult(deleted: 1, failed: 2, failure: failure)))
+            }
+        }
+
+        @Test func aRunningBackupStopsTheRunBeforeAnyDelete() async {
+            let (c, host, fake, _) = make()
+            let visit = await openPage(c, host); defer { visit.cancel() }
+            fake.statuses = [FakeTimeMachine.running]
+            fake.currentSnapshots = [snap("043250")]
+            c.requestSnapshotDelete()   // Home's chip: `backup` is nil, the controller cannot know yet
+            #expect(c.showDeleteConfirm)
+            c.confirmSnapshotDelete(names: [snap("043250")])
+            await c.deleteTask?.value
+            #expect(fake.deletes.isEmpty)
+            #expect(c.deleteState == .finished(SnapshotDeleteResult(deleted: 0, failed: 1, failure: .backupRunning)))
+            #expect(fake.collectCalls == 1, "the list is re-read after a failed run too")
+        }
+
+        @Test func deletesOnlyConfirmedNamesStillOnTheFreshList() async {
+            let (c, host, fake, _) = make()
+            let visit = await openPage(c, host); defer { visit.cancel() }
+            fake.currentSnapshots = [snap("053250"), snap("063250")]   // 043250 vanished, 063250 is new
+            c.requestSnapshotDelete()
+            c.confirmSnapshotDelete(names: [snap("043250"), snap("053250")])
+            await c.deleteTask?.value
+            #expect(fake.deletes == ["2026-11-03-053250"])
+            #expect(c.deleteState == .finished(SnapshotDeleteResult(deleted: 1, failed: 0, failure: nil)))
+        }
+
+        @Test func aBackupSeenByThePollClosesThePanelAndBlocksTheButton() async {
+            let (c, _, fake, _) = make()
+            fake.statuses = [FakeTimeMachine.running]
+            c.requestSnapshotDelete()
+            let visit = Task { await c.observeStatus() }
+            await settle { fake.statusCalls >= 1 && !c.showDeleteConfirm }
+            c.requestSnapshotDelete()
+            #expect(!c.showDeleteConfirm)
+            visit.cancel(); await visit.value
+        }
+
+        @Test func leavingThePageClearsTheNoteAndARequestClearsItToo() async {
+            let (c, _, fake, _) = make()
+            let done = SnapshotDeleteState.finished(SnapshotDeleteResult(deleted: 1, failed: 0, failure: nil))
+            c.applyFixtureSnapshotDelete(state: done)
+            let visit = Task { await c.observeStatus() }
+            await settle { fake.statusCalls >= 1 }
+            visit.cancel(); await visit.value
+            #expect(c.deleteState == .idle)
+            c.applyFixtureSnapshotDelete(state: done)
+            c.requestSnapshotDelete()
+            #expect(c.deleteState == .idle && c.showDeleteConfirm)
+        }
+
+        @Test func aRequestDoesNotSurviveTheVisitItWasMadeFor() async {
+            let (c, _, fake, _) = make()
+            c.requestSnapshotDelete()          // Home's chip; the page then shows `.wait`, so no panel mounts
+            let visit = Task { await c.observeStatus() }
+            await settle { fake.statusCalls >= 1 }
+            #expect(c.showDeleteConfirm)
+            visit.cancel(); await visit.value
+            #expect(!c.showDeleteConfirm)
+        }
+
+        @Test func aRunThatEndsAfterTheVisitLeavesNoNote() async {
+            let (c, _, fake, _) = make()
+            fake.currentSnapshots = [snap("043250")]
+            c.requestSnapshotDelete()
+            c.confirmSnapshotDelete(names: [snap("043250")])
+            await c.deleteTask?.value
+            #expect(c.deleteState == .idle)
+            #expect(fake.collectCalls == 1, "the list is still re-read")
+        }
+
+        @Test func stopCancelsARunAndLeavesNoSpinner() async {
+            let (c, _, fake, _) = make()
+            fake.currentSnapshots = [snap("043250")]
+            fake.holdDelete = true
+            c.requestSnapshotDelete()
+            c.confirmSnapshotDelete(names: [snap("043250")])
+            await settle { fake.deleteParked }
+            let task = c.deleteTask
+            c.stop()
+            #expect(c.deleteState == .idle && c.deleteTask == nil)
+            fake.releaseDelete()
+            await task?.value
+            #expect(c.deleteState == .idle && fake.collectCalls == 0)
+        }
+
+        @Test func homeChipOpensTheConfirmationAndDeletesNothing() async {
+            let (c, _, fake, _) = make()
+            let router = NavigationRouter()
+            let chip = HomeChip(id: "snapshots", object: "Delete", value: "3 snapshots", destination: Destination(.backups, focus: .tm), opensDeleteConfirm: true)
+            HomeAttentionCard.activate(chip, timeMachine: c, router: router)
+            #expect(c.showDeleteConfirm && router.destination == Destination(.backups, focus: .tm))
+            #expect(fake.deletes.isEmpty && fake.statusCalls == 0)
+            let other = HomeChip(id: "brew", object: "Update Homebrew", value: "(3)", destination: Destination(.system, focus: .brew))
+            c.cancelSnapshotDelete()
+            HomeAttentionCard.activate(other, timeMachine: c, router: router)
+            #expect(!c.showDeleteConfirm && router.destination == Destination(.system, focus: .brew))
+        }
+
+        /// The date does not exist on any Mac, so even a broken gate could delete nothing.
+        @Test func liveDeleteIsRefused() async {
+            let outcome = await TimeMachineController.Dependencies.live.deleteSnapshot("1999-01-01-000000")
+            #expect(outcome.termination == .launchFailed(EPERM))
+        }
+
         // 16 (R12) Opt-in: MACDASH_LIVE=1 swift test --filter liveCanaryTimeMachine
         // Runs the production status and collect reads on this Mac. Reads only: never startbackup / stopbackup.
         @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
@@ -317,6 +546,25 @@ extension SerialTests {
                 .filter { $0.range(of: #"^\d{4}-\d{2}-\d{2}-\d{6}"#, options: .regularExpression) != nil }.count
             print("liveCanary listlocalsnapshots names=\(String(describing: snapshots?.count)) listlocalsnapshotdates=\(dateCount)")
             #expect(snapshots?.count == dateCount)                     // an independent tmutil verb agrees on the count
+        }
+
+        // Opt-in: MACDASH_LIVE=1 swift test --filter liveCanarySnapshotDates
+        // STORAGE-ACTIONS-COPY R28. Reads only: the production list closure and `tmutil listlocalsnapshotdates /`. Deletes nothing.
+        @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
+        func liveCanarySnapshotDates() async {
+            let names = await TimeMachineController.Dependencies.live.listSnapshots()
+            print("liveCanary snapshot names=\(String(describing: names))")
+            #expect(names != nil)
+            let dates = (names ?? []).compactMap(SnapshotDeletion.date(fromName:))
+            #expect(dates.count == names?.count, "every real name has the exact shape")
+            func independent(_ env: [String: String]) async -> [String] {
+                let text = await CommandRunner.run("/usr/bin/tmutil", ["listlocalsnapshotdates", "/"], timeout: 15, environment: env).text ?? ""
+                return text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { SnapshotDeletion.isValidDate($0) }
+            }
+            let local = await independent(SnapshotDeletion.environment)
+            let utc = await independent(CommandRunner.defaultEnvironment)
+            print("liveCanary dates=\(dates) listlocalsnapshotdates(local)=\(local) listlocalsnapshotdates(TZ=UTC)=\(utc)")
+            #expect(Set(dates) == Set(local), "the delete argument agrees with an independent tmutil verb in the delete environment")
         }
     }
 }

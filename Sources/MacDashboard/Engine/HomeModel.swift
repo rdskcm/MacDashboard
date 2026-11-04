@@ -29,6 +29,13 @@ struct HomeChip: Identifiable, Equatable {
     let object: String
     let value: String?
     let destination: Destination
+    /// A click also opens the Backups card's delete confirmation (never deletes by itself).
+    var opensDeleteConfirm = false
+}
+
+extension HomeChip {
+    /// The button's VoiceOver label: the visible text, object then value.
+    var accessibilityText: String { [object, value].compactMap { $0 }.joined(separator: " ") }
 }
 
 /// `tone` nil = DS3.ink, .hot = hotInk, .amber = amberInk, .neutral = muted.
@@ -88,6 +95,7 @@ struct HomeInput {
     var system: SystemInfo?
     var claudeBackup: ClaudeBackupStatus?
     var backupStaleHours: Int
+    var lowSpacePercent: Int
     var history: [MacHistoryEntry]
     var now: Date
     /// Precomputed history figures. The app passes the model's cached digest (recomputed only when the history
@@ -300,18 +308,20 @@ enum HomeModel {
         if let d = report.homeCaches, d.bytes > 3 * GIB { freeable += d.bytes }
         let foldersHome = Destination(.storage, focus: .folders, foldersSegment: .home)
         if freeable > 0 {
-            out.append(HomeChip(id: "freeUp", object: L.homeFreeUpSpace, value: fmtBytes(freeable), destination: foldersHome))
+            out.append(HomeChip(id: "freeUp", object: L.homeFreeUp, value: fmtBytes(freeable), destination: foldersHome))
         }
-        if let n = report.snapshots?.count, n > 0 {
-            out.append(HomeChip(id: "snapshots", object: L.commonLocalSnapshots, value: "\(n)",
-                                destination: Destination(.backups, focus: .tm)))
+        // Only when space is short (StorageSpace is the one low-space rule); the Backups card always offers it.
+        let space = input.disk.flatMap { StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: input.lowSpacePercent) }
+        if let n = report.snapshots?.count, n > 0, space == .low || space == .critical {
+            out.append(HomeChip(id: "snapshots", object: L.bkDeleteVerb, value: L.bkSnapshotCount(n),
+                                destination: Destination(.backups, focus: .tm), opensDeleteConfirm: true))
         }
         if let n = report.brewOutdated?.count, n > 0 {
-            out.append(HomeChip(id: "brew", object: "Homebrew", value: L.homeBrewOutdatedShort(n),
+            out.append(HomeChip(id: "brew", object: L.homeUpdateHomebrew, value: "(\(n))",
                                 destination: Destination(.system, focus: .brew)))
         }
         if !report.homeDirsUnreadable.isEmpty || !report.serviceDirsUnreadable.isEmpty {
-            out.append(HomeChip(id: "fda", object: L.commonFullDiskAccessNeeded, value: nil, destination: foldersHome))
+            out.append(HomeChip(id: "fda", object: L.homeGrantFullDiskAccess, value: nil, destination: foldersHome))
         }
         return out
     }

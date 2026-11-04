@@ -48,7 +48,7 @@ extension HomeInput {
                          mem: model.mem, swap: model.swap, disk: model.disk,
                          hasBattery: battery != nil, battery: model.battery,
                          system: model.headerSystem, claudeBackup: model.claudeBackup,
-                         backupStaleHours: model.settings.backupStaleHours,
+                         backupStaleHours: model.settings.backupStaleHours, lowSpacePercent: model.settings.lowSpacePercent,
                          history: [], now: model.now(),
                          historyDigest: model.history.homeDigest)
     }
@@ -62,7 +62,7 @@ extension HomeInput {
         return HomeInput(assessment: model.assessment, report: report, scan: model.blockState(.scan),
                          load: nil, ncpu: model.ncpu, processCount: nil, mem: nil, swap: nil, disk: model.disk,
                          hasBattery: false, battery: model.battery, system: nil, claudeBackup: nil,
-                         backupStaleHours: model.settings.backupStaleHours,
+                         backupStaleHours: model.settings.backupStaleHours, lowSpacePercent: model.settings.lowSpacePercent,
                          history: [], now: model.now())
     }
 

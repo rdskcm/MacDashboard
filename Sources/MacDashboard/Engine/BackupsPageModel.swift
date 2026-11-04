@@ -25,6 +25,12 @@ struct BackupsClaudeButton: Equatable { var busy: Bool; var primary: Bool }
 /// The Time Machine card's Back up now button; nil = not shown (no destination, or not read yet). `help` = why it is disabled.
 struct BackupsTMButton: Equatable { var enabled: Bool; var busy: Bool; var primary: Bool; var help: String? }
 
+/// The Time Machine card's «Delete N snapshots» button; nil = not shown (no snapshots, or `.wait`). `help` = why it is disabled.
+struct BackupsTMDeleteButton: Equatable { var title: String; var enabled: Bool; var busy: Bool; var help: String? }
+
+/// The inline confirmation. `names` are the snapshots it asks about, handed back on Delete.
+struct BackupsDeleteConfirm: Equatable { var title: String; var text: String; var confirmA11y: String; var names: [String] }
+
 struct BackupsNote: Equatable {
     enum Button: Equatable { case setUp, openSettingsBackups, openFullDiskAccess }
     var tone: BackupsTone; var text: String; var button: Button?
@@ -50,14 +56,21 @@ struct BackupsPageModel: Equatable {
         var claudeDiskConnected: Bool? = nil
         var claudeAction: ClaudeBackupAction = .idle
         var claudeUsesDefaultLog = true
+        var deleteNames: [String]? = nil     // model.homeReport.snapshots: stable through a report pass
+        var snapshotDelete: SnapshotDeleteState = .idle
+        var deleteConfirmOpen = false
     }
 
     var tag: BackupsTone = .neutral; var tagText = ""; var sub = ""
     var tmState: TMCardState = .wait; var tmCaption: String? = nil
     var tmNote: BackupsNote? = nil; var tmProgress: BackupsProgress? = nil
     var tmTiles: [BackupsTile] = []           // notset: 3 tiles (snaps, purgeable, dest); else 4 (last, next, dest, snaps)
+    var tmSnapshotsExplanation: String? = nil  // the line under the tiles; nil when the card has no tiles
     var tmFailure: String? = nil              // hot note from TMActionState.failed
     var tmButton: BackupsTMButton? = nil      // nil in .wait and .notSet
+    var tmDeleteButton: BackupsTMDeleteButton? = nil
+    var tmDeleteConfirm: BackupsDeleteConfirm? = nil
+    var tmDeleteNote: BackupsNote? = nil      // the outcome of the last deletion run
     var claudeState: ClaudeCardState = .missing; var claudeCaption = ""
     var claudeRunProgress: BackupsProgress? = nil
     var claudeNote: BackupsNote? = nil; var claudeTiles: [BackupsTile] = []
@@ -95,7 +108,7 @@ struct BackupsPageModel: Equatable {
             let state = tmState(dest: dest, backup: i.backup, action: i.action, now: i.now)
             m.tmState = state
             m.tmCaption = caption(dest: dest, state: state, updatedAt: i.updatedAt)
-            m.tmButton = tmButton(dest: dest, state: state, action: i.action)
+            m.tmButton = tmButton(dest: dest, state: state, action: i.action, deleting: i.snapshotDelete == .deleting)
             switch state {
             case .overdue7, .overdue30:
                 let days = dest.lastBackupDate.map { daysSince($0, now: i.now) } ?? 0
@@ -111,7 +124,15 @@ struct BackupsPageModel: Equatable {
                 snapshotsTile(names: i.snapshots, now: i.now),
             ]
         }
+        // What the «Local snapshots» tile counts (https://support.apple.com/en-us/102154). No frequency in the text: it is true on every schedule.
+        m.tmSnapshotsExplanation = m.tmTiles.isEmpty ? nil : L.bkSnapshotsExplanation
         if case .failed(let msg) = i.action { m.tmFailure = msg }
+        m.tmDeleteButton = tmDeleteButton(names: i.deleteNames, state: m.tmState, deleting: i.snapshotDelete == .deleting)
+        if i.deleteConfirmOpen, m.tmDeleteButton?.enabled == true, let names = i.deleteNames {
+            m.tmDeleteConfirm = BackupsDeleteConfirm(title: L.bkDeleteConfirmTitle(names.count), text: L.bkDeleteConfirmText,
+                                                     confirmA11y: L.bkDeleteSnapshots(names.count), names: names)
+        }
+        m.tmDeleteNote = tmDeleteNote(i.snapshotDelete)
 
         // Claude card
         m.claudeState = claudeState(i.claudeBackup, warnAfterHours: i.warnAfterHours, now: i.now)
@@ -292,13 +313,52 @@ struct BackupsPageModel: Equatable {
     /// Mirrors TimeMachineController.startBackupNow: needs a mounted destination and no start or stop in flight. `.backing`
     /// also covers a running backup, which the controller does not check. A failed action counts as idle: it may be retried.
     /// `dest` is the effective destination: while no backup runs it equals the stored one the controller reads.
-    static func tmButton(dest: TMDestination, state: TMCardState, action: TMActionState) -> BackupsTMButton {
+    static func tmButton(dest: TMDestination, state: TMCardState, action: TMActionState, deleting: Bool = false) -> BackupsTMButton {
         let connected = dest.mountPoint != nil
         let backing = state == .backing
-        let enabled = connected && !backing
+        let enabled = connected && !backing && !deleting
         let overdue = state == .overdue7 || state == .overdue30
-        return BackupsTMButton(enabled: enabled, busy: action == .starting, primary: enabled && overdue,
-                               help: connected || backing ? nil : L.bkConnectFirst(dest.name ?? L.bkTheBackupDisk))
+        let help: String? = deleting ? L.bkDeletingHelp : (connected || backing ? nil : L.bkConnectFirst(dest.name ?? L.bkTheBackupDisk))
+        return BackupsTMButton(enabled: enabled, busy: action == .starting, primary: enabled && overdue, help: help)
+    }
+
+    /// STORAGE-ACTIONS-COPY Stage 2. Disabled during a backup (deletion then is untested and a snapshot may be in use)
+    /// and with an unread list (nothing to name). Hidden only at 0 snapshots and in `.wait`.
+    static func tmDeleteButton(names: [String]?, state: TMCardState, deleting: Bool) -> BackupsTMDeleteButton? {
+        guard state != .wait else { return nil }
+        let count = names?.count ?? 0
+        let title = count > 0 ? L.bkDeleteSnapshots(count) : L.bkDeleteSnapshotsNoCount
+        if deleting { return BackupsTMDeleteButton(title: title, enabled: false, busy: true, help: nil) }
+        guard let names else { return BackupsTMDeleteButton(title: title, enabled: false, busy: false, help: L.bkDeleteListUnread) }
+        guard !names.isEmpty else { return nil }
+        if state == .backing { return BackupsTMDeleteButton(title: title, enabled: false, busy: false, help: L.bkDeleteWaitBackup) }
+        return BackupsTMDeleteButton(title: title, enabled: true, busy: false, help: nil)
+    }
+
+    /// The outcome note. A total failure from tmutil (not of unreadable names) also points at Full Disk Access: what tmutil prints without it inside the app is not measured.
+    static func tmDeleteNote(_ state: SnapshotDeleteState) -> BackupsNote? {
+        guard case .finished(let r) = state else { return nil }
+        guard r.failed > 0 else {
+            return BackupsNote(tone: .green, text: r.deleted > 0 ? L.bkSnapshotsDeleted(r.deleted) : L.bkSnapshotsAlreadyGone, button: nil)
+        }
+        let why: String
+        var button: BackupsNote.Button? = nil
+        var addsCheck = false
+        switch r.failure ?? .tool(nil) {
+        case .permission:
+            why = L.bkSnapshotsNeedFDA
+            button = .openFullDiskAccess
+        case .backupRunning:
+            why = L.bkSnapshotsBackupRunning
+        case .timedOut:
+            why = L.bkSnapshotsTimedOut(Int(SnapshotDeletion.timeoutSeconds))
+        case .tool(let line):
+            why = line ?? L.bkFailedNoReason
+            if r.deleted == 0 && r.failed > r.unparsable { button = .openFullDiskAccess; addsCheck = true }
+        }
+        var text = r.deleted > 0 ? L.bkSnapshotsDeletedPartly(r.deleted, r.deleted + r.failed, why) : L.bkSnapshotsDeleteFailed(r.failed, why)
+        if addsCheck { text += (text.hasSuffix(".") ? " " : ". ") + L.bkSnapshotsCheckFDA }
+        return BackupsNote(tone: .hot, text: text, button: button)
     }
 
     static func progress(dest: TMDestination, backup: TMBackupProgress, action: TMActionState) -> BackupsProgress {
