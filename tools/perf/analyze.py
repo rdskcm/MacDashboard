@@ -15,6 +15,10 @@
   analyze.py verdict <out-dir> [--g1-max PCT]
       Reads <out-dir>/runs.tsv, writes summary.tsv, appends the per-scenario tables to report.md, prints
       `COUNTS pass=<k> fail=<m> noisy=<j>`.
+  analyze.py pos <pos-log>
+      Position log of a scroll window (drv wave, SCROLL-BENCH-EDGES): prints `METRIC end_contact_pct`, `METRIC pos_reads`,
+      `METRIC motion_s`, and `POS-INVALID <why>` when more than 5 % of the reads are within 3 pt of an end of the range
+      or fewer than 50 % of the expected reads were logged. Exit 0 in both cases, 2 on a missing or headerless file.
   analyze.py selftest
       Checks median() and the exact Mann-Whitney p-value; prints `selftest ok`.
 
@@ -29,6 +33,11 @@ import statistics
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
+
+
+POS_CONTACT_PT = 3.0        # a position read within this many points of an end of the range is an end contact
+POS_LIMIT_PCT = 5.0         # a window with more than this share of its reads at an end is invalid
+POS_MIN_READ_SHARE = 0.5    # a window with fewer than this share of the expected reads is invalid
 
 
 def die(msg):
@@ -367,6 +376,52 @@ def mw_p_greater(cand, base):
     return hits / total
 
 
+def pos_eval(range_pt, hz, motion_s, values):
+    """-> (end_contact_pct, why). values = bar values (0..1) read during the motion; why is "" for a valid window."""
+    n = len(values)
+    hits = sum(1 for v in values if v * range_pt <= POS_CONTACT_PT or (1 - v) * range_pt <= POS_CONTACT_PT)
+    pct = 100.0 * hits / n if n else 0.0
+    expected = hz * motion_s
+    if n == 0 or motion_s <= 0:
+        return pct, "no completed scroll window in the position log (%d reads, %.1f s of motion)" % (n, motion_s)
+    if n < POS_MIN_READ_SHARE * expected:
+        return pct, "only %d of about %d position reads were logged" % (n, round(expected))
+    if pct > POS_LIMIT_PCT:
+        return pct, "%.1f %% of %d position reads at an end (limit 5 %%), range %.0f pt" % (pct, n, range_pt)
+    return pct, ""
+
+
+def cmd_pos(argv):
+    if len(argv) != 1:
+        die("usage: analyze.py pos <pos-log>")
+    if not os.path.exists(argv[0]):
+        die("missing " + argv[0])
+    rng = hz = None
+    values, starts, motion = [], [], 0.0
+    for line in open(argv[0]):
+        p = line.split()
+        if not p:
+            continue
+        if p[0] == "#":
+            kv = dict(x.split("=", 1) for x in p[1:] if "=" in x)
+            if "range" in kv:
+                rng, hz = float(kv["range"]), float(kv.get("hz", 10))
+        elif p[0] == "S" and len(p) == 2:
+            starts.append(float(p[1]))
+        elif p[0] == "E" and len(p) == 2 and starts:
+            motion += float(p[1]) - starts.pop()
+        elif p[0] == "P" and len(p) == 3:
+            values.append(float(p[2]))
+    if rng is None:
+        die("no '# range=' header in " + argv[0])
+    pct, why = pos_eval(rng, hz, motion, values)
+    metric("end_contact_pct", pct)
+    metric("pos_reads", len(values))
+    metric("motion_s", motion)
+    if why:
+        print("POS-INVALID " + why)
+
+
 def cmd_selftest(args):
     cases = [
         ("median odd", median([1, 3, 2]) == 2),
@@ -374,6 +429,11 @@ def cmd_selftest(args):
         ("mw 3v3 separated", abs(mw_p_greater([3, 4, 5], [0, 1, 2]) - 0.05) < 1e-9),
         ("mw identical", mw_p_greater([1, 2, 3], [1, 2, 3]) > 0.05),
         ("mw 5v5 separated", abs(mw_p_greater([5, 6, 7, 8, 9], [0, 1, 2, 3, 4]) - 1 / 252) < 1e-9),
+        ("pos all mid valid", pos_eval(1000.0, 10, 9.8, [0.5] * 100)[1] == ""),
+        ("pos 10 of 100 at end invalid", pos_eval(1000.0, 10, 9.8, [0.5] * 90 + [1.0] * 10)[1] != ""),
+        ("pos 10 reads of 98 expected invalid", pos_eval(1000.0, 10, 9.8, [0.5] * 10)[1] != ""),
+        ("pos header only invalid", pos_eval(1000.0, 10, 0.0, [])[1] != ""),
+        ("pos reads without a completed S/E pair invalid", pos_eval(1000.0, 10, 0.0, [0.5] * 20)[1] != ""),
     ]
     for name, ok in cases:
         if not ok:
@@ -496,6 +556,9 @@ def cmd_verdict(argv):
             if have_base:
                 parts.append("baseline %d of %d runs" % (b0, bn))
             title += " — IDLE PAGE: nothing to scroll (%s); measured as an idle page, not as a scroll" % ", ".join(parts)
+        rc, rb = agg(scen, "cand", "range_pt"), agg(scen, "base", "range_pt")
+        if rc is not None and rb is not None and abs(rc - rb) > 0.10 * abs(rb):
+            title += " — RANGE DIFFERS: candidate %s pt, baseline %s pt (same speed and motion time)" % (fmt(rc), fmt(rb))
         # the regression rule compares like with like: both arms scrolled in every run, or neither arm did in any run
         same_scroll = (cn == 0 and bn == 0) or (cn > 0 and bn > 0 and c0 in (0, cn) and b0 in (0, bn) and (c0 == 0) == (b0 == 0))
         rep.append("### %s" % title)
@@ -554,10 +617,10 @@ def cmd_verdict(argv):
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("tp", "ca", "top", "verdict", "selftest"):
+    if len(sys.argv) < 2 or sys.argv[1] not in ("tp", "ca", "top", "verdict", "selftest", "pos"):
         print(__doc__, file=sys.stderr)
         sys.exit(2)
-    {"tp": cmd_tp, "ca": cmd_ca, "top": cmd_top, "verdict": cmd_verdict, "selftest": cmd_selftest}[sys.argv[1]](sys.argv[2:])
+    {"tp": cmd_tp, "ca": cmd_ca, "top": cmd_top, "verdict": cmd_verdict, "selftest": cmd_selftest, "pos": cmd_pos}[sys.argv[1]](sys.argv[2:])
 
 
 if __name__ == "__main__":

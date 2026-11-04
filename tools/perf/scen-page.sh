@@ -1,8 +1,4 @@
 #!/bin/bash
-# G6 page: iPhone page (chart view) scroll down and back.
+# G6 page: iPhone page (chart view), two segments of a triangle wave inside the page's real range.
 . "$(dirname "$0")/scen-lib.sh"
-mark t0
-runh "$BIN/drv" scroll 500 450 3 -15
-runh sleep 3
-runh "$BIN/drv" scroll 500 450 3 15
-mark t1
+runm "$BIN/drv" wave "$PID" 500,450,180,3 500,450,180,0
