@@ -12,7 +12,8 @@ enum Metric: Hashable, Sendable { case cpu, mem }
 /// Mac SoC temperature level (HOME-LEFTOVERS): the one classification every SoC temperature display uses.
 enum SocTempLevel: Equatable, Sendable { case normal, warm, hot }
 
-/// REDESIGN-CPU thresholds (03-cpu:20) and the high-load run tracker.
+/// REDESIGN-CPU thresholds (03-cpu:20) and the high-load run tracker. High = ≥ 85 % for at least 60 s
+/// (TRIAGE-THRESHOLDS-REVIEW D4).
 enum CPULoad {
     static let highUsagePct: Double = 85
     /// SoC temperature thresholds, user decision 2026-10-19 (HOME-LEFTOVERS, option B): Apple publishes no limit and
@@ -78,7 +79,7 @@ struct CPUPageModel: Equatable {
         case .loading: phase = .loading
         case .ok:
             if let cpu = i.cpu {
-                phase = CPULoad.usage(cpu) >= CPULoad.highUsagePct ? .high : .live
+                phase = (CPULoad.usage(cpu) >= CPULoad.highUsagePct && CPULoad.highMinutes(since: i.highSince, now: i.now) != nil) ? .high : .live
             } else {
                 phase = .loading
             }

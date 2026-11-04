@@ -513,23 +513,30 @@ truncation flag) + the first 2 KiB of stderr; .timedOut/.cancelled only when our
 (leader died of SIGKILL, or output was still unread). `outcome.text` keeps the old String? contract:
 nil for launch failure, timeout and cancellation, and for empty stdout unless the leader exited 0.
 
-## 6. Assessment (port of assess() — same thresholds)
+## 6. Assessment (attention rules)
 
-- disk: pct ≥ .85 ⇒ crit "Диск заполнен на N% — срочно освободите место."; ≥ .70 ⇒ warn "… — пора освобождать место."
-- swap used ≥ 2 GiB ⇒ serious problem; ≥ 1 GiB ⇒ warn tip (wording from legacy).
-- battery: maxCapacity < 70 ⇒ serious; < 80 ⇒ warn tip; condition != "Normal" ⇒ serious.
-- security: each of FileVault/Gatekeeper/SIP/Firewall == false ⇒ serious "X выключен — стоит включить." (nil ⇒ silent).
-- updates: count > 0 ⇒ warn "Доступны обновления macOS: N шт."
-- brew outdated > 0 ⇒ tip.
-- crashes: a group whose process == AppInfo.name, or ANY group with isPanic (kernel panic, whatever the process), ⇒ one warn item — "Сбои <app> за последние 7 дней: N шт. …" / "Сбой системы (паника ядра) за последние 7 дней: N шт. …"; other system/third-party groups never raise severity (V2-CRASH-SIGNAL).
-- tmDest == .some(nil) ⇒ warn "Time Machine не настроен — бэкапов нет."
-- smart: any disk with Critical Warning != 0x00 or Media Errors > 0 ⇒ crit;
-  Percentage Used ≥ 80 ⇒ warn; SMART "NO ACCESS" on external ⇒ tip (переподключите кабель / установите smartmontools).
-- homeDirs: Downloads > 10 GiB ⇒ tip («Загрузки» занимают X — стоит разобрать);
-  .Trash > 1 GiB ⇒ tip; ~/Library/Caches > 3 GiB ⇒ tip.
-- homeDirsUnreadable / serviceDirsUnreadable non-empty ⇒ ONE tip + ONE capsule (V2-FDA-DEGRADE),
-  action = Settings → Privacy & Security → Full Disk Access. Never a Problem/AttentionItem: a
-  permission the user has not granted is not a machine fault.
+Severity colours: warn = amber, serious = red. "Category" is the notification category (none = never notifies).
+
+| Kind | Condition | Severity | Category |
+|---|---|---|---|
+| diskFullSoon / diskFull (T1) | free < `lowSpacePercent` % (10/15/20, default 20) AND free < 40 GB: low. free < 10 % AND free < 20 GB: critical | warn / serious | disk |
+| swapHigh (T3) | the system's memory pressure level is critical (kernel `warn` sets the tile and tag only, no row) | serious | none |
+| firewallOff (T7) | firewall explicitly off (unknown is silent) | warn | protection |
+| fileVaultOff, gatekeeperOff, sipOff (T8) | explicitly off (unknown is silent) | serious | protection |
+| updates (T9) | `report.updates` non-empty | warn | updates |
+| crashes (T11) | the app's own crash group, or any kernel panic, in the last 7 days; other groups never raise it | warn | crashes |
+| timeMachine (T12) | Time Machine not configured (`tmDest == .some(nil)`) | warn | backup |
+| timeMachineOverdue (T13) | last backup older than 7 days; older than 30 days; unknown age is silent | warn / serious | backup |
+| claudeBackup (T14) | last successful Claude backup older than the Settings limit (1-30 days, default 2) | warn | backup |
+| smartErrors (T15) | Critical Warning bits 0, 2, 3, 4 or 5 set (bit 1, temperature, alone is not failing), or media errors > 0; an unparseable value counts as failing | serious | none |
+| smartWear (T17) | Percentage Used >= 80 | warn | none |
+| wakeHolders (T20) | a non-OS program has held a sleep-preventing assertion for 300 s or more and is not on the ignore list | warn | none |
+
+Not attention rules: outdated Homebrew packages (T10) are a "You can" chip only. Downloads (> 10 GiB) and Caches (> 3 GiB)
+tips and capsules (T21), and the local-snapshots chip (T22), appear only while the disk level is low or critical; Trash
+(> 1 GiB) stays unconditional. Notifications repeat at most once per kind per 24 hours; a step down inside the disk family
+never notifies. Every rule cites a source or is labelled an assumption; the review is TRIAGE-THRESHOLDS-REVIEW.
+
 - summary: worst severity; "Замечаний: N" | "Всё в порядке".
 Assessment recomputed when report sections change AND lightly on live ticks
 (disk/swap tiles reflect live values).

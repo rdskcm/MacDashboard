@@ -26,6 +26,12 @@ private func homeBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
     return (report, live)
 }
 
+private let tmLate: TMDestination = {
+    var d = TMDestination(name: "Backup", kind: "Local", mountPoint: "/Volumes/B", quotaBytes: nil, lastBackup: nil)
+    d.lastBackupDate = Date().addingTimeInterval(-10 * 86_400)
+    return d
+}()
+
 private func homeAssess(_ report: FullReport, _ live: LiveSnapshot, wake: Bool = true) -> Assessment {
     Assess.assess(report: report, live: live, memPressure: .critical,
                   wakeHolders: wake ? [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)] : [],
@@ -54,8 +60,10 @@ extension SerialTests {
             defer { L10nStore.shared.language = saved }
             L10nStore.shared.language = .en
             var seen = Set<AttentionKind>()
-            for pct in [0.94, 0.80] {
-                let (report, live) = homeBadFixture(diskPct: pct)
+            for pct in [0.94, 0.87] {
+                var (report, live) = homeBadFixture(diskPct: pct)
+                // No report holds both TM kinds: the 0.87 pass carries the overdue one (D7).
+                if pct == 0.87 { report.tmDest = .some(.some(tmLate)) }
                 let a = homeAssess(report, live)
                 let tasks = HomeModel.tasks(a, report: report, disk: live.disk, battery: live.battery)
                 #expect(tasks.map(\.id) == a.items.map(\.id), "tasks keep assessment order")
@@ -69,9 +77,9 @@ extension SerialTests {
                     case .smartErrors: expected = (.storage, .smart, L.homeVerbDetails)
                     case .diskFull, .diskFullSoon: expected = (.storage, .disk, L.homeVerbFreeUp)
                     case .timeMachine: expected = (.backups, .tm, L.commonSetUp)
+                    case .timeMachineOverdue: expected = (.backups, .tm, L.commonShow)
                     case .wakeHolders: expected = (.system, .sleep, L.commonShow)
                     case .batteryCapacity, .batteryCondition: expected = (.battery, .bathero, L.homeVerbDetails)
-                    case .brewOutdated: expected = (.system, .brew, L.homeVerbUpdate)
                     case .updates: expected = (.security, .updates, L.commonInstall)
                     case .swapHigh: expected = (.memory, .usage, L.commonShow)
                     case .fileVaultOff: expected = (.security, .protect, L.homeVerbSettings)
@@ -83,10 +91,11 @@ extension SerialTests {
                     }
                     #expect(t.section == expected.0 && t.destination == Destination(expected.0, focus: expected.1), "section/focus \(t.kind)")
                     #expect(t.verb == expected.2, "verb \(t.kind)")
-                    if t.kind == .sipOff { #expect(t.help == L.homeSipHelp, "sip help") } else { #expect(t.help == item.fullText, "help \(t.kind)") }
+                    if t.kind == .sipOff { #expect(t.help == L.homeSipHelp + " " + L.attnWhySip, "sip help") } else { #expect(t.help == item.fullTextWithWhy, "help \(t.kind)") }
+                    if t.kind == .timeMachineOverdue { #expect(t.tileTag == L.bkTagOverdue, "tag \(t.kind)") }
                 }
             }
-            #expect(seen == Set(AttentionKind.allCases), "all 17 kinds exercised (got \(seen.count))")
+            #expect(seen == Set(AttentionKind.allCases), "all kinds exercised (got \(seen.count))")
 
             let (report, live) = homeBadFixture(diskPct: 0.94)
             let tasks = HomeModel.tasks(homeAssess(report, live), report: report, disk: live.disk, battery: live.battery)
@@ -94,10 +103,13 @@ extension SerialTests {
             #expect(state(.diskFull)?.1 == "94% full", "disk state")
             #expect(state(.wakeHolders)?.0 == "caffeinate", "wake object")
             #expect(state(.updates)?.0 == "macOS 26.1.1" && state(.updates)?.1 == "update available", "updates object/state")
-            #expect(state(.brewOutdated)?.1 == "3 packages outdated", "brew state")
             #expect(state(.batteryCondition)?.1 == L.commonServiceRecommended, "battery condition state")
             #expect(state(.crashes)?.1 == "2 reports", "crashes state")
             #expect(state(.smartWear)?.1 == "85%", "smart wear state")
+            var (lateReport, lateLive) = homeBadFixture(diskPct: 0.87)
+            lateReport.tmDest = .some(.some(tmLate))
+            let lateTasks = HomeModel.tasks(homeAssess(lateReport, lateLive), report: lateReport, disk: lateLive.disk, battery: lateLive.battery)
+            #expect(lateTasks.first { $0.kind == .timeMachineOverdue }?.state == "10 days ago", "TM overdue state")
         }
 
         @Test func updateObject() {
@@ -109,7 +121,7 @@ extension SerialTests {
         }
 
         @Test func status() {
-            let (report, live) = homeBadFixture(diskPct: 0.80)
+            let (report, live) = homeBadFixture(diskPct: 0.87)
             let tasks = HomeModel.tasks(homeAssess(report, live), report: report, disk: live.disk, battery: live.battery)
             let amberOnly = tasks.filter { $0.tone == .amber }
             let now = Date()
@@ -118,6 +130,12 @@ extension SerialTests {
             #expect(HomeModel.status(scan: .ok(at: now), tasks: amberOnly) == .attention)
             #expect(HomeModel.status(scan: .ok(at: now), tasks: tasks) == .critical)
             #expect(HomeModel.status(scan: .refreshing(lastGoodAt: now), tasks: amberOnly) == .attention)
+            var fwReport = FullReport()
+            fwReport.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
+            let fwA = Assess.assess(report: fwReport, live: LiveSnapshot())
+            let fwTasks = HomeModel.tasks(fwA, report: fwReport, disk: nil, battery: nil)
+            #expect(fwTasks.map(\.kind) == [.firewallOff] && HomeModel.status(scan: .ok(at: now), tasks: fwTasks) == .attention,
+                    "a firewall-only task list is attention, not critical")
         }
 
         @Test func scan() {
@@ -137,7 +155,7 @@ extension SerialTests {
             let saved = L10nStore.shared.language
             defer { L10nStore.shared.language = saved }
             L10nStore.shared.language = .en
-            let (r, live) = homeBadFixture(diskPct: 0.85)   // 15 % free: low, so the snapshots chip shows
+            let (r, live) = homeBadFixture(diskPct: 0.87)   // 13 % free: low, so the snapshots chip shows
             var report = r
             let home = FileManager.default.homeDirectoryForCurrentUser.path
             report.homeDirs = [DirSize(path: home + "/Downloads", bytes: 14 * GIB),
@@ -166,6 +184,18 @@ extension SerialTests {
             report.homeDirs = [DirSize(path: home + "/Downloads", bytes: 5 * GIB)]
             report.homeCaches = nil
             #expect(!HomeModel.chips(homeInput(report, live)).contains { $0.id == "freeUp" }, "5 GiB Downloads: no chip")
+            // D8: with space ok, Downloads and Caches drop out; Trash stays, no snapshots chip.
+            var roomy = r
+            roomy.homeDirs = [DirSize(path: home + "/Downloads", bytes: 14 * GIB),
+                              DirSize(path: home + "/.Trash", bytes: GIB + GIB / 2)]
+            roomy.homeCaches = DirSize(path: home + "/Library/Caches", bytes: 4 * GIB + GIB / 5)
+            roomy.snapshots = ["a", "b", "c"]
+            roomy.homeDirsUnreadable = ["/x"]
+            let (_, roomyLive) = homeBadFixture(diskPct: 0.50)
+            let roomyChips = HomeModel.chips(homeInput(roomy, roomyLive))
+            #expect(roomyChips.first { $0.id == "freeUp" }?.value == fmtBytes(GIB + GIB / 2), "space ok: freeUp is the Trash alone")
+            #expect(!roomyChips.contains { $0.id == "snapshots" }, "space ok: no snapshots chip")
+            #expect(roomyChips.map(\.id) == ["freeUp", "brew", "fda"], "space ok: brew and fda stay")
         }
 
 
@@ -181,16 +211,16 @@ extension SerialTests {
             }
             let three = ["a", "b", "c"]
             #expect(text(diskPct: 0.50, names: three) == nil, "space ok")
-            #expect(text(diskPct: 0.85, names: three) == "Delete 3 snapshots", "low")
+            #expect(text(diskPct: 0.87, names: three) == "Delete 3 snapshots", "low")
             #expect(text(diskPct: 0.95, names: three) == "Delete 3 snapshots", "critical")
-            #expect(text(diskPct: 0.85, names: ["a"]) == "Delete 1 snapshot")
-            #expect(text(diskPct: 0.85, names: []) == nil)
-            #expect(text(diskPct: 0.85, names: nil) == nil)
-            var (report, live) = homeBadFixture(diskPct: 0.85)
+            #expect(text(diskPct: 0.87, names: ["a"]) == "Delete 1 snapshot")
+            #expect(text(diskPct: 0.87, names: []) == nil)
+            #expect(text(diskPct: 0.87, names: nil) == nil)
+            var (report, live) = homeBadFixture(diskPct: 0.87)
             report.snapshots = three
             var strict = homeInput(report, live)
             strict.lowSpacePercent = 10
-            #expect(!HomeModel.chips(strict).contains { $0.id == "snapshots" }, "15 % free is fine at a 10 % setting")
+            #expect(!HomeModel.chips(strict).contains { $0.id == "snapshots" }, "13 % free is fine at a 10 % setting")
             live.disk = nil
             #expect(!HomeModel.chips(homeInput(report, live)).contains { $0.id == "snapshots" }, "disk not read yet")
             #expect((1...2).map { StringsRU().bkSnapshotCount($0) } == ["1 снимок", "2 снимка"])
@@ -211,13 +241,16 @@ extension SerialTests {
             #expect(tiles.count == 8)
             #expect(HomeModel.tiles(homeInput(report, live, hasBattery: false), tasks: tasks, scan: .ok(at: now)).count == 7)
             let sec = tiles.first { $0.page == .security }!
-            #expect(sec.tagTone == .hot && sec.tagText == "Firewall off" && sec.hotRing)
+            #expect(sec.tagTone == .amber && sec.tagText == "Firewall off" && !sec.hotRing)
             #expect(sec.destination == Destination(.security, focus: .protect))
             let stor = tiles.first { $0.page == .storage }!
             #expect(stor.tagTone == .hot && stor.tagText == "drive failing", "storage tag from its first (hottest) task")
             let cpu = tiles.first { $0.page == .cpu }!
             #expect(cpu.kvs[0].label == L.homeKVLoad15 && cpu.kvs[0].value == fmtFixed(1, decimals: 2) && cpu.kvs[1].value == "412" && cpu.sub == "Apple M3 · 8 cores")
             #expect(cpu.accessibilityText == "\(cpu.name), Apple M3 · 8 cores, \(cpu.tagText), Load 15 min \(fmtFixed(1, decimals: 2)), Processes 412")
+            let sysTile = tiles.first { $0.page == .system }!
+            let brewKV = sysTile.kvs.first { $0.label == "Homebrew" }
+            #expect(brewKV?.value == L.homeBrewOutdatedShort(3) && brewKV?.tone == nil, "Homebrew KV is not amber at 3 outdated")
             let mem = tiles.first { $0.page == .memory }!
             #expect(mem.kvs.map(\.label) == [L.memPurgeable, L.memFileCache])
             #expect(mem.kvs[0].value == fmtBytes(live.mem!.purgeable) && mem.kvs[1].value == fmtBytes(live.mem!.fileBacked))
@@ -248,6 +281,14 @@ extension SerialTests {
             #expect(HomeModel.protectionOn(nil) == nil)
             #expect(HomeModel.protectionOn(SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true)) == 4)
             #expect(HomeModel.protectionOn(SecurityState(fileVault: true, gatekeeper: true, sip: nil, firewall: false)) == 2)
+        }
+
+        @Test func protectionTone() {
+            #expect(HomeModel.protectionTone(SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: true)) == nil)
+            #expect(HomeModel.protectionTone(SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)) == .amber)
+            #expect(HomeModel.protectionTone(SecurityState(fileVault: false, gatekeeper: true, sip: true, firewall: true)) == .hot)
+            #expect(HomeModel.protectionTone(SecurityState(fileVault: false, gatekeeper: true, sip: true, firewall: false)) == .hot)
+            #expect(HomeModel.protectionTone(nil) == nil)
         }
 
         @Test func monthlyRateAndSigned() {
@@ -296,7 +337,6 @@ extension SerialTests {
             L10nStore.shared.language = .ru
             #expect([1, 3, 5, 11, 21].map { L.homeTaskCount($0) } == ["1 задача", "3 задачи", "5 задач", "11 задач", "21 задача"])
             #expect(L.homeStateReports(4) == "4 отчёта")
-            #expect(L.homeStatePackagesOutdated(3) == "3 пакета устарели")
             #expect(L.homeHistoryDays(98) == "98 дней")
             #expect(L.homeCPUSub("Apple M3", 8) == "Apple M3 · 8 ядер")
             L10nStore.shared.language = .en

@@ -37,6 +37,7 @@ protocol SettingsStrings {
     var settingsSnapshotLabel: String { get }
     var settingsSnapshotSub: String { get }
     var settingsLowSpaceLabel: String { get }
+    func settingsLowSpaceSub(_ gb: Int) -> String
     var settingsClaudeLogLabel: String { get }
     var settingsChoose: String { get }
     var settingsPathMissing: String { get }
@@ -98,6 +99,7 @@ extension StringsEN: SettingsStrings {
     var settingsSnapshotLabel: String { "Daily snapshot" }
     var settingsSnapshotSub: String { "Data for History charts" }
     var settingsLowSpaceLabel: String { "Low-space warning" }
+    func settingsLowSpaceSub(_ gb: Int) -> String { "Below this share of the disk and under \(gb) GB." }
     var settingsClaudeLogLabel: String { "Claude backup log" }
     var settingsChoose: String { "Choose…" }
     var settingsPathMissing: String { "File not found at this path" }
@@ -161,6 +163,7 @@ extension StringsRU: SettingsStrings {
     var settingsSnapshotLabel: String { "Ежедневный снимок" }
     var settingsSnapshotSub: String { "Данные для графиков «История»" }
     var settingsLowSpaceLabel: String { "Мало места, если свободно <" }
+    func settingsLowSpaceSub(_ gb: Int) -> String { "и при этом меньше \(gb) ГБ" }
     var settingsClaudeLogLabel: String { "Журнал бэкапа Claude" }
     var settingsChoose: String { "Выбрать…" }
     var settingsPathMissing: String { "Файл по этому пути не найден" }

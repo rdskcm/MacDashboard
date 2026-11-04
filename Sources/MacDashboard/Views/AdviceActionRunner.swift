@@ -1,7 +1,7 @@
 // Views/AdviceActionRunner.swift
 // Executes the system-facing AdviceActions for the Рекомендации card. UI-owned
-// confirmations happen BEFORE these calls; model-owned actions (brewUpgrade,
-// enableFirewall) never reach here.
+// confirmations happen BEFORE these calls; model-owned actions (enableFirewall,
+// enableGatekeeper) never reach here.
 import AppKit
 
 /// Serial owner of the `NSAppleScript` used by `AdviceActionRunner.emptyTrash`:

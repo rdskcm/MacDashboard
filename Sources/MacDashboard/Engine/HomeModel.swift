@@ -18,7 +18,7 @@ struct HomeTask: Identifiable, Equatable {
     let section: Page
     let destination: Destination
     let verb: String?         // nil = no button (SIP)
-    let help: String          // tooltip: SIP → homeSipHelp, else item.fullText
+    let help: String          // tooltip: SIP → homeSipHelp + why, else item.fullTextWithWhy
     let tileTag: String       // the section tile's tag text when this task is the section's first
     let legacyAction: AdviceAction?   // item.action (used only by decision 1 option A)
     let wakeHolderKeys: [WakeHolderKey]
@@ -209,6 +209,9 @@ enum HomeModel {
         case .timeMachine:
             (section, focus) = (.backups, .tm)
             (object, state, verb, tag) = ("Time Machine", L.homeStateNotSetUp, L.commonSetUp, L.homeTagTMNotSetUp)
+        case .timeMachineOverdue:
+            (section, focus) = (.backups, .tm)
+            (object, state, verb, tag) = ("Time Machine", item.detail, L.commonShow, L.bkTagOverdue)
         case .wakeHolders:
             let keys = item.wakeHolderKeys
             let first = keys.first?.owner ?? item.label
@@ -220,10 +223,6 @@ enum HomeModel {
             let cap = BatteryInfo.merged(live: battery, report: report.battery)?.maxCapacity ?? 100
             (section, focus) = (.battery, .bathero)
             (object, state, verb, tag) = (L.commonBattery, L.homeStateWorn(100 - cap), L.homeVerbDetails, L.homeTagWorn)
-        case .brewOutdated:
-            let n = report.brewOutdated?.count ?? 0
-            (section, focus) = (.system, .brew)
-            (object, state, verb, tag) = ("Homebrew", L.homeStatePackagesOutdated(n), L.homeVerbUpdate, L.homeTagBrewOutdated)
         case .updates:
             let n = report.updates?.count ?? 0
             (section, focus) = (.security, .updates)
@@ -265,7 +264,7 @@ enum HomeModel {
 
         return HomeTask(id: item.id, kind: item.kind, tone: tone, object: object, state: state,
                         section: section, destination: Destination(section, focus: focus),
-                        verb: verb, help: item.kind == .sipOff ? L.homeSipHelp : item.fullText,
+                        verb: verb, help: item.kind == .sipOff ? [L.homeSipHelp, item.why].compactMap { $0 }.joined(separator: " ") : item.fullTextWithWhy,
                         tileTag: tag, legacyAction: item.action, wakeHolderKeys: item.wakeHolderKeys)
     }
 
@@ -300,23 +299,26 @@ enum HomeModel {
         var out: [HomeChip] = []
 
         // Free up space: the folders that raise today's Downloads / Trash / Caches capsules.
+        // Downloads and Caches only when space is short (StorageSpace is the one low-space rule); Trash always.
+        let space = input.disk.flatMap { StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: input.lowSpacePercent) }
+        let short = StorageSpace.suggestsFreeing(space)
         var freeable: Int64 = 0
         for d in report.homeDirs ?? [] {
             let name = (d.path as NSString).lastPathComponent
-            if name == "Downloads", d.bytes > 10 * GIB { freeable += d.bytes }
+            if name == "Downloads", d.bytes > 10 * GIB, short { freeable += d.bytes }
             if name == ".Trash", d.bytes > 1 * GIB { freeable += d.bytes }
         }
-        if let d = report.homeCaches, d.bytes > 3 * GIB { freeable += d.bytes }
+        if short, let d = report.homeCaches, d.bytes > 3 * GIB { freeable += d.bytes }
         let foldersHome = Destination(.storage, focus: .folders, foldersSegment: .home)
         if freeable > 0 {
             out.append(HomeChip(id: "freeUp", object: L.homeFreeUp, value: fmtBytes(freeable), destination: foldersHome))
         }
         // Only when space is short (StorageSpace is the one low-space rule); the Backups card always offers it.
-        let space = input.disk.flatMap { StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: input.lowSpacePercent) }
-        if let n = report.snapshots?.count, n > 0, space == .low || space == .critical {
+        if let n = report.snapshots?.count, n > 0, short {
             out.append(HomeChip(id: "snapshots", object: L.bkDeleteVerb, value: L.bkSnapshotCount(n),
                                 destination: Destination(.backups, focus: .tm), opensDeleteConfirm: true))
         }
+        // Outdated packages are this suggestion only, never an attention row: new versions arrive almost daily (TRIAGE-THRESHOLDS-REVIEW).
         if let n = report.brewOutdated?.count, n > 0 {
             out.append(HomeChip(id: "brew", object: L.homeUpdateHomebrew, value: "(\(n))",
                                 destination: Destination(.system, focus: .brew)))
@@ -333,6 +335,13 @@ enum HomeModel {
     static func protectionOn(_ s: SecurityState?) -> Int? {
         guard let s else { return nil }
         return [s.fileVault, s.gatekeeper, s.sip, s.firewall].filter { $0 == true }.count
+    }
+
+    /// D5: hot when FileVault, Gatekeeper or SIP is off; amber when only the firewall is; nil when all on or unknown.
+    static func protectionTone(_ s: SecurityState?) -> HomeTone? {
+        guard let s else { return nil }
+        if s.fileVault == false || s.gatekeeper == false || s.sip == false { return .hot }
+        return s.firewall == false ? .amber : nil
     }
 
     static func historyDigest(_ entries: [MacHistoryEntry]) -> HomeHistoryDigest {
@@ -463,7 +472,7 @@ enum HomeModel {
             let updates: String?
             if let u = r.updates { updates = u.isEmpty ? L.homeKVNone : "\(u.count)" } else { updates = nil }
             return (.green, L.homeTagAllOn, L.homeSecuritySub,
-                    [kv(L.commonProtection, on.map { L.homeKVProtection($0) }, (on ?? 4) < 4 ? .hot : nil),
+                    [kv(L.commonProtection, on.map { L.homeKVProtection($0) }, protectionTone(r.security)),
                      kv(L.commonUpdates, updates)])
         case .backups:
             let claude: HomeKV
@@ -482,7 +491,7 @@ enum HomeModel {
         case .system:
             let brew: HomeKV
             if let n = r.brewOutdated?.count {
-                brew = n > 0 ? HomeKV(label: "Homebrew", value: L.homeBrewOutdatedShort(n), tone: .amber)
+                brew = n > 0 ? HomeKV(label: "Homebrew", value: L.homeBrewOutdatedShort(n), tone: nil)
                              : HomeKV(label: "Homebrew", value: L.homeKVUpToDate, tone: nil)
             } else {
                 brew = HomeKV(label: "Homebrew", value: dash, tone: .neutral)

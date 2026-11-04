@@ -202,25 +202,30 @@ struct SystemPageModel: Equatable {
         case .outdated, .stopped, .upgradeFailed: brewOutdatedShown = outdatedCount > 0
         default: brewOutdatedShown = false
         }
+        var brewUpgradeFailed = false
+        if case .upgradeFailed = m.brewState { brewUpgradeFailed = outdatedCount > 0 }
         (m.tag, m.tagText) = tag(energyFailed: energyFailed,
                                  warnableSleep: i.wakeSampled && !warnable.isEmpty,
                                  staleFound: m.startupChecked && !m.staleRows.isEmpty,
                                  brewUpdating: m.brewState == .updating,
-                                 brewOutdated: brewOutdatedShown)
+                                 brewOutdated: brewOutdatedShown,
+                                 brewUpgradeFailed: brewUpgradeFailed)
         return m
     }
 
     // MARK: tag
 
     /// Priority: energy apply failed (hot) · warnable sleep blocker (amber) · stale startup items after a
-    /// check (amber) · brew updating (accent) · brew outdated (amber) · else green.
+    /// check (amber) · brew updating (accent) · brew upgrade failed (amber, a fault) · brew outdated (neutral,
+    /// not an attention item) · else green.
     static func tag(energyFailed: Bool, warnableSleep: Bool, staleFound: Bool,
-                    brewUpdating: Bool, brewOutdated: Bool) -> (SystemTone, String) {
+                    brewUpdating: Bool, brewOutdated: Bool, brewUpgradeFailed: Bool) -> (SystemTone, String) {
         if energyFailed { return (.hot, L.sysTagApplyFailed) }
         if warnableSleep { return (.amber, L.commonMacCantSleep) }
         if staleFound { return (.amber, L.commonNeedsAttention) }
         if brewUpdating { return (.accent, L.sysTagUpdating) }
-        if brewOutdated { return (.amber, L.sysTagOutdated) }
+        if brewUpgradeFailed { return (.amber, L.sysTagOutdated) }
+        if brewOutdated { return (.neutral, L.sysTagOutdated) }
         return (.green, L.commonAllGood)
     }
 

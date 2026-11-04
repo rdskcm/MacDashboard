@@ -22,7 +22,7 @@ struct SecurityTileModel: Equatable {
     var label: String
     var value: String            // on / off / Enabling… / —
     var valueTone: SecurityTone? // nil ink, .hot hotInk, .neutral muted
-    var dot: SecurityTone?       // .green / .hot / nil
+    var dot: SecurityTone?       // .green / .amber / .hot / nil
     var note: String?
     var noteTone: SecurityTone?  // nil muted, .green greenInk
     var button: SecurityTileButton?
@@ -157,6 +157,7 @@ struct SecurityPageModel: Equatable {
         var m = SecurityPageModel()
         m.sub = L.secSub
         let crashTotal = (i.crashes ?? []).reduce(0) { $0 + $1.count }
+        let raisingCrashTotal = (i.crashes ?? []).filter(ReportCollector.crashRaisesAttention).reduce(0) { $0 + $1.count }
 
         // Tag: first match wins (Design, "Tag priority").
         if let s = i.security {
@@ -165,12 +166,12 @@ struct SecurityPageModel: Equatable {
             else if isOff(.fileVault, s, action: i.action) { (m.tag, m.tagText) = (.hot, L.homeTagFileVaultOff) }
             else if isOff(.gatekeeper, s, action: i.action) { (m.tag, m.tagText) = (.hot, L.homeTagGatekeeperOff) }
             else if isOff(.sip, s, action: i.action) { (m.tag, m.tagText) = (.hot, L.homeTagSipOff) }
-            else if isOff(.firewall, s, action: i.action) { (m.tag, m.tagText) = (.hot, L.homeTagFirewallOff) }
+            else if isOff(.firewall, s, action: i.action) { (m.tag, m.tagText) = (.amber, L.homeTagFirewallOff) }   // D5
             else if case .enabling(let p) = i.action, p == .firewall || p == .gatekeeper {
                 (m.tag, m.tagText) = (.accent, L.secTagEnabling(p))
             }
             else if !(i.updates ?? []).isEmpty { (m.tag, m.tagText) = (.amber, L.secTagUpdates) }
-            else if crashTotal > 0 { (m.tag, m.tagText) = (.amber, L.secTagCrashes(crashTotal)) }
+            else if raisingCrashTotal > 0 { (m.tag, m.tagText) = (.amber, L.secTagCrashes(raisingCrashTotal)) }
             else if SecurityProtection.allCases.contains(where: { value($0, s) == nil }) {
                 (m.tag, m.tagText) = (.neutral, L.secTagOnCount(protectionsOn(s)))
             }
@@ -269,7 +270,8 @@ struct SecurityPageModel: Equatable {
         case nil:
             t.value = dash; t.valueTone = .neutral; t.dot = nil; t.note = L.secNoteUnknown
         case false?:
-            t.error = true; t.dot = .hot; t.valueTone = .hot
+            let tone: SecurityTone = p == .firewall ? .amber : .hot   // D5
+            t.error = true; t.dot = tone; t.valueTone = tone
             if i.action == .enabling(p) {
                 t.value = L.secValueEnabling; t.note = L.secNoteWaitingTouchID; t.button = .enable; t.busy = true
             } else {

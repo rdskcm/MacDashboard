@@ -1,21 +1,20 @@
-Critical
+Needs attention
 Report
 Refresh report
 This Mac
 Devices
 MacDashboard
 MacBook Air · Apple M3 · 16 GB · macOS 26.1 (25B78) · uptime 3 days 4 hours
-Mac status, 5 tasks, need attention, Critical, 1, Warnings, 4, checked at 10:30
-Enable… — Firewall
-Firewall off, Security
+Mac status, 4 tasks, need attention, Critical, 0, Warnings, 4, checked at 10:30
 Details — Battery
 Battery 24% worn, Battery
-Update — Homebrew
-Homebrew 3 packages outdated, System
+Enable… — Firewall
+Firewall off, Security
 Set up… — Time Machine
 Time Machine not set up, Backups
-Show all (5)
-Free up 18.3 GB
+Show — caffeinate
+caffeinate keeps the Mac awake, System
+Free up 1.4 GB
 Update Homebrew (3)
 Grant Full Disk Access
 You can

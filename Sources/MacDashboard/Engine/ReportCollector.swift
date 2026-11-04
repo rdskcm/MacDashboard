@@ -888,8 +888,8 @@ final class ReportCollector {
     private func smartSeverity(attrs: [(String, String)]) -> Severity {
         func a(_ k: String) -> String? { attrs.first { $0.0 == k }?.1 }
         func i(_ k: String) -> Int? { a(k).map { $0.filter { $0.isNumber } }.flatMap { $0.isEmpty ? nil : Int($0) } }
-        let crit = a("Critical Warning")
-        if (crit != nil && crit != "0x00") || (i("Media and Data Integrity Errors") ?? 0) > 0 { return .crit }
+        let media = i("Media and Data Integrity Errors").map { UInt64(max(0, $0)) }
+        if SmartRules.isFailing(warningBits: SmartRules.warningBits(attr: a("Critical Warning")), mediaErrors: media) { return .crit }
         if let pu = i("Percentage Used"), pu >= 80 { return .warn }
         return .good
     }

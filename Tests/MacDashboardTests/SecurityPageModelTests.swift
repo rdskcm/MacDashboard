@@ -60,9 +60,9 @@ extension SerialTests {
         @Test func firewallOff() {
             withLanguage(.en) {
                 let m = make(input(security: SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)))
-                #expect(m.tag == .hot && m.tagText == "Firewall off")
+                #expect(m.tag == .amber && m.tagText == "Firewall off")
                 let t = m.tiles[3]
-                #expect(t.value == "off" && t.valueTone == .hot && t.dot == .hot && t.error)
+                #expect(t.value == "off" && t.valueTone == .amber && t.dot == .amber && t.error)
                 #expect(t.button == .enable && t.note == "Touch ID required" && !t.busy)
                 #expect(m.protectionCaption == "3 of 4 on")
             }
@@ -130,16 +130,20 @@ extension SerialTests {
                 #expect(make(input(security: fwGk, action: .enabling(.firewall))).tagText == "Gatekeeper off")
                 // Enabling beats updates and crashes.
                 let fw = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
-                let m = make(input(security: fw, action: .enabling(.firewall), updates: [upd("u")], crashes: [crash("a")]))
+                let m = make(input(security: fw, action: .enabling(.firewall), updates: [upd("u")], crashes: [crash(AppInfo.name)]))
                 #expect(m.tag == .accent)
                 // Updates beat crashes.
-                let u = make(input(updates: [upd("u")], crashes: [crash("a")]))
+                let u = make(input(updates: [upd("u")], crashes: [crash(AppInfo.name)]))
                 #expect(u.tag == .amber && u.tagText == "updates available")
-                let c = make(input(crashes: [crash("a", 2), crash("b")]))
+                let c = make(input(crashes: [crash(AppInfo.name, 2), crash("kernel", panic: true)]))
                 #expect(c.tag == .amber && c.tagText == "3 crashes in 7 days")
-                #expect(make(input(crashes: [crash("a")])).tagText == "1 crash in 7 days")
+                #expect(make(input(crashes: [crash(AppInfo.name)])).tagText == "1 crash in 7 days")
                 // Off beats updates.
-                #expect(make(input(security: fw, updates: [upd("u")])).tag == .hot)
+                let fvOff = SecurityState(fileVault: false, gatekeeper: true, sip: true, firewall: true)
+                #expect(make(input(security: fvOff, updates: [upd("u")])).tag == .hot)
+                // A firewall-only off is amber (D5) and still leads the other amber tags.
+                let fwOnly = make(input(security: fw, updates: [upd("u")]))
+                #expect(fwOnly.tag == .amber && fwOnly.tagText == "Firewall off")
             }
         }
 
@@ -230,6 +234,10 @@ extension SerialTests {
                 #expect(make(input(crashes: [crash("a")])).crashesCaption == "1 crash · own app and kernel panics")
                 let w = make(input(crashes: nil))
                 #expect(w.crashesWait && w.crashRows.isEmpty)
+                // T11: a crash of a process that raises no attention does not drive the tag, only the caption.
+                let other = make(input(crashes: [crash("Xcode", 3)]))
+                #expect(other.tagText != L.secTagCrashes(3) && other.crashesCaption.hasPrefix("3 crashes"), "non-raising crash: no crash tag, caption counts it")
+                #expect(make(input(crashes: [crash("kernel", 1, panic: true), crash("Xcode", 3)])).tagText == L.secTagCrashes(1), "tag counts raising groups only")
             }
             withLanguage(.ru) {
                 let m = make(input(crashes: groups))
@@ -237,8 +245,8 @@ extension SerialTests {
                 #expect(m.crashRows[0].sub == "последний сегодня, 09:41")
                 #expect(m.crashesCaption == "4 сбоя · своё приложение и паники ядра")
                 #expect(L.shortDateTime(at(5, 3, 8, 5)) == "3 мая, 08:05")
-                #expect(make(input(crashes: [crash("a", 5)])).tagText == "5 сбоев за 7 дней")
-                #expect(make(input(crashes: [crash("a")])).tagText == "1 сбой за 7 дней")
+                #expect(make(input(crashes: [crash(AppInfo.name, 5)])).tagText == "5 сбоев за 7 дней")
+                #expect(make(input(crashes: [crash(AppInfo.name)])).tagText == "1 сбой за 7 дней")
             }
         }
 

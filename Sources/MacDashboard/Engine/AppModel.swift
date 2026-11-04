@@ -825,7 +825,7 @@ final class AppModel {
     private func setAssessment(_ n: Assessment) {
         if assessment != n { assessment = n }
         guard hasCompletedPass else { return }
-        let fresh = notifyEdges.update(items: n.items, enabled: settings.notifyEnabled)
+        let fresh = notifyEdges.update(items: n.items, enabled: settings.notifyEnabled, now: now())
         if !fresh.isEmpty { notify(fresh) }
     }
 
@@ -836,7 +836,7 @@ final class AppModel {
             for item in items {
                 guard let cat = NotifyCategory.category(for: item.kind) else { continue }
                 client.deliver(identifier: "attention.\(item.kind.rawValue)", title: L.settingsNotifyLabel(cat),
-                               body: item.fullText, page: cat.page)
+                               body: item.fullTextWithWhy, page: cat.page)
             }
         }
         client.status { status in

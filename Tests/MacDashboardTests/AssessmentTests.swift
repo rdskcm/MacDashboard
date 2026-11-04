@@ -69,7 +69,7 @@ extension SerialTests {
                 #expect(!a.problems.contains { $0.text.contains("Диск заполнен") }, "assess disk 25% free: no disk problem")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 19))
+                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 19, size: 100_000_000_000))
                 #expect(a.diskSev == .warn, "assess disk 19% free: .warn")
                 #expect(a.items.contains { $0.kind == .diskFullSoon }, "assess disk 19% free: diskFullSoon item")
             }
@@ -78,7 +78,7 @@ extension SerialTests {
                 #expect(a.diskSev == .good, "assess disk exactly 20% free: .good (strict)")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 9))
+                let a = Assess.assess(report: FullReport(), live: freeLive(freePct: 9, size: 100_000_000_000))
                 #expect(a.diskSev == .crit, "assess disk 9% free: .crit")
                 #expect(a.items.contains { $0.kind == .diskFull }, "assess disk 9% free: diskFull item")
             }
@@ -88,9 +88,14 @@ extension SerialTests {
             }
             do {
                 #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 12), lowSpacePercent: 10).diskSev == .good, "lowSpacePercent 10, 12% free: .good")
-                #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 9), lowSpacePercent: 10).diskSev == .crit, "lowSpacePercent 10, 9% free: .crit")
+                #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 9, size: 100_000_000_000), lowSpacePercent: 10).diskSev == .crit, "lowSpacePercent 10, 9% free: .crit")
                 #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 10), lowSpacePercent: 10).diskSev == .good, "lowSpacePercent 10, 10% free: .good (no amber band)")
                 #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 14), lowSpacePercent: 15).diskSev == .warn, "lowSpacePercent 15, 14% free: .warn")
+            }
+            do {
+                // TRIAGE-THRESHOLDS-REVIEW D1: the absolute caps (20 GB red, 40 GB amber).
+                #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 9)).diskSev == .warn, "cap: 23 GB free is amber, not red")
+                #expect(Assess.assess(report: FullReport(), live: freeLive(freePct: 19)).diskSev == .good, "cap: 48.6 GB free is fine on 256 GB")
             }
             do {
                 var live = LiveSnapshot()
@@ -101,8 +106,10 @@ extension SerialTests {
                       "assess disk 4TiB@80%: no disk problem or tip")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.85, size: 4096 * GIB))
-                #expect(a.diskSev == .warn, "assess disk 4TiB@85% (15% free): .warn — the rule no longer scales with volume size")
+                let a = Assess.assess(report: FullReport(), live: diskLive(pct: 0.992, size: 4096 * GIB))
+                #expect(a.diskSev == .warn, "assess disk 4TiB@99.2% (0.8% free, about 33 GiB): .warn — the percentage rule still applies under the caps")
+                #expect(Assess.assess(report: FullReport(), live: diskLive(pct: 0.85, size: 4096 * GIB)).diskSev == .good,
+                      "assess disk 4TiB@85% (15% free, about 614 GiB): .good — the 40 GB cap")
             }
 
             do {
@@ -123,11 +130,12 @@ extension SerialTests {
             }
             do {
                 let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .warn)
-                #expect(memItem(a)?.sev == .warn && a.swapSev == .warn, "assess with .warn pressure, no swap: warn item (R4)")
+                #expect(memItem(a) == nil && a.swapSev == .warn && a.problems.isEmpty, "assess with .warn pressure: no item, no problem, swapSev warn (D2)")
             }
             do {
                 let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .critical)
                 #expect(memItem(a)?.sev == .serious && a.swapSev == .serious, "assess with .critical pressure: serious item")
+                #expect(memItem(a)?.why == L.attnWhyMemPressure, "assess with .critical pressure: why line")
             }
             do {
                 let apps = [AppMemory(name: "Google Chrome", bytes: 3 * GIB), AppMemory(name: "Telegram", bytes: GIB)]
@@ -142,9 +150,9 @@ extension SerialTests {
                       "assess mem pressure detail has no swap/compressed mention (R7)")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .warn, topApps: [])
+                let a = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .critical, topApps: [])
                 #expect(memItem(a)?.fullText.contains("Закройте приложения") == true, "assess mem pressure, 0 apps: generic instruction")
-                let a1 = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .warn,
+                let a1 = Assess.assess(report: FullReport(), live: swapLive(usedBytes: 0), memPressure: .critical,
                                         topApps: [AppMemory(name: "Google Chrome", bytes: GIB)])
                 #expect(a1.items.first { $0.kind == .swapHigh }?.fullText.contains("занимает ") == true,
                       "assess mem pressure, 1 app: singular sentence")
@@ -161,6 +169,12 @@ extension SerialTests {
                 let a = Assess.assess(report: batteryReport(maxCapacity: 78), live: LiveSnapshot())
                 #expect(a.problems.contains { $0.sev == .warn && $0.text.contains("Ёмкость") } && a.items.contains { $0.kind == .batteryCapacity && $0.sev == .warn } && !a.tips.contains { $0.text.contains("Ёмкость") },
                       "assess battery 78%, cycles == nil: warn item (still warns)")
+            }
+            do {
+                let worn = Assess.assess(report: batteryReport(maxCapacity: 76, condition: "Normal"), live: LiveSnapshot())
+                #expect(worn.items.first { $0.kind == .batteryCapacity }?.why == L.attnWhyBatteryWorn, "battery worn: why line")
+                let service = Assess.assess(report: batteryReport(maxCapacity: 90, condition: "Service Recommended"), live: LiveSnapshot())
+                #expect(service.items.first { $0.kind == .batteryCondition }?.why == L.attnWhyBatteryService, "battery service: why line")
             }
             do {
                 let a = Assess.assess(report: batteryReport(maxCapacity: 90), live: LiveSnapshot())
@@ -192,7 +206,17 @@ extension SerialTests {
                 var report = FullReport()
                 report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
                 let a = Assess.assess(report: report, live: LiveSnapshot())
-                #expect(a.problems.contains { $0.sev == .serious && $0.text.contains("Файрвол") }, "assess security firewall==false: serious problem")
+                #expect(a.problems.contains { $0.sev == .warn && $0.text.contains("Файрвол") }, "assess security firewall==false: warn problem (D5)")
+                #expect(a.items.first { $0.kind == .firewallOff }?.sev == .warn, "assess security firewall==false: item .warn (D5)")
+                for (fv, gk, sip, kind) in [(false, true, true, AttentionKind.fileVaultOff), (true, false, true, .gatekeeperOff), (true, true, false, .sipOff)] {
+                    var r = FullReport()
+                    r.security = SecurityState(fileVault: fv, gatekeeper: gk, sip: sip, firewall: true)
+                    #expect(Assess.assess(report: r, live: LiveSnapshot()).items.first { $0.kind == kind }?.sev == .serious, "assess security \(kind): serious (D5)")
+                }
+                var fvOff = FullReport()
+                fvOff.security = SecurityState(fileVault: false, gatekeeper: true, sip: true, firewall: true)
+                let fvItem = Assess.assess(report: fvOff, live: LiveSnapshot()).items.first { $0.kind == .fileVaultOff }
+                #expect(fvItem?.fullTextWithWhy == L.assessFileVaultOff + " " + L.attnWhyFileVault, "assess fileVaultOff: fullTextWithWhy")
             }
             do {
                 var report = FullReport()
@@ -220,6 +244,7 @@ extension SerialTests {
                 let a = Assess.assess(report: report, live: LiveSnapshot())
                 #expect(a.problems.contains { $0.sev == .warn && $0.text == L.assessOwnCrashesRecent(AppInfo.name, 2) },
                       "assess crashes: own-app group -> warn problem naming the app")
+                #expect(a.items.first { $0.kind == .crashes }?.why == L.attnWhyOwnCrash, "assess crashes: own-app only -> own-crash why")
                 #expect(a.items.contains { $0.kind == .crashes }, "assess crashes: own-app group -> AttentionItem(.crashes)")
             }
             do {
@@ -249,6 +274,7 @@ extension SerialTests {
                       "assess crashes: kernel panic from a non-own process -> exactly one AttentionItem(.crashes)")
                 #expect(a.problems.contains { $0.sev == .warn && $0.text == L.assessKernelPanicsRecent(1) },
                       "assess crashes: kernel panic -> warn problem with the panic sentence")
+                #expect(a.items.first { $0.kind == .crashes }?.why == L.attnWhyKernelPanic, "assess crashes: panic -> kernel-panic why")
             }
             do {
                 // CRASH-REPORT-DISMISS: hidden groups never reach the assessment.
@@ -305,6 +331,28 @@ extension SerialTests {
                 #expect(!a.problems.contains { $0.text.contains("Time Machine") }, "assess tmDest .some(.some): nothing")
             }
             do {
+                // D7: overdue by the Backups page's own rule (strictly more than 7 / 30 days).
+                let t0 = Date(timeIntervalSinceReferenceDate: 800_000_000)
+                func overdue(_ last: Date?) -> AttentionItem? {
+                    var dest = TMDestination(name: "Backup", kind: "Local", mountPoint: "/Volumes/B", quotaBytes: nil, lastBackup: nil)
+                    dest.lastBackupDate = last
+                    var report = FullReport()
+                    report.tmDest = .some(.some(dest))
+                    return Assess.assess(report: report, live: LiveSnapshot(), now: t0).items.first { $0.kind == .timeMachineOverdue }
+                }
+                #expect(overdue(t0 - 7 * 86_400) == nil, "TM overdue: exactly 7 days is not overdue")
+                #expect(overdue(t0 - 7 * 86_400 - 1)?.sev == .warn, "TM overdue: 7 days and 1 s is warn")
+                #expect(overdue(t0 - 7 * 86_400 - 1)?.detail == L.bkDaysAgo(7), "TM overdue: detail is the day count")
+                #expect(overdue(t0 - 30 * 86_400)?.sev == .warn, "TM overdue: exactly 30 days is still warn")
+                #expect(overdue(t0 - 30 * 86_400 - 1)?.sev == .serious, "TM overdue: 30 days and 1 s is serious")
+                #expect(overdue(nil) == nil, "TM overdue: unknown age is silent")
+                #expect(overdue(t0 - 10 * 86_400)?.why == L.attnWhyTimeMachineOverdue, "TM overdue: why line")
+                var none = FullReport()
+                none.tmDest = .some(.none)
+                let kinds = Assess.assess(report: none, live: LiveSnapshot(), now: t0).items.map(\.kind)
+                #expect(kinds == [.timeMachine], "TM not set up: only .timeMachine")
+            }
+            do {
                 var report = FullReport()
                 report.tmDest = .none
                 let a = Assess.assess(report: report, live: LiveSnapshot())
@@ -317,6 +365,20 @@ extension SerialTests {
                                            attrs: [("Media and Data Integrity Errors", "3")], severity: .crit)]
                 let a = Assess.assess(report: report, live: LiveSnapshot())
                 #expect(a.problems.contains { $0.sev == .crit && $0.text.contains("ошибках носителя") }, "assess smart media errors: crit problem")
+            }
+            do {
+                // T15: only the failure bits of Critical Warning count (0x02 temperature alone does not).
+                func smartKinds(_ attrs: [(String, String)]) -> [AttentionKind] {
+                    var r = FullReport()
+                    r.smart = [SmartDisk(device: "internal", title: "Boot SSD", status: "x", attrs: attrs, severity: .good)]
+                    return Assess.assess(report: r, live: LiveSnapshot()).items.map(\.kind)
+                }
+                #expect(!smartKinds([("Critical Warning", "0x02")]).contains(.smartErrors), "SMART 0x02: no smartErrors")
+                #expect(smartKinds([("Critical Warning", "0x04")]).contains(.smartErrors), "SMART 0x04: smartErrors")
+                #expect(smartKinds([("Critical Warning", "0x00"), ("Media and Data Integrity Errors", "1")]).contains(.smartErrors), "SMART media 1: smartErrors")
+                var r = FullReport()
+                r.smart = [SmartDisk(device: "internal", title: "Boot SSD", status: "x", attrs: [("Critical Warning", "0x04")], severity: .crit)]
+                #expect(Assess.assess(report: r, live: LiveSnapshot()).items.first { $0.kind == .smartErrors }?.sev == .crit, "SMART 0x04: crit")
             }
             do {
                 var report = FullReport()
@@ -335,8 +397,20 @@ extension SerialTests {
             do {
                 var report = FullReport()
                 report.homeDirs = [DirSize(path: "/Users/x/Downloads", bytes: 11 * GIB)]
-                let a = Assess.assess(report: report, live: LiveSnapshot())
-                #expect(a.tips.contains { $0.text.contains("Загрузки") }, "assess homeDirs Downloads > 10GiB: tip")
+                let a = Assess.assess(report: report, live: diskLive(pct: 0.90))
+                #expect(a.tips.contains { $0.text.contains("Загрузки") }, "assess homeDirs Downloads > 10GiB, space short: tip")
+            }
+            do {
+                // D8: Downloads / Caches suggestions only while space is short; Trash always.
+                var report = FullReport()
+                report.homeDirs = [DirSize(path: "/Users/x/Downloads", bytes: 12 * GIB), DirSize(path: "/Users/x/.Trash", bytes: 2 * GIB)]
+                report.homeCaches = DirSize(path: "/Users/x/Library/Caches", bytes: 4 * GIB)
+                let roomy = Assess.assess(report: report, live: diskLive(pct: 0.70))
+                #expect(!roomy.tips.contains { $0.text.contains("Загрузки") || $0.text.contains("Caches") } && roomy.capsules.map(\.object) == [L.attnCapTrash],
+                      "D8: 30% free on 256 GB: no Downloads/Caches tip or capsule, Trash present")
+                #expect(roomy.tips.contains { $0.text.contains("Корзина") }, "D8: 30% free: Trash tip present")
+                let tight = Assess.assess(report: report, live: diskLive(pct: 0.90))
+                #expect(Set(tight.capsules.map(\.object)) == [L.attnCapDownloads, L.attnCapTrash, L.attnCapCaches], "D8: 10% free: all three capsules")
             }
             do {
                 var report = FullReport()
@@ -394,22 +468,18 @@ extension SerialTests {
                       "assess advice: Trash tip ⇒ action == .emptyTrash")
             }
             do {
+                // Outdated Homebrew packages are never an attention item (TRIAGE-THRESHOLDS-REVIEW, [BREW]).
                 var report = FullReport()
                 report.brewOutdated = ["pkg1", "pkg2"]
                 let a = Assess.assess(report: report, live: LiveSnapshot())
-                #expect(a.items.first { $0.kind == .brewOutdated }?.action == .brewUpgrade
-                        && a.items.first { $0.kind == .brewOutdated }?.sev == .warn
-                        && !a.tips.contains { $0.action == .brewUpgrade },
-                      "assess advice: brew outdated ⇒ warn item with action == .brewUpgrade, no tip")
-            }
-            do {
-                var report = FullReport()
-                report.brewStatus = .installed(version: "Homebrew 4.6.0")
-                report.brewOutdated = nil
-                let a = Assess.assess(report: report, live: LiveSnapshot())
-                #expect(!a.tips.contains { $0.action == .brewUpgrade } && !a.capsules.contains { $0.action == .brewUpgrade }
-                        && !a.items.contains { $0.kind == .brewOutdated },
-                      "assess advice: brew outdated check failed ⇒ no brew tip or capsule")
+                var none = report; none.brewOutdated = []
+                let b = Assess.assess(report: none, live: LiveSnapshot())
+                #expect(!a.items.contains { $0.label.contains("Homebrew") || $0.detail.contains("Homebrew") || $0.fullText.contains("Homebrew") }
+                        && !a.problems.contains { $0.text.contains("Homebrew") }
+                        && !a.tips.contains { $0.text.contains("Homebrew") }
+                        && !a.capsules.contains { $0.object.contains("Homebrew") || $0.value.contains("Homebrew") || $0.explanation.contains("Homebrew") },
+                      "assess advice: brew outdated ⇒ no item, problem, tip or capsule mentions Homebrew")
+                #expect(a.summaryText == b.summaryText && a.summarySev == b.summarySev && a.items.count == b.items.count, "assess advice: brew outdated leaves the summary unchanged")
             }
             do {
                 var report = FullReport()
@@ -422,7 +492,7 @@ extension SerialTests {
                 let downloadsPath = "/Users/x/Downloads"
                 var report = FullReport()
                 report.homeDirs = [DirSize(path: downloadsPath, bytes: 11 * GIB)]
-                let a = Assess.assess(report: report, live: LiveSnapshot())
+                let a = Assess.assess(report: report, live: diskLive(pct: 0.90))
                 #expect(a.tips.first { $0.text.contains("Загрузки") }?.action == .revealPath(downloadsPath),
                       "assess advice: Downloads tip ⇒ action == .revealPath(downloadsPath)")
             }
