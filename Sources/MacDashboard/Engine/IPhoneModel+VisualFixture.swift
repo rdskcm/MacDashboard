@@ -61,11 +61,15 @@ extension IPhoneModel {
             udid: "fixture-alex", name: "Alex’s iPhone", marketingName: "iPhone 17 Pro Max",
             productType: "iPhone18,2", osVersion: "26.4.1", build: "23E254", enclosureColor: "2",
             battery: BatteryDetail(
-                percent: 34, voltageMV: 3930, amperageMA: 1200, powerW: nil, temperatureC: 40.6,
+                percent: 34, voltageMV: 3930, amperageMA: 1200, powerW: 4.716, temperatureC: 40.6,
                 cellVoltagesMV: [], externalConnected: true, isCharging: true, fullyCharged: false,
                 timeToEmptyMin: nil, timeToFullMin: nil, currentCapacityMAh: nil, maxCapacityMAh: 4928,
                 designCapacityMAh: 5030, cycleCount: 269, designCycleCount: nil, healthPercent: 98,
-                adapter: nil, charger: nil, lifetime: nil
+                adapter: BatteryAdapterInfo(watts: 15, voltageMV: 5000, currentMA: 3000, name: nil, manufacturer: nil,
+                                            adapterDescription: "pd charger", isWireless: false,
+                                            pdProfiles: [PDProfile(index: 0, maxVoltageMV: 5000, maxCurrentMA: 3000)],
+                                            selectedProfileIndex: nil),
+                charger: nil, lifetime: nil
             )
         )]
 

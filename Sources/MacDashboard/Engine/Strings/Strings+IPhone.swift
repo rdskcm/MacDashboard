@@ -49,6 +49,10 @@ protocol IPhoneStrings {
     var iphoneUnitWh: String { get }
     var iphoneCapacityUnitA11y: String { get }
     var iphoneWhSourceHelp: String { get }
+    func iphonePowerBatteryLine(_ w: String, _ v: String, _ a: String) -> String
+    func iphonePowerCableLine(_ w: String) -> String
+    func iphonePowerEfficiencySuffix(_ n: Int) -> String
+    func iphonePowerSourceLine(_ w: String) -> String
     var iphoneBatteryConnectToRead: String { get }
     var iphoneBatteryNoData: String { get }
     var iphoneBatteryAutoReadOff: String { get }
@@ -115,6 +119,10 @@ extension StringsEN: IPhoneStrings {
     var iphoneUnitWh: String { "Wh" }
     var iphoneCapacityUnitA11y: String { "Capacity units" }
     var iphoneWhSourceHelp: String { "Approximate: capacity × 3.88 V, the typical iPhone battery voltage (Wikipedia, iPhone 16 Pro / 17 Pro articles, from regulatory listings)" }
+    func iphonePowerBatteryLine(_ w: String, _ v: String, _ a: String) -> String { "Battery: \(w) = \(v) V × \(a) A" }
+    func iphonePowerCableLine(_ w: String) -> String { "Drawn from the cable: \(w)" }
+    func iphonePowerEfficiencySuffix(_ n: Int) -> String { " · charger efficiency \(n) %" }
+    func iphonePowerSourceLine(_ w: String) -> String { "Power source offers up to \(w)" }
     var iphoneBatteryConnectToRead: String { "Connect the iPhone by cable to read the battery." }
     var iphoneBatteryNoData: String { "no data" }
     var iphoneBatteryAutoReadOff: String { "Auto-read is off. Press Refresh to read the battery." }
@@ -184,6 +192,10 @@ extension StringsRU: IPhoneStrings {
     var iphoneUnitWh: String { "Вт·ч" }
     var iphoneCapacityUnitA11y: String { "Единицы ёмкости" }
     var iphoneWhSourceHelp: String { "Примерно: ёмкость × 3,88 В — типовое напряжение батарей iPhone (Википедия, статьи iPhone 16 Pro / 17 Pro, по данным регуляторов)" }
+    func iphonePowerBatteryLine(_ w: String, _ v: String, _ a: String) -> String { "Батарея: \(w) = \(v) В × \(a) А" }
+    func iphonePowerCableLine(_ w: String) -> String { "Берёт из кабеля: \(w)" }
+    func iphonePowerEfficiencySuffix(_ n: Int) -> String { " · КПД зарядки \(n) %" }
+    func iphonePowerSourceLine(_ w: String) -> String { "Источник питания отдаёт до \(w)" }
     var iphoneBatteryConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать батарею." }
     var iphoneBatteryNoData: String { "нет данных" }
     var iphoneBatteryAutoReadOff: String { "Авточтение выключено. Нажмите «Обновить», чтобы прочитать батарею." }

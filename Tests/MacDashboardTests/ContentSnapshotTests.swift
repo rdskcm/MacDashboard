@@ -1102,6 +1102,9 @@ extension SerialTests {
                         HarnessSection(label: "iPhone battery: live tiles, hot tones") {
                             IPhoneBatteryCard(record: rec, snapshot: liveSnapshot(ip, alex, percent: 9, external: false, temp: 46.0, cycles: 1000, productType: "iPhone18,2"))
                         }
+                        HarnessSection(label: "iPhone battery: charging, power note on State") {
+                            IPhoneBatteryCard(record: rec, snapshot: ip.lastSnapshot[alex]!)
+                        }
                     }
                 }
                 run.snap("content-iphone-history", mode, width: 1134) {

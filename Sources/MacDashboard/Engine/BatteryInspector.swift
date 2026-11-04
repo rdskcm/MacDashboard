@@ -32,6 +32,8 @@ struct BatteryChargerInfo: Equatable {
     var notChargingReason: Int?
     var slowChargingReason: Int?
     var timeChargingThermallyLimited: Int?
+    var chargerPowerMW: Int? = nil             // ChargerPower — iOS 27 AppleChargerData node, mW (IPHONE-BATTERY-DETAILS findings C-27-3)
+    var chargerEfficiencyPercent: Int? = nil   // ChargerEfficiency, percent
 }
 
 struct BatteryLifetimeInfo: Equatable {
@@ -250,7 +252,8 @@ enum BatteryInspector {
 
     /// `primary` is the top-level ChargerData; `fallback` is the AppleChargerData child's
     /// ChargerData (macOS 27 keeps only some keys at the top level). Per key, primary wins.
-    /// nil only when both are absent.
+    /// nil only when both are absent. iPhone (iOS 27): the transport merges the `AppleChargerData` class node's
+    /// `ChargerData` into the dict before parsing, so `primary` already holds `ChargerPower`.
     private static func chargerInfo(from primary: [String: Any]?, fallback: [String: Any]?) -> BatteryChargerInfo? {
         guard primary != nil || fallback != nil else { return nil }
         func int(_ key: String) -> Int? { (primary?[key] as? Int) ?? (fallback?[key] as? Int) }
@@ -259,7 +262,9 @@ enum BatteryInspector {
             chargingCurrentMA: int("ChargingCurrent"),
             notChargingReason: int("NotChargingReason"),
             slowChargingReason: int("SlowChargingReason"),
-            timeChargingThermallyLimited: int("TimeChargingThermallyLimited")
+            timeChargingThermallyLimited: int("TimeChargingThermallyLimited"),
+            chargerPowerMW: int("ChargerPower"),
+            chargerEfficiencyPercent: int("ChargerEfficiency")
         )
     }
 

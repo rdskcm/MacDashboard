@@ -121,7 +121,9 @@ struct IPhoneBatteryCard: View {
         let temp = IPhoneData.temperatureTone(b.temperatureC)
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
             box(L.iphoneBatCharge, b.percent.map { "\($0) %" }, tone: charge, bar: b.percent.map { Double($0) / 100 })
-            box(L.iphoneBatState, state(b), accent: b.isCharging || b.externalConnected)
+            box(L.iphoneBatState, state(b), accent: b.isCharging || b.externalConnected,
+                note: IPhoneData.powerNoteText(powerW: b.powerW, isCharging: b.isCharging),
+                help: IPhoneData.powerHelpText(b))
             box(L.iphoneBatCycles, b.cycleCount.map { "\($0)" }, tone: cycles,
                 note: cycles == .hot ? L.iphoneCyclesHigh : cycles == .amber ? L.iphoneCyclesAging : nil)
             box(L.iphoneBatTemperature, b.temperatureC.map { L.batteryCelsius(fmtNum($0, decimals: 1)) }, tone: temp,

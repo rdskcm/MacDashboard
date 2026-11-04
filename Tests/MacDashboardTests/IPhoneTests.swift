@@ -437,3 +437,128 @@ extension SerialTests {
         #expect(IPhoneData.ratedCycles(productType: nil) == nil)
     }
 }
+
+// IPHONE-BATTERY-DETAILS: per-class relay merge, pure functions, no process-wide state.
+// Values are the trimmed probe readings of the findings file (iPhone14,5 on 27.0.1, iPhone18,2 on 26.4.1); no identifiers.
+@Suite struct IPhoneBatteryDetailsTests {
+    static let main27: [String: Any] = [
+        "CycleCount": 1937, "CurrentCapacity": 86, "IsCharging": true, "ExternalConnected": true,
+        "BatteryData": ["DesignCapacity": 3208, "FullChargeCapacity": 2600, "NominalChargeCapacity": 2580] as [String: Any],
+    ]
+    static let pack27: [String: Any] = [
+        "Temperature": 3950, "VirtualTemperature": 3909, "Voltage": 3901, "Amperage": 624, "InstantAmperage": 630,
+        "DesignCapacity": 3208, "CycleCount": 1937,
+        "LifetimeData": ["AverageTemperature": 28, "MaximumTemperature": 45, "MinimumTemperature": 11] as [String: Any],
+        "PowerTelemetryData": ["BatteryPower": 2434] as [String: Any],
+    ]
+    static let charger27: [String: Any] = [
+        "ChargerData": ["ChargerPower": 6159, "ChargerVBUS": 4716, "ChargerIBUS": 1306, "ChargerEfficiency": 90,
+                        "SlowChargingReason": 8, "NotChargingReason": 0] as [String: Any],
+    ]
+    static let main26: [String: Any] = [
+        "CycleCount": 269, "CurrentCapacity": 79, "AppleRawMaxCapacity": 4915, "DesignCapacity": 5030,
+        "Temperature": 3169, "VirtualTemperature": 2929, "Voltage": 4033, "Amperage": 2630, "InstantAmperage": 2636,
+        "IsCharging": true, "ExternalConnected": true,
+        "AdapterDetails": ["Watts": 15, "AdapterVoltage": 5000, "Current": 3000, "Description": "pd charger"] as [String: Any],
+        "ChargerData": ["ChargingVoltage": 4185, "ChargingCurrent": 3641] as [String: Any],
+    ]
+
+    @Test func needsPerClassQueries() {
+        #expect(IPhoneData.batteryNeedsPerClassQueries(Self.main27))
+        #expect(!IPhoneData.batteryNeedsPerClassQueries(Self.main26))
+        #expect(IPhoneData.batteryNeedsPerClassQueries(["Voltage": 4033]))
+        #expect(IPhoneData.batteryNeedsPerClassQueries(["Temperature": 3169]))
+    }
+
+    @Test func mergeFillsLiveKeysOnly() {
+        let merged = IPhoneData.mergeBatteryPayloads(main: Self.main27, pack: Self.pack27, charger: Self.charger27)
+        #expect(Set(merged.keys) == Set(Self.main27.keys).union(IPhoneData.packLiveKeys).union(["ChargerData"]),
+                "only the five live keys and ChargerData are added")
+        let b = BatteryInspector.parse(dict: merged)
+        #expect(b.temperatureC == 39.5 && b.voltageMV == 3901 && b.amperageMA == 624)
+        #expect(abs((b.powerW ?? 0) - 2.434224) < 1e-6, "power = 3901 mV × 624 mA / 1e6")
+        #expect(b.charger?.chargerPowerMW == 6159 && b.charger?.chargerEfficiencyPercent == 90 && b.charger?.slowChargingReason == 8)
+        // The capacity path is untouched by the merge: same numbers as parsing main27 alone.
+        let alone = BatteryInspector.parse(dict: Self.main27)
+        #expect(b.healthPercent == alone.healthPercent && b.healthPercent == 81, "2600 / 3208 → 81 %")
+        #expect(b.maxCapacityMAh == 2600 && b.designCapacityMAh == 3208 && b.cycleCount == 1937 && b.percent == 86)
+        #expect(b.adapter == nil, "iOS 27: no AdapterDetails in any queried class (C-27-4)")
+    }
+
+    @Test func mergeMainWinsPerKey() {
+        let merged = IPhoneData.mergeBatteryPayloads(main: Self.main26, pack: Self.pack27, charger: Self.charger27)
+        #expect(merged["Temperature"] as? Int == 3169 && merged["Voltage"] as? Int == 4033 && merged["Amperage"] as? Int == 2630)
+        let cd = merged["ChargerData"] as? [String: Any]
+        #expect(cd?["ChargingVoltage"] as? Int == 4185 && cd?["ChargerPower"] as? Int == 6159, "ChargerData merged per key, main wins")
+        let b = BatteryInspector.parse(dict: merged)
+        #expect(b.charger?.chargingVoltageMV == 4185 && b.charger?.chargerPowerMW == 6159)
+        #expect(b.adapter?.watts == 15 && abs((b.powerW ?? 0) - 10.60679) < 1e-5)
+    }
+
+    @Test func mergeWithoutPayloadsIsIdentity() {
+        let merged = IPhoneData.mergeBatteryPayloads(main: Self.main26, pack: nil, charger: nil)
+        #expect(NSDictionary(dictionary: merged) == NSDictionary(dictionary: Self.main26))
+        let onlyMain = IPhoneData.mergeBatteryPayloads(main: Self.main27, pack: nil, charger: nil)
+        #expect(BatteryInspector.parse(dict: onlyMain).temperatureC == nil && BatteryInspector.parse(dict: onlyMain).powerW == nil)
+    }
+
+    @Test func mergeReadsPackBatteryDataFallback() {
+        let pack: [String: Any] = ["BatteryData": ["Temperature": 2789, "Voltage": 12294] as [String: Any]]
+        let b = BatteryInspector.parse(dict: IPhoneData.mergeBatteryPayloads(main: Self.main27, pack: pack, charger: nil))
+        #expect(b.temperatureC == 27.89 && b.voltageMV == 12294 && b.amperageMA == nil && b.powerW == nil)
+    }
+
+    @Test func chargerNewKeys() {
+        let with = BatteryInspector.parse(dict: ["ChargerData": ["ChargerPower": 6159, "ChargerEfficiency": 90] as [String: Any]])
+        #expect(with.charger?.chargerPowerMW == 6159 && with.charger?.chargerEfficiencyPercent == 90)
+        let without = BatteryInspector.parse(dict: ["ChargerData": ["ChargingVoltage": 4185] as [String: Any]])
+        #expect(without.charger?.chargerPowerMW == nil && without.charger?.chargerEfficiencyPercent == nil)
+    }
+}
+
+// IPHONE-BATTERY-DETAILS: note and tooltip texts (language state → SerialTests, which starts in Russian).
+extension SerialTests {
+    struct IPhoneBatteryDetailsTextTests {
+        private func detail(powerW: Double?, v: Int?, a: Int?, charging: Bool,
+                            chargerMW: Int? = nil, eff: Int? = nil, adapterW: Int? = nil) -> BatteryDetail {
+            var d = BatteryInspector.parse(dict: [:])
+            d.powerW = powerW; d.voltageMV = v; d.amperageMA = a; d.isCharging = charging; d.externalConnected = true
+            if chargerMW != nil || eff != nil {
+                d.charger = BatteryChargerInfo(chargingVoltageMV: nil, chargingCurrentMA: nil, notChargingReason: nil,
+                                               slowChargingReason: nil, timeChargingThermallyLimited: nil,
+                                               chargerPowerMW: chargerMW, chargerEfficiencyPercent: eff)
+            }
+            if let adapterW {
+                d.adapter = BatteryAdapterInfo(watts: adapterW, voltageMV: nil, currentMA: nil, name: nil, manufacturer: nil,
+                                               adapterDescription: nil, isWireless: false, pdProfiles: [], selectedProfileIndex: nil)
+            }
+            return d
+        }
+
+        @Test func powerNote() {
+            #expect(IPhoneData.powerNoteText(powerW: 2.434224, isCharging: true) == "+2,4 Вт")
+            #expect(IPhoneData.powerNoteText(powerW: 10.60679, isCharging: true) == "+10,6 Вт")
+            #expect(IPhoneData.powerNoteText(powerW: 2.434224, isCharging: false) == nil, "Plugged in: no note (Decision 3)")
+            #expect(IPhoneData.powerNoteText(powerW: 0.03, isCharging: true) == nil, "below powerNoteMinW")
+            #expect(IPhoneData.powerNoteText(powerW: -0.42, isCharging: true) == nil, "gauge contradiction: no note")
+            #expect(IPhoneData.powerNoteText(powerW: nil, isCharging: true) == nil)
+            L10nStore.shared.language = .en
+            #expect(IPhoneData.powerNoteText(powerW: 2.434224, isCharging: true) == "+2.4 W")
+        }
+
+        @Test func powerHelp() {
+            let ios27 = detail(powerW: 2.434224, v: 3901, a: 624, charging: true, chargerMW: 6159, eff: 90)
+            #expect(IPhoneData.powerHelpText(ios27) == "Батарея: +2,4 Вт = 3,9 В × +0,62 А\nБерёт из кабеля: 6,2 Вт · КПД зарядки 90 %")
+            let ios26 = detail(powerW: 10.60679, v: 4033, a: 2630, charging: true, adapterW: 15)
+            #expect(IPhoneData.powerHelpText(ios26) == "Батарея: +10,6 Вт = 4,03 В × +2,63 А\nИсточник питания отдаёт до 15 Вт")
+            let draining = detail(powerW: -0.42, v: 3850, a: -109, charging: false, adapterW: 15)
+            #expect(IPhoneData.powerHelpText(draining) == "Батарея: \u{2212}0,4 Вт = 3,85 В × \u{2212}0,11 А\nИсточник питания отдаёт до 15 Вт")
+            let packFailed = detail(powerW: nil, v: nil, a: nil, charging: true, chargerMW: 6159)
+            #expect(IPhoneData.powerHelpText(packFailed) == "Берёт из кабеля: 6,2 Вт")
+            #expect(IPhoneData.powerHelpText(detail(powerW: nil, v: nil, a: nil, charging: false)) == nil)
+            #expect(IPhoneData.powerHelpText(detail(powerW: nil, v: nil, a: nil, charging: true, chargerMW: 0)) == nil, "ChargerPower 0 is not a cable figure")
+            L10nStore.shared.language = .en
+            #expect(IPhoneData.powerHelpText(ios27) == "Battery: +2.4 W = 3.9 V × +0.62 A\nDrawn from the cable: 6.2 W · charger efficiency 90 %")
+        }
+    }
+}
