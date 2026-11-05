@@ -87,6 +87,8 @@ final class AppSettings {
     static let iphoneAutoReadKey = "iphoneAutoRead"
     /// REDESIGN-IPHONE: folder for kept sysdiagnose archives; absent or empty = `IPhoneStore.defaultArchiveRoot()`.
     static let iphoneArchiveFolderKey = "iphoneArchiveFolder"
+    /// DEVICE-ARCHIVE-CLEANUP: when true, an archive the app requested stays on the iPhone after its import (C5).
+    static let iphoneKeepRequestedOnPhoneKey = "iphoneKeepRequestedOnPhone"
     /// Pure resolution: nil, empty or a non-absolute path → `defaultRoot`; otherwise the stored path as a directory URL.
     static func resolveArchiveFolder(raw: String?, defaultRoot: URL) -> URL {
         guard let raw, !raw.isEmpty, raw.hasPrefix("/") else { return defaultRoot }
@@ -224,6 +226,10 @@ final class AppSettings {
     var keepImportedArchives: Bool {
         didSet { defaults.set(keepImportedArchives, forKey: Self.keepImportedArchivesKey) }
     }
+    /// DEVICE-ARCHIVE-CLEANUP: false (default) = delete an app-requested archive from the iPhone after a full import.
+    var iphoneKeepRequestedOnPhone: Bool {
+        didSet { defaults.set(iphoneKeepRequestedOnPhone, forKey: Self.iphoneKeepRequestedOnPhoneKey) }
+    }
     var iphoneAutoRead: Bool {
         didSet { defaults.set(iphoneAutoRead, forKey: Self.iphoneAutoReadKey) }
     }
@@ -266,6 +272,7 @@ final class AppSettings {
         orbsEnabled = d.object(forKey: Self.orbsEnabledKey) as? Bool ?? true
         rimProfile = Self.resolveRimProfile(raw: d.string(forKey: Self.rimProfileKey))
         keepImportedArchives = d.object(forKey: Self.keepImportedArchivesKey) as? Bool ?? true
+        iphoneKeepRequestedOnPhone = d.object(forKey: Self.iphoneKeepRequestedOnPhoneKey) as? Bool ?? false
         iphoneAutoRead = d.object(forKey: Self.iphoneAutoReadKey) as? Bool ?? true
         let storedFolder = d.string(forKey: Self.iphoneArchiveFolderKey)
         iphoneArchiveFolder = (storedFolder?.isEmpty ?? true) ? nil : storedFolder

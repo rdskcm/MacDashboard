@@ -72,6 +72,13 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    | 6 | Install `smartmontools` via Homebrew | `Engine/SmartToolsController.swift:133` (`installNow`) | user | **no** — deliberate, see below |
    | 7 | Apply energy settings | `Views/EnergyCard.swift:363` (`pmset -b`/`-c`) | admin | yes — `Views/EnergyCard.swift:176` |
    | 8 | Download an iOS restore image (IPSW) | `Engine/IPSWDownloader.swift` | user (+ Files & Folders prompt for Downloads) | yes — UI step: size, destination, source |
+   | 9 | Delete an app-requested sysdiagnose archive from the iPhone | `Engine/MobileDeviceTransport.swift` (`AFCSession.removeOwnArchive`, the one AFC remove call site) | user (paired phone) | yes — the import choice sheet states it (`Views/IPhoneImportCard.swift`, `deleteNote`); off with Settings › Devices › «Keep requested archives on the iPhone» |
+   | 10 | Move a kept sysdiagnose archive to the Trash (the Mac copy only, no phone call) | `Engine/IPhoneModel.swift` (`trashKeptArchive`, `trashItem`), button in `Views/IPhoneImportCard.swift` (`keptSection`) | user | no — the Trash is recoverable |
+
+   Row 9 deletes only an archive the app itself requested: a request record (the directory listing at the click, the
+   archive new against it, its name's start time inside the request window, the only new archive) is the proof, and the
+   claim is stored in the device record. It runs only after a full import of that archive and never touches any other
+   file on the phone.
 
    Row 1 needs a second, separate macOS grant beyond the confirmation dialog: TCC
    Automation control of Finder, which the system asks for the first time the action
@@ -103,7 +110,7 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
 
    Two further boundaries hold with no exceptions: the app writes file **content** only
    inside `~/Library/Application Support/MacDashboard/`, kept iPhone sysdiagnose archives in the
-   archive folder (default `~/Documents/MacDashboard/iPhone`, Settings › iPhone), the verified
+   archive folder (default `~/Documents/MacDashboard/iPhone`, Settings › Devices), the verified
    `.ipsw` in `~/Downloads` (row 8), read-only copies of iPhone crash logs in the per-user temporary
    folder (`$TMPDIR/md-crashlog-*`, removed when iPhone mode next starts) and a crash log saved to the
    place the user picks in the save panel (IPHONE-CRASHLOG-ACTIONS) (rows 1, 3, 4 delete or move files elsewhere but never author
@@ -140,7 +147,7 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
   - `mac_report.txt` — the single report file (overwritten).
   - `mac_check_state.json` — history (same schema as legacy file, see §7).
 - iPhone archive folder: `~/Documents/MacDashboard/iPhone/<deviceKey>/<archive>` by default, or the
-  folder chosen in Settings › iPhone (kept sysdiagnose archives only).
+  folder chosen in Settings › Devices (kept sysdiagnose archives only).
 - iPhone crash-log copies: `$TMPDIR/md-crashlog-<UUID>/<file>` (0700 / 0600), removed when iPhone mode
   next starts; `~/Library/Application Support/MacDashboard/iphone-log-types.json` — the crash-log type cache (paths,
   sizes, times, bug types, process names, header timestamps per device key; version 2).

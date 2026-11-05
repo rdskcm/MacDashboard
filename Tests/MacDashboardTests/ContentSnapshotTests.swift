@@ -1064,6 +1064,11 @@ extension SerialTests {
                             IPhonePendingTileView(status: .readFailed(L.iphoneStatusFailed)) {}
                         }
                     }
+                    // IPhoneModeView.content is private; the hint it shows above the tiles when stored devices exist
+                    // and no phone is attached is rendered directly.
+                    HarnessSection(label: "Stored devices, no phone attached: unlock-first hint") {
+                        IPhoneUnlockFirstHint(alignment: .leading)
+                    }
                 }
                 run.snap("content-iphone-notices", mode, width: 1134) {
                     HarnessSection(label: "iPhone banners and notices") {
@@ -1249,16 +1254,24 @@ extension SerialTests {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone import: copying") {
                             IPhoneImportCard(model: fixtureIPhone(archiveRoot: keptRoot) {
+                                $0.sysdiagnoseRequest[alex] = nil; $0.phoneCleanup[alex] = nil
                                 // A second kept name with no file: must stay hidden.
                                 $0.devices[0].keptArchives.append("sysdiagnose_missing_file.tar.gz")
                                 $0.importing[alex] = .copying(done: 125_000_000, total: 298_000_000)
                             }, deviceKey: alex)
                         }
+                        HarnessSection(label: "iPhone import: kept archive, move to Trash failed") {
+                            IPhoneImportCard(model: fixtureIPhone(archiveRoot: keptRoot) {
+                                $0.sysdiagnoseRequest[alex] = nil; $0.phoneCleanup[alex] = nil
+                                $0.keptTrashFailed[alex] = keptName
+                            }, deviceKey: alex)
+                        }
                         HarnessSection(label: "iPhone import: extracting") {
-                            IPhoneImportCard(model: fixtureIPhone { $0.importing[alex] = .extracting }, deviceKey: alex)
+                            IPhoneImportCard(model: fixtureIPhone { $0.sysdiagnoseRequest[alex] = nil; $0.phoneCleanup[alex] = nil; $0.importing[alex] = .extracting }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone import: success") {
                             IPhoneImportCard(model: fixtureIPhone {
+                                $0.sysdiagnoseRequest[alex] = nil; $0.phoneCleanup[alex] = nil
                                 $0.importResult[alex] = .success((name: longArchive, summary: ImportSummary(
                                     batteryPoints: 12, skippedRows: 0, logFiles: 37,
                                     keptPath: URL(fileURLWithPath: "/tmp/kept.tar.gz"))))
@@ -1266,11 +1279,60 @@ extension SerialTests {
                         }
                         HarnessSection(label: "iPhone import: failure") {
                             IPhoneImportCard(model: fixtureIPhone {
+                                $0.sysdiagnoseRequest[alex] = nil; $0.phoneCleanup[alex] = nil
                                 $0.importResult[alex] = .failure(.tarFailed(.exitCode(1)))
                             }, deviceKey: alex)
                         }
                         HarnessSection(label: "iPhone import: cancelled") {
-                            IPhoneImportCard(model: fixtureIPhone { $0.importResult[alex] = .failure(.cancelled) }, deviceKey: alex)
+                            IPhoneImportCard(model: fixtureIPhone { $0.sysdiagnoseRequest[alex] = nil; $0.phoneCleanup[alex] = nil; $0.importResult[alex] = .failure(.cancelled) }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: request waiting") {
+                            IPhoneImportCard(model: fixtureIPhone { $0.sysdiagnoseRequest[alex] = .waiting; $0.phoneCleanup[alex] = nil }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: request creating") {
+                            IPhoneImportCard(model: fixtureIPhone { $0.sysdiagnoseRequest[alex] = .creating; $0.phoneCleanup[alex] = nil }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: request ready") {
+                            IPhoneImportCard(model: fixtureIPhone {
+                                $0.sysdiagnoseRequest[alex] = .ready(OwnSysdiagnose(
+                                    name: longArchive, size: 298_000_000, requestID: UUID(), requestedAt: VisualFixture.referenceDate))
+                                $0.phoneCleanup[alex] = nil
+                            }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: request ambiguous") {
+                            IPhoneImportCard(model: fixtureIPhone { $0.sysdiagnoseRequest[alex] = .ambiguous; $0.phoneCleanup[alex] = nil }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: request failed") {
+                            IPhoneImportCard(model: fixtureIPhone { $0.sysdiagnoseRequest[alex] = .failed; $0.phoneCleanup[alex] = nil }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: request waiting, disconnected") {
+                            IPhoneImportCard(model: fixtureIPhone {
+                                $0.sysdiagnoseRequest[alex] = .waiting; $0.phoneCleanup[alex] = nil; $0.connected[alex] = nil
+                            }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: success, deleted from iPhone") {
+                            IPhoneImportCard(model: fixtureIPhone {
+                                $0.sysdiagnoseRequest[alex] = nil
+                                $0.importResult[alex] = .success((name: longArchive, summary: ImportSummary(
+                                    batteryPoints: 12, skippedRows: 0, logFiles: 37,
+                                    keptPath: URL(fileURLWithPath: "/tmp/kept.tar.gz"))))
+                                $0.phoneCleanup[alex] = .deleted
+                            }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: success, delete failed") {
+                            IPhoneImportCard(model: fixtureIPhone {
+                                $0.sysdiagnoseRequest[alex] = nil
+                                $0.importResult[alex] = .success((name: longArchive, summary: ImportSummary(
+                                    batteryPoints: 12, skippedRows: 0, logFiles: 37,
+                                    keptPath: URL(fileURLWithPath: "/tmp/kept.tar.gz"))))
+                                $0.phoneCleanup[alex] = .failed(7)
+                            }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone import: failure, interrupted") {
+                            IPhoneImportCard(model: fixtureIPhone {
+                                $0.sysdiagnoseRequest[alex] = nil; $0.phoneCleanup[alex] = nil
+                                $0.importResult[alex] = .failure(.interrupted)
+                            }, deviceKey: alex)
                         }
                     }
                 }
@@ -1310,13 +1372,21 @@ extension SerialTests {
                         }
                         HarnessSection(label: "iPhone dialogs: parse choice") {
                             IPhoneImportChoiceSheet(
-                                title: L.iphoneImportConfirmTitle(longArchive, into: "Alex’s iPhone"),
+                                title: L.iphoneImportConfirmTitle(into: "Alex’s iPhone"),
+                                archiveName: longArchive,
                                 keepDefault: true,
                                 onCancel: {}, onParse: {}, onKeep: {})
                                 .background(DS3.overlay)
                             IPhoneImportChoiceSheet(
-                                title: L.iphoneImportConfirmTitle(longArchive, into: "Alex’s iPhone"),
+                                title: L.iphoneImportConfirmTitle(into: "Alex’s iPhone"),
+                                archiveName: longArchive,
                                 keepDefault: false,
+                                onCancel: {}, onParse: {}, onKeep: {})
+                                .background(DS3.overlay)
+                            IPhoneImportChoiceSheet(
+                                title: L.iphoneImportConfirmTitle(into: "Alex’s iPhone"),
+                                archiveName: longArchive,
+                                keepDefault: true, deleteNote: L.iphoneImportDeleteNote,
                                 onCancel: {}, onParse: {}, onKeep: {})
                                 .background(DS3.overlay)
                         }

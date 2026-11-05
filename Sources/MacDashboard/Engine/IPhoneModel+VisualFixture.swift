@@ -143,5 +143,30 @@ extension IPhoneModel {
         importing = [:]
         importResult = [:]
         importQuestion = [:]
+        sysdiagnoseRequest = [:]
+        phoneCleanup = [:]
+
+        // DEVICE-ARCHIVE-CLEANUP: states a real phone rarely shows. Default = the phone is writing the requested archive
+        // and the last import deleted its archive; MACDASH_FIXTURE_REQUEST picks another phase on a bench build.
+        let requestFixture = ProcessInfo.processInfo.environment["MACDASH_FIXTURE_REQUEST"] ?? "creating"
+        sysdiagnoseRequest[Self.fixtureAlexKey] = Self.fixtureRequestPhase(requestFixture)
+        importResult[Self.fixtureAlexKey] = .success((name: archiveName, summary: ImportSummary(
+            batteryPoints: 12, skippedRows: 0, logFiles: 37, keptPath: nil)))
+        phoneCleanup[Self.fixtureAlexKey] = requestFixture == "kept" ? .keptBySetting : .deleted
+    }
+
+    /// `MACDASH_FIXTURE_REQUEST`: waiting | creating | ready | ambiguous | expired | timedOut | failed | kept | none.
+    static func fixtureRequestPhase(_ raw: String) -> SysdiagnoseRequestPhase? {
+        switch raw {
+        case "waiting": return .waiting
+        case "creating", "kept": return .creating
+        case "ready": return .ready(OwnSysdiagnose(name: "sysdiagnose_2026.01.15_09-15-02+0300_iPhone-OS_iPhone_23E254.tar.gz",
+                                                   size: 298_000_000, requestID: UUID(), requestedAt: VisualFixture.referenceDate))
+        case "ambiguous": return .ambiguous
+        case "expired": return .expired
+        case "timedOut": return .timedOut
+        case "failed": return .failed
+        default: return nil
+        }
     }
 }

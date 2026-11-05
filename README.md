@@ -62,7 +62,7 @@ feedback and comments. Hope you like it!
 
 By default MacDashboard only reads: it collects information and writes its
 own report/history files under Application Support and, only when you choose to keep an
-imported iPhone sysdiagnose, that archive in the folder shown in Settings › iPhone (default
+imported iPhone sysdiagnose, that archive in the folder shown in Settings › Devices (default
 `~/Documents/MacDashboard/iPhone`; if Documents syncs to iCloud Drive, kept archives sync with
 it) — nothing else. The only
 exceptions are actions you explicitly click, each of which shows a
@@ -129,6 +129,11 @@ Every request also shows the server your Mac's IP address and
 number and name are never sent anywhere. On screen, serial numbers show only
 their last 4 characters and an IMEI only its first 8 digits (the model's type
 code) until you click "Show". Nothing else touches the network.
+
+The app only reads a connected iPhone, with one exception: a sysdiagnose archive
+the app itself asked the phone to create is deleted from the phone after it has
+been imported in full, unless Settings › Devices › “Keep requested archives on
+the iPhone” is on. Archives you created yourself are never deleted.
 
 **There is no AI assistant in the app.** An unfinished one, never part of a
 release, was removed from the code; its last state is kept under the git tag

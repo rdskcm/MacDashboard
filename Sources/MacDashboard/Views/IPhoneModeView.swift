@@ -25,10 +25,19 @@ struct IPhoneModeView: View {
 
     private var tileCount: Int { model.devices.count + model.pendingHandles.count }
 
+    /// Stored devices are listed but none is attached. With no tiles at all, `IPhoneNotice` shows the hint instead.
+    private var showsUnlockHintInHeader: Bool {
+        model.transportAvailable && tileCount > 0 && model.pendingHandles.isEmpty && !model.hasAttachedPhone
+            && !model.devices.contains(where: { model.connected[$0.id] != nil })
+    }
+
     private var listPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                header
+                HStack(alignment: .center, spacing: 28) {
+                    header
+                    if showsUnlockHintInHeader { IPhoneUnlockFirstHint(alignment: .leading) }
+                }
                 banners
                 content
             }
@@ -88,6 +97,7 @@ struct IPhoneModeView: View {
             IPhoneNotice(kind: .unavailable)
         } else if tileCount == 0 {
             IPhoneNotice(kind: .empty, searchDisabled: model.restartingService,
+                         phoneAttached: model.hasAttachedPhone,
                          onSearch: { model.searchAgain() })
         } else {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3),
@@ -358,11 +368,26 @@ struct IPhonePendingTileView: View {
     }
 }
 
+/// Shown wherever no phone is attached: a phone locked since a restart has USB data off and cannot be seen.
+struct IPhoneUnlockFirstHint: View {
+    let alignment: TextAlignment
+
+    var body: some View {
+        Text(L.iphoneUnlockFirstHint)
+            .font(.system(size: alignment == .center ? 15 : 14.5))
+            .foregroundStyle(DS3.inkSoft)
+            .multilineTextAlignment(alignment)
+            .frame(maxWidth: alignment == .center ? 350 : 640, alignment: alignment == .center ? .center : .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 /// Centred notice replacing the grid: no phones found, or the transport is unavailable.
 struct IPhoneNotice: View {
     enum Kind { case empty, unavailable }
     let kind: Kind
     var searchDisabled = false
+    var phoneAttached = false
     var onSearch: () -> Void = {}
 
     private var title: String {
@@ -387,6 +412,7 @@ struct IPhoneNotice: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 350)
                     .fixedSize(horizontal: false, vertical: true)
+                if kind == .empty, !phoneAttached { IPhoneUnlockFirstHint(alignment: .center) }
             }
             if kind == .empty {
                 Button(L.iphoneSearchAgain, action: onSearch)

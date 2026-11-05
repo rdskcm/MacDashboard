@@ -184,6 +184,27 @@ extension SerialTests {
                 Issue.record("iPhone: store save threw \(error)")
             }
 
+            // DEVICE-ARCHIVE-CLEANUP: ownArchives round-trips; a store written without the key decodes to nil.
+            do {
+                var r3 = r1
+                r3.ownArchives = [OwnSysdiagnose(name: "sysdiagnose_2026.10.09_01-34-55+0300_iPhone-OS_iPhone_23E254.tar.gz",
+                                                 size: 1234, requestID: UUID(), requestedAt: Date(timeIntervalSince1970: 1791704000))]
+                let ownURL = tmp.appendingPathComponent("own").appendingPathComponent("iphones.json")
+                try FileManager.default.createDirectory(at: ownURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try IPhoneStore(url: ownURL).save([r3])
+                #expect(IPhoneStore(url: ownURL).load() == [r3], "iPhone: ownArchives round-trips through IPhoneStore")
+                let obj = try JSONSerialization.jsonObject(with: Data(contentsOf: ownURL))
+                var env = (obj as? [String: Any]) ?? [:]
+                var arr = (env["devices"] as? [[String: Any]]) ?? []
+                #expect(arr.count == 1 && arr[0]["ownArchives"] != nil, "iPhone: ownArchives key is written")
+                if !arr.isEmpty { arr[0].removeValue(forKey: "ownArchives") }
+                env["devices"] = arr
+                try JSONSerialization.data(withJSONObject: env).write(to: ownURL)
+                #expect(IPhoneStore(url: ownURL).load().first?.ownArchives == nil, "iPhone: a store without ownArchives decodes with nil")
+            } catch {
+                Issue.record("iPhone: ownArchives store check threw \(error)")
+            }
+
             // An unreadable file is read as [] and renamed aside (bytes intact) by the next save.
             let badURL = tmp.appendingPathComponent("bad").appendingPathComponent("iphones.json")
             try? FileManager.default.createDirectory(at: badURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -282,9 +303,9 @@ extension SerialTests {
             #expect(ident([], "k17", all) == .unknown, "iPhone: identity unknown when the archive has no capacity")
             #expect(ident([4395], "kb", all) == .unknown, "iPhone: identity unknown when the phone has no stored capacity")
             #expect(ident([4395], "missing", all) == .unknown, "iPhone: identity unknown without a record")
-            #expect(StringsEN().iphoneImportConfirmTitle("a.tar.gz", into: "iPhone 17 Pro Max") == "Import “a.tar.gz” into iPhone 17 Pro Max",
+            #expect(StringsEN().iphoneImportConfirmTitle(into: "iPhone 17 Pro Max") == "Import into iPhone 17 Pro Max",
                   "iPhone: EN confirm title names the phone")
-            #expect(StringsRU().iphoneImportConfirmTitle("a.tar.gz", into: "iPhone 17 Pro Max") == "Импорт «a.tar.gz» в iPhone 17 Pro Max",
+            #expect(StringsRU().iphoneImportConfirmTitle(into: "iPhone 17 Pro Max") == "Импорт в iPhone 17 Pro Max",
                   "iPhone: RU confirm title names the phone")
             let mEN = StringsEN().iphoneImportMismatchMessage(file: "a.tar.gz", owner: "iPhone 15 Pro Max", archiveMAh: [4395],
                                                               deviceMAh: 5030, target: "iPhone 17 Pro Max")
@@ -299,9 +320,14 @@ extension SerialTests {
             let arch = IPhoneData.sysdiagnoseArchives(in: [
                 af("/DiagnosticLogs/sysdiagnose/a.tar.gz", 1), af("/DiagnosticLogs/sysdiagnose/b.tar.gz", 9),
                 af("/DiagnosticLogs/sysdiagnose/c.log", 5), af("/DiagnosticLogs/sysdiagnose/d.tar.gz", dir: true, 7),
-                af("/Retired/e.tar.gz", 8), af("/DiagnosticLogs/sysdiagnose/f.tar.gz", nil)])
+                af("/Retired/e.tar.gz", 8), af("/DiagnosticLogs/sysdiagnose/f.tar.gz", nil),
+                af("/DiagnosticLogs/sysdiagnose/IN_PROGRESS_sysdiagnose_x.tar.gz", 10)])
             #expect(arch.map(\.path) == ["/DiagnosticLogs/sysdiagnose/b.tar.gz", "/DiagnosticLogs/sysdiagnose/a.tar.gz", "/DiagnosticLogs/sysdiagnose/f.tar.gz"],
                   "iPhone: sysdiagnoseArchives keeps regular .tar.gz files there, newest first")
+            #expect(!arch.contains { $0.path.contains("IN_PROGRESS_") }, "iPhone: sysdiagnoseArchives drops an IN_PROGRESS_ file")
+            #expect(StringsEN().iphoneImportError(.interrupted) != StringsEN().iphoneImportError(.copyFailed)
+                  && StringsRU().iphoneImportError(.interrupted) != StringsRU().iphoneImportError(.copyFailed),
+                  "iPhone: .interrupted has its own import error text in EN and RU")
             // Identity fields (fake values only)
             let idLock: [String: Any] = ["MarketingName": "iPhone 99", "ModelNumber": "MXXX1", "RegionInfo": "LL/A",
                                          "RegulatoryModelNumber": "A9999", "HardwareModel": "D99AP", "ProductVersion": "99.1",

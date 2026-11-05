@@ -15,6 +15,7 @@ protocol IPhoneStrings {
     var iphoneUnknownDevice: String { get }
     var iphoneRetry: String { get }
     var iphoneSearchAgain: String { get }
+    var iphoneUnlockFirstHint: String { get }
     var iphoneRestartService: String { get }
     var iphoneRestartConfirmTitle: String { get }
     var iphoneRestartConfirmBody: String { get }
@@ -89,6 +90,7 @@ extension StringsEN: IPhoneStrings {
     var iphoneUnknownDevice: String { "iPhone" }
     var iphoneRetry: String { "Retry" }
     var iphoneSearchAgain: String { "Search again" }
+    var iphoneUnlockFirstHint: String { "After a restart or a long lock, an iPhone does not connect until you unlock it. Unlock it, and it appears here." }
     var iphoneRestartService: String { "Restart connection service…" }
     var iphoneRestartConfirmTitle: String { "Restart the connection service?" }
     var iphoneRestartConfirmBody: String { "The service briefly interrupts every iPhone and iPad connected to this Mac, including Finder sync. It needs an administrator password or Touch ID." }
@@ -165,6 +167,7 @@ extension StringsRU: IPhoneStrings {
     var iphoneUnknownDevice: String { "iPhone" }
     var iphoneRetry: String { "Повторить" }
     var iphoneSearchAgain: String { "Искать снова" }
+    var iphoneUnlockFirstHint: String { "После перезагрузки или долгой блокировки iPhone не подключается, пока его не разблокируете. Разблокируйте его, и он появится здесь." }
     var iphoneRestartService: String { "Перезапустить службу подключения…" }
     var iphoneRestartConfirmTitle: String { "Перезапустить службу подключения?" }
     var iphoneRestartConfirmBody: String { "Служба на мгновение прервёт связь со всеми iPhone и iPad, подключёнными к этому Mac, включая синхронизацию в Finder. Понадобится пароль администратора или Touch ID." }

@@ -198,5 +198,49 @@ extension SerialTests {
             print("liveCanary free=\(free.map(String.init) ?? "nil")")
             #expect(free != nil && total != nil && free! > 0 && free! < total!)
         }
+
+        @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
+        @MainActor
+        func liveCanarySysdiagnoseDir() async {
+            let transport = MobileDeviceTransport.shared
+            let box = Self.liveBox
+            transport.start { event in
+                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+            }
+            guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
+                Issue.record("attach an unlocked, trusted iPhone over USB")
+                return
+            }
+            var listed: Result<[IPhoneAFCEntry], IPhoneReadError>?
+            let t0 = ContinuousClock.now
+            transport.listSysdiagnoseDir(h) { listed = $0 }
+            guard await Self.wait(30, until: { listed != nil }), case .success(let entries)? = listed else {
+                Issue.record("sysdiagnose listing failed: \(String(describing: listed))")
+                return
+            }
+            let ms = Self.ms(t0)
+            let names = entries.map { ($0.path as NSString).lastPathComponent }
+            let inProgress = names.filter { $0.hasPrefix(SysdiagnoseDir.inProgressPrefix) }.count
+            let parsable = names.filter { $0.hasSuffix(".tar.gz") && SysdiagnoseDir.startDate(ofArchive: $0) != nil }.count
+            print("liveCanary sysdiagnoseDir entries=\(entries.count) inProgress=\(inProgress) parsableNames=\(parsable) ms=\(ms)")
+            for e in entries {
+                #expect(e.path.hasPrefix(SysdiagnoseDir.path + "/") && !e.path.dropFirst(SysdiagnoseDir.path.count + 1).contains("/"))
+                let n = (e.path as NSString).lastPathComponent
+                if n.hasSuffix(".tar.gz"), !n.hasPrefix(SysdiagnoseDir.inProgressPrefix) {
+                    #expect(SysdiagnoseDir.startDate(ofArchive: n) != nil, "unparsable archive name")
+                }
+            }
+            #expect(!IPhoneData.sysdiagnoseArchives(in: entries).contains {
+                ($0.path as NSString).lastPathComponent.hasPrefix(SysdiagnoseDir.inProgressPrefix)
+            })
+
+            // The file does not exist, so the session and `info` path run and the remove itself is never reached.
+            var outcome: PhoneCleanup?
+            transport.removeOwnArchive(h, path: SysdiagnoseDir.remotePath("sysdiagnose_2000.01.01_00-00-00+0000_canary.tar.gz"),
+                                       expectedSize: 1) { outcome = $0 }
+            let done = await Self.wait(30, until: { outcome != nil })
+            print("liveCanary removeProbe=\(outcome.map { String(describing: $0) } ?? "nil")")
+            #expect(done && outcome == .alreadyGone)
+        }
     }
 }

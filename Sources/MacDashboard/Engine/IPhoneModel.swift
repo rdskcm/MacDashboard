@@ -43,6 +43,9 @@ final class IPhoneModel {
     /// a device replaces the previous list.
     var archiveLogs: [String: [IPhoneLogEntry]] = [:]
     var importing: [String: ImportProgress] = [:]
+    /// DEVICE-ARCHIVE-CLEANUP D14: device key → name of the kept archive whose last move to the Trash failed
+    /// (memory only; cleared at the next attempt and when an import starts).
+    var keptTrashFailed: [String: String] = [:]
     /// Last import result per device: the archive name with its summary, or the error.
     var importResult: [String: Result<(name: String, summary: ImportSummary), ImportError>] = [:]
     /// IPHONE-HISTORY-MIXUP: an import paused on an archive that looks like another phone's;
@@ -50,6 +53,22 @@ final class IPhoneModel {
     var importQuestion: [String: ImportIdentityQuestion] = [:]
     /// The paused import's continuation per device, resumed by `answerImportQuestion`.
     @ObservationIgnored private var importAnswer: [String: CheckedContinuation<Bool, Never>] = [:]
+    /// DEVICE-ARCHIVE-CLEANUP: the «Create new sysdiagnose» request per device (memory only; nil = none shown).
+    var sysdiagnoseRequest: [String: SysdiagnoseRequestPhase] = [:]
+    /// What happened on the phone after the last import per device (memory only; nil = not an own archive).
+    var phoneCleanup: [String: PhoneCleanup] = [:]
+    @ObservationIgnored private var openRequests: [String: SysdiagnoseRequest] = [:]
+    /// The running poll loop per device; exists only while `SysdiagnoseDir.shouldPoll` is true (Decision 7).
+    /// Tag of the latest `requestSysdiagnose` start per device; a listing callback of an older start does nothing.
+    @ObservationIgnored private var requestStarts: [String: UUID] = [:]
+    @ObservationIgnored private var requestTasks: [String: Task<Void, Never>] = [:]
+    /// Devices whose import card is mounted (`IPhoneImportCard` onAppear/onDisappear).
+    @ObservationIgnored private var requestPanelShown: Set<String> = []
+    /// `AppActivityMonitor`'s verdict, mirrored from `AppModel.setPaused` (AppShell.swift). Starts false: the
+    /// monitor reports the first change; under -visualFixture it never exists and nothing polls anyway.
+    @ObservationIgnored private var windowPaused = false
+    /// Devices whose running import paused on the «another phone» question (Decision 3).
+    @ObservationIgnored private var identityAsked: Set<String> = []
 
     // MARK: Crash-log actions (IPHONE-CRASHLOG-ACTIONS)
 
@@ -203,6 +222,8 @@ final class IPhoneModel {
     /// Every handle the transport reported attached and has not detached yet. A read that
     /// lands after its handle detached is dropped (the detach wins).
     private var attached: Set<IPhoneHandle> = []
+    /// True while the transport reports a phone attached, even before its first read lands. Observed through `attached`.
+    var hasAttachedPhone: Bool { !attached.isEmpty }
 
     init(store: IPhoneStore = IPhoneStore(url: IPhoneStore.defaultURL()),
          transport: MobileDeviceTransport = .shared,
@@ -258,7 +279,32 @@ final class IPhoneModel {
         return fm.fileExists(atPath: legacy.path) ? legacy : nil
     }
 
-    /// Settings › iPhone › Choose…: moves every kept archive to `url`, then stores the setting. All or nothing:
+    /// DEVICE-ARCHIVE-CLEANUP D14: moves one kept archive (the Mac copy only, no phone call) to the Trash and drops
+    /// its name from the record; battery history and logs stay. `url` is the one `keptArchiveURL` resolved for the
+    /// row: its folder must be one of the two places that function looks in and its last component must be `name`,
+    /// else nothing happens. A file already gone counts as removed. Any other failure keeps the row and sets
+    /// `keptTrashFailed`. Never deletes outright: only the Trash move.
+    func trashKeptArchive(deviceKey: String, name: String, url: URL,
+                          trash: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) {
+        keptTrashFailed[deviceKey] = nil
+        let folder = url.deletingLastPathComponent().standardizedFileURL
+        let current = archiveRoot.appendingPathComponent(deviceKey, isDirectory: true).standardizedFileURL
+        let legacy = IPhoneStore.legacyArchiveRoot().appendingPathComponent(deviceKey, isDirectory: true)
+            .appendingPathComponent("sysdiagnose", isDirectory: true).standardizedFileURL
+        guard name == url.lastPathComponent, folder == current || folder == legacy,
+              let i = devices.firstIndex(where: { $0.id == deviceKey }),
+              devices[i].keptArchives.contains(name) else { return }
+        if FileManager.default.fileExists(atPath: url.path) {
+            do { try trash(url) } catch {
+                keptTrashFailed[deviceKey] = name
+                return
+            }
+        }
+        devices[i].keptArchives.removeAll { $0 == name }
+        try? store.save(devices)
+    }
+
+    /// Settings › Devices › Choose…: moves every kept archive to `url`, then stores the setting. All or nothing:
     /// a skipped or failed file moves the moved ones back and reports the count.
     func setArchiveFolder(_ url: URL) async {
         let new = url.standardizedFileURL
@@ -311,6 +357,7 @@ final class IPhoneModel {
             pendingStatus[h] = nil
             for (key, handle) in connected where handle == h {
                 connected[key] = nil
+                updatePolling(key)
                 status[key] = .remembered
                 identity[key] = nil
                 storage[key] = nil
@@ -413,13 +460,19 @@ final class IPhoneModel {
     /// Runs one import. `keep` = «Разобрать и сохранить». Merges the derived battery points
     /// into the stored history and fills `archiveLogs` only on success. One import per
     /// device at a time.
-    func importArchive(deviceKey: String, source: SysdiagnoseImporter.Source, keep: Bool) {
+    func importArchive(deviceKey: String, source: SysdiagnoseImporter.Source, keep: Bool,
+                       deletesFromPhone: Bool = false) {
         guard importing[deviceKey] == nil, devices.contains(where: { $0.id == deviceKey }) else { return }
+        phoneCleanup[deviceKey] = nil
+        keptTrashFailed[deviceKey] = nil
+        identityAsked.remove(deviceKey)
+        if case .ready = sysdiagnoseRequest[deviceKey] { sysdiagnoseRequest[deviceKey] = nil }
         if case .phone(_, _, let size) = source {
             importing[deviceKey] = .copying(done: 0, total: size)
         } else {
             importing[deviceKey] = .extracting
         }
+        updatePolling(deviceKey)   // the list watch stops during an import
         importResult[deviceKey] = nil
         let keepRoot = archiveRoot
         Task { [weak self] in
@@ -431,15 +484,24 @@ final class IPhoneModel {
                                             }) { [weak self] p in
                 self?.importing[deviceKey] = p
             }
-            self?.finishImport(deviceKey: deviceKey, keep: keep, result: result)
+            self?.finishImport(deviceKey: deviceKey, keep: keep, source: source, deletesFromPhone: deletesFromPhone,
+                              result: result)
         }
     }
 
-    private func finishImport(deviceKey: String, keep: Bool, result: Result<ImportOutput, ImportError>) {
+    private func finishImport(deviceKey: String, keep: Bool, source: SysdiagnoseImporter.Source,
+                              deletesFromPhone: Bool, result: Result<ImportOutput, ImportError>) {
         importing[deviceKey] = nil
+        updatePolling(deviceKey)   // the list watch returns after the import
         switch result {
         case .failure(let e):
-            importResult[deviceKey] = .failure(e)
+            // A copy cut by a detach (cable today, Wi-Fi once IPHONE-WIFI lands) is named as such; the importer has
+            // already removed its temp folder, so nothing partial is kept.
+            if e == .copyFailed, case .phone(let h, _, _) = source, !attached.contains(h) {
+                importResult[deviceKey] = .failure(.interrupted)
+            } else {
+                importResult[deviceKey] = .failure(e)
+            }
         case .success(let out):
             if let i = devices.firstIndex(where: { $0.id == deviceKey }) {
                 devices[i].battery = IPhoneData.mergeImported(devices[i].battery, out.points)
@@ -448,6 +510,41 @@ final class IPhoneModel {
             }
             archiveLogs[deviceKey] = out.logs
             importResult[deviceKey] = .success((out.archiveName, out.summary))
+            if case .phone(_, let remotePath, let size) = source {
+                cleanUpPhone(deviceKey: deviceKey, remotePath: remotePath, size: size, summary: out.summary,
+                             deletesFromPhone: deletesFromPhone)
+            }
+        }
+    }
+
+    /// Deletes the imported archive from the phone when it is an own claim and the import was full (§ Ownership).
+    /// `deletesFromPhone` is the decision the choice dialog showed; a setting changed during the import does not alter it.
+    private func cleanUpPhone(deviceKey: String, remotePath: String, size: Int64, summary: ImportSummary,
+                              deletesFromPhone: Bool) {
+        let name = (remotePath as NSString).lastPathComponent
+        guard remotePath == SysdiagnoseDir.remotePath(name),
+              let own = devices.first(where: { $0.id == deviceKey })?.ownArchives?.first(where: { $0.name == name })
+        else { return }   // not an own archive: nothing is done or said
+        if !deletesFromPhone { phoneCleanup[deviceKey] = .keptBySetting; return }
+        guard own.size == size, SysdiagnoseDir.importAllowsDelete(summary, identityAsked: identityAsked.contains(deviceKey)) else {
+            phoneCleanup[deviceKey] = .keptIncomplete
+            return
+        }
+        guard let h = connected[deviceKey] else { phoneCleanup[deviceKey] = .notConnected; return }
+        phoneCleanup[deviceKey] = .deleting
+        transport.removeOwnArchive(h, path: remotePath, expectedSize: own.size) { [weak self] outcome in
+            guard let self else { return }
+            // A new import or an unlink in the meantime owns the message now; the claim bookkeeping below still runs.
+            if self.devices.contains(where: { $0.id == deviceKey }), self.importing[deviceKey] == nil {
+                self.phoneCleanup[deviceKey] = outcome
+            }
+            switch outcome {
+            case .deleted, .alreadyGone, .changed:
+                self.dropClaim(name, deviceKey: deviceKey)
+                self.loadLogs(deviceKey: deviceKey)
+            default:
+                break   // the claim stays: a later full import of the same archive retries the delete
+            }
         }
     }
 
@@ -456,6 +553,7 @@ final class IPhoneModel {
     private func confirmIdentity(deviceKey: String, archiveName: String, archiveMAh: Set<Int>) async -> Bool {
         guard case .mismatch(let q) = IPhoneData.archiveIdentity(archiveName: archiveName, archiveMAh: archiveMAh,
                                                                  deviceKey: deviceKey, devices: devices) else { return true }
+        identityAsked.insert(deviceKey)
         return await withCheckedContinuation { cont in
             Task { @MainActor in
                 self.importAnswer[deviceKey] = cont
@@ -505,6 +603,7 @@ final class IPhoneModel {
             pendingStatus[h] = nil
             connected[key] = h
             status[key] = .connected
+            updatePolling(key)
             lastSnapshot[key] = snap
             if trigger == .attach, AppSettings.shared.iphoneAutoRead,
                IPhoneData.autoReadDue(last: autoReadAt[key], now: now) {
@@ -520,6 +619,159 @@ final class IPhoneModel {
                 pendingStatus[h] = err == .needsTrust ? .needsTrust : .readFailed(L.iphoneStatusFailed)
             }
         }
+    }
+
+    // MARK: Sysdiagnose request (DEVICE-ARCHIVE-CLEANUP)
+
+    /// «Create new sysdiagnose…»: lists the phone's archive folder, then shows the button instruction and polls
+    /// until one new archive is claimed, the request ends, or the user stops it. One request per device.
+    func requestSysdiagnose(deviceKey: String) {
+        guard let h = connected[deviceKey], sysdiagnoseRequest[deviceKey]?.isActive != true else { return }
+        sysdiagnoseRequest[deviceKey] = .preparing
+        let start = UUID()
+        requestStarts[deviceKey] = start
+        let requestedAt = Date()   // before the listing: an archive started during it still counts as new
+        transport.listSysdiagnoseDir(h) { [weak self] result in
+            guard let self, self.requestStarts[deviceKey] == start,
+                  self.sysdiagnoseRequest[deviceKey] == .preparing else { return }   // stopped or restarted meanwhile
+            guard case .success(let entries) = result else {
+                self.sysdiagnoseRequest[deviceKey] = .failed
+                return
+            }
+            let names = Set(entries.filter { !$0.isDirectory }.map { ($0.path as NSString).lastPathComponent })
+            self.openRequests[deviceKey] = SysdiagnoseRequest(id: UUID(), requestedAt: requestedAt, baseline: names)
+            self.sysdiagnoseRequest[deviceKey] = .waiting
+            self.updatePolling(deviceKey)
+        }
+    }
+
+    /// Stops a running request or closes a finished one's message. Also for IPHONE-UNLINK before it removes a record.
+    func cancelSysdiagnoseRequest(deviceKey: String) {
+        requestStarts[deviceKey] = nil
+        openRequests[deviceKey] = nil
+        sysdiagnoseRequest[deviceKey] = nil
+        updatePolling(deviceKey)
+    }
+
+    /// `IPhoneImportCard` reports its mount state (onAppear / onDisappear): the panel is visible only while the card is.
+    func setRequestPanelShown(deviceKey: String, _ shown: Bool) {
+        if shown { requestPanelShown.insert(deviceKey) } else { requestPanelShown.remove(deviceKey) }
+        updatePolling(deviceKey)
+    }
+
+    /// `AppActivityMonitor` (AppShell.swift): true when the app is not frontmost or has no visible, unoccluded window.
+    func setPaused(_ paused: Bool) {
+        guard windowPaused != paused else { return }
+        windowPaused = paused
+        for key in Set(openRequests.keys).union(requestPanelShown).union(requestTasks.keys) { updatePolling(key) }
+    }
+
+    /// True while the 10 s poll loop of `deviceKey` exists (tests, `no-unseen-work` check).
+    func isPolling(deviceKey: String) -> Bool { requestTasks[deviceKey] != nil }
+
+    /// Decision 7 and 13: the one loop per device. With a request open it polls that request; with none open and no
+    /// import running it watches the phone's finished archives. True when the loop may run now.
+    private func wantsPolling(_ deviceKey: String) -> Bool {
+        let shown = requestPanelShown.contains(deviceKey), isConnected = connected[deviceKey] != nil
+        if openRequests[deviceKey] != nil {
+            return SysdiagnoseDir.shouldPoll(phase: sysdiagnoseRequest[deviceKey], panelShown: shown,
+                                             windowPaused: windowPaused, connected: isConnected)
+        }
+        return SysdiagnoseDir.shouldWatchList(panelShown: shown, windowPaused: windowPaused, connected: isConnected,
+                                              importing: importing[deviceKey] != nil)
+    }
+
+    /// Starts the loop when it may run and is not running; cancels it otherwise. This is the only place a poll task is
+    /// created or cancelled. A started loop ticks at once (the first request poll after a pause applies the clock
+    /// rules to what is on the phone) and then every 10 s.
+    private func updatePolling(_ deviceKey: String) {
+        let wants = wantsPolling(deviceKey)
+        if wants, requestTasks[deviceKey] == nil {
+            requestTasks[deviceKey] = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self, await self.tick(deviceKey) else { return }
+                    try? await Task.sleep(nanoseconds: UInt64(SysdiagnoseDir.pollInterval * 1_000_000_000))
+                }
+            }
+        } else if !wants, let t = requestTasks.removeValue(forKey: deviceKey) {
+            t.cancel()
+        }
+    }
+
+    /// One tick in whichever mode applies. A request that ends here leaves the loop running in list mode when the
+    /// list gate holds; otherwise the loop ends and removes itself (a cancelled loop was already removed).
+    private func tick(_ deviceKey: String) async -> Bool {
+        if openRequests[deviceKey] != nil {
+            _ = await pollRequest(deviceKey)
+        } else {
+            await pollArchiveList(deviceKey)
+        }
+        guard !Task.isCancelled else { return false }
+        if wantsPolling(deviceKey) { return true }
+        requestTasks[deviceKey] = nil
+        return false
+    }
+
+    /// List mode (Decision 13): lists the phone's sysdiagnose folder and compares the finished archives with the ones
+    /// shown under «On the iPhone». On a difference the crash-log listing is reloaded once. Does nothing before the
+    /// first load, and a failed listing is ignored until the next tick.
+    private func pollArchiveList(_ deviceKey: String) async {
+        guard let h = connected[deviceKey], let shown = logs[deviceKey], !Task.isCancelled else { return }
+        let result: Result<[IPhoneAFCEntry], IPhoneReadError> = await withCheckedContinuation { cont in
+            transport.listSysdiagnoseDir(h) { cont.resume(returning: $0) }
+        }
+        guard case .success(let entries) = result, !Task.isCancelled, connected[deviceKey] == h,
+              importing[deviceKey] == nil, openRequests[deviceKey] == nil else { return }
+        let current = logs[deviceKey] ?? shown   // loadLogs may have published meanwhile
+        let showing = current.map { IPhoneAFCEntry(path: $0.path, isDirectory: false, size: $0.size, modified: $0.modified) }
+        if SysdiagnoseDir.finishedArchives(entries) != SysdiagnoseDir.finishedArchives(showing) {
+            loadLogs(deviceKey: deviceKey)
+        }
+    }
+
+    /// One poll; false when polling stops (final phase, cancelled, or no longer allowed).
+    private func pollRequest(_ deviceKey: String) async -> Bool {
+        guard let r = openRequests[deviceKey], let h = connected[deviceKey], !Task.isCancelled else { return false }
+        let result: Result<[IPhoneAFCEntry], IPhoneReadError> = await withCheckedContinuation { cont in
+            transport.listSysdiagnoseDir(h) { cont.resume(returning: $0) }
+        }
+        guard openRequests[deviceKey]?.id == r.id, !Task.isCancelled else { return false }   // stopped during the listing
+        guard case .success(let entries) = result else { return true }    // retried at the next tick
+        let (next, phase) = SysdiagnoseDir.step(r, listing: entries, now: Date())
+        openRequests[deviceKey] = next
+        switch phase {
+        case .ready(let own):
+            claim(own, deviceKey: deviceKey)
+            endRequest(deviceKey, phase)
+            loadLogs(deviceKey: deviceKey)   // the archive appears under «On the iPhone»
+            return false
+        case .ambiguous, .expired, .timedOut, .failed:
+            endRequest(deviceKey, phase)
+            return false
+        case .preparing, .waiting, .creating:
+            sysdiagnoseRequest[deviceKey] = phase
+            return true
+        }
+    }
+
+    /// Final phase: polling ends, the message stays until closed or an import starts.
+    private func endRequest(_ deviceKey: String, _ phase: SysdiagnoseRequestPhase) {
+        openRequests[deviceKey] = nil
+        sysdiagnoseRequest[deviceKey] = phase
+    }
+
+    private func claim(_ own: OwnSysdiagnose, deviceKey: String) {
+        guard let i = devices.firstIndex(where: { $0.id == deviceKey }) else { return }
+        var list = (devices[i].ownArchives ?? []).filter { $0.name != own.name }
+        list.append(own)
+        devices[i].ownArchives = Array(list.suffix(SysdiagnoseDir.maxOwnRecords))
+        try? store.save(devices)
+    }
+
+    private func dropClaim(_ name: String, deviceKey: String) {
+        guard let i = devices.firstIndex(where: { $0.id == deviceKey }) else { return }
+        devices[i].ownArchives?.removeAll { $0.name == name }
+        try? store.save(devices)
     }
 
     // MARK: Find iPhone (Stage 7)
