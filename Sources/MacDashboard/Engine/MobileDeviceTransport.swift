@@ -572,9 +572,9 @@ final class MobileDeviceTransport {
     }
 
     /// Walks the crash-log tree and posts the listing at once (`onListing`, R2), then reads the
-    /// headers of files not in `knownHeaders` in the same session, posting `onTypes` per batch.
+    /// headers of files not in `knownHeaders` (cache key → parsed header) in the same session, posting `onTypes` per batch.
     /// The read loop yields to any more urgent job; the rest is queued at `.background` (D5, D6).
-    func listLogs(_ h: IPhoneHandle, knownHeaders: [String: String],
+    func listLogs(_ h: IPhoneHandle, knownHeaders: [String: IPhoneLogHeader],
                   onListing: @escaping @MainActor (Result<IPhoneLogListing, IPhoneReadError>) -> Void,
                   onTypes: @escaping @MainActor (IPhoneLogTypeBatch) -> Void) {
         let queued = enqueue(.user) { [self] in
@@ -610,7 +610,7 @@ final class MobileDeviceTransport {
             }
             // nil = the read failed: reported as failed, so it is not cached and the next listing reads it again.
             if let head {
-                batch.read[key] = IPhoneData.bugType(fromHeader: head) ?? ""
+                batch.read[key] = IPhoneCrashLog.logHeader(fromHeader: head)
             } else {
                 batch.failed.insert(key)
             }

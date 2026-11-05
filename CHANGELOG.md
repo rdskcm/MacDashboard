@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### New
 
+- [feat] iPhone crash logs: click a file to see its process, type and time, then open it in Console or save it to the Mac. The file is copied from the phone read-only (nothing on the phone changes) into a private temporary folder that is cleared at the next launch; files from an imported sysdiagnose work without the phone. The saved crash-log type cache now also keeps each file's process and time, so the first listing after this update identifies the files again once, in the background.
 - [feat] iPhone battery card: on iOS 27 the temperature is read again (iOS 27 moved it to a separate registry node; the app now asks for that node when the main one lacks it), and while the phone charges the State tile shows the power going into the battery, e.g. «Charging +2.4 W». Its tooltip spells out the voltage and current behind the figure and, where the phone reports it, what is drawn from the cable (iOS 27) or what the power source offers (iOS 26).
 - [feat] The header's iPhone segment is now «Devices»; Esc, ⌘[ and a second click on the segment return from a device page to the list.
 - [feat] Settings › iPhone: «Auto-read on connect» (off = on attach the app only identifies the phone and reads the battery and crash logs on request).

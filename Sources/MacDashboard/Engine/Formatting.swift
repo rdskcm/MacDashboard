@@ -141,6 +141,20 @@ func fmtDisplayDay(_ date: Date) -> String {
     displayDayFormatter.string(from: date)
 }
 
+private let displayDateTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = .autoupdatingCurrent
+    f.timeZone = .autoupdatingCurrent
+    f.dateStyle = .short
+    f.timeStyle = .medium
+    return f
+}()
+
+/// System-region short date + time with seconds, for display only (crash-log «Created»).
+func fmtDisplayDateTime(_ date: Date) -> String {
+    displayDateTimeFormatter.string(from: date)
+}
+
 private func makeShortDayFormatter(_ template: String) -> DateFormatter {
     let f = DateFormatter()
     f.locale = .autoupdatingCurrent

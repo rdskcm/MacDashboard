@@ -3,7 +3,8 @@
 // `.tar.gz`: copies it from the phone (read-only AFC, through the transport) or uses the
 // Mac file the user picked, extracts only the members the import parses (D13) into a
 // fresh temp dir, parses them, optionally keeps the archive under the archive folder, and ALWAYS
-// removes the temp dir. Nothing outside the temp dir is ever deleted, and a Mac-picked
+// removes the temp dir (the extracted `.ips` reports are moved to per-file crash-log copy folders first,
+// IPHONE-CRASHLOG-ACTIONS). Nothing outside the temp dir is ever deleted, and a Mac-picked
 // file is never moved or deleted.
 
 import Foundation
@@ -100,7 +101,8 @@ struct SysdiagnoseImporter {
 
         let prefix = extractDir.standardizedFileURL.path
         var logs: [IPhoneLogEntry] = []
-        for u in ipsFiles.sorted(by: { $0.path < $1.path }) {
+        let sortedIps = ipsFiles.sorted(by: { $0.path < $1.path })
+        for u in sortedIps {
             let rel = u.standardizedFileURL.path.hasPrefix(prefix)
                 ? String(u.standardizedFileURL.path.dropFirst(prefix.count)) : u.lastPathComponent
             let attrs = try? fm.attributesOfItem(atPath: u.path)
@@ -108,10 +110,9 @@ struct SysdiagnoseImporter {
             let modified = attrs?[.modificationDate] as? Date
             var head = Self.readPrefix(u, limit: 4096)
             if let d = head, size > 4096, !d.contains(0x0A) { head = Self.readPrefix(u, limit: 65536) }
-            let bug = head.flatMap { IPhoneData.bugType(fromHeader: $0) }
-            logs.append(IPhoneLogEntry(path: rel, size: size, modified: modified, bugType: bug,
-                                       category: IPhoneData.category(bugType: bug),
-                                       source: .archive(name: archiveName)))
+            logs.append(IPhoneCrashLog.logEntry(path: rel, size: size, modified: modified,
+                                                header: head.map { IPhoneCrashLog.logHeader(fromHeader: $0) },
+                                                source: .archive(name: archiveName)))
         }
 
         // 4b. Identity (IPHONE-HISTORY-MIXUP): asked before anything is kept or merged.
@@ -129,6 +130,20 @@ struct SysdiagnoseImporter {
                 return .failure(.keepFailed)
             }
             keptURL = dest
+        }
+
+        // 6. IPHONE-CRASHLOG-ACTIONS (Decision 1): move the extracted reports out of the temp root before the
+        // defer removes it, one copy folder each, so archive rows can open and save without the phone.
+        // A file that cannot be moved keeps localURL nil; its row then says the copy is gone.
+        for (i, u) in sortedIps.enumerated() {
+            guard let dir = IPhoneCrashLog.makeCopyDir(in: fm.temporaryDirectory) else { continue }
+            let dest = dir.appendingPathComponent(u.lastPathComponent)
+            if (try? fm.moveItem(at: u, to: dest)) != nil {
+                try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dest.path)
+                logs[i].localURL = dest
+            } else {
+                try? fm.removeItem(at: dir)
+            }
         }
         return .success(ImportOutput(archiveName: archiveName,
                                      summary: ImportSummary(batteryPoints: points.count, skippedRows: skipped,

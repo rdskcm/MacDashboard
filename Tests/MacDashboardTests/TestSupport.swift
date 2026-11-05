@@ -44,6 +44,12 @@ let apiFixturesRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()   // Tests
     .appendingPathComponent("APIFixtures", isDirectory: true)
 
+/// <package>/Tests/IPSFixtures: synthetic iPhone `.ips` headers (IPHONE-CRASHLOG-ACTIONS).
+let ipsFixturesRoot = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()   // Tests/MacDashboardTests
+    .deletingLastPathComponent()   // Tests
+    .appendingPathComponent("IPSFixtures", isDirectory: true)
+
 /// ARCH-SETTINGS-PATH: a fresh, empty `UserDefaults` suite for one test. The name always starts with
 /// `MacDashboardTests.`, so `removeIsolatedDefaults` can never remove a real domain (the app's is
 /// `com.rdskcm.mac-dashboard`). Callers: `let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }`.

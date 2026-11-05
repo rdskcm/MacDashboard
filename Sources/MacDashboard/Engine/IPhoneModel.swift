@@ -31,10 +31,11 @@ final class IPhoneModel {
     var transportAvailable = true
     /// Crash-log listing per device (memory only).
     var logs: [String: [IPhoneLogEntry]] = [:]
-    /// Per device: "<path>|<size>|<mtime ms>" → bug_type ("" = none). Replaced by each successful
-    /// listing (files gone from the phone drop out), extended by type batches, saved to
-    /// `iphone-log-types.json` (IPHONE-LOAD-SPEED R3). IPHONE-CRASHLOG-ACTIONS reads it.
-    var headerCache: [String: [String: String]] = [:]
+    /// Per device: "<path>|<size>|<mtime ms>" → parsed header (bug_type, process, timestamp;
+    /// `IPhoneLogHeader()` = none). Replaced by each successful listing (files gone from the
+    /// phone drop out), extended by type batches, saved to `iphone-log-types.json` v2
+    /// (IPHONE-LOAD-SPEED R3, IPHONE-CRASHLOG-ACTIONS D1).
+    var headerCache: [String: [String: IPhoneLogHeader]] = [:]
     var logsLoading = InFlightReads<IPhoneHandle>()
     /// Devices whose last crash-log listing failed; cleared by a successful listing or detach.
     var logsFailed: Set<String> = []
@@ -49,6 +50,121 @@ final class IPhoneModel {
     var importQuestion: [String: ImportIdentityQuestion] = [:]
     /// The paused import's continuation per device, resumed by `answerImportQuestion`.
     @ObservationIgnored private var importAnswer: [String: CheckedContinuation<Bool, Never>] = [:]
+
+    // MARK: Crash-log actions (IPHONE-CRASHLOG-ACTIONS)
+
+    enum LogAction: Equatable { case console, save }
+    enum LogActionState: Equatable {
+        case copying(LogAction, done: Int64, total: Int64)
+        /// The local copy exists; writing it to the folder the user chose.
+        case saving
+        case saved
+        case failed(IPhoneLogActionError)
+    }
+    /// Per `logActionKey` (memory only). Cleared for a device on detach.
+    var logAction: [String: LogActionState] = [:]
+    /// Live files already copied this run: "<deviceKey>|<logCacheKey>" → local file (memory only, Decision 3).
+    @ObservationIgnored private var logCopies: [String: URL] = [:]
+    /// Opens a local file and reports success on the main actor. The view passes the app's Console opener
+    /// (ARCH-ENGINE-GUARD: the Engine names no view type, D4).
+    typealias LogOpener = (URL, @escaping @MainActor (Bool) -> Void) -> Void
+
+    static func logActionKey(deviceKey: String, entry: IPhoneLogEntry) -> String {
+        let src: String
+        switch entry.source { case .live: src = "live"; case .archive(let n): src = "a:" + n }
+        return deviceKey + "|" + src + "|" + entry.id
+    }
+
+    func isLogActionBusy(_ key: String) -> Bool {
+        switch logAction[key] {
+        case .copying?, .saving?: return true
+        default: return false
+        }
+    }
+
+    /// The local file for `entry`: the archive copy (Decision 1), a copy made earlier this run, or a fresh
+    /// read-only copy from the phone into its own temp folder. On failure sets `logAction[key]` and returns nil.
+    /// Returns nil silently when the phone detached during the copy (its rows are gone, F12).
+    private func localCopy(deviceKey: String, entry: IPhoneLogEntry, action: LogAction, key: String) async -> URL? {
+        let fm = FileManager.default
+        if case .archive = entry.source {
+            guard let u = entry.localURL, fm.fileExists(atPath: u.path) else {
+                logAction[key] = .failed(.gone); return nil
+            }
+            return u
+        }
+        let cacheKey = deviceKey + "|" + IPhoneData.logCacheKey(path: entry.path, size: entry.size, modified: entry.modified)
+        if let u = logCopies[cacheKey], IPhoneCrashLog.fileSize(u) == entry.size { return u }
+        logCopies[cacheKey] = nil
+        guard let h = connected[deviceKey] else { logAction[key] = .failed(.disconnected); return nil }
+        let tmp = fm.temporaryDirectory
+        guard IPhoneCrashLog.hasRoom(available: IPhoneCrashLog.availableBytes(at: tmp), size: entry.size) else {
+            logAction[key] = .failed(.noSpace); return nil
+        }
+        guard let dir = IPhoneCrashLog.makeCopyDir(in: tmp) else { logAction[key] = .failed(.copyFailed); return nil }
+        let dest = dir.appendingPathComponent((entry.path as NSString).lastPathComponent)
+        let total = entry.size
+        logAction[key] = .copying(action, done: 0, total: total)
+        let ok: Bool = await withCheckedContinuation { cont in
+            transport.copyFile(h, remotePath: entry.path, size: total, to: dest,
+                               progress: { [weak self] done in
+                                   guard let self, case .copying(let a, _, _)? = self.logAction[key] else { return }
+                                   self.logAction[key] = .copying(a, done: Int64(done), total: total)
+                               },
+                               completion: { cont.resume(returning: $0) })
+        }
+        guard attached.contains(h) else { try? fm.removeItem(at: dir); logAction[key] = nil; return nil }
+        guard ok, IPhoneCrashLog.fileSize(dest) == total else {
+            try? fm.removeItem(at: dir); logAction[key] = .failed(.copyFailed); return nil
+        }
+        logCopies[cacheKey] = dest
+        return dest
+    }
+
+    /// «Open in Console». No-op while an action on the same row runs, or for a file Console is not offered for.
+    /// `open` is the Console opener the view passes in; the Engine names no view type.
+    func openLogInConsole(deviceKey: String, entry: IPhoneLogEntry, open: @escaping LogOpener) {
+        let key = Self.logActionKey(deviceKey: deviceKey, entry: entry)
+        guard !isLogActionBusy(key),
+              IPhoneCrashLog.canOpenInConsole(name: (entry.path as NSString).lastPathComponent, size: entry.size)
+        else { return }
+        logAction[key] = .copying(.console, done: 0, total: entry.size)
+        Task { [weak self] in
+            guard let self, let url = await self.localCopy(deviceKey: deviceKey, entry: entry, action: .console, key: key)
+            else { return }
+            open(url) { [weak self] ok in
+                self?.logAction[key] = ok ? nil : .failed(.consoleFailed)
+            }
+        }
+    }
+
+    /// «Save to Mac…» after the save panel returned `dest`.
+    func saveLog(deviceKey: String, entry: IPhoneLogEntry, to dest: URL) {
+        let key = Self.logActionKey(deviceKey: deviceKey, entry: entry)
+        guard !isLogActionBusy(key) else { return }
+        logAction[key] = .copying(.save, done: 0, total: entry.size)
+        Task { [weak self] in
+            guard let self, let url = await self.localCopy(deviceKey: deviceKey, entry: entry, action: .save, key: key)
+            else { return }
+            self.logAction[key] = .saving
+            let ok = await Task.detached(priority: .userInitiated) { IPhoneCrashLog.writeSaved(from: url, to: dest) }.value
+            // Decision 3: a big live copy made for a Save is not kept.
+            if entry.source == .live, entry.size > IPhoneCrashLog.consoleMaxBytes {
+                logCopies = logCopies.filter { $0.value != url }
+                try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+            }
+            guard ok else { self.logAction[key] = .failed(.saveFailed); return }
+            self.logAction[key] = .saved
+            try? await Task.sleep(nanoseconds: UInt64(IPhoneCrashLog.savedConfirmSeconds * 1_000_000_000))
+            if self.logAction[key] == .saved { self.logAction[key] = nil }
+        }
+    }
+
+    /// Collapse of a row: a finished state (saved / failed) is forgotten; a running copy is not touched.
+    func clearLogActionResult(deviceKey: String, entry: IPhoneLogEntry) {
+        let key = Self.logActionKey(deviceKey: deviceKey, entry: entry)
+        if !isLogActionBusy(key) { logAction[key] = nil }
+    }
 
     /// Identity and parts per connected device. Memory only (R13, D10); cleared on detach.
     var identity: [String: [IPhoneIdentityField]] = [:]
@@ -105,6 +221,8 @@ final class IPhoneModel {
         started = true
         // Before any import can start (D7).
         IPhoneData.removeStaleImportRoots(in: FileManager.default.temporaryDirectory)
+        // IPHONE-CRASHLOG-ACTIONS (Decision 3): crash-log copies of the previous run.
+        IPhoneData.removeStaleImportRoots(in: FileManager.default.temporaryDirectory, prefix: IPhoneCrashLog.tempPrefix)
         devices = store.load()
         headerCache = logTypeStore.load(keeping: Set(devices.map(\.id)))
         for d in devices { status[d.id] = .remembered }
@@ -200,6 +318,7 @@ final class IPhoneModel {
                 lastSnapshot[key] = nil
                 logs[key] = nil
                 logsFailed.remove(key)
+                for k in logAction.keys where k.hasPrefix(key + "|live|") { logAction[k] = nil }
             }
         }
     }
@@ -248,7 +367,7 @@ final class IPhoneModel {
     }
 
     /// Updates the in-memory type cache of one device and saves the file when it changed.
-    private func setHeaderCache(_ key: String, _ cache: [String: String]) {
+    private func setHeaderCache(_ key: String, _ cache: [String: IPhoneLogHeader]) {
         guard headerCache[key] != cache else { return }
         headerCache[key] = cache
         try? logTypeStore.save(headerCache.filter { k, _ in devices.contains { $0.id == k } })

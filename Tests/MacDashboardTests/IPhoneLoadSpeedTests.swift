@@ -94,12 +94,15 @@ extension SerialTests {
 
         @Test func split() {
             let f1 = file("/a", at: 100), f2 = file("/b", at: 300), f3 = file("/c"), f4 = file("/d", at: 200)
-            let known = [key(f1): "309", key(f3): "", "/gone|1|0": "298"]
+            let known = [key(f1): IPhoneLogHeader(bugType: "309", process: "A", timestamp: nil), key(f3): IPhoneLogHeader(),
+                         "/gone|1|0": IPhoneLogHeader(bugType: "298")]
             let (listing, pending) = IPhoneLogTypes.split([file("/dir1", dir: true), f1, f2, file("/dir2", dir: true), f3, f4], known: known)
             #expect(listing.entries.map(\.path) == ["/a", "/b", "/c", "/d"])
             #expect(listing.entries.filter { $0.category == .pending }.count == 2)
             #expect(listing.entries[0].category == .appCrash && listing.entries[0].bugType == "309")
             #expect(listing.entries[2].category == .other && listing.entries[2].bugType == nil)
+            #expect(listing.entries[0].process == "A")
+            #expect(listing.entries[1].created == f2.modified)
             #expect(Set(listing.known.keys) == [key(f1), key(f3)])
             #expect(listing.entries.allSatisfy { $0.source == .live })
             #expect(pending.map(\.path) == ["/b", "/d"])
@@ -112,20 +115,24 @@ extension SerialTests {
             let (listing, _) = IPhoneLogTypes.split([a, b, c, d], known: [:])
             var entries = listing.entries
             entries[3].category = .jetsam   // not pending, key present in the batch
-            let batch = IPhoneLogTypeBatch(read: [key(a): "309", key(b): "", key(d): "309"], failed: [key(c)])
+            let batch = IPhoneLogTypeBatch(read: [key(a): IPhoneLogHeader(bugType: "309", process: "P", timestamp: Date(timeIntervalSince1970: 42)),
+                                                     key(b): IPhoneLogHeader(), key(d): IPhoneLogHeader(bugType: "309")],
+                                         failed: [key(c)])
             let m = IPhoneLogTypes.merge(entries, batch)
             #expect(m[0].category == .appCrash && m[0].bugType == "309")
             #expect(m[1].category == .other && m[1].bugType == nil)
             #expect(m[2].category == .other && m[2].bugType == nil)
+            #expect(m[0].process == "P" && m[0].created == Date(timeIntervalSince1970: 42))
+            #expect(m[2].created == c.modified)
             #expect(m[3] == entries[3])
         }
 
         @Test func updatedCache() {
             let a = file("/a"), z = file("/z")
             let (listing, _) = IPhoneLogTypes.split([a], known: [:])
-            let batch = IPhoneLogTypeBatch(read: [key(a): "309", key(z): "298"], failed: [])
-            let c = IPhoneLogTypes.updatedCache(["old|1|1": "x"], entries: listing.entries, batch: batch)
-            #expect(c == ["old|1|1": "x", key(a): "309"])
+            let batch = IPhoneLogTypeBatch(read: [key(a): IPhoneLogHeader(bugType: "309"), key(z): IPhoneLogHeader(bugType: "298")], failed: [])
+            let c = IPhoneLogTypes.updatedCache(["old|1|1": IPhoneLogHeader(bugType: "x")], entries: listing.entries, batch: batch)
+            #expect(c == ["old|1|1": IPhoneLogHeader(bugType: "x"), key(a): IPhoneLogHeader(bugType: "309")])
         }
 
         @Test func store() throws {
@@ -133,14 +140,16 @@ extension SerialTests {
             defer { try? FileManager.default.removeItem(at: dir) }
             let url = dir.appendingPathComponent("sub").appendingPathComponent(IPhoneLogTypeStore.fileName)
             let store = IPhoneLogTypeStore(url: url)
-            let cache = ["d1": ["/a|1|2": "309", "/b|3|4": ""], "d2": ["/c|5|6": "298"]]
+            let full = IPhoneLogHeader(bugType: "309", process: "App", timestamp: Date(timeIntervalSince1970: 1_760_000_000))
+            let cache = ["d1": ["/a|1|2": full, "/b|3|4": IPhoneLogHeader()], "d2": ["/c|5|6": IPhoneLogHeader(bugType: "298")]]
             try store.save(cache)
             #expect(store.load(keeping: ["d1", "d2"]) == cache)
+            #expect(store.load(keeping: ["d1"])["d1"]?["/a|1|2"]?.timestamp == full.timestamp)
             func perms(_ u: URL) -> Int { ((try? FileManager.default.attributesOfItem(atPath: u.path)[.posixPermissions]) as? Int) ?? -1 }
             #expect(perms(url) == 0o600)
             #expect(perms(url.deletingLastPathComponent()) == 0o700)
             #expect(store.load(keeping: ["d1"]) == ["d1": cache["d1"]!])
-            try Data(#"{"version":2,"devices":{"d1":{"a":"b"}}}"#.utf8).write(to: url)
+            try Data(#"{"version":1,"devices":{"d1":{"a|1|2":"309"}}}"#.utf8).write(to: url)
             #expect(store.load(keeping: ["d1"]).isEmpty)
             try Data([0xff, 0x00, 0x13, 0x37]).write(to: url)
             #expect(store.load(keeping: ["d1"]).isEmpty)

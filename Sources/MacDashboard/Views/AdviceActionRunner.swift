@@ -37,13 +37,18 @@ enum AdviceActionRunner {
     }
     /// REDESIGN-SECURITY D5: opens a DiagnosticReports file in Console (bundle lookup, never a hard-coded path);
     /// without a Console bundle the system's default handler for .ips/.panic opens it.
-    static func openInConsole(_ path: String) {
+    /// IPHONE-CRASHLOG-ACTIONS: `completion` (main actor) gets whether the open succeeded.
+    static func openInConsole(_ path: String, completion: (@MainActor (Bool) -> Void)? = nil) {
         let file = URL(fileURLWithPath: path)
         guard let console = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Console") else {
-            NSWorkspace.shared.open(file); return
+            let ok = NSWorkspace.shared.open(file)
+            if let completion { MainActor.assumeIsolated { completion(ok) } }
+            return
         }
         NSWorkspace.shared.open([file], withApplicationAt: console, configuration: NSWorkspace.OpenConfiguration()) { _, error in
             if let error { NSLog("[MacDashboard] openInConsole failed for %@: %@", path, error.localizedDescription) }
+            guard let completion else { return }
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(error == nil) } }
         }
     }
     /// Reveals `path` in Finder. Regular directories are opened directly (users expect

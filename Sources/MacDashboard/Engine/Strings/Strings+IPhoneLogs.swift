@@ -38,6 +38,19 @@ protocol IPhoneLogsStrings {
     var iphoneImportKeptTitle: String { get }
     func iphoneImportRevealA11y(_ name: String) -> String
     func iphoneLogsFromArchive(_ name: String) -> String
+    var iphoneLogsDetailProcess: String { get }
+    var iphoneLogsDetailType: String { get }
+    var iphoneLogsDetailCreated: String { get }
+    func iphoneLogsType(_ c: LogCategory, bugType: String?) -> String
+    var iphoneLogsOpenInConsole: String { get }
+    var iphoneLogsSaveToMac: String { get }
+    var iphoneLogsSaved: String { get }
+    var iphoneLogsSavePanelTitle: String { get }
+    var iphoneLogsSavePrompt: String { get }
+    var iphoneLogsRowHint: String { get }
+    func iphoneLogsOpenInConsoleA11y(_ name: String) -> String
+    func iphoneLogsSaveA11y(_ name: String) -> String
+    func iphoneLogsActionError(_ e: IPhoneLogActionError) -> String
     var iphoneIdentityTitle: String { get }
     var iphoneIdentityConnectToRead: String { get }
     var iphoneIdentityRefreshA11y: String { get }
@@ -171,6 +184,41 @@ extension StringsEN: IPhoneLogsStrings {
     var iphoneImportKeptTitle: String { "Kept archives" }
     func iphoneImportRevealA11y(_ name: String) -> String { "Show archive \(name) in Finder" }
     func iphoneLogsFromArchive(_ name: String) -> String { "From archive \(name)" }
+    var iphoneLogsDetailProcess: String { "Process" }
+    var iphoneLogsDetailType: String { "Type" }
+    var iphoneLogsDetailCreated: String { "Created" }
+    func iphoneLogsType(_ c: LogCategory, bugType: String?) -> String {
+        switch c {
+        case .appCrash: return "App crash"
+        case .exceptionFault: return "Exception fault"
+        case .jetsam: return "Jetsam event"
+        case .diskWrites: return "Disk writes"
+        case .cpuResource: return "CPU resource"
+        case .stackshot: return "Stackshot"
+        case .otherReport: return bugType.map { "Other report (\($0))" } ?? "Other report"
+        case .analytics: return "Analytics"
+        case .other: return "Other"
+        case .pending: return iphoneLogsCategory(.pending)
+        }
+    }
+    var iphoneLogsOpenInConsole: String { "Open in Console" }
+    var iphoneLogsSaveToMac: String { "Save to Mac…" }
+    var iphoneLogsSaved: String { "Saved" }
+    var iphoneLogsSavePanelTitle: String { "Save crash log" }
+    var iphoneLogsSavePrompt: String { "Save" }
+    var iphoneLogsRowHint: String { "Shows the file’s details and actions" }
+    func iphoneLogsOpenInConsoleA11y(_ name: String) -> String { "Open \(name) in Console" }
+    func iphoneLogsSaveA11y(_ name: String) -> String { "Save \(name) to the Mac" }
+    func iphoneLogsActionError(_ e: IPhoneLogActionError) -> String {
+        switch e {
+        case .disconnected: return "Connect the iPhone by cable to copy this file."
+        case .copyFailed: return "Could not copy the file from the iPhone. Press Refresh and try again."
+        case .noSpace: return "Not enough free space on the Mac for this file."
+        case .gone: return "This copy is no longer on the Mac. Import the archive again."
+        case .consoleFailed: return "Console could not open the file."
+        case .saveFailed: return "Could not save the file there. Choose another folder."
+        }
+    }
     var iphoneIdentityTitle: String { "Device and parts" }
     var iphoneIdentityConnectToRead: String { "Connect the iPhone by cable to read its device details." }
     var iphoneIdentityRefreshA11y: String { "Refresh the device details" }
@@ -338,6 +386,41 @@ extension StringsRU: IPhoneLogsStrings {
     var iphoneImportKeptTitle: String { "Сохранённые архивы" }
     func iphoneImportRevealA11y(_ name: String) -> String { "Показать архив \(name) в Finder" }
     func iphoneLogsFromArchive(_ name: String) -> String { "Из архива \(name)" }
+    var iphoneLogsDetailProcess: String { "Процесс" }
+    var iphoneLogsDetailType: String { "Тип" }
+    var iphoneLogsDetailCreated: String { "Создан" }
+    func iphoneLogsType(_ c: LogCategory, bugType: String?) -> String {
+        switch c {
+        case .appCrash: return "Сбой приложения"
+        case .exceptionFault: return "Исключение"
+        case .jetsam: return "Событие Jetsam"
+        case .diskWrites: return "Запись на диск"
+        case .cpuResource: return "Нагрузка CPU"
+        case .stackshot: return "Стекшот"
+        case .otherReport: return bugType.map { "Другой отчёт (\($0))" } ?? "Другой отчёт"
+        case .analytics: return "Аналитика"
+        case .other: return "Прочее"
+        case .pending: return iphoneLogsCategory(.pending)
+        }
+    }
+    var iphoneLogsOpenInConsole: String { "Открыть в Console" }
+    var iphoneLogsSaveToMac: String { "Сохранить на Mac…" }
+    var iphoneLogsSaved: String { "Сохранено" }
+    var iphoneLogsSavePanelTitle: String { "Сохранить журнал сбоя" }
+    var iphoneLogsSavePrompt: String { "Сохранить" }
+    var iphoneLogsRowHint: String { "Показывает подробности файла и действия" }
+    func iphoneLogsOpenInConsoleA11y(_ name: String) -> String { "Открыть \(name) в Console" }
+    func iphoneLogsSaveA11y(_ name: String) -> String { "Сохранить \(name) на Mac" }
+    func iphoneLogsActionError(_ e: IPhoneLogActionError) -> String {
+        switch e {
+        case .disconnected: return "Подключите iPhone кабелем, чтобы скопировать файл."
+        case .copyFailed: return "Не удалось скопировать файл с iPhone. Нажмите «Обновить» и попробуйте ещё раз."
+        case .noSpace: return "На Mac не хватает места для этого файла."
+        case .gone: return "Этой копии уже нет на Mac. Импортируйте архив ещё раз."
+        case .consoleFailed: return "Console не смог открыть файл."
+        case .saveFailed: return "Не удалось сохранить файл в эту папку. Выберите другую."
+        }
+    }
     var iphoneIdentityTitle: String { "Устройство и детали" }
     var iphoneIdentityConnectToRead: String { "Подключите iPhone кабелем, чтобы прочитать данные устройства." }
     var iphoneIdentityRefreshA11y: String { "Обновить данные устройства" }

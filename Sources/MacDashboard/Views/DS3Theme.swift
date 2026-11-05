@@ -162,6 +162,9 @@ enum DS3Motion {
     static let popIn: Animation = .spring(response: 0.42, dampingFraction: 0.6)
     /// `popIn` for Core Animation (`HistoryHoverView`): the same curve as mass/stiffness/damping. Keep the two equal.
     static let popInSpring = Spring(response: 0.42, dampingRatio: 0.6)
+    /// Mockup `mdgrow .4s cubic-bezier(.34,1.56,.64,1)` (row expand). Same mapping the handoff uses for
+    /// `tmin .6s` → `.spring(response: 0.6, dampingFraction: 0.7)` (00-shared §6), scaled to 0.4 s.
+    static let rowExpand: Animation = .spring(response: 0.4, dampingFraction: 0.7)
 
     /// Pulse: 2.8 s cycle = 1.68 s rise (scale 1 -> 2.6, opacity 0.55 -> 0) + 1.12 s hold.
     static let pulseRise: Double = 1.68
