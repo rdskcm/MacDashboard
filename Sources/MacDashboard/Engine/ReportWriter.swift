@@ -18,6 +18,7 @@ struct ReportSummaryInput {
     var load: [Double]?
     var ncpu: Int
     var socTempC: Int?
+    var thermal: ThermalLevel? = nil
     var mem: MemSnapshot?
     var memPressure: MemoryPressureLevel?
     var swap: SwapInfo?
@@ -154,6 +155,7 @@ enum ReportWriter {
         var parts = [L.homePercent(fmtFixed(cpu.user + cpu.sys, decimals: 1))]
         parts.append(i.load?.first.map { L.homeLoadCores(fmtFixed($0, decimals: 2), i.ncpu) } ?? L.homeCoresOnly(i.ncpu))
         if let t = i.socTempC { parts.append("SoC \(t) °C") }
+        if let th = i.thermal, th != .nominal { parts.append(CPUPageModel.thermalNote(th).text) }
         return parts.joined(separator: " · ")
     }
 

@@ -426,6 +426,7 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 - battery: IOKit `IOPSCopyPowerSourcesInfo` (+ cycles/condition only in full report).
   Desktop Mac ⇒ nil, tile hidden.
 - load: `getloadavg`.
+- thermal state: `ProcessInfo.processInfo.thermalState`, read once at start() and then updated by `ProcessInfo.thermalStateDidChangeNotification` (no polling, also while paused); shown in the CPU page's SoC tile note, never converted into a throttling percentage.
 - top processes: TWO subprocesses per tick, each supplying only what the other can't.
   `/bin/ps -axww -o pid=,rss=,time=,comm=` (CommandRunner, 5 s timeout) yields pid, full
   untruncated name, RSS and cumulative CPU time; per-process CPU% is a delta of that

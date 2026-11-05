@@ -33,6 +33,7 @@ extension AppModel {
         // REDESIGN-HOME: Home's CPU tile «Processes» and the scan state («checked at 10:30»).
         processCount = 412
         applyFixturePressure(.normal)
+        applyFixtureThermal(.nominal)
         applyFixtureScan({
             var s = BlockState(.scan, createdAt: VisualFixture.referenceDate)
             s.begin(at: VisualFixture.referenceDate.addingTimeInterval(-20), showsLoading: false)

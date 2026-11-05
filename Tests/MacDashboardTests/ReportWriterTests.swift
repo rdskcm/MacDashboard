@@ -150,6 +150,20 @@ extension SerialTests {
             #expect(tasks[0].tone == .hot && tasks[1].tone == .amber, "renderEN: task tones")
         }
 
+        @Test func thermalInCPURow() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            var i = fullInput()
+            L10nStore.shared.language = .en
+            let base = ReportWriter.render(i)
+            i.thermal = .nominal
+            #expect(ReportWriter.render(i) == base, "nominal leaves the CPU line unchanged")
+            i.thermal = .serious
+            #expect(ReportWriter.render(i).contains("SoC 48 °C · thermal: high\n"))
+            L10nStore.shared.language = .ru
+            #expect(ReportWriter.render(i).contains("SoC 48 °C · нагрев: высокий\n"))
+        }
+
         @Test func renderRU() {
             let originalLang = L10nStore.shared.language
             defer { L10nStore.shared.language = originalLang }

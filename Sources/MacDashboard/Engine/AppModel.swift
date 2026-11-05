@@ -27,6 +27,8 @@ final class AppModel {
     /// unavailable (Intel / API failure) — the CPU page shows «—» (honest-empty).
     /// Stored pre-rounded to Int so the equality guard suppresses sub-degree jitter.
     var socTempC: Int? = nil
+    /// THERMAL-STATE: macOS thermal state from ProcessInfo, updated by thermalStateDidChangeNotification (no polling).
+    private(set) var thermal: ThermalLevel? = nil
     var topCPU: [ProcEntry] = []
     var topMem: [ProcEntry] = []
     /// REDESIGN-HOME: rows of the last full ps snapshot (Home CPU tile «Processes»); nil before the first slow sample.
@@ -93,6 +95,7 @@ final class AppModel {
             generatedAt: generatedAt, system: report.system ?? lastKnownSystem,
             status: HomeModel.status(scan: HomeModel.scan(scanBlock), tasks: tasks), tasks: tasks,
             cpu: cpu, load: load, ncpu: ncpu, socTempC: socTempC,
+            thermal: thermal,
             mem: mem, memPressure: memPressure, swap: swap, disk: disk,
             hasBattery: merged != nil, battery: merged,
             security: report.security, claudeBackup: claudeBackup, claudeAttempt: claudeRun.attempt, snapshotCount: report.snapshots?.count,
@@ -353,6 +356,9 @@ final class AppModel {
     /// Visual fixture only: sets the memory-pressure level the Now card's Memory chip reads.
     func applyFixturePressure(_ p: MemoryPressureLevel?) { memPressure = p }
 
+    /// Visual fixture only: sets the macOS thermal state the CPU page's SoC tile note reads.
+    func applyFixtureThermal(_ t: ThermalLevel?) { thermal = t }
+
     /// Visual fixture only: sets the memory block.
     func applyFixtureMemory(_ state: BlockState) { memoryBlock = state }
     /// Visual fixture only (REDESIGN-BATTERY): the detail the Battery page shows and its block.
@@ -413,10 +419,13 @@ final class AppModel {
         lastCPUSampleAt = t
     }
 
+    @ObservationIgnored private var thermalObserver: NSObjectProtocol?
+
     // MARK: - Lifecycle (SPEC §4 contract)
 
     func start() {
         guard fastTask == nil else { return }
+        observeThermalState()
         // REDESIGN-NOTIFY: banners only while the app is not frontmost (D13); a click parks a destination for the view (R5).
         NotificationCenterClient.shared.shouldPresentBanner = { [weak self] in self?.isPaused ?? true }
         NotificationCenterClient.shared.onOpen = { [weak self] page in self?.requestNavigation(to: Destination(page)) }
@@ -582,6 +591,23 @@ final class AppModel {
         storage.stop()
         for watchdog in blockWatchdogs.values { watchdog.cancel() }
         blockWatchdogs.removeAll()
+        if let o = thermalObserver { NotificationCenter.default.removeObserver(o); thermalObserver = nil }
+    }
+
+    /// THERMAL-STATE: Apple requires reading `thermalState` before registering, or the notification is not delivered.
+    private func observeThermalState() {
+        guard thermalObserver == nil else { return }
+        applyThermalState(ProcessInfo.processInfo.thermalState)
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.applyThermalState(ProcessInfo.processInfo.thermalState) }
+        }
+    }
+
+    private func applyThermalState(_ s: ProcessInfo.ThermalState) {
+        let level = ThermalLevel(s)
+        if thermal != level { thermal = level }
     }
 
     /// Public entry. `.button` only from the «Обновить отчёт» button.

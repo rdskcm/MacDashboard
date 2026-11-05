@@ -8,9 +8,10 @@ private let t0 = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
 private func cpuInput(cpu: CPUUsage? = CPUUsage(user: 18, sys: 7.7, idle: 74.3),
                       load: [Double]? = [2.1, 1.85, 1.6], chip: String? = "Apple M3", soc: Int? = 48,
-                      block: BlockPhase? = nil, highSince: Date? = nil, ncpu: Int = 8) -> CPUPageModel.Input {
+                      block: BlockPhase? = nil, highSince: Date? = nil, ncpu: Int = 8,
+                      thermal: ThermalLevel? = nil) -> CPUPageModel.Input {
     CPUPageModel.Input(cpu: cpu, load: load, ncpu: ncpu, chip: chip, socTempC: soc,
-                       block: block ?? .ok(at: t0), highSince: highSince, now: t0, intervalSeconds: 2)
+                       block: block ?? .ok(at: t0), highSince: highSince, now: t0, intervalSeconds: 2, thermal: thermal)
 }
 
 private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
@@ -124,7 +125,7 @@ extension SerialTests {
         @Test func socTile() {
             withLanguage(.en) {
                 var soc = CPUPageModel.make(cpuInput(soc: 95)).tiles[2]
-                #expect(soc.value == "95 °C" && soc.dot == .hot && soc.hot && soc.note == "hot · may throttle" && !soc.dimmed, "exactly 95 is hot")
+                #expect(soc.value == "95 °C" && soc.dot == .hot && soc.hot && soc.note == "hot" && !soc.dimmed, "exactly 95 is hot")
                 soc = CPUPageModel.make(cpuInput(soc: 94)).tiles[2]
                 #expect(soc.value == "94 °C" && soc.dot == .amber && !soc.hot && soc.note == "warm" && !soc.dimmed, "94 is warm")
                 soc = CPUPageModel.make(cpuInput(soc: 85)).tiles[2]
@@ -139,7 +140,40 @@ extension SerialTests {
             withLanguage(.ru) {
                 #expect(CPUPageModel.make(cpuInput(soc: 48)).tiles[2].note == "норма")
                 #expect(CPUPageModel.make(cpuInput(soc: 90)).tiles[2].note == "тепло")
-                #expect(CPUPageModel.make(cpuInput(soc: 95)).tiles[2].note == "горячо · возможен троттлинг")
+                #expect(CPUPageModel.make(cpuInput(soc: 95)).tiles[2].note == "горячо")
+            }
+        }
+
+        @Test func thermalLevelMapping() {
+            #expect(ThermalLevel(.nominal) == .nominal && ThermalLevel(.fair) == .fair)
+            #expect(ThermalLevel(.serious) == .serious && ThermalLevel(.critical) == .critical)
+        }
+
+        @Test func thermalTile() {
+            let states: [ThermalLevel] = [.nominal, .fair, .serious, .critical]
+            let tones: [CPUNoteTone] = [.green, .neutral, .amber, .hot]
+            let en = ["thermal: normal", "thermal: elevated", "thermal: high", "thermal: critical"]
+            let ru = ["нагрев: норма", "нагрев: повышен", "нагрев: высокий", "нагрев: критический"]
+            withLanguage(.en) {
+                for (k, st) in states.enumerated() {
+                    let t = CPUPageModel.make(cpuInput(soc: 48, thermal: st)).tiles[2]
+                    #expect(t.note == en[k] && t.noteTone == tones[k] && t.help != nil)
+                    #expect(t.value == "48 °C" && t.dot == .green)
+                    #expect(en[k].count <= 19)
+                }
+                var t = CPUPageModel.make(cpuInput(soc: 97, thermal: .nominal)).tiles[2]
+                #expect(t.dot == .hot && t.note == "thermal: normal" && t.noteTone == .green)
+                t = CPUPageModel.make(cpuInput(soc: nil, thermal: .serious)).tiles[2]
+                #expect(t.value == "—" && t.dimmed && t.note == "thermal: high" && t.noteTone == .amber)
+                t = CPUPageModel.make(cpuInput(cpu: nil, block: .loading(since: t0), thermal: .critical)).tiles[2]
+                #expect(t.note == nil)
+            }
+            withLanguage(.ru) {
+                for (k, st) in states.enumerated() {
+                    let t = CPUPageModel.make(cpuInput(soc: 48, thermal: st)).tiles[2]
+                    #expect(t.note == ru[k])
+                    #expect(ru[k].count <= 19)
+                }
             }
         }
 
