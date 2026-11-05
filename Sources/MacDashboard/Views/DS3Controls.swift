@@ -343,6 +343,7 @@ struct DS3Card<Trailing: View, Content: View>: View {
     let title: String
     var caption: String? = nil
     var spacing: CGFloat = 16
+    var fillsHeight = false
     @ViewBuilder var trailing: () -> Trailing
     @ViewBuilder var content: () -> Content
 
@@ -367,14 +368,14 @@ struct DS3Card<Trailing: View, Content: View>: View {
             content()
         }
         .padding(22)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: fillsHeight ? .topLeading : .leading)
         .ds3GlassCard(cornerRadius: 30)
     }
 }
 
 extension DS3Card where Trailing == EmptyView {
-    init(title: String, caption: String? = nil, spacing: CGFloat = 16, @ViewBuilder content: @escaping () -> Content) {
-        self.init(title: title, caption: caption, spacing: spacing, trailing: { EmptyView() }, content: content)
+    init(title: String, caption: String? = nil, spacing: CGFloat = 16, fillsHeight: Bool = false, @ViewBuilder content: @escaping () -> Content) {
+        self.init(title: title, caption: caption, spacing: spacing, fillsHeight: fillsHeight, trailing: { EmptyView() }, content: content)
     }
 }
 

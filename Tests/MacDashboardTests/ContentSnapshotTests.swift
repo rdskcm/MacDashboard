@@ -157,6 +157,7 @@ extension SerialTests {
                 $0.applyFixtureThermal(.nominal)
                 $0.applyFixtureCPU(cpuOK, highSince: nil)
             }
+            let cpuGPUUnavailable = fixtureHome { $0.gpuUtil = nil; $0.applyFixtureCPU(cpuOK, highSince: nil) }
             let cpuFail = fixtureHome { $0.applyFixtureCPU(cpuFailed, highSince: nil) }
             let cpuLoading = fixtureHome { $0.applyFixtureCPU(BlockState(.cpu, createdAt: homeRef), highSince: nil) }
             // REDESIGN-MEMORY: Memory page states (fixture = low pressure, swap 25 %).
@@ -494,40 +495,46 @@ extension SerialTests {
                     ProcessListCard(model: m, initialMetric: .mem)
                 }
                 // 1094 = 1150 window - 2 x 28 page padding.
-                run.snap("content-cpu-live", mode, width: 1094) {
-                    CPUUsageCard(model: m)
+                run.snap("content-soc-live", mode, width: 1094) {
+                    SoCCards(model: m)
                 }
-                run.snap("content-cpu-high", mode, width: 1094) {
-                    CPUUsageCard(model: cpuHigh)
+                run.snap("content-soc-high", mode, width: 1094) {
+                    SoCCards(model: cpuHigh)
                 }
-                run.snap("content-cpu-hot", mode, width: 1094) {
-                    CPUUsageCard(model: cpuHot)
+                run.snap("content-soc-hot", mode, width: 1094) {
+                    SoCCards(model: cpuHot)
                 }
-                run.snap("content-cpu-thermal-fair", mode, width: 1094) {
-                    CPUUsageCard(model: cpuThermalFair)
+                run.snap("content-soc-thermal-fair", mode, width: 1094) {
+                    SoCCards(model: cpuThermalFair)
                 }
-                run.snap("content-cpu-thermal-serious", mode, width: 1094) {
-                    CPUUsageCard(model: cpuThermalSerious)
+                run.snap("content-soc-thermal-serious", mode, width: 1094) {
+                    SoCCards(model: cpuThermalSerious)
                 }
-                run.snap("content-cpu-thermal-critical", mode, width: 1094) {
-                    CPUUsageCard(model: cpuThermalCritical)
+                run.snap("content-soc-thermal-critical", mode, width: 1094) {
+                    SoCCards(model: cpuThermalCritical)
                 }
-                run.snap("content-cpu-thermal-notemp", mode, width: 1094) {
-                    CPUUsageCard(model: cpuThermalNoTemp)
+                run.snap("content-soc-thermal-notemp", mode, width: 1094) {
+                    SoCCards(model: cpuThermalNoTemp)
                 }
                 // 844 = 900 minimum window - 2 x 28 page padding; the longest RU note must fit.
                 L10nStore.shared.language = .ru
-                run.snap("content-cpu-thermal-narrow-ru", mode, width: 844) {
-                    CPUUsageCard(model: cpuThermalCritical)
+                run.snap("content-soc-thermal-narrow-ru", mode, width: 844) {
+                    SoCCards(model: cpuThermalCritical)
                 }
                 L10nStore.shared.language = .en
-                run.snap("content-cpu-failed", mode, width: 1094) {
-                    CPUUsageCard(model: cpuFail)
+                run.snap("content-soc-gpu-unavailable", mode, width: 1094) {
+                    SoCCards(model: cpuGPUUnavailable)
                 }
-                run.snap("content-cpu-loading", mode, width: 1094) {
-                    CPUUsageCard(model: cpuLoading)
+                run.snap("content-soc-narrow", mode, width: 844) {
+                    SoCCards(model: m)
                 }
-                run.snap("content-cpu-bars", mode, width: 1150) {
+                run.snap("content-soc-failed", mode, width: 1094) {
+                    SoCCards(model: cpuFail)
+                }
+                run.snap("content-soc-loading", mode, width: 1094) {
+                    SoCCards(model: cpuLoading)
+                }
+                run.snap("content-soc-bars", mode, width: 1150) {
                     VStack(spacing: 12) {
                         CPUPageBar(model: m) {}
                         CPUPageBar(model: cpuHigh) {}
@@ -1077,6 +1084,10 @@ extension SerialTests {
                                 $0.cpu = nil; $0.mem = nil; $0.disk = nil
                                 $0.battery?.maxCapacity = nil; $0.report.battery?.maxCapacity = nil
                             }, router: NavigationRouter(), tier: .mid, animatesEntrance: false)
+                        }
+                        HarnessSection(label: "GPU unavailable") {
+                            HomeNowCard(model: fixtureHome { $0.gpuUtil = nil },
+                                        router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }
                         HarnessSection(label: "Task tones") {
                             HomeNowCard(model: fixtureHome {

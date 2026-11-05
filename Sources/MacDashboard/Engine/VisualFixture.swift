@@ -18,6 +18,10 @@ enum VisualFixture {
         forced || ProcessInfo.processInfo.arguments.contains("-visualFixture")
     }
 
+    /// GPU-UTILIZATION: `-fixtureGPUUnavailable 1` on the command line makes the fixture's GPU figure nil (bench review
+    /// of the honest-empty GPU card and Home figure). Read only under `-visualFixture`.
+    static var gpuUnavailableRequested: Bool { ProcessInfo.processInfo.arguments.contains("-fixtureGPUUnavailable") }
+
     /// Always in the past, so `reportUpdatedTimeString` takes its stable
     /// "date + time" branch (not the "same day as now" time-only branch).
     static let referenceDate: Date = Calendar.current.date(
@@ -194,6 +198,7 @@ enum VisualFixture {
         var disk: DiskInfo
         var battery: BatteryInfo
         var socTempC: Int?
+        var gpuUtil: Int?
         var topCPU: [ProcEntry]
         var topMem: [ProcEntry]
         var cpuHistory: [(Date, Double)]
@@ -214,6 +219,7 @@ enum VisualFixture {
         let load: [Double] = [2.10, 1.85, 1.60]
         let cpu = CPUUsage(user: 18.5, sys: 7.2, idle: 74.3)
         let socTempC = 48
+        let gpuUtil = 23
 
         let mem = MemSnapshot(
             total: 16 * GiB, pageSize: 16384,
@@ -351,7 +357,7 @@ enum VisualFixture {
 
         return Dataset(
             load: load, cpu: cpu, mem: mem, swap: swap, disk: disk, battery: battery,
-            socTempC: socTempC, topCPU: topCPU, topMem: topMem, cpuHistory: cpuHistory,
+            socTempC: socTempC, gpuUtil: gpuUtil, topCPU: topCPU, topMem: topMem, cpuHistory: cpuHistory,
             report: report, wakeHolders: wakeHolders, assessment: assessment,
             history: history, reportText: reportText, claudeBackup: claudeBackup,
             claudeAttempt: claudeAttempt, claudeSize: claudeSize, claudeJob: claudeJob

@@ -2,7 +2,7 @@
 // REDESIGN-HOME (stage C): the Now card of Home — live CPU / Memory / Storage / Battery cells
 // (02-home.md §2, 00-shared §4.6/§4.7). The cells come from `HomeModel.nowCells`; this file only draws them.
 // Cells sit in a non-lazy `EqualColumnsLayout` so a column change keeps their identity and animates their frames
-// (RESIZE-MOTION); `live-list-identity` still holds (non-lazy, live sparkline).
+// (RESIZE-MOTION); `live-list-identity` still holds (non-lazy).
 
 import SwiftUI
 
@@ -21,12 +21,11 @@ struct HomeNowCard: View {
         let columns = hasBattery ? (narrow ? 2 : 4) : 3
         let tasks = HomeModel.tasks(input.assessment, report: input.report, disk: input.disk, battery: model.battery)
         let cells = HomeModel.nowCells(input, tasks: tasks, memPressure: model.memPressure, socTempC: model.socTempC,
-                                       cpu: model.cpu, short: short, narrow: narrow)
-        let spark = HomeModel.sparkline(model.cpuHistory)
+                                       gpuUtil: model.gpuUtil, cpu: model.cpu, short: short, narrow: narrow)
         DS3Card(title: L.commonNow, caption: L.homeEverySeconds(model.settings.fastIntervalSeconds)) {
             EqualColumnsLayout(columns: columns, spacing: 8) {
                 ForEach(cells) { cell in
-                    HomeNowCellView(cell: cell, sparkline: spark) { router.navigate(to: cell.destination) }
+                    HomeNowCellView(cell: cell) { router.navigate(to: cell.destination) }
                 }
             }
         }
@@ -36,15 +35,19 @@ struct HomeNowCard: View {
 
 struct HomeNowCellView: View {
     let cell: HomeNowCell
-    let sparkline: [Double]
     let onOpen: () -> Void
 
     var body: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 10) {
                 labelRow
-                valueRow
-                visual.frame(height: 40)
+                if cell.figures.isEmpty {
+                    valueRow
+                    visual.frame(height: 40)
+                } else {
+                    figures
+                    Spacer(minLength: 0)
+                }
                 Text(cell.foot)
                     .font(.system(size: 12.5))
                     .foregroundStyle(DS3.muted)
@@ -61,6 +64,28 @@ struct HomeNowCellView: View {
         .buttonStyle(DS3TileButtonStyle())
         .accessibilityLabel(cell.accessibilityText)
         .accessibilityIdentifier("home-now-\(cell.kind.rawValue)")
+    }
+
+    /// GPU-UTILIZATION: the SoC cell's two figures. Kicker over value, two equal columns; the Spacer after it pins the
+    /// foot to the neighbours' foot line (the Now card's EqualColumnsLayout proposes the row height to every cell).
+    private var figures: some View {
+        EqualColumnsLayout(columns: 2, spacing: 8) {
+            ForEach(Array(cell.figures.enumerated()), id: \.offset) { _, f in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(f.kicker)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(DS3.muted)
+                        .lineLimit(1)
+                    Text(f.value)
+                        .font(.system(size: 26, weight: .heavy))
+                        .tracking(-0.78)
+                        .monospacedDigit()
+                        .foregroundStyle(f.dimmed ? DS3.muted : DS3.ink)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 
     private var labelColor: Color {
@@ -112,9 +137,7 @@ struct HomeNowCellView: View {
 
     @ViewBuilder
     private var visual: some View {
-        if cell.kind == .cpu {
-            HomeSparkline(values: sparkline)
-        } else if let bar = cell.batteryBar {
+        if let bar = cell.batteryBar {
             HomeBatteryBarView(bar: bar)
         } else {
             VStack(alignment: .leading, spacing: 7) {
@@ -184,52 +207,6 @@ func homeSeriesColor(_ s: HomeSeries) -> Color {
     case .green: return DS3.green
     case .amber: return DS3.amber
     case .hot: return DS3.hot
-    }
-}
-
-/// 24-point CPU line with a flat 22 % area (00 §4.7; prototype `This Mac Home v2.dc.html:219-222`).
-struct HomeSparkline: View {
-    let values: [Double]
-
-    var body: some View {
-        if values.count >= 2 {
-            ZStack {
-                HomeSparklinePath(values: values, closed: true)
-                    .fill(DS3.accent.opacity(0.22))
-                HomeSparklinePath(values: values, closed: false)
-                    .stroke(DS3.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-            }
-            .accessibilityHidden(true)
-        } else {
-            Color.clear
-        }
-    }
-}
-
-private struct HomeSparklinePath: Shape {
-    let values: [Double]
-    let closed: Bool
-
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let n = values.count
-        guard n >= 2 else { return p }
-        func pt(_ i: Int) -> CGPoint {
-            CGPoint(x: rect.minX + CGFloat(i) / CGFloat(n - 1) * rect.width,
-                    y: rect.minY + rect.height - CGFloat(values[i] / 100) * (rect.height - 2) - 1)
-        }
-        p.move(to: pt(0))
-        for i in 1..<n {
-            let a = pt(i - 1), b = pt(i)
-            let mx = (a.x + b.x) / 2
-            p.addCurve(to: b, control1: CGPoint(x: mx, y: a.y), control2: CGPoint(x: mx, y: b.y))
-        }
-        if closed {
-            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            p.closeSubpath()
-        }
-        return p
     }
 }
 

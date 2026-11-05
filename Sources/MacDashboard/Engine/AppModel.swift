@@ -27,6 +27,9 @@ final class AppModel {
     /// unavailable (Intel / API failure) — the CPU page shows «—» (honest-empty).
     /// Stored pre-rounded to Int so the equality guard suppresses sub-degree jitter.
     var socTempC: Int? = nil
+    /// GPU-UTILIZATION: whole-machine GPU load %, `Device Utilization %` of the IOAccelerator entry (undocumented key),
+    /// sampled by the fast task next to socTempC. nil = unavailable — the SoC page and the Home SoC cell show «—».
+    var gpuUtil: Int? = nil
     /// THERMAL-STATE: macOS thermal state from ProcessInfo, updated by thermalStateDidChangeNotification (no polling).
     private(set) var thermal: ThermalLevel? = nil
     var topCPU: [ProcEntry] = []
@@ -457,14 +460,15 @@ final class AppModel {
                 // isolation from start(), so resuming the continuation lands here).
                 self.beginBlock(.cpu)
                 self.beginBlock(.memory)
-                let (snap, socTempC, pressure): (LiveSnapshot, Int?, MemoryPressureLevel?) = await withCheckedContinuation { continuation in
+                let (snap, socTempC, gpuUtil, pressure): (LiveSnapshot, Int?, Int?, MemoryPressureLevel?) = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .userInitiated).async {
                         let s = fastBox.value.collectFast()
                         // Block N7: same background hop — one HID pass costs ~50 ms.
                         let soc = ThermalSensors.socTemperature(
                             from: ThermalHIDReader.readTemperatureSensors())
+                        let gpu = GPUStats.readDeviceUtilization()
                         let pressure = LiveCollector.readMemoryPressure()
-                        continuation.resume(returning: (s, soc.map { Int($0.rounded()) }, pressure))
+                        continuation.resume(returning: (s, soc.map { Int($0.rounded()) }, gpu, pressure))
                     }
                 }
                 guard !Task.isCancelled else { return }
@@ -486,6 +490,7 @@ final class AppModel {
                 if self.disk    != snap.disk    { self.disk    = snap.disk }
                 if self.battery != snap.battery { self.battery = snap.battery }
                 if self.socTempC != socTempC { self.socTempC = socTempC }
+                if self.gpuUtil != gpuUtil { self.gpuUtil = gpuUtil }
                 if self.memPressure != pressure { self.memPressure = pressure }
                 self.lastSampleAt = snap.t
                 if let cpu = snap.cpu {

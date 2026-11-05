@@ -20,6 +20,8 @@ struct CommonStringsTests {
             (en.commonServiceRecommended, "service recommended", ru.commonServiceRecommended, "нужен сервис"),
             (en.commonClaudeBackup, "Claude backup", ru.commonClaudeBackup, "Бэкап Claude"),
             (en.commonCPU, "CPU", ru.commonCPU, "Процессор"),
+            (en.commonGPU, "GPU", ru.commonGPU, "Графика"),
+            (en.commonSoC, "SoC", ru.commonSoC, "SoC"),
             (en.commonMemory, "Memory", ru.commonMemory, "Память"),
             (en.commonStorage, "Storage", ru.commonStorage, "Хранилище"),
             (en.commonSecurity, "Security", ru.commonSecurity, "Безопасность"),
@@ -59,7 +61,7 @@ struct CommonStringsTests {
             (en.commonCritical, "Critical", ru.commonCritical, "Критично"),
             (en.commonLastData("10:29:52"), "last data — 10:29:52", ru.commonLastData("10:29:52"), "последние данные — 10:29:52"),
         ]
-        #expect(rows.count == 50, "50 common rows")
+        #expect(rows.count == 52, "52 common rows")
         for r in rows {
             #expect(r.gotEN == r.wantEN, "\(r.wantEN)")
             #expect(r.gotRU == r.wantRU, "\(r.wantEN)")

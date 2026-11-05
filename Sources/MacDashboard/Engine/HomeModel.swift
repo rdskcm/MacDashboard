@@ -116,7 +116,7 @@ extension Page {
     var title: String {
         switch self {
         case .home: return L.commonThisMac
-        case .cpu: return L.commonCPU
+        case .cpu: return L.commonSoC
         case .memory: return L.commonMemory
         case .storage: return L.commonStorage
         case .battery: return L.commonBattery
@@ -529,6 +529,9 @@ struct HomeBatteryBar: Equatable {
     let help: String        // tooltip over the tick and its label
 }
 
+/// GPU-UTILIZATION: one of the SoC cell's two figures (CPU, GPU). `spoken` is its VoiceOver text.
+struct HomeNowFigure: Equatable { let kicker: String; let value: String; let spoken: String; let dimmed: Bool }
+
 struct HomeNowCell: Identifiable, Equatable {
     var id: HomeNowKind { kind }
     let kind: HomeNowKind
@@ -538,6 +541,7 @@ struct HomeNowCell: Identifiable, Equatable {
     let chipText: String?              // nil = no chip
     let big: String
     let of: String
+    let figures: [HomeNowFigure]       // SoC cell only; [] elsewhere
     let loading: Bool
     let segments: [HomeNowSegment]     // memory/storage stack; CPU, battery: []
     let batteryBar: HomeBatteryBar?    // battery with a capacity reading only
@@ -551,7 +555,10 @@ extension HomeNowCell {
     /// loading: the "—" placeholder), chip, legend items, the battery threshold in words, foot. Used by `HomeNowCellView`; covered by HomeModelTests.
     var accessibilityText: String {
         var parts = [label]
-        if !loading { parts.append("\(big) \(of)".trimmingCharacters(in: .whitespaces)) }
+        if !loading {
+            if figures.isEmpty { parts.append("\(big) \(of)".trimmingCharacters(in: .whitespaces)) }
+            else { parts += figures.map(\.spoken) }
+        }
         if let chipText, chipTone != nil { parts.append(chipText) }
         parts += legend.map(\.text)
         if let batteryBar { parts.append(batteryBar.spoken) }
@@ -564,11 +571,12 @@ extension HomeModel {
     private static let gib: Double = Double(1 << 30)
 
     /// The Now card cells (battery omitted when the Mac has none).
-    static func nowCells(_ input: HomeInput, tasks: [HomeTask], memPressure: MemoryPressureLevel?, socTempC: Int?,
+    static func nowCells(_ input: HomeInput, tasks: [HomeTask], memPressure: MemoryPressureLevel?, socTempC: Int?, gpuUtil: Int?,
                          cpu: CPUUsage?, short: Bool, narrow: Bool) -> [HomeNowCell] {
         func task(_ k: AttentionKind) -> HomeTask? { tasks.first { $0.kind == k } }
-        func loadingCell(_ kind: HomeNowKind, _ label: String, _ dest: Destination) -> HomeNowCell {
-            HomeNowCell(kind: kind, label: label, tone: .neutral, chipTone: nil, chipText: nil, big: "—", of: "",
+        func loadingCell(_ kind: HomeNowKind, _ label: String, _ dest: Destination,
+                         figures: [HomeNowFigure] = []) -> HomeNowCell {
+            HomeNowCell(kind: kind, label: label, tone: .neutral, chipTone: nil, chipText: nil, big: "—", of: "", figures: figures,
                         loading: true, segments: [HomeNowSegment(series: .track, value: 1)], batteryBar: nil, legend: [],
                         foot: L.commonCollectingData, destination: dest)
         }
@@ -592,11 +600,18 @@ extension HomeModel {
             let foot: String
             if let l = input.load, let l0 = l.first { foot = L.homeLoadCores(fmtFixed(l0, decimals: 2), input.ncpu) }
             else { foot = L.homeCoresOnly(input.ncpu) }
-            cells.append(HomeNowCell(kind: .cpu, label: L.commonCPU, tone: .neutral, chipTone: chipTone, chipText: chipText,
-                                     big: L.homePercent(fmtFixed(cpu.user + cpu.sys, decimals: 1)), of: "", loading: false,
+            let cpuPct = L.homePercent(fmtFixed(cpu.user + cpu.sys, decimals: 0))
+            let cpuFigure = HomeNowFigure(kicker: L.commonCPU, value: cpuPct, spoken: "\(L.commonCPU) \(cpuPct)", dimmed: false)
+            let gpuFigure: HomeNowFigure = gpuUtil.map {
+                HomeNowFigure(kicker: L.commonGPU, value: L.homePercent("\($0)"), spoken: "\(L.commonGPU) \(L.homePercent("\($0)"))", dimmed: false)
+            } ?? HomeNowFigure(kicker: L.commonGPU, value: "—", spoken: "\(L.commonGPU): \(L.gpuNotAvailable)", dimmed: true)
+            cells.append(HomeNowCell(kind: .cpu, label: L.commonSoC, tone: .neutral, chipTone: chipTone, chipText: chipText,
+                                     big: "", of: "", figures: [cpuFigure, gpuFigure], loading: false,
                                      segments: [], batteryBar: nil, legend: [], foot: foot, destination: cpuDest))
         } else {
-            cells.append(loadingCell(.cpu, L.commonCPU, cpuDest))
+            cells.append(loadingCell(.cpu, L.commonSoC, cpuDest, figures: [
+                HomeNowFigure(kicker: L.commonCPU, value: "—", spoken: "", dimmed: true),
+                HomeNowFigure(kicker: L.commonGPU, value: "—", spoken: "", dimmed: true)]))
         }
 
         // Memory
@@ -624,7 +639,7 @@ extension HomeModel {
             cells.append(HomeNowCell(
                 kind: .memory, label: L.commonMemory, tone: task(.swapHigh)?.tone ?? .neutral,
                 chipTone: chipTone, chipText: chipText,
-                big: fmtBytes(mem.usedBytes), of: L.homeOf("\(Int((Double(mem.total) / gib).rounded()))"), loading: false,
+                big: fmtBytes(mem.usedBytes), of: L.homeOf("\(Int((Double(mem.total) / gib).rounded()))"), figures: [], loading: false,
                 segments: [HomeNowSegment(series: .s1, value: Double(mem.active)),
                            HomeNowSegment(series: .s2, value: Double(mem.wired)),
                            HomeNowSegment(series: .s6, value: Double(mem.compressor)),
@@ -666,7 +681,7 @@ extension HomeModel {
             let focus: CardID = (smart != nil || (wear != nil && diskT == nil)) ? .smart : .disk
             cells.append(HomeNowCell(
                 kind: .storage, label: L.commonStorage, tone: tone, chipTone: chipTone, chipText: chipText,
-                big: fmtCapacity(disk.avail), of: L.homeFreeWord, loading: false, segments: segments, batteryBar: nil, legend: legend,
+                big: fmtCapacity(disk.avail), of: L.homeFreeWord, figures: [], loading: false, segments: segments, batteryBar: nil, legend: legend,
                 foot: L.homeStorageFoot(size: size, purgeable: disk.purgeable.map { fmtCapacity($0) }, short: short),
                 destination: Destination(.storage, focus: focus)))
         } else {
@@ -686,7 +701,7 @@ extension HomeModel {
                 else { tone = .neutral; (chipTone, chipText) = (.green, L.homeChipHealthy); fill = .green }
                 cells.append(HomeNowCell(
                     kind: .battery, label: L.commonBattery, tone: tone, chipTone: chipTone, chipText: chipText,
-                    big: L.homePercent("\(cap)"), of: L.homeOfNew, loading: false, segments: [],
+                    big: L.homePercent("\(cap)"), of: L.homeOfNew, figures: [], loading: false, segments: [],
                     batteryBar: HomeBatteryBar(fraction: Double(cap) / 100, fill: fill, tick: 0.8, tickLabel: L.homePercent("80"),
                                                spoken: L.homeWearThreshold, help: L.homeWearThresholdHelp),
                     legend: [],
@@ -697,10 +712,5 @@ extension HomeModel {
             }
         }
         return cells
-    }
-
-    /// The last 24 values of the CPU history, clamped to 0…100 (fewer when fewer exist).
-    static func sparkline(_ history: [(Date, Double)]) -> [Double] {
-        history.suffix(24).map { min(100, max(0, $0.1)) }
     }
 }

@@ -52,6 +52,7 @@ feedback and comments. Hope you like it!
 - Detects recent crash logs (7-day window), grouped and collapsed, and flags
   own-app crashes vs. system panics.
 - SOC and internal-disk temperatures, read via Apple Silicon's private HID sensor API, plus macOS's own thermal state (`ProcessInfo.thermalState`).
+- Live GPU load (the whole-machine `Device Utilization %` of the Apple Silicon accelerator's IOKit registry entry, an undocumented key) on the SoC page next to the CPU, and in the Home Now card.
 - A handful of one-click maintenance actions, each explicit and confirmed
   (see "What it can change" below): cleaning up orphaned autostart entries,
   installing `smartmontools` for SMART data on external drives, refreshing

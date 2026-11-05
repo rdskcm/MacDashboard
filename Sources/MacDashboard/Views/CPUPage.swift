@@ -1,8 +1,8 @@
 // Views/CPUPage.swift
 // REDESIGN-CPU: the CPU section page (handoff 03-cpu) on the shared §8 blocks (SectionPageBlocks.swift):
-// page bar (Back, icon, title, sub line, state tag), «CPU · live snapshot» card (hero + three
-// tiles, loading / failed states) and the restyled Processes card. All texts and states come from the
-// pure `CPUPageModel`; this file only draws them.
+// page bar (Back, icon, title, sub line, state tag) and the restyled Processes card. GPU-UTILIZATION: it is
+// now the SoC page: CPU card, GPU card, chip-temperature block (SoCCards) and the Processes card.
+// All texts and states come from the pure `CPUPageModel`; this file only draws them.
 
 import SwiftUI
 
@@ -14,12 +14,12 @@ struct CPUPage: View {
     @State private var pulse: CardID? = nil
 
     /// Reads no live model field (only `router.navigationSerial` / `destination`): `CPUPageBar` and
-    /// `CPUUsageCard` do the reading, so a 2 s tick never re-evaluates the page itself (same rule as `HomeNowCard`).
+    /// `SoCCards` do the reading, so a 2 s tick never re-evaluates the page itself (same rule as `HomeNowCard`).
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    CPUUsageCard(model: model)
+                    SoCCards(model: model)
                         .id(CardID.cpu)
                         .sectionFocusPulse(pulse == .cpu)
                         .ds3Appear(delay: 0.08)
@@ -79,32 +79,53 @@ struct CPUPageBar: View {
     }
 }
 
-// MARK: - CPU card
+// MARK: - SoC cards
 
-/// Internal: the visual fixture renders it.
+/// Internal: the visual fixture renders it. CPU card, GPU card (equal height) and the chip-temperature block.
 @MainActor
-struct CPUUsageCard: View {
+struct SoCCards: View {
     let model: AppModel
 
     var body: some View {
         let m = CPUPageModel.make(cpuPageInput(model))
-        DS3Card(title: L.commonCPU, caption: m.caption) {
-            if m.showsWait {
-                SectionWait(text: L.commonCollectingData)
-            } else {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let note = m.failureNote {
-                        SectionNote(tone: DS3.hot, text: note)
-                    }
-                    HeroSplitLayout {
-                        SectionHero(label: L.cpuUsage, value: m.hero.value, fraction: m.hero.fraction, note: m.hero.note,
-                                    tone: m.hero.high ? DS3.amber : DS3.accent,
-                                    toneInk: m.hero.high ? DS3.amberInk : DS3.accentInk,
-                                    dimmed: m.hero.dimmed)
-                        EqualColumnsLayout(columns: 3, spacing: 8, fillsHeight: true) {
-                            ForEach(m.tiles.indices, id: \.self) { tile(m.tiles[$0]) }
+        VStack(alignment: .leading, spacing: 16) {
+            EqualColumnsLayout(columns: 2, spacing: 16, fillsHeight: true) {
+                DS3Card(title: L.commonCPU, caption: m.caption, fillsHeight: true) {
+                    if m.showsWait {
+                        SectionWait(text: L.commonCollectingData)
+                    } else {
+                        VStack(alignment: .leading, spacing: 16) {
+                            if let note = m.failureNote { SectionNote(tone: DS3.hot, text: note) }
+                            SectionHero(label: L.cpuUsage, value: m.hero.value, fraction: m.hero.fraction, note: m.hero.note,
+                                        tone: m.hero.high ? DS3.amber : DS3.accent,
+                                        toneInk: m.hero.high ? DS3.amberInk : DS3.accentInk,
+                                        dimmed: m.hero.dimmed)
+                                .fixedSize(horizontal: false, vertical: true)
+                            EqualColumnsLayout(columns: 2, spacing: 8, fillsHeight: true) {
+                                ForEach(m.tiles.indices, id: \.self) { tile(m.tiles[$0]) }
+                            }
+                            Spacer(minLength: 0)
                         }
                     }
+                }
+                DS3Card(title: L.commonGPU, fillsHeight: true) {
+                    if m.showsWait {
+                        SectionWait(text: L.commonCollectingData)
+                    } else {
+                        VStack(alignment: .leading, spacing: 16) {
+                            SectionHero(label: L.cpuUsage, value: m.gpu.value, fraction: m.gpu.fraction, note: m.gpu.note,
+                                        tone: DS3.accent, toneInk: DS3.accentInk, dimmed: m.gpu.dimmed)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+            DS3Card(title: L.socChipTemperature) {
+                if m.showsWait {
+                    SectionWait(text: L.commonCollectingData)
+                } else {
+                    tile(m.temperature)
                 }
             }
         }
@@ -136,5 +157,5 @@ private func cpuPageInput(_ model: AppModel) -> CPUPageModel.Input {
     CPUPageModel.Input(cpu: model.cpu, load: model.load, ncpu: model.ncpu, chip: model.headerSystem?.chip,
                        socTempC: model.socTempC, block: model.cpuBlock.phase, highSince: model.cpuHighSince,
                        now: model.lastSampleAt, intervalSeconds: model.settings.fastIntervalSeconds,
-                       thermal: model.thermal)
+                       thermal: model.thermal, gpuUtil: model.gpuUtil)
 }

@@ -56,6 +56,8 @@ protocol CommonStrings {
     var commonServiceRecommended: String { get }
     var commonClaudeBackup: String { get }
     var commonCPU: String { get }
+    var commonGPU: String { get }
+    var commonSoC: String { get }
     var commonMemory: String { get }
     var commonStorage: String { get }
     var commonSecurity: String { get }
@@ -146,6 +148,8 @@ extension StringsEN: CommonStrings {
     var commonServiceRecommended: String { "service recommended" }
     var commonClaudeBackup: String { "Claude backup" }
     var commonCPU: String { "CPU" }
+    var commonGPU: String { "GPU" }
+    var commonSoC: String { "SoC" }
     var commonMemory: String { "Memory" }
     var commonStorage: String { "Storage" }
     var commonSecurity: String { "Security" }
@@ -236,6 +240,8 @@ extension StringsRU: CommonStrings {
     var commonServiceRecommended: String { "нужен сервис" }
     var commonClaudeBackup: String { "Бэкап Claude" }
     var commonCPU: String { "Процессор" }
+    var commonGPU: String { "Графика" }
+    var commonSoC: String { "SoC" }
     var commonMemory: String { "Память" }
     var commonStorage: String { "Хранилище" }
     var commonSecurity: String { "Безопасность" }
