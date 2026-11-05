@@ -396,7 +396,7 @@ struct HistoryState: Codable {
 // battery/load/topCPU/topMem etc. as individual @Observable fields (see
 // Engine/DashboardModel.swift:104-108's doc comment for why); a private computed `live`
 // exists only for the report/assess code paths.
-var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
+var cpuHistory: [(Date, Double)]  // last 60 points of user+sys
 var report: FullReport            // sections fill in as collected
 var assessment: Assessment
 var history: HistoryState
@@ -426,7 +426,8 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 - battery: IOKit `IOPSCopyPowerSourcesInfo` (+ cycles/condition only in full report).
   Desktop Mac ⇒ nil, tile hidden.
 - load: `getloadavg`.
-- thermal state: `ProcessInfo.processInfo.thermalState`, read once at start() and then updated by `ProcessInfo.thermalStateDidChangeNotification` (no polling, also while paused); shown in the CPU page's SoC tile note, never converted into a throttling percentage.
+- thermal state: `ProcessInfo.processInfo.thermalState`, read once at start() and then updated by `ProcessInfo.thermalStateDidChangeNotification` (no polling, also while paused); shown in the SoC page's chip-temperature block, never converted into a throttling percentage.
+- GPU load: IOKit `IOAccelerator` → `PerformanceStatistics` → `Device Utilization %` (undocumented private key, exact match, max over entries, clamped 0...100; nil → «—»). Read in the fast task's background hop next to the SoC temperature, ~0.03 ms. Whole-machine figure, including the app's own drawing. Shown on the SoC page's GPU card and in Home's SoC cell; not in the report.
 - top processes: TWO subprocesses per tick, each supplying only what the other can't.
   `/bin/ps -axww -o pid=,rss=,time=,comm=` (CommandRunner, 5 s timeout) yields pid, full
   untruncated name, RSS and cumulative CPU time; per-process CPU% is a delta of that

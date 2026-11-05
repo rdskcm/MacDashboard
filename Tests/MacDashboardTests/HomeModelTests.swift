@@ -364,11 +364,11 @@ extension SerialTests {
 
         private func nowCells(_ report: FullReport, _ live: LiveSnapshot, pressure: MemoryPressureLevel?,
                               tasks: [HomeTask]? = nil, hasBattery: Bool = true, cpu: CPUUsage? = CPUUsage(user: 20.2, sys: 5.5, idle: 74.3),
-                              short: Bool = false, narrow: Bool = false) -> [HomeNowCell] {
+                              short: Bool = false, narrow: Bool = false, gpu: Int? = 23) -> [HomeNowCell] {
             let a = Assess.assess(report: report, live: live, memPressure: pressure)
             let input = homeInput(report, live, assessment: a, hasBattery: hasBattery)
             let t = tasks ?? HomeModel.tasks(a, report: report, disk: live.disk, battery: live.battery)
-            return HomeModel.nowCells(input, tasks: t, memPressure: pressure, socTempC: 48, cpu: cpu, short: short, narrow: narrow)
+            return HomeModel.nowCells(input, tasks: t, memPressure: pressure, socTempC: 48, gpuUtil: gpu, cpu: cpu, short: short, narrow: narrow)
         }
 
         @Test func nowCellsDiskSegmentsOneBasis() {
@@ -388,7 +388,7 @@ extension SerialTests {
             let (report, live) = nowFixture()
             let cells = nowCells(report, live, pressure: .normal)
             #expect(cells.map(\.kind) == [.cpu, .memory, .storage, .battery])
-            #expect(cells[0].big == "25.7%" && cells[0].chipText == "48 °C" && cells[0].chipTone == .green)
+            #expect(cells[0].figures[0].value == "26%" && cells[0].chipText == "48 °C" && cells[0].chipTone == .green)
             #expect(cells[0].foot == "load 2.10 · 8 cores")
             #expect(cells[1].big == "9.5 GB" && cells[1].tone == .neutral && cells[1].chipText == "pressure low")
             #expect(cells[1].of == "of 16" && cells[1].foot == "swap 1 GB of 8 GB · compressed 1.5 GB")
@@ -400,7 +400,7 @@ extension SerialTests {
                                                           spoken: "wear threshold 80%", help: "80% — Apple’s wear threshold"))
             #expect(cells[3].segments.isEmpty && cells[3].legend.isEmpty)
             #expect(cells[0...2].allSatisfy { $0.batteryBar == nil })
-            #expect(HomeModel.nowCells(homeInput(report, live), tasks: [], memPressure: nil, socTempC: nil, cpu: CPUUsage(user: 1, sys: 1, idle: 98),
+            #expect(HomeModel.nowCells(homeInput(report, live), tasks: [], memPressure: nil, socTempC: nil, gpuUtil: nil, cpu: CPUUsage(user: 1, sys: 1, idle: 98),
                                        short: false, narrow: false)[0].chipText == nil)
             let short = nowCells(report, live, pressure: .normal, short: true)
             #expect(short[1].legend[0].text == "act. 4")
@@ -444,7 +444,7 @@ extension SerialTests {
             L10nStore.shared.language = .en
             let (report, live) = nowFixture()
             let cells = nowCells(report, live, pressure: .normal)
-            #expect(cells[0].accessibilityText == "CPU, 25.7%, 48 °C, load 2.10 · 8 cores")
+            #expect(cells[0].accessibilityText == "SoC, CPU 26%, GPU 23%, 48 °C, load 2.10 · 8 cores")
             let m = cells[1]
             #expect(m.accessibilityText == (["Memory", "9.5 GB of 16", "pressure low"] + m.legend.map(\.text)
                                             + ["swap 1 GB of 8 GB · compressed 1.5 GB"]).joined(separator: ", "))
@@ -456,7 +456,7 @@ extension SerialTests {
             #expect(ru.accessibilityText == "Батарея, 76 % от новой, износ, порог износа 80 %, \(ru.foot)")
             L10nStore.shared.language = .en
             let loading = nowCells(report, live, pressure: nil, cpu: nil)[0]
-            #expect(loading.accessibilityText == "CPU, Collecting data…")
+            #expect(loading.accessibilityText == "SoC, Collecting data…")
         }
 
         @Test func nowCellsBatteryMergesReportStatics() {
@@ -529,7 +529,7 @@ extension SerialTests {
             let (report, live) = nowFixture()
             #expect(nowCells(report, live, pressure: nil, hasBattery: false).count == 3)
             let cells = nowCells(report, live, pressure: nil, cpu: nil)
-            #expect(cells[0].loading && cells[0].big == "—" && cells[0].foot == "Collecting data…" && cells[0].chipText == nil)
+            #expect(cells[0].loading && cells[0].big == "—" && cells[0].figures.map(\.value) == ["—", "—"] && cells[0].foot == "Collecting data…" && cells[0].chipText == nil)
             #expect(cells[0].segments == [HomeNowSegment(series: .track, value: 1)] && cells[0].legend.isEmpty)
             #expect(cells[1].chipText == nil, "no pressure level, no chip")
         }
@@ -537,7 +537,7 @@ extension SerialTests {
         @Test func socChipSharesCPUPageLevels() {
             let (report, live) = nowFixture()
             func chip(_ t: Int) -> HomeTone? {
-                HomeModel.nowCells(homeInput(report, live), tasks: [], memPressure: nil, socTempC: t,
+                HomeModel.nowCells(homeInput(report, live), tasks: [], memPressure: nil, socTempC: t, gpuUtil: 23,
                                    cpu: CPUUsage(user: 1, sys: 1, idle: 98), short: false, narrow: false)[0].chipTone
             }
             #expect(chip(84) == .green && chip(85) == .amber && chip(94) == .amber && chip(95) == .hot, "Home chip 84/85/94/95")
@@ -552,16 +552,30 @@ extension SerialTests {
             }
         }
 
-        @Test func nowRuAndSparkline() {
+        @Test func nowSoCFigures() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            let (report, live) = nowFixture()
+            let cells = nowCells(report, live, pressure: .normal)
+            #expect(cells[0].label == "SoC" && cells[0].figures.count == 2)
+            #expect(cells[0].figures[0].kicker == "CPU" && cells[0].figures[0].value == "26%")
+            #expect(cells[0].figures[1].kicker == "GPU" && cells[0].figures[1].value == "23%")
+            #expect(cells[0].accessibilityText == "SoC, CPU 26%, GPU 23%, 48 °C, \(cells[0].foot)")
+            let none = nowCells(report, live, pressure: .normal, gpu: nil)[0]
+            #expect(none.figures[1].value == "—" && none.figures[1].dimmed)
+            #expect(none.figures[1].spoken == "GPU: Not available on this Mac")
+            L10nStore.shared.language = .ru
+            let ru = nowCells(report, live, pressure: .normal)[0]
+            #expect(ru.figures[0].kicker == "Процессор" && ru.figures[1].kicker == "Графика")
+        }
+
+        @Test func nowRu() {
             let saved = L10nStore.shared.language
             defer { L10nStore.shared.language = saved }
             L10nStore.shared.language = .ru
             #expect(L.homeLoadCores(fmtFixed(2.1, decimals: 2), 8) == "нагрузка 2,10 · 8 ядер")
             #expect(L.homeBatteryFoot(cycles: 21, charge: nil, state: nil, short: false) == "21 цикл")
-            let pts = (0..<60).map { (Date(timeIntervalSince1970: Double($0)), Double($0) * 2) }
-            let sp = HomeModel.sparkline(pts)
-            #expect(sp.count == 24 && sp.last == 100 && sp.first == 72)
-            #expect(HomeModel.sparkline([(Date(), 150), (Date(), -3)]) == [100, 0])
         }
     }
 }

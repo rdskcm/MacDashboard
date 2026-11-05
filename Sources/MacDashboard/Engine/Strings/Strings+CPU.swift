@@ -23,6 +23,9 @@ protocol CPUStrings {
     var cpuUser: String { get }
     var cpuSystem: String { get }
     var cpuSocTemperature: String { get }
+    var socChipTemperature: String { get }
+    var gpuNotAvailable: String { get }
+    var gpuWholeMac: String { get }
     var cpuSocHot: String { get }
     var cpuSocWarm: String { get }
     var cpuThermalNominal: String { get }
@@ -75,6 +78,9 @@ extension StringsEN: CPUStrings {
     var cpuUser: String { "User" }
     var cpuSystem: String { "System" }
     var cpuSocTemperature: String { "SoC temperature" }
+    var socChipTemperature: String { "Chip temperature" }
+    var gpuNotAvailable: String { "Not available on this Mac" }
+    var gpuWholeMac: String { "Whole Mac, including what macOS draws" }
     var cpuSocHot: String { "hot" }
     var cpuSocWarm: String { "warm" }
     var cpuThermalNominal: String { "thermal: normal" }
@@ -126,6 +132,9 @@ extension StringsRU: CPUStrings {
     var cpuUser: String { "Пользователь" }
     var cpuSystem: String { "Система" }
     var cpuSocTemperature: String { "Температура SoC" }
+    var socChipTemperature: String { "Температура чипа" }
+    var gpuNotAvailable: String { "Недоступно на этом Mac" }
+    var gpuWholeMac: String { "Весь Mac, включая отрисовку macOS" }
     var cpuSocHot: String { "горячо" }
     var cpuSocWarm: String { "тепло" }
     var cpuThermalNominal: String { "нагрев: норма" }

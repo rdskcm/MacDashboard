@@ -79,6 +79,7 @@ struct CPUPageModel: Equatable {
         var cpu: CPUUsage?; var load: [Double]?; var ncpu: Int; var chip: String?; var socTempC: Int?
         var block: BlockPhase; var highSince: Date?; var now: Date; var intervalSeconds: Int
         var thermal: ThermalLevel? = nil
+        var gpuUtil: Int? = nil
     }
 
     var phase: CPUPagePhase
@@ -89,7 +90,9 @@ struct CPUPageModel: Equatable {
     var caption: String         // CPU card caption
     var failureNote: String?    // non-nil only in .failed
     var hero: CPUHeroModel
-    var tiles: [CPUTileModel]   // always 3: User, System, SoC temperature
+    var tiles: [CPUTileModel]   // always 2: User, System
+    var gpu: CPUHeroModel       // GPU card hero
+    var temperature: CPUTileModel   // the shared chip-temperature block (was tiles[2])
     var showsWait: Bool         // phase == .loading
 
     static func make(_ i: Input) -> CPUPageModel {
@@ -134,6 +137,33 @@ struct CPUPageModel: Equatable {
             failureNote = reason + " " + L.readRetriesAutomatically
         }
 
+        // Temperature block: independent of the CPU phase (GPU-UTILIZATION D9).
+        var soc: CPUTileModel
+        if let t = i.socTempC {
+            switch CPULoad.socLevel(t) {
+            case .hot:
+                soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.cpuSocHot, dot: .hot, hot: true, dimmed: false)
+            case .warm:
+                soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.cpuSocWarm, dot: .amber, hot: false, dimmed: false)
+            case .normal:
+                soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.commonNormal, dot: .green, hot: false, dimmed: false)
+            }
+            if let th = i.thermal {
+                let n = thermalNote(th)
+                soc.note = n.text; soc.noteTone = n.tone; soc.help = n.help
+            }
+        } else {
+            let th = i.thermal.map(thermalNote)
+            soc = CPUTileModel(label: L.cpuSocTemperature, value: "—", note: th?.text, dot: nil, hot: false, dimmed: true,
+                               noteTone: th?.tone, help: th?.help)
+        }
+        let gpu: CPUHeroModel
+        if let g = i.gpuUtil {
+            gpu = CPUHeroModel(value: L.homePercent("\(g)"), fraction: Double(g) / 100, note: L.gpuWholeMac, high: false, dimmed: false)
+        } else {
+            gpu = CPUHeroModel(value: "—", fraction: 0, note: L.gpuNotAvailable, high: false, dimmed: true)
+        }
+
         let hero: CPUHeroModel
         var tiles: [CPUTileModel]
         let showsReading = phase == .live || phase == .high
@@ -151,33 +181,13 @@ struct CPUPageModel: Equatable {
             hero = CPUHeroModel(value: L.homePercent(fmtFixed(usage, decimals: 1)),
                                 fraction: min(max(usage / 100, 0), 1),
                                 note: note, high: high, dimmed: false)
-            var soc: CPUTileModel
-            if let t = i.socTempC {
-                switch CPULoad.socLevel(t) {
-                case .hot:
-                    soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.cpuSocHot, dot: .hot, hot: true, dimmed: false)
-                case .warm:
-                    soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.cpuSocWarm, dot: .amber, hot: false, dimmed: false)
-                case .normal:
-                    soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.commonNormal, dot: .green, hot: false, dimmed: false)
-                }
-                if let th = i.thermal {
-                    let n = thermalNote(th)
-                    soc.note = n.text; soc.noteTone = n.tone; soc.help = n.help
-                }
-            } else {
-                let th = i.thermal.map(thermalNote)
-                soc = CPUTileModel(label: L.cpuSocTemperature, value: "—", note: th?.text, dot: nil, hot: false, dimmed: true,
-                                   noteTone: th?.tone, help: th?.help)
-            }
             tiles = [
                 CPUTileModel(label: L.cpuUser, value: L.homePercent(fmtFixed(cpu.user, decimals: 1)), note: nil, dot: nil, hot: false, dimmed: false),
                 CPUTileModel(label: L.cpuSystem, value: L.homePercent(fmtFixed(cpu.sys, decimals: 1)), note: nil, dot: nil, hot: false, dimmed: false),
-                soc,
             ]
         } else {
             hero = CPUHeroModel(value: "—", fraction: 0, note: L.cpuNoReading, high: false, dimmed: true)
-            tiles = [L.cpuUser, L.cpuSystem, L.cpuSocTemperature].map {
+            tiles = [L.cpuUser, L.cpuSystem].map {
                 CPUTileModel(label: $0, value: "—", note: nil, dot: nil, hot: false, dimmed: true)
             }
         }
@@ -185,7 +195,7 @@ struct CPUPageModel: Equatable {
         var isFailed = false
         if case .failed = phase { isFailed = true }
         return CPUPageModel(phase: phase, tag: tag, tagText: tagText, sub: sub, subIsFailure: isFailed,
-                            caption: caption, failureNote: failureNote, hero: hero, tiles: tiles,
+                            caption: caption, failureNote: failureNote, hero: hero, tiles: tiles, gpu: gpu, temperature: soc,
                             showsWait: phase == .loading)
     }
 
@@ -227,7 +237,7 @@ struct CPUPageModel: Equatable {
     /// Quit / Force quit are offered only for real processes: pid 0 is kernel_task, pid 1 is launchd.
     static func showsActions(pid: Int32?) -> Bool { pid.map { $0 > 1 } ?? false }
 
-    /// Hero / tiles split of the CPU card (D21): hero = max(200, (W − 8) × 0.8 / 2.8), at most W − 8.
+    /// Hero / tiles split (D21), used by HeroSplitLayout on Memory / Battery / Storage (no longer by the SoC page): hero = max(200, (W − 8) × 0.8 / 2.8), at most W − 8.
     static func heroWidths(total: CGFloat) -> (hero: CGFloat, tiles: CGFloat) {
         guard total >= 8 else { return (0, 0) }
         let avail = total - 8

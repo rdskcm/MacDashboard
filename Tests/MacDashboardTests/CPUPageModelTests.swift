@@ -9,9 +9,9 @@ private let t0 = Date(timeIntervalSinceReferenceDate: 800_000_000)
 private func cpuInput(cpu: CPUUsage? = CPUUsage(user: 18, sys: 7.7, idle: 74.3),
                       load: [Double]? = [2.1, 1.85, 1.6], chip: String? = "Apple M3", soc: Int? = 48,
                       block: BlockPhase? = nil, highSince: Date? = nil, ncpu: Int = 8,
-                      thermal: ThermalLevel? = nil) -> CPUPageModel.Input {
+                      thermal: ThermalLevel? = nil, gpu: Int? = 23) -> CPUPageModel.Input {
     CPUPageModel.Input(cpu: cpu, load: load, ncpu: ncpu, chip: chip, socTempC: soc,
-                       block: block ?? .ok(at: t0), highSince: highSince, now: t0, intervalSeconds: 2, thermal: thermal)
+                       block: block ?? .ok(at: t0), highSince: highSince, now: t0, intervalSeconds: 2, thermal: thermal, gpuUtil: gpu)
 }
 
 private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
@@ -77,7 +77,7 @@ extension SerialTests {
                 #expect(m.sub == "Apple M3 · 8 cores · updates every 2 s")
                 #expect(m.caption == "live snapshot")
                 #expect(!m.subIsFailure && m.failureNote == nil && !m.showsWait)
-                #expect(m.tiles.map(\.label) == ["User", "System", "SoC temperature"])
+                #expect(m.tiles.map(\.label) == ["User", "System"])
                 #expect(m.tiles[0].value == "18.0%" && m.tiles[1].value == "7.7%")
             }
             withLanguage(.ru) {
@@ -124,23 +124,47 @@ extension SerialTests {
 
         @Test func socTile() {
             withLanguage(.en) {
-                var soc = CPUPageModel.make(cpuInput(soc: 95)).tiles[2]
+                var soc = CPUPageModel.make(cpuInput(soc: 95)).temperature
                 #expect(soc.value == "95 °C" && soc.dot == .hot && soc.hot && soc.note == "hot" && !soc.dimmed, "exactly 95 is hot")
-                soc = CPUPageModel.make(cpuInput(soc: 94)).tiles[2]
+                soc = CPUPageModel.make(cpuInput(soc: 94)).temperature
                 #expect(soc.value == "94 °C" && soc.dot == .amber && !soc.hot && soc.note == "warm" && !soc.dimmed, "94 is warm")
-                soc = CPUPageModel.make(cpuInput(soc: 85)).tiles[2]
+                soc = CPUPageModel.make(cpuInput(soc: 85)).temperature
                 #expect(soc.dot == .amber && !soc.hot && soc.note == "warm", "exactly 85 is warm")
-                soc = CPUPageModel.make(cpuInput(soc: 84)).tiles[2]
+                soc = CPUPageModel.make(cpuInput(soc: 84)).temperature
                 #expect(soc.dot == .green && !soc.hot && soc.note == "normal", "84 is normal")
-                soc = CPUPageModel.make(cpuInput(soc: 48)).tiles[2]
+                soc = CPUPageModel.make(cpuInput(soc: 48)).temperature
                 #expect(soc.value == "48 °C" && soc.dot == .green && !soc.hot && soc.note == "normal")
-                soc = CPUPageModel.make(cpuInput(soc: nil)).tiles[2]
+                soc = CPUPageModel.make(cpuInput(soc: nil)).temperature
                 #expect(soc.value == "—" && soc.dimmed && soc.dot == nil && soc.note == nil)
             }
             withLanguage(.ru) {
-                #expect(CPUPageModel.make(cpuInput(soc: 48)).tiles[2].note == "норма")
-                #expect(CPUPageModel.make(cpuInput(soc: 90)).tiles[2].note == "тепло")
-                #expect(CPUPageModel.make(cpuInput(soc: 95)).tiles[2].note == "горячо")
+                #expect(CPUPageModel.make(cpuInput(soc: 48)).temperature.note == "норма")
+                #expect(CPUPageModel.make(cpuInput(soc: 90)).temperature.note == "тепло")
+                #expect(CPUPageModel.make(cpuInput(soc: 95)).temperature.note == "горячо")
+            }
+        }
+
+        @Test func tilesAreUserAndSystem() {
+            withLanguage(.en) {
+                let m = CPUPageModel.make(cpuInput())
+                #expect(m.tiles.count == 2 && m.tiles[0].label == "User" && m.tiles[1].label == "System")
+                let f = CPUPageModel.make(cpuInput(cpu: nil, block: .failed(.noReading, lastGoodAt: nil)))
+                #expect(f.tiles.count == 2 && f.tiles.allSatisfy(\.dimmed))
+            }
+        }
+
+        @Test func gpuHero() {
+            withLanguage(.en) {
+                let g = CPUPageModel.make(cpuInput(gpu: 23)).gpu
+                #expect(g.value == "23%" && g.fraction == 0.23 && !g.dimmed && g.note == "Whole Mac, including what macOS draws")
+                let n = CPUPageModel.make(cpuInput(gpu: nil)).gpu
+                #expect(n.value == "—" && n.fraction == 0 && n.dimmed && n.note == "Not available on this Mac")
+                #expect(CPUPageModel.make(cpuInput(gpu: 100)).gpu.fraction == 1)
+                let f = CPUPageModel.make(cpuInput(cpu: nil, block: .failed(.noReading, lastGoodAt: nil), gpu: 23))
+                #expect(f.gpu.value == "23%", "a CPU failure does not dim the GPU figure")
+            }
+            withLanguage(.ru) {
+                #expect(CPUPageModel.make(cpuInput(gpu: nil)).gpu.note == "Недоступно на этом Mac")
             }
         }
 
@@ -156,21 +180,22 @@ extension SerialTests {
             let ru = ["нагрев: норма", "нагрев: повышен", "нагрев: высокий", "нагрев: критический"]
             withLanguage(.en) {
                 for (k, st) in states.enumerated() {
-                    let t = CPUPageModel.make(cpuInput(soc: 48, thermal: st)).tiles[2]
+                    let t = CPUPageModel.make(cpuInput(soc: 48, thermal: st)).temperature
                     #expect(t.note == en[k] && t.noteTone == tones[k] && t.help != nil)
                     #expect(t.value == "48 °C" && t.dot == .green)
                     #expect(en[k].count <= 19)
                 }
-                var t = CPUPageModel.make(cpuInput(soc: 97, thermal: .nominal)).tiles[2]
+                var t = CPUPageModel.make(cpuInput(soc: 97, thermal: .nominal)).temperature
                 #expect(t.dot == .hot && t.note == "thermal: normal" && t.noteTone == .green)
-                t = CPUPageModel.make(cpuInput(soc: nil, thermal: .serious)).tiles[2]
+                t = CPUPageModel.make(cpuInput(soc: nil, thermal: .serious)).temperature
                 #expect(t.value == "—" && t.dimmed && t.note == "thermal: high" && t.noteTone == .amber)
-                t = CPUPageModel.make(cpuInput(cpu: nil, block: .loading(since: t0), thermal: .critical)).tiles[2]
-                #expect(t.note == nil)
+                t = CPUPageModel.make(cpuInput(cpu: nil, block: .loading(since: t0), thermal: .critical)).temperature
+                #expect(CPUPageModel.make(cpuInput(cpu: nil, block: .loading(since: t0), thermal: .critical)).showsWait)
+                #expect(t.note == "thermal: critical")
             }
             withLanguage(.ru) {
                 for (k, st) in states.enumerated() {
-                    let t = CPUPageModel.make(cpuInput(soc: 48, thermal: st)).tiles[2]
+                    let t = CPUPageModel.make(cpuInput(soc: 48, thermal: st)).temperature
                     #expect(t.note == ru[k])
                     #expect(ru[k].count <= 19)
                 }
@@ -193,7 +218,7 @@ extension SerialTests {
                 #expect(m.sub == "Apple M3 · last data — \(hms)")
                 #expect(m.failureNote == "Couldn’t read CPU counters: no response within 5 s. The app keeps trying automatically.")
                 #expect(m.hero.value == "—" && m.hero.note == "No current reading" && m.hero.dimmed && !m.hero.high)
-                #expect(m.tiles.map(\.value) == ["—", "—", "—"] && m.tiles.allSatisfy { $0.dimmed && $0.note == nil && $0.dot == nil })
+                #expect(m.tiles.map(\.value) == ["—", "—"] && m.tiles.allSatisfy { $0.dimmed && $0.note == nil && $0.dot == nil })
                 #expect(!m.showsWait)
             }
         }

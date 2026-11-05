@@ -17,6 +17,7 @@ extension AppModel {
         disk = d.disk
         battery = d.battery
         socTempC = d.socTempC
+        gpuUtil = VisualFixture.gpuUnavailableRequested ? nil : d.gpuUtil
         topCPU = d.topCPU
         topMem = d.topMem
         cpuHistory = d.cpuHistory
