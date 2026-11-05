@@ -137,7 +137,7 @@ struct IPhoneLogsCard: View {
         .foregroundStyle(DS3.muted)
         .padding(.vertical, 10)
         .padding(.horizontal, 16)
-        .background(DS3.overlay)
+        .background(DS3.overlaySolid)
         .overlay(alignment: .bottom) { Rectangle().fill(DS3.line).frame(height: 1) }
     }
 }
