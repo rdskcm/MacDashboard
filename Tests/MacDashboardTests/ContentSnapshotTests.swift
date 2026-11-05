@@ -1121,6 +1121,46 @@ extension SerialTests {
                         }
                     }
                 }
+                run.snap("content-iphone-history-ranges", mode, width: 1134) {
+                    let ip = fixtureIPhone()
+                    let alexPoints = ip.devices.first { $0.id == alex }!.battery
+                    let samPoints = ip.devices.first { $0.id == sam }!.battery
+                    VStack(alignment: .leading, spacing: 24) {
+                        HarnessSection(label: "iPhone history: 1M, weekly labels (30 of 180 days)") {
+                            IPhoneBatteryHistoryCard(points: alexPoints, initialRange: .month)
+                        }
+                        HarnessSection(label: "iPhone history: 3M, month labels; 6M and 1Y disabled") {
+                            IPhoneBatteryHistoryCard(points: alexPoints, initialRange: .quarter)
+                        }
+                        HarnessSection(label: "iPhone history: 1Y selected on 120 days falls back to All, table") {
+                            IPhoneBatteryHistoryCard(points: samPoints, initialView: .table, initialRange: .year)
+                        }
+                    }
+                }
+                do {
+                    func pt(_ day: String, _ h: Int?, _ c: Int, _ src: String) -> BatteryPoint {
+                        BatteryPoint(day: day, cycles: c, healthPercent: h, maxCapacityMAh: nil, designCapacityMAh: 5030, source: src)
+                    }
+                    let sparse = [pt("2025-06-02", 100, 40, "import"), pt("2025-09-14", 99, 120, "import"), pt("2026-01-15", 98, 269, "live")]
+                    let noHealth = [pt("2026-01-13", nil, 260, "live"), pt("2026-01-15", nil, 269, "live")]
+                    let single = [pt("2026-01-15", 98, 269, "live")]
+                    run.snap("content-iphone-history-sparse", mode, width: 1134) {
+                        VStack(alignment: .leading, spacing: 24) {
+                            HarnessSection(label: "iPhone history: one point in the 1M range") {
+                                IPhoneBatteryHistoryCard(points: sparse, initialRange: .month)
+                            }
+                            HarnessSection(label: "iPhone history: 6M, two sparse points; 1Y disabled") {
+                                IPhoneBatteryHistoryCard(points: sparse, initialRange: .halfYear)
+                            }
+                            HarnessSection(label: "iPhone history: points without health values; only All enabled") {
+                                IPhoneBatteryHistoryCard(points: noHealth)
+                            }
+                            HarnessSection(label: "iPhone history: one point in total; every range disabled") {
+                                IPhoneBatteryHistoryCard(points: single)
+                            }
+                        }
+                    }
+                }
                 run.snap("content-iphone-logs", mode, width: 1134) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone logs: from archive") {

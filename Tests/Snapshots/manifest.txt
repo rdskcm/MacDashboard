@@ -23,7 +23,7 @@ content-home-now-dark	2026-11-04	27.2	Xcode 27.2	81ba45d-dirty
 content-iphone-tiles-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-notices-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-battery-dark	2026-11-04	27.2	Xcode 27.2	79fe127-dirty
-content-iphone-history-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
+content-iphone-history-dark	2026-11-05	27.2	Xcode 27.2	d99c7a8
 content-iphone-logs-dark	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
 content-iphone-import-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-identity-dark	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
@@ -54,7 +54,7 @@ content-home-now-light	2026-11-04	27.2	Xcode 27.2	81ba45d-dirty
 content-iphone-tiles-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-notices-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-battery-light	2026-11-04	27.2	Xcode 27.2	79fe127-dirty
-content-iphone-history-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
+content-iphone-history-light	2026-11-05	27.2	Xcode 27.2	d99c7a8
 content-iphone-logs-light	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
 content-iphone-import-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-iphone-identity-light	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
@@ -259,3 +259,7 @@ content-battery-passport-min-dark	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
 content-battery-passport-min-ru-dark	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
 content-battery-passport-min-light	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
 content-battery-passport-min-ru-light	2026-11-04	27.2	Xcode 27.2	07a0262-dirty
+content-iphone-history-ranges-dark	2026-11-05	27.2	Xcode 27.2	d99c7a8
+content-iphone-history-ranges-light	2026-11-05	27.2	Xcode 27.2	d99c7a8
+content-iphone-history-sparse-dark	2026-11-05	27.2	Xcode 27.2	d99c7a8
+content-iphone-history-sparse-light	2026-11-05	27.2	Xcode 27.2	d99c7a8

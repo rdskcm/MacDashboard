@@ -48,6 +48,9 @@ enum DS3 {
     }
     @MainActor private static var lastBarTint: (fill: GlassTint.Fill, color: Color)?
     static let overlay = Color(light: ds3RGB(250, 248, 244, 0.96), dark: ds3RGB(30, 29, 27, 0.97))
+    /// Opaque twin of `overlay` for a pinned header that rows scroll under. `overlay` over the card ground (`rimGround*`):
+    /// dark 0.97*(30,29,27)+0.03*(27,27,29) = (29.9,28.9,27.1) -> (30,29,27); light 0.96*(250,248,244)+0.04*(250,250,249) = (250,248.1,244.2) -> (250,248,244).
+    static let overlaySolid = Color(light: Color(hex: 0xFAF8F4), dark: Color(hex: 0x1E1D1B))
 
     static let accent = Color(light: Color(hex: 0x2F7FE0), dark: Color(hex: 0x6AA6F2))
     static let accentInk = Color(light: Color(hex: 0x1A63C2), dark: Color(hex: 0x93BFF7))
