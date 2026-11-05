@@ -3,12 +3,13 @@
 // MobileDevice.framework bound at runtime with dlopen/dlsym (the failure model of
 // ThermalHIDReader.loadSymbols(): all symbols or none, never dlclose'd).
 //
-// READ-ONLY CONTRACT (R10). This file never writes, deletes, renames, pairs, unpairs,
-// sets a value, restarts/shuts down/sleeps the phone or moves crash logs. It has exactly
-// one AFC file-open call site (`openReadOnly`), with the mode literal 1 (read-only). The
-// only diagnostics_relay requests are the shapes `IPhoneData.relayMessage` can build. The
-// gate commands G1-G3 (forbidden-symbol grep, one-open-site count, request-string grep)
-// are in the Verification section of the IPHONE-MODULE spec; run them after every change.
+// READ-ONLY CONTRACT (R10, amended by DEVICE-ARCHIVE-CLEANUP). This file never writes, renames, pairs, unpairs,
+// sets a value, restarts/shuts down/sleeps the phone or moves crash logs. It deletes exactly one kind of file: a
+// sysdiagnose archive the app itself requested, through the ONE AFC remove call site `AFCSession.removeOwnArchive`,
+// which refuses every path `SysdiagnoseDir.isOwnArchivePath` rejects; the model calls it only after a full import
+// of a claimed archive (SPEC.md §1 item 6, row 9). It has exactly one AFC file-open call site (`openReadOnly`),
+// with the mode literal 1 (read-only). The only diagnostics_relay requests are the shapes `IPhoneData.relayMessage`
+// can build. Gates G1-G4: specs/DEVICE-ARCHIVE-CLEANUP.md § Verification (while open), then the CHANGELOG entry.
 //
 // Not covered by tests: private framework, app-only (same as ThermalHIDReader).
 // The pure parts (relay request shapes, value extraction, key hashing) are in
@@ -86,6 +87,7 @@ final class MobileDeviceTransport {
     /// `len` is a size_t in/out slot: a 4-byte slot let the framework read 4 stray stack bytes as the
     /// high half of the requested length (seen in a debug build: every file over the buffer size came back whole).
     private typealias AfcFileReadFn = @convention(c) (Ptr?, Ptr?, Ptr?, UnsafeMutablePointer<UInt>) -> Int32
+    private typealias AfcRemoveFn = @convention(c) (Ptr?, UnsafePointer<CChar>) -> Int32
 
     /// Every function this block uses, resolved all-or-nothing (R16).
     private struct Syms {
@@ -117,6 +119,8 @@ final class MobileDeviceTransport {
         let afcFileRefOpen: AfcFileOpenFn
         let afcFileRefRead: AfcFileReadFn
         let afcFileRefClose: AfcHandleCloseFn
+        /// Optional (DEVICE-ARCHIVE-CLEANUP): its absence disables only the delete, never the transport.
+        let afcRemovePath: AfcRemoveFn?
     }
 
     private static func loadSyms() -> Syms? {
@@ -154,6 +158,7 @@ final class MobileDeviceTransport {
               let afcFileRefRead = dlsym(h, "AFCFileRefRead"),
               let afcFileRefClose = dlsym(h, "AFCFileRefClose")
         else { return nil }   // partial resolution => the whole set fails closed
+        let afcRemove = dlsym(h, "AFCRemovePath")
 
         return Syms(
             subscribe: unsafeBitCast(subscribe, to: SubscribeFn.self),
@@ -183,7 +188,8 @@ final class MobileDeviceTransport {
             afcKVClose: unsafeBitCast(afcKVClose, to: AfcKVCloseFn.self),
             afcFileRefOpen: unsafeBitCast(afcFileRefOpen, to: AfcFileOpenFn.self),
             afcFileRefRead: unsafeBitCast(afcFileRefRead, to: AfcFileReadFn.self),
-            afcFileRefClose: unsafeBitCast(afcFileRefClose, to: AfcHandleCloseFn.self))
+            afcFileRefClose: unsafeBitCast(afcFileRefClose, to: AfcHandleCloseFn.self),
+            afcRemovePath: afcRemove.map { unsafeBitCast($0, to: AfcRemoveFn.self) })
     }
 
     // MARK: - State
@@ -389,6 +395,44 @@ final class MobileDeviceTransport {
             return out
         }
 
+        /// Entries directly in `dir`, no recursion and no header reads; nil when `dir` cannot be opened and its parent
+        /// does not show it missing. A directory the parent lists as absent is empty (a phone that never made a
+        /// sysdiagnose has no `/DiagnosticLogs/sysdiagnose`).
+        func listDirectory(_ dir: String) -> [IPhoneAFCEntry]? {
+            if let names = names(in: dir) {
+                return names.compactMap { info(dir == "/" ? "/" + $0 : dir + "/" + $0) }
+            }
+            let parent = (dir as NSString).deletingLastPathComponent
+            guard let siblings = names(in: parent.isEmpty ? "/" : parent) else { return nil }
+            return siblings.contains((dir as NSString).lastPathComponent) ? nil : []
+        }
+
+        private func names(in dir: String) -> [String]? {
+            var handle: Ptr?
+            guard s.afcDirOpen(afc, dir, &handle) == 0, let handle else { return nil }
+            defer { _ = s.afcDirClose(afc, handle) }
+            var out: [String] = []
+            while true {
+                var name: UnsafeMutablePointer<CChar>?
+                guard s.afcDirRead(afc, handle, &name) == 0, let name else { break }
+                let n = String(cString: name)
+                if n != "." && n != ".." { out.append(n) }
+            }
+            return out
+        }
+
+        /// The ONLY AFC remove call site in the app (DEVICE-ARCHIVE-CLEANUP): one app-requested sysdiagnose archive,
+        /// checked against its claimed size right before the remove and confirmed gone after it.
+        func removeOwnArchive(path: String, expectedSize: Int64) -> PhoneCleanup {
+            guard SysdiagnoseDir.isOwnArchivePath(path) else { return .failed(-1) }
+            guard let remove = s.afcRemovePath else { return .unavailable }
+            guard let e = info(path) else { return .alreadyGone }
+            guard !e.isDirectory, e.size == expectedSize else { return .changed }
+            let rc = remove(afc, path)
+            guard rc == 0 else { return .failed(rc) }
+            return info(path) == nil ? .deleted : .failed(0)
+        }
+
         private func walk(_ dir: String, depth: Int, into out: inout [IPhoneAFCEntry]) {
             guard depth <= 8 else { return }
             var handle: Ptr?
@@ -409,7 +453,7 @@ final class MobileDeviceTransport {
             }
         }
 
-        private func info(_ path: String) -> IPhoneAFCEntry? {
+        func info(_ path: String) -> IPhoneAFCEntry? {
             var handle: Ptr?
             guard s.afcFileInfoOpen(afc, path, &handle) == 0, let handle else { return nil }
             defer { _ = s.afcKVClose(handle) }
@@ -660,5 +704,41 @@ final class MobileDeviceTransport {
             Self.onMain { completion(ok) }
         }
         if !queued { Self.onMain { completion(false) } }
+    }
+
+    /// Files directly in `/DiagnosticLogs/sysdiagnose` (DEVICE-ARCHIVE-CLEANUP request baseline and polling): one
+    /// session, one directory read, no header reads. `.user` urgency: the user clicked and is waiting (Decision 8).
+    func listSysdiagnoseDir(_ h: IPhoneHandle,
+                            completion: @escaping @MainActor (Result<[IPhoneAFCEntry], IPhoneReadError>) -> Void) {
+        let queued = enqueue(.user) { [self] in
+            let result = withSession(h) { dev -> [IPhoneAFCEntry] in
+                guard let listed = withCrashAFC(dev, { $0.listDirectory(SysdiagnoseDir.path) }), let entries = listed else {
+                    throw IPhoneReadError.failed(step: "crashreportcopymobile", code: 0)
+                }
+                return entries
+            }
+            Self.onMain { completion(result) }
+        }
+        if !queued { Self.onMain { completion(.failure(.unavailable)) } }
+    }
+
+    /// Deletes one app-requested archive (see `AFCSession.removeOwnArchive`); the size re-check and the remove are
+    /// one job, so nothing runs between them. Completes on main.
+    func removeOwnArchive(_ h: IPhoneHandle, path: String, expectedSize: Int64,
+                          completion: @escaping @MainActor (PhoneCleanup) -> Void) {
+        let queued = enqueue(.user) { [self] in
+            let result = withSession(h) { dev -> PhoneCleanup in
+                withCrashAFC(dev) { $0.removeOwnArchive(path: path, expectedSize: expectedSize) } ?? .failed(0)
+            }
+            let outcome: PhoneCleanup
+            switch result {
+            case .success(let c): outcome = c
+            case .failure(.failed(_, let code)): outcome = .failed(code)
+            case .failure(.gone): outcome = .notConnected
+            case .failure: outcome = .failed(0)
+            }
+            Self.onMain { completion(outcome) }
+        }
+        if !queued { Self.onMain { completion(.unavailable) } }
     }
 }

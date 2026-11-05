@@ -1,6 +1,7 @@
 // Views/IPhoneImportCard.swift
 // Sysdiagnose import: archives on the phone, a Mac file picker, the parse-only / parse-and-
-// keep choice, progress, the summary line and the kept archives (IPHONE-DESIGN: DS3).
+// keep choice, progress, the summary line and the kept archives (IPHONE-DESIGN: DS3), the «Create new
+// sysdiagnose» request and the phone-side delete outcome.
 
 import AppKit
 import SwiftUI
@@ -15,9 +16,11 @@ struct IPhoneImportCard: View {
         var id: String { name }
         var name: String
         var source: SysdiagnoseImporter.Source
+        var deletesFromPhone = false
     }
     @State private var pending: Pending?
-    /// False once the card has left the screen (page switch): the dialog's dismissal then is not an answer.
+    /// False once the card has left the screen (page switch): the dialog's dismissal then is not an answer;
+    /// also gates the request poll (DEVICE-ARCHIVE-CLEANUP).
     @State private var onScreen = true
 
     private var isConnected: Bool { model.connected[deviceKey] != nil }
@@ -33,6 +36,10 @@ struct IPhoneImportCard: View {
         model.devices.first { $0.id == deviceKey }.map(IPhoneData.displayName) ?? L.iphoneUnknownDevice
     }
     private var question: ImportIdentityQuestion? { model.importQuestion[deviceKey] }
+    private var record: IPhoneDeviceRecord? { model.devices.first { $0.id == deviceKey } }
+    /// Names of the archives this app requested on this phone (only these are ever deleted there).
+    private var ownNames: Set<String> { Set(record?.ownArchives?.map(\.name) ?? []) }
+    private func deletes(_ name: String) -> Bool { ownNames.contains(name) && !AppSettings.shared.iphoneKeepRequestedOnPhone }
 
     /// Phone archives: from the crash-log listing, newest first. Empty when not connected.
     private var phoneArchives: [IPhoneAFCEntry] {
@@ -47,11 +54,12 @@ struct IPhoneImportCard: View {
             VStack(alignment: .leading, spacing: 16) {
                 if !phoneArchives.isEmpty { phoneSection }
                 pickRow
+                requestPanel
                 status
                 if !items.isEmpty { keptSection(items) }
             }
-            .onAppear { onScreen = true }
-            .onDisappear { onScreen = false }
+            .onAppear { onScreen = true; model.setRequestPanelShown(deviceKey: deviceKey, true) }
+            .onDisappear { onScreen = false; model.setRequestPanelShown(deviceKey: deviceKey, false) }
             // A sheet, not a confirmationDialog/alert (macOS 27, checked with real key events): a system dialog
             // cannot have Cancel as both the Return default and the Escape button without a third, auto-added
             // Cancel (`role: .cancel` + `.defaultAction` leaves Escape dead; no role adds a system Cancel).
@@ -75,8 +83,10 @@ struct IPhoneImportCard: View {
         // clears `pending` through the item binding, which is Cancel.
         .sheet(item: $pending) { p in
             IPhoneImportChoiceSheet(
-                title: L.iphoneImportConfirmTitle(p.name, into: targetName),
+                title: L.iphoneImportConfirmTitle(into: targetName),
+                archiveName: p.name,
                 keepDefault: AppSettings.shared.keepImportedArchives,
+                deleteNote: p.deletesFromPhone ? L.iphoneImportDeleteNote : nil,
                 onCancel: { pending = nil },
                 onParse: { start(p, keep: false) },
                 onKeep: { start(p, keep: true) })
@@ -102,7 +112,8 @@ struct IPhoneImportCard: View {
             Text(fmtBytes(a.size)).foregroundStyle(DS3.muted)
             if let h = model.connected[deviceKey] {
                 Button(L.iphoneImportButton) {
-                    pending = Pending(name: name, source: .phone(handle: h, remotePath: a.path, size: a.size))
+                    pending = Pending(name: name, source: .phone(handle: h, remotePath: a.path, size: a.size),
+                                      deletesFromPhone: deletes(name))
                 }
                 .buttonStyle(DS3ButtonStyle(kind: .primary, height: 32, hPad: 14))
                 .disabled(running != nil)
@@ -124,6 +135,12 @@ struct IPhoneImportCard: View {
                 .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1))
                 .disabled(running != nil)
                 .accessibilityLabel(L.iphoneImportPickA11y)
+            if isConnected {
+                Button(L.iphoneRequestButton) { model.requestSysdiagnose(deviceKey: deviceKey) }
+                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1))
+                    .disabled(running != nil || model.sysdiagnoseRequest[deviceKey]?.isActive == true)
+                    .accessibilityLabel(L.iphoneRequestButtonA11y)
+            }
             if phoneArchives.isEmpty {
                 Text(L.iphoneImportHint)
                     .font(.system(size: 13))
@@ -154,7 +171,8 @@ struct IPhoneImportCard: View {
             let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
             switch r {
             case .success(let ok):
-                resultPanel(text: "\(ok.name): \(L.iphoneImportSummary(ok.summary))", ink: DS3.accentInk, detail: nil)
+                let cleanup = model.phoneCleanup[deviceKey].map { " " + L.iphonePhoneCleanup($0) } ?? ""
+                resultPanel(text: "\(ok.name): \(L.iphoneImportSummary(ok.summary))\(cleanup)", ink: DS3.accentInk, detail: nil)
                     .ds3TintPanel(DS3.accent, from: 0.14, to: 0.05, ring: 0.28, cornerRadius: 20)
             case .failure(.cancelled):
                 resultPanel(text: L.iphoneImportError(.cancelled), ink: DS3.inkSoft, detail: nil)
@@ -166,6 +184,72 @@ struct IPhoneImportCard: View {
                     .ds3InsetRims(shape, ring: DS3.hot.opacity(0.4))
             }
         }
+    }
+
+    // DEVICE-ARCHIVE-CLEANUP: the «Create new sysdiagnose» request (same panel recipe as the import progress).
+    @ViewBuilder private var requestPanel: some View {
+        if let phase = model.sysdiagnoseRequest[deviceKey] {
+            let text = requestText(phase)
+            HStack(alignment: .center, spacing: 12) {
+                Color.clear.frame(width: 14, height: 14)
+                    .overlay { if phase.isActive { DS3Spinner(role: .accentInkRing, size: 14) } }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(text.bad ? DS3.inkSoft : DS3.accentInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let body = text.body {
+                        Text(body)
+                            .font(.system(size: 13.5))
+                            .foregroundStyle(DS3.inkSoft)
+                            .lineLimit(text.isName ? 1 : nil)
+                            .truncationMode(.middle)
+                            .fixedSize(horizontal: false, vertical: !text.isName)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                requestButtons(phase)
+            }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(RequestPanelSurface(bad: text.bad))
+            .ds3Appear(offset: CGSize(width: 0, height: -6), scale: 1)
+        }
+    }
+
+    private func requestText(_ p: SysdiagnoseRequestPhase) -> (title: String, body: String?, bad: Bool, isName: Bool) {
+        let away = !isConnected
+        switch p {
+        case .preparing: return (L.iphoneRequestPreparing, nil, false, false)
+        case .waiting: return (L.iphoneRequestWaitingTitle, away ? L.iphoneRequestReconnect : L.iphoneRequestWaitingBody, false, false)
+        case .creating: return (L.iphoneRequestCreatingTitle, away ? L.iphoneRequestReconnect : L.iphoneRequestCreatingBody, false, false)
+        case .ready(let own): return (L.iphoneRequestReadyTitle, own.name, false, true)
+        case .ambiguous: return (L.iphoneRequestAmbiguousTitle, L.iphoneRequestAmbiguousBody, true, false)
+        case .expired: return (L.iphoneRequestExpiredTitle, L.iphoneRequestExpiredBody, true, false)
+        case .timedOut: return (L.iphoneRequestTimedOutTitle, L.iphoneRequestTimedOutBody, true, false)
+        case .failed: return (L.iphoneRequestFailedTitle, L.iphoneRequestFailedBody, true, false)
+        }
+    }
+
+    @ViewBuilder private func requestButtons(_ p: SysdiagnoseRequestPhase) -> some View {
+        if case .ready(let own) = p, let h = model.connected[deviceKey] {
+            Button(L.iphoneImportButton) {
+                pending = Pending(name: own.name,
+                                  source: .phone(handle: h, remotePath: SysdiagnoseDir.remotePath(own.name), size: own.size),
+                                  deletesFromPhone: deletes(own.name))
+            }
+            .buttonStyle(DS3ButtonStyle(kind: .primary, height: 32, hPad: 14))
+            .disabled(running != nil)
+            .accessibilityLabel(L.iphoneImportArchiveA11y(own.name))
+        }
+        Button {
+            model.cancelSysdiagnoseRequest(deviceKey: deviceKey)
+        } label: {
+            Text(L.iphoneRequestStop).dsSwapInPlace(!p.isActive) { Text(L.iphoneRequestClose) }
+        }
+        .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, topRim: 1))
+        .accessibilityLabel(p.isActive ? L.iphoneRequestStopA11y : L.iphoneRequestCloseA11y)
     }
 
     @ViewBuilder private func bar(_ p: ImportProgress) -> some View {
@@ -213,11 +297,22 @@ struct IPhoneImportCard: View {
                     Button(L.reportShowInFinder) { AdviceActionRunner.reveal(item.url.path) }
                         .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, topRim: 1))
                         .accessibilityLabel(L.iphoneImportRevealA11y(name))
+                    Button(L.iphoneImportKeptTrash) {
+                        model.trashKeptArchive(deviceKey: deviceKey, name: name, url: item.url)
+                    }
+                    .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 32, hPad: 14, topRim: 1))
+                    .accessibilityLabel(L.iphoneImportKeptTrashA11y(name))
                 }
                 .padding(.leading, 16)
                 .padding(.trailing, 8)
                 .padding(.vertical, 8)
                 .ds3RowPanel(cornerRadius: 20)
+                if model.keptTrashFailed[deviceKey] == name {
+                    let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    resultPanel(text: L.iphoneImportKeptTrashFailed, ink: DS3.hotInk, detail: nil)
+                        .background(shape.fill(DS3.hot.opacity(0.10)))
+                        .ds3InsetRims(shape, ring: DS3.hot.opacity(0.4))
+                }
             }
         }
     }
@@ -235,15 +330,30 @@ struct IPhoneImportCard: View {
 
     private func start(_ p: Pending, keep: Bool) {
         pending = nil
-        model.importArchive(deviceKey: deviceKey, source: p.source, keep: keep)
+        model.importArchive(deviceKey: deviceKey, source: p.source, keep: keep, deletesFromPhone: p.deletesFromPhone)
+    }
+}
+
+/// The request panel's surface: the import progress tint, or the cancelled-result look for an ended request.
+private struct RequestPanelSurface: ViewModifier {
+    let bad: Bool
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        if bad {
+            content.background(shape.fill(DS3.row)).ds3InsetRims(shape, ring: DS3.hot.opacity(0.4))
+        } else {
+            content.ds3TintPanel(DS3.accent, from: 0.14, to: 0.05, ring: 0.28, cornerRadius: 20)
+        }
     }
 }
 
 /// Parse-only / parse-and-keep choice (internal so the harness can render it).
 struct IPhoneImportChoiceSheet: View {
     let title: String
+    let archiveName: String
     /// `AppSettings.keepImportedArchives`: which of the two actions is primary and answers Return.
     let keepDefault: Bool
+    var deleteNote: String? = nil
     let onCancel: () -> Void
     let onParse: () -> Void
     let onKeep: () -> Void
@@ -255,10 +365,20 @@ struct IPhoneImportChoiceSheet: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(DS3.ink)
                     .fixedSize(horizontal: false, vertical: true)
+                Text(archiveName)
+                    .font(.system(size: 13))
+                    .foregroundStyle(DS3.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(L.iphoneImportChoiceBody)
                     .font(.system(size: 13.5))
                     .foregroundStyle(DS3.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
+                if let deleteNote {
+                    Text(deleteNote)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(DS3.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
@@ -277,7 +397,7 @@ struct IPhoneImportChoiceSheet: View {
             }
         }
         .padding(22)
-        .frame(width: 420)
+        .frame(width: 540)
     }
 }
 

@@ -19,6 +19,8 @@ protocol SettingsStrings {
     var settingsWindowTitle: String { get }
     var settingsSectionIPhone: String { get }
     var settingsKeepArchivesLabel: String { get }
+    var settingsKeepRequestedOnPhoneLabel: String { get }
+    var settingsKeepRequestedOnPhoneSub: String { get }
     var settingsSectionAbout: String { get }
     var settingsInstantNote: String { get }
     var settingsOptionSystem: String { get }
@@ -79,8 +81,10 @@ extension StringsEN: SettingsStrings {
     var settingsSectionGeneral: String { "General" }
     var settingsSectionMonitoring: String { "Monitoring" }
     var settingsVersionLabel: String { "Version" }
-    var settingsSectionIPhone: String { "iPhone" }
+    var settingsSectionIPhone: String { "Devices" }
     var settingsKeepArchivesLabel: String { "Keep imported archives" }
+    var settingsKeepRequestedOnPhoneLabel: String { "Keep requested archives on the iPhone" }
+    var settingsKeepRequestedOnPhoneSub: String { "Otherwise an archive this app requested is deleted from the iPhone after a successful import" }
     var settingsSectionAbout: String { "About" }
     var settingsInstantNote: String { "Changes apply instantly." }
     var settingsOptionSystem: String { "System" }
@@ -143,8 +147,10 @@ extension StringsRU: SettingsStrings {
     var settingsSectionGeneral: String { "Основные" }
     var settingsSectionMonitoring: String { "Мониторинг" }
     var settingsVersionLabel: String { "Версия" }
-    var settingsSectionIPhone: String { "iPhone" }
+    var settingsSectionIPhone: String { "Устройства" }
     var settingsKeepArchivesLabel: String { "Хранить импортированные архивы" }
+    var settingsKeepRequestedOnPhoneLabel: String { "Оставлять запрошенные архивы на iPhone" }
+    var settingsKeepRequestedOnPhoneSub: String { "Иначе архив, запрошенный приложением, удаляется с iPhone после успешного импорта" }
     var settingsSectionAbout: String { "О программе" }
     var settingsInstantNote: String { "Изменения применяются сразу." }
     var settingsOptionSystem: String { "Системный" }

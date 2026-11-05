@@ -12,7 +12,7 @@ System
 Light
 Dark
 Theme
-iPhone
+Devices
 Background orbs
 1
 Background orbs

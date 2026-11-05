@@ -109,7 +109,7 @@ enum IPhoneHistoryRange: DayWindowRange {
     }
 }
 
-/// The only persisted device record (R13); the crash-log type cache is a separate rebuildable file.
+/// The only persisted device record (R13; `ownArchives` since DEVICE-ARCHIVE-CLEANUP); the crash-log type cache is a separate rebuildable file.
 struct IPhoneDeviceRecord: Codable, Equatable, Identifiable {
     var id: String                  // deviceKey
     var name: String
@@ -120,6 +120,9 @@ struct IPhoneDeviceRecord: Codable, Equatable, Identifiable {
     var lastSeen: Date
     var battery: [BatteryPoint]
     var keptArchives: [String]
+    /// DEVICE-ARCHIVE-CLEANUP: archives the app requested and saw finish on this phone (newest last, at most
+    /// `SysdiagnoseDir.maxOwnRecords`). nil in stores written before the block; only these may be deleted on the phone.
+    var ownArchives: [OwnSysdiagnose]? = nil
 }
 
 // Sysdiagnose import types (pure; L10n formats them, so Checks need them too).
@@ -138,6 +141,7 @@ struct ImportSummary: Equatable {
 
 enum ImportError: Error, Equatable {
     case copyFailed
+    case interrupted   // the phone disconnected during the copy (DEVICE-ARCHIVE-CLEANUP)
     case sizeMismatch
     case tarFailed(ExtractFailure)
     case keepFailed
@@ -629,10 +633,11 @@ enum IPhoneData {
                                                 ownerName: owners.count == 1 ? displayName(owners[0]) : nil))
     }
 
-    /// Regular `.tar.gz` files under `/DiagnosticLogs/sysdiagnose/`, newest first (nil
-    /// dates last, ties by path).
+    /// Regular, finished `.tar.gz` files under `/DiagnosticLogs/sysdiagnose/` (an `IN_PROGRESS_` file is still being
+    /// written and is never offered), newest first (nil dates last, ties by path).
     static func sysdiagnoseArchives(in entries: [IPhoneAFCEntry]) -> [IPhoneAFCEntry] {
-        entries.filter { !$0.isDirectory && $0.path.hasPrefix("/DiagnosticLogs/sysdiagnose/") && $0.path.hasSuffix(".tar.gz") }
+        entries.filter { !$0.isDirectory && $0.path.hasPrefix(SysdiagnoseDir.path + "/") && $0.path.hasSuffix(".tar.gz")
+                         && !SysdiagnoseDir.isInProgress(($0.path as NSString).lastPathComponent) }
             .sorted { a, b in
                 switch (a.modified, b.modified) {
                 case let (x?, y?): return x != y ? x > y : a.path < b.path

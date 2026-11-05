@@ -627,7 +627,7 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: iPhone (`Settings.dc.html:206-209`)
+    // MARK: iPhone (`Settings.dc.html:206-209`; the keep-on-iPhone row is DEVICE-ARCHIVE-CLEANUP's, not in the mockup)
 
     private var archiveFolderSub: String? {
         iphone.archiveFolderError.map { if case .couldNotMove(let n) = $0 { return L.settingsArchiveFolderMoveFailed(n) } else { return "" } }
@@ -640,6 +640,9 @@ struct SettingsView: View {
             }
             SettingsRow(label: L.settingsKeepArchivesLabel) {
                 DS3Switch(isOn: $settings.keepImportedArchives, label: L.settingsKeepArchivesLabel, metrics: .settings)
+            }
+            SettingsRow(label: L.settingsKeepRequestedOnPhoneLabel, sub: L.settingsKeepRequestedOnPhoneSub) {
+                DS3Switch(isOn: $settings.iphoneKeepRequestedOnPhone, label: L.settingsKeepRequestedOnPhoneLabel, metrics: .settings)
             }
             SettingsPathRow(
                 label: L.settingsArchiveFolderLabel,

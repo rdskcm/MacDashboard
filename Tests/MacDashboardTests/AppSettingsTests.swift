@@ -211,6 +211,14 @@ extension SerialTests {
             #expect(AppSettings(defaults: d).keepImportedArchives, "keepImportedArchives defaults to true")
         }
 
+        @Test func keepRequestedOnPhoneDefault() {
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            #expect(!AppSettings(defaults: d).iphoneKeepRequestedOnPhone, "deletion of requested archives is the default (C5)")
+            let s = AppSettings(defaults: d)
+            s.iphoneKeepRequestedOnPhone = true
+            #expect(AppSettings(defaults: d).iphoneKeepRequestedOnPhone, "the toggle persists through the injected suite")
+        }
+
         @Test func iphoneAutoReadDefault() {
             let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
             #expect(AppSettings(defaults: d).iphoneAutoRead, "iphoneAutoRead defaults to true")

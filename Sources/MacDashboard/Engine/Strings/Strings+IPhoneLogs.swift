@@ -19,7 +19,7 @@ protocol IPhoneLogsStrings {
     var iphoneImportPickFile: String { get }
     var iphoneImportPickA11y: String { get }
     var iphoneImportPickPrompt: String { get }
-    func iphoneImportConfirmTitle(_ name: String, into phone: String) -> String
+    func iphoneImportConfirmTitle(into target: String) -> String
     var iphoneImportParseOnly: String { get }
     var iphoneImportParseKeep: String { get }
     var iphoneImportCancel: String { get }
@@ -37,6 +37,9 @@ protocol IPhoneLogsStrings {
     func iphoneImportErrorDetail(_ e: ImportError) -> String?
     var iphoneImportKeptTitle: String { get }
     func iphoneImportRevealA11y(_ name: String) -> String
+    var iphoneImportKeptTrash: String { get }
+    func iphoneImportKeptTrashA11y(_ name: String) -> String
+    var iphoneImportKeptTrashFailed: String { get }
     func iphoneLogsFromArchive(_ name: String) -> String
     var iphoneLogsDetailProcess: String { get }
     var iphoneLogsDetailType: String { get }
@@ -100,6 +103,29 @@ protocol IPhoneLogsStrings {
     var iphoneImportOnPhone: String { get }
     var iphoneImportChoiceBody: String { get }
     var iphoneImportInArchive: String { get }
+    var iphoneRequestButton: String { get }
+    var iphoneRequestButtonA11y: String { get }
+    var iphoneRequestPreparing: String { get }
+    var iphoneRequestWaitingTitle: String { get }
+    var iphoneRequestWaitingBody: String { get }
+    var iphoneRequestCreatingTitle: String { get }
+    var iphoneRequestCreatingBody: String { get }
+    var iphoneRequestReconnect: String { get }
+    var iphoneRequestReadyTitle: String { get }
+    var iphoneRequestAmbiguousTitle: String { get }
+    var iphoneRequestAmbiguousBody: String { get }
+    var iphoneRequestExpiredTitle: String { get }
+    var iphoneRequestExpiredBody: String { get }
+    var iphoneRequestTimedOutTitle: String { get }
+    var iphoneRequestTimedOutBody: String { get }
+    var iphoneRequestFailedTitle: String { get }
+    var iphoneRequestFailedBody: String { get }
+    var iphoneRequestStop: String { get }
+    var iphoneRequestStopA11y: String { get }
+    var iphoneRequestClose: String { get }
+    var iphoneRequestCloseA11y: String { get }
+    var iphoneImportDeleteNote: String { get }
+    func iphonePhoneCleanup(_ c: PhoneCleanup) -> String
     var iphoneIdentitySerials: String { get }
 }
 
@@ -131,7 +157,7 @@ extension StringsEN: IPhoneLogsStrings {
     var iphoneImportPickFile: String { "Choose file on Mac…" }
     var iphoneImportPickA11y: String { "Choose a sysdiagnose archive on this Mac" }
     var iphoneImportPickPrompt: String { "Choose" }
-    func iphoneImportConfirmTitle(_ name: String, into phone: String) -> String { "Import “\(name)” into \(phone)" }
+    func iphoneImportConfirmTitle(into target: String) -> String { "Import into \(target)" }
     var iphoneImportParseOnly: String { "Parse only" }
     var iphoneImportParseKeep: String { "Parse and keep" }
     var iphoneImportCancel: String { "Cancel" }
@@ -146,7 +172,7 @@ extension StringsEN: IPhoneLogsStrings {
     }
     var iphoneImportMismatchProceed: String { "Load anyway" }
     var iphoneImportMismatchProceedA11y: String { "Load the other phone’s battery history into this phone" }
-    var iphoneImportHint: String { "Archives on the phone appear once the logs are read; you can also choose a .tar.gz file on this Mac." }
+    var iphoneImportHint: String { "Archives on the phone appear once the logs are read. You can also choose a .tar.gz file on this Mac." }
     func iphoneImportProgress(_ p: ImportProgress) -> String {
         switch p {
         case .copying(let done, let total):
@@ -162,7 +188,8 @@ extension StringsEN: IPhoneLogsStrings {
     }
     func iphoneImportError(_ e: ImportError) -> String {
         switch e {
-        case .copyFailed: return "Could not copy the archive from the phone."
+        case .copyFailed: return "Could not copy the archive from the iPhone. Keep it connected and unlocked, then try again."
+        case .interrupted: return "The iPhone disconnected during the copy. Nothing was kept. Reconnect it and import again."
         case .sizeMismatch: return "The copied archive size did not match the size on the phone."
         case .tarFailed: return "Could not extract the archive."
         case .keepFailed: return "Could not keep the archive."
@@ -183,6 +210,9 @@ extension StringsEN: IPhoneLogsStrings {
     }
     var iphoneImportKeptTitle: String { "Kept archives" }
     func iphoneImportRevealA11y(_ name: String) -> String { "Show archive \(name) in Finder" }
+    var iphoneImportKeptTrash: String { "Move to Trash" }
+    func iphoneImportKeptTrashA11y(_ name: String) -> String { "Move \(name) to the Trash" }
+    var iphoneImportKeptTrashFailed: String { "Could not move it to the Trash. Check the file in Finder." }
     func iphoneLogsFromArchive(_ name: String) -> String { "From archive \(name)" }
     var iphoneLogsDetailProcess: String { "Process" }
     var iphoneLogsDetailType: String { "Type" }
@@ -302,6 +332,41 @@ extension StringsEN: IPhoneLogsStrings {
     var iphoneImportOnPhone: String { "On the iPhone" }
     var iphoneImportChoiceBody: String { "Parse reads battery history and log files from the archive. Keep also stores a copy of the archive on this Mac." }
     var iphoneImportInArchive: String { "In the archive" }
+    var iphoneRequestButton: String { "Create new sysdiagnose…" }
+    var iphoneRequestButtonA11y: String { "Ask the iPhone for a new sysdiagnose archive" }
+    var iphoneRequestPreparing: String { "Checking the archives on the iPhone…" }
+    var iphoneRequestWaitingTitle: String { "Waiting for the iPhone" }
+    var iphoneRequestWaitingBody: String { "On the iPhone, press and release both volume buttons and the side button at the same time. It vibrates briefly when it starts." }
+    var iphoneRequestCreatingTitle: String { "The iPhone is creating the archive" }
+    var iphoneRequestCreatingBody: String { "This takes several minutes. Keep the iPhone connected." }
+    var iphoneRequestReconnect: String { "Reconnect the iPhone to continue." }
+    var iphoneRequestReadyTitle: String { "New archive ready" }
+    var iphoneRequestAmbiguousTitle: String { "More than one new archive appeared" }
+    var iphoneRequestAmbiguousBody: String { "None of them will be deleted from the iPhone. You can still import them." }
+    var iphoneRequestExpiredTitle: String { "No new archive appeared" }
+    var iphoneRequestExpiredBody: String { "Nothing started within 15 minutes. Try again." }
+    var iphoneRequestTimedOutTitle: String { "The archive did not finish in time" }
+    var iphoneRequestTimedOutBody: String { "If it appears later, it is listed under On the iPhone and stays on the iPhone." }
+    var iphoneRequestFailedTitle: String { "Could not read the archives on the iPhone" }
+    var iphoneRequestFailedBody: String { "Keep the iPhone connected and unlocked, then try again." }
+    var iphoneRequestStop: String { "Stop waiting" }
+    var iphoneRequestStopA11y: String { "Stop waiting for the new archive" }
+    var iphoneRequestClose: String { "Close" }
+    var iphoneRequestCloseA11y: String { "Close this message" }
+    var iphoneImportDeleteNote: String { "This app requested this archive, so it is deleted from the iPhone after a successful import." }
+    func iphonePhoneCleanup(_ c: PhoneCleanup) -> String {
+        switch c {
+        case .deleting: return "Deleting it from the iPhone…"
+        case .deleted: return "Deleted from the iPhone."
+        case .keptBySetting: return "Kept on the iPhone (Settings › Devices)."
+        case .keptIncomplete: return "Kept on the iPhone: the import was not complete."
+        case .notConnected: return "Kept on the iPhone: it was disconnected. Import the archive again while it is connected to delete it."
+        case .alreadyGone: return "It is no longer on the iPhone."
+        case .changed: return "Kept on the iPhone: the file there changed after it was requested."
+        case .unavailable: return "Kept on the iPhone: this version of macOS cannot delete files on it."
+        case .failed(let code): return "Could not delete it from the iPhone (error \(code)). It stays there."
+        }
+    }
     var iphoneIdentitySerials: String { "Serial numbers" }
 }
 
@@ -333,7 +398,7 @@ extension StringsRU: IPhoneLogsStrings {
     var iphoneImportPickFile: String { "Выбрать файл на Mac…" }
     var iphoneImportPickA11y: String { "Выбрать архив sysdiagnose на Mac" }
     var iphoneImportPickPrompt: String { "Выбрать" }
-    func iphoneImportConfirmTitle(_ name: String, into phone: String) -> String { "Импорт «\(name)» в \(phone)" }
+    func iphoneImportConfirmTitle(into target: String) -> String { "Импорт в \(target)" }
     var iphoneImportParseOnly: String { "Только разобрать" }
     var iphoneImportParseKeep: String { "Разобрать и сохранить" }
     var iphoneImportCancel: String { "Отмена" }
@@ -348,7 +413,7 @@ extension StringsRU: IPhoneLogsStrings {
     }
     var iphoneImportMismatchProceed: String { "Всё равно загрузить" }
     var iphoneImportMismatchProceedA11y: String { "Загрузить историю аккумулятора другого телефона в этот" }
-    var iphoneImportHint: String { "Архивы с телефона видны после чтения журналов; можно выбрать и файл .tar.gz на Mac." }
+    var iphoneImportHint: String { "Архивы с телефона видны после чтения журналов. Можно выбрать и файл .tar.gz на Mac." }
     func iphoneImportProgress(_ p: ImportProgress) -> String {
         switch p {
         case .copying(let done, let total):
@@ -364,7 +429,8 @@ extension StringsRU: IPhoneLogsStrings {
     }
     func iphoneImportError(_ e: ImportError) -> String {
         switch e {
-        case .copyFailed: return "Не удалось скопировать архив с телефона."
+        case .copyFailed: return "Не удалось скопировать архив с iPhone. Не отключайте его, разблокируйте и попробуйте ещё раз."
+        case .interrupted: return "iPhone отключился во время копирования. Ничего не сохранено. Подключите его и импортируйте снова."
         case .sizeMismatch: return "Размер скопированного архива не совпал с размером на телефоне."
         case .tarFailed: return "Не удалось распаковать архив."
         case .keepFailed: return "Не удалось сохранить архив."
@@ -385,6 +451,9 @@ extension StringsRU: IPhoneLogsStrings {
     }
     var iphoneImportKeptTitle: String { "Сохранённые архивы" }
     func iphoneImportRevealA11y(_ name: String) -> String { "Показать архив \(name) в Finder" }
+    var iphoneImportKeptTrash: String { "В Корзину" }
+    func iphoneImportKeptTrashA11y(_ name: String) -> String { "Переместить \(name) в Корзину" }
+    var iphoneImportKeptTrashFailed: String { "Не удалось переместить в Корзину. Проверьте файл в Finder." }
     func iphoneLogsFromArchive(_ name: String) -> String { "Из архива \(name)" }
     var iphoneLogsDetailProcess: String { "Процесс" }
     var iphoneLogsDetailType: String { "Тип" }
@@ -504,5 +573,40 @@ extension StringsRU: IPhoneLogsStrings {
     var iphoneImportOnPhone: String { "На iPhone" }
     var iphoneImportChoiceBody: String { "Разбор читает из архива историю батареи и журналы. «Сохранить» также оставляет копию архива на этом Mac." }
     var iphoneImportInArchive: String { "В архиве" }
+    var iphoneRequestButton: String { "Создать новый sysdiagnose…" }
+    var iphoneRequestButtonA11y: String { "Попросить iPhone создать новый архив sysdiagnose" }
+    var iphoneRequestPreparing: String { "Проверяем архивы на iPhone…" }
+    var iphoneRequestWaitingTitle: String { "Ждём iPhone" }
+    var iphoneRequestWaitingBody: String { "На iPhone одновременно нажмите и отпустите обе кнопки громкости и боковую кнопку. Он коротко завибрирует, когда начнёт." }
+    var iphoneRequestCreatingTitle: String { "iPhone создаёт архив" }
+    var iphoneRequestCreatingBody: String { "Это займёт несколько минут. Не отключайте iPhone." }
+    var iphoneRequestReconnect: String { "Подключите iPhone снова, чтобы продолжить." }
+    var iphoneRequestReadyTitle: String { "Новый архив готов" }
+    var iphoneRequestAmbiguousTitle: String { "Появилось больше одного нового архива" }
+    var iphoneRequestAmbiguousBody: String { "Ни один из них не будет удалён с iPhone. Импортировать их по-прежнему можно." }
+    var iphoneRequestExpiredTitle: String { "Новый архив не появился" }
+    var iphoneRequestExpiredBody: String { "За 15 минут ничего не началось. Попробуйте ещё раз." }
+    var iphoneRequestTimedOutTitle: String { "Архив не успел создаться" }
+    var iphoneRequestTimedOutBody: String { "Если он появится позже, он будет в списке «На iPhone» и останется на iPhone." }
+    var iphoneRequestFailedTitle: String { "Не удалось прочитать архивы на iPhone" }
+    var iphoneRequestFailedBody: String { "Не отключайте iPhone, разблокируйте его и попробуйте ещё раз." }
+    var iphoneRequestStop: String { "Не ждать" }
+    var iphoneRequestStopA11y: String { "Перестать ждать новый архив" }
+    var iphoneRequestClose: String { "Закрыть" }
+    var iphoneRequestCloseA11y: String { "Закрыть это сообщение" }
+    var iphoneImportDeleteNote: String { "Этот архив запросило приложение, поэтому после успешного импорта он будет удалён с iPhone." }
+    func iphonePhoneCleanup(_ c: PhoneCleanup) -> String {
+        switch c {
+        case .deleting: return "Удаляем его с iPhone…"
+        case .deleted: return "Удалён с iPhone."
+        case .keptBySetting: return "Оставлен на iPhone (Настройки › Устройства)."
+        case .keptIncomplete: return "Оставлен на iPhone: импорт прошёл не полностью."
+        case .notConnected: return "Оставлен на iPhone: он был отключён. Импортируйте архив ещё раз, пока iPhone подключён, чтобы удалить его."
+        case .alreadyGone: return "На iPhone его уже нет."
+        case .changed: return "Оставлен на iPhone: файл там изменился после запроса."
+        case .unavailable: return "Оставлен на iPhone: эта версия macOS не умеет удалять на нём файлы."
+        case .failed(let code): return "Не удалось удалить его с iPhone (ошибка \(code)). Он остался там."
+        }
+    }
     var iphoneIdentitySerials: String { "Серийные номера" }
 }

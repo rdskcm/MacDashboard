@@ -15,8 +15,8 @@ extension AppActions {
 }
 
 /// The AppKit side of AppModel's pause/resume (SPEC §1.4). Observes app activate/resign and window
-/// close/miniaturize/deminiaturize/occlusion and tells the model two Foundation-only facts: `setPaused(_:)` and
-/// `appDidBecomeActive()`. `NSPanel`s (HoverTip's tooltip panels) never keep the app un-paused. Created once per
+/// close/miniaturize/deminiaturize/occlusion and tells the models two Foundation-only facts: `setPaused(_:)` (to
+/// AppModel and to IPhoneModel, for the sysdiagnose request poll) and `appDidBecomeActive()`. `NSPanel`s (HoverTip's tooltip panels) never keep the app un-paused. Created once per
 /// process by MacDashboardApp right after `model.start()`, never under -visualFixture; lives as long as the process.
 @MainActor
 final class AppActivityMonitor {
@@ -60,7 +60,9 @@ final class AppActivityMonitor {
         let hasVisibleWindow = NSApp.windows.contains { window in
             !(window is NSPanel) && window.isVisible && window.occlusionState.contains(.visible)
         }
-        model.setPaused(!(NSApp.isActive && hasVisibleWindow))
+        let paused = !(NSApp.isActive && hasVisibleWindow)
+        model.setPaused(paused)
+        IPhoneModel.shared.setPaused(paused)   // DEVICE-ARCHIVE-CLEANUP Decision 7: the request poll pauses with the app
     }
 }
 

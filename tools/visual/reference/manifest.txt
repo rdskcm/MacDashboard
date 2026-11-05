@@ -4,12 +4,12 @@ main-glass-clear-dark	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Displa
 main-glass-tinted-dark	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
 main-glass-rt-dark	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
 main-report-dark	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
-settings-general-dark	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
+settings-general-dark	2026-11-05	27.2	27	0965167-dirty	1280.00x832.00@2.0	Display P3
 main-light	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
 main-glass-clear-light	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
 main-glass-tinted-light	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
 main-glass-rt-light	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
 main-report-light	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
-settings-general-light	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
-settings-glass-rt-dark	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
-settings-glass-rt-light	2026-11-04	27.2	27	ab64412-dirty	1280.00x832.00@2.0	Display P3
+settings-general-light	2026-11-05	27.2	27	0965167-dirty	1280.00x832.00@2.0	Display P3
+settings-glass-rt-dark	2026-11-05	27.2	27	0965167-dirty	1280.00x832.00@2.0	Display P3
+settings-glass-rt-light	2026-11-05	27.2	27	0965167-dirty	1280.00x832.00@2.0	Display P3
