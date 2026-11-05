@@ -207,6 +207,17 @@ import Testing
         #expect(Set(m.logAction.keys) == ["\(o)|live|y"])
     }
 
+    @Test @MainActor func emptyNoticeShowsOnlyWhenNoPhoneIsListed() async throws {
+        let (m, dir) = try makeModel()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(!m.listShowsEmptyNotice)
+        await m.unlink(deviceKey: o, trash: fakeTrash(dir))
+        #expect(!m.listShowsEmptyNotice)
+        await m.unlink(deviceKey: k, trash: fakeTrash(dir))
+        #expect(m.devices.isEmpty)
+        #expect(m.listShowsEmptyNotice)
+    }
+
     @Test @MainActor func unknownAndMalformedKeysDoNothing() async throws {
         let (m, dir) = try makeModel()
         defer { try? FileManager.default.removeItem(at: dir) }

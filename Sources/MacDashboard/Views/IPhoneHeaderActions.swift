@@ -25,6 +25,7 @@ struct IPhoneHeaderActions: View {
 
     private func row(compact: Bool) -> IPhoneActionsRow {
         IPhoneActionsRow(compact: compact, restarting: model.restartingService, disabled: disabled,
+                         showsSearch: !model.listShowsEmptyNotice,
                          onAskRestart: onAskRestart,
                          onSearch: { model.searchAgain() })
     }
@@ -33,7 +34,7 @@ struct IPhoneHeaderActions: View {
     @MainActor
     static func fullRowIdealWidth() -> CGFloat {
         ds3IdealWidth(key: "iphone-actions-full|\(L10nStore.shared.language.rawValue)") {
-            IPhoneActionsRow(compact: false, restarting: false, disabled: false,
+            IPhoneActionsRow(compact: false, restarting: false, disabled: false, showsSearch: true,
                              onAskRestart: {}, onSearch: {})
         }
     }
@@ -44,11 +45,12 @@ private struct IPhoneActionsRow: View {
     let compact: Bool
     let restarting: Bool
     let disabled: Bool
+    let showsSearch: Bool
     let onAskRestart: () -> Void
     let onSearch: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) { restart; search }
+        HStack(spacing: 8) { restart; if showsSearch { search } }
             .anchorPreference(key: IPhoneActionsAnchorKey.self, value: .bounds) { $0 }
     }
 

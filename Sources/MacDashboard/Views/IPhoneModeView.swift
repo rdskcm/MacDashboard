@@ -163,7 +163,7 @@ struct IPhoneModeView: View {
     @ViewBuilder private var content: some View {
         if !model.transportAvailable {
             IPhoneNotice(kind: .unavailable)
-        } else if tileCount == 0 {
+        } else if model.listShowsEmptyNotice {
             IPhoneNotice(kind: .empty, searchDisabled: model.restartingService,
                          phoneAttached: model.hasAttachedPhone,
                          onSearch: { model.searchAgain() })

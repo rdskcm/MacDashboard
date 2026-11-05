@@ -46,6 +46,8 @@ final class IPhoneModel {
     var status: [String: DeviceStatus] = [:]
     /// Attached handles not yet identified (waiting for trust, or the read failed).
     var pendingHandles: Set<IPhoneHandle> = []
+    /// True while the Devices list shows its empty notice, which carries its own «Search again».
+    var listShowsEmptyNotice: Bool { transportAvailable && devices.isEmpty && pendingHandles.isEmpty }
     /// Status of each pending handle (`.needsTrust` or `.readFailed`).
     var pendingStatus: [IPhoneHandle: DeviceStatus] = [:]
     var lastSnapshot: [String: IPhoneSnapshot] = [:]
