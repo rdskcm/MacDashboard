@@ -1200,6 +1200,42 @@ extension SerialTests {
                         }
                     }
                 }
+                run.snap("content-iphone-logs-actions", mode, width: 1134) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        let logs = fixtureIPhone().logs[alex]!
+                        let first = IPhoneData.grouped(logs).first { $0.0 == .appCrash }!.1.first!   // top row of App crashes
+                        let telegram = logs.first { $0.path.hasPrefix("/ExcUserFault_Telegram-") }!   // seeded: copy failed
+                        let jetsam = logs.first { $0.path.hasPrefix("/JetsamEvent-") }!              // seeded: Console refused, no Process
+                        let sysd = logs.first { $0.path.hasSuffix(".tar.gz") }!                       // seeded: saving, no Console button
+                        let pendingKey = IPhoneData.grouped(logs).first { $0.0 == .diskWrites }!.1.first!.id
+                        HarnessSection(label: "iPhone logs: row open") {
+                            IPhoneLogsCard(model: fixtureIPhone(), deviceKey: alex, initialExpanded: first.id)
+                        }
+                        HarnessSection(label: "iPhone logs: row open, copy failed") {
+                            IPhoneLogsCard(model: fixtureIPhone(), deviceKey: alex, initialCategory: .exceptionFault,
+                                           initialExpanded: telegram.id)
+                        }
+                        HarnessSection(label: "iPhone logs: row open, Console refused, no Process line") {
+                            IPhoneLogsCard(model: fixtureIPhone(), deviceKey: alex, initialCategory: .jetsam,
+                                           initialExpanded: jetsam.id)
+                        }
+                        HarnessSection(label: "iPhone logs: sysdiagnose row saving (no Console)") {
+                            IPhoneLogsCard(model: fixtureIPhone(), deviceKey: alex, initialCategory: .other,
+                                           initialExpanded: sysd.id)
+                        }
+                        HarnessSection(label: "iPhone logs: row open while its type is pending") {
+                            IPhoneLogsCard(model: fixtureIPhone { m in
+                                m.logs[alex] = m.logs[alex]!.map { e in
+                                    e.id == pendingKey ? IPhoneCrashLog.pendingEntry(path: e.path, size: e.size, modified: e.modified) : e
+                                }
+                            }, deviceKey: alex, initialCategory: .pending, initialExpanded: pendingKey)
+                        }
+                        HarnessSection(label: "iPhone logs: archive row open") {
+                            IPhoneLogsCard(model: fixtureIPhone(), deviceKey: alex, initialSource: .archive,
+                                           initialExpanded: fixtureIPhone().archiveLogs[alex]!.first!.id)
+                        }
+                    }
+                }
                 // Kept archives show only for names whose file exists: a temp root holds the fixture's one file.
                 let keptRoot = FileManager.default.temporaryDirectory
                     .appendingPathComponent("md-visual-kept-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)

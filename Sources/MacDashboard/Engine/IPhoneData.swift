@@ -8,7 +8,7 @@
 //
 // R13: nothing here stores a serial, IMEI, part id or UDID. `IPhoneDeviceRecord` is the
 // only persisted device data, and it is keyed by `deviceKey(udid:)`.
-// The crash-log type cache (`IPhoneLogTypeStore`, IPhoneLogTypes.swift) is the second persisted file: crash-log paths, sizes, times and bug_types keyed by deviceKey — no identifier.
+// The crash-log type cache (`IPhoneLogTypeStore`, IPhoneLogTypes.swift) is the second persisted file: crash-log paths, sizes, times, bug_types, process names and header timestamps keyed by deviceKey — no identifier (IPHONE-CRASHLOG-ACTIONS).
 
 import CryptoKit
 import Foundation
@@ -75,6 +75,12 @@ struct IPhoneLogEntry: Equatable, Identifiable {
     var bugType: String?
     var category: LogCategory
     var source: Source
+    /// IPHONE-CRASHLOG-ACTIONS: header `name` / `app_name`, or the file-name fallback; nil = unknown.
+    var process: String? = nil
+    /// Header `timestamp`, else the file-name stamp, else `modified`.
+    var created: Date? = nil
+    /// Archive rows only: the extracted file kept in the crash-log temp folder (Decision 1); nil for live rows.
+    var localURL: URL? = nil
     var id: String { path }
 }
 
@@ -372,8 +378,8 @@ enum IPhoneData {
     // MARK: - Crash-log classification
 
     /// The first line of a crash-log header (up to `\n`) as a JSON object, or nil when the
-    /// data has no newline or the line is not a JSON object.
-    private static func headerObject(_ data: Data) -> [String: Any]? {
+    /// data has no newline or the line is not a JSON object. Internal: also read by IPhoneCrashLog.
+    static func headerObject(_ data: Data) -> [String: Any]? {
         guard let nl = data.firstIndex(of: 0x0A) else { return nil }
         let line = data[data.startIndex..<nl]
         guard let obj = try? JSONSerialization.jsonObject(with: Data(line)) else { return nil }
@@ -388,7 +394,13 @@ enum IPhoneData {
     /// `bug_type` of the header's first-line JSON object, as a string (a String or a
     /// number is accepted). nil: no newline, not JSON, not an object, or no `bug_type`.
     static func bugType(fromHeader data: Data) -> String? {
-        guard let obj = headerObject(data), let v = obj["bug_type"] else { return nil }
+        headerObject(data).flatMap(bugType(in:))
+    }
+
+    /// The `bug_type` value of a parsed header object (IPHONE-CRASHLOG-ACTIONS: shared with `IPhoneCrashLog.logHeader`,
+    /// which parses the line once for three fields).
+    static func bugType(in obj: [String: Any]) -> String? {
+        guard let v = obj["bug_type"] else { return nil }
         if let s = v as? String { return s.isEmpty ? nil : s }
         if let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() {
             let d = n.doubleValue
@@ -637,10 +649,11 @@ enum IPhoneData {
     /// Removes every item directly in `dir` whose name starts with `importTempPrefix`: temp
     /// roots left by an import the app quit in the middle of. Called once when iPhone mode
     /// starts, before any import can run. Touches nothing else.
-    static func removeStaleImportRoots(in dir: URL) {
+    /// Also called with `IPhoneCrashLog.tempPrefix` (IPHONE-CRASHLOG-ACTIONS).
+    static func removeStaleImportRoots(in dir: URL, prefix: String = importTempPrefix) {
         let fm = FileManager.default
         guard let names = try? fm.contentsOfDirectory(atPath: dir.path) else { return }
-        for name in names where name.hasPrefix(importTempPrefix) {
+        for name in names where name.hasPrefix(prefix) {
             try? fm.removeItem(at: dir.appendingPathComponent(name))
         }
     }

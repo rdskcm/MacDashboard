@@ -90,10 +90,13 @@ extension IPhoneModel {
                 let d = day(i * 30 / count)
                 let stamp = String(format: "%02d%02d%02d", (i * 7) % 24, (i * 13) % 60, (i * 29) % 60)
                 let name = "\(prefixes[i % prefixes.count])-\(IPhoneData.historyDay(d))-\(stamp)\(ext)"
-                entries.append(IPhoneLogEntry(
+                var entry = IPhoneLogEntry(
                     path: "/" + name, size: Int64(4000 + (i * 7919 + c * 104729) % 90000),
                     modified: d, bugType: nil, category: cat, source: .live
-                ))
+                )
+                entry.process = IPhoneCrashLog.processFromFileName(name, category: cat)
+                entry.created = IPhoneCrashLog.fileNameTimestamp(name) ?? d
+                entries.append(entry)
             }
         }
         entries.append(IPhoneLogEntry(
@@ -102,6 +105,11 @@ extension IPhoneModel {
         ))
         logs = [Self.fixtureAlexKey: entries]
         logsFailed = []
+        // IPHONE-CRASHLOG-ACTIONS: action states a real phone rarely shows; visible on a bench build by opening the row.
+        func seed(_ e: IPhoneLogEntry, _ s: LogActionState) { logAction[Self.logActionKey(deviceKey: Self.fixtureAlexKey, entry: e)] = s }
+        seed(entries.first { $0.path.hasPrefix("/ExcUserFault_Telegram-") }!, .failed(.copyFailed))
+        seed(entries.first { $0.path.hasPrefix("/JetsamEvent-") }!, .failed(.consoleFailed))
+        seed(entries.first { $0.path.hasSuffix(".tar.gz") }!, .copying(.save, done: 125_000_000, total: 298_000_000))
 
         let archiveName = "sysdiagnose_2025.12.15_10-02-11+0300_iPhone-OS_iPhone_22E240.tar.gz"
         let archived: [(String, Int64, Int, LogCategory)] = [
@@ -110,8 +118,11 @@ extension IPhoneModel {
             ("JetsamEvent-2025-12-10-231105.ips", 492_000, 36, .jetsam),
         ]
         archiveLogs = [Self.fixtureAlexKey: archived.map {
-            IPhoneLogEntry(path: "/" + $0.0, size: $0.1, modified: day($0.2), bugType: nil,
-                           category: $0.3, source: .archive(name: archiveName))
+            var e = IPhoneLogEntry(path: "/" + $0.0, size: $0.1, modified: day($0.2), bugType: nil,
+                                   category: $0.3, source: .archive(name: archiveName))
+            e.process = IPhoneCrashLog.processFromFileName($0.0, category: $0.3)
+            e.created = IPhoneCrashLog.fileNameTimestamp($0.0) ?? day($0.2)
+            return e
         }]
 
         let values: [IdentityLabel: String] = [

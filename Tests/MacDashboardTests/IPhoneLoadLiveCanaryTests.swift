@@ -18,6 +18,10 @@ extension SerialTests {
     }
 
     struct IPhoneLoadLiveCanaryTests {
+        /// One box for the whole suite: `MobileDeviceTransport.start` keeps only the first handler, so a box
+        /// made by a later test would never receive the attach event.
+        @MainActor static let liveBox = IPhoneLoadLiveBox()
+
         /// Polls `done` every 20 ms; false after `seconds`.
         @MainActor
         static func wait(_ seconds: Double, until done: () -> Bool) async -> Bool {
@@ -40,7 +44,7 @@ extension SerialTests {
 
         /// Runs one listing to the end: the listing, then batches until no entry is `.pending`.
         @MainActor
-        static func runListing(_ h: IPhoneHandle, known: [String: String], box: IPhoneLoadLiveBox)
+        static func runListing(_ h: IPhoneHandle, known: [String: IPhoneLogHeader], box: IPhoneLoadLiveBox)
             async -> (initial: [IPhoneLogEntry], settled: [IPhoneLogEntry], batch: IPhoneLogTypeBatch, listMs: Int, typesMs: Int)? {
             box.listing = nil
             box.batches = []
@@ -74,7 +78,7 @@ extension SerialTests {
         @MainActor
         func liveCanaryIPhoneLoad() async {
             let transport = MobileDeviceTransport.shared
-            let box = IPhoneLoadLiveBox()
+            let box = Self.liveBox
             transport.start { event in
                 if case .attached(let h) = event, box.handle == nil { box.handle = h }
             }
@@ -98,6 +102,17 @@ extension SerialTests {
             print("liveCanary types read=\(cold.batch.read.count) failed=\(cold.batch.failed.count) ms=\(cold.typesMs)")
             #expect(p == cold.initial.count, "empty cache: every file must be pending")
             #expect(!cold.settled.contains { $0.category == .pending })
+            // IPHONE-CRASHLOG-ACTIONS: the parser on this phone. Process names and counts only, no identifier.
+            let withProcess = cold.settled.filter { $0.process != nil }.count
+            let fromHeader = cold.settled.filter { e in
+                guard let c = e.created else { return false }
+                let name = (e.path as NSString).lastPathComponent
+                return c != IPhoneCrashLog.fileNameTimestamp(name) && c != e.modified
+            }.count
+            let appCrash = cold.settled.filter { $0.category == .appCrash }.count
+            print("liveCanary headers process=\(withProcess) timestamp=\(fromHeader) appCrash=\(appCrash)")
+            #expect(cold.settled.filter { $0.category == .appCrash || $0.category == .exceptionFault }.allSatisfy { $0.process != nil })
+            #expect(cold.settled.allSatisfy { $0.created != nil })
 
             // 3. warm listing with the cache built from the cold one
             let cache = IPhoneLogTypes.updatedCache([:], entries: cold.settled, batch: cold.batch)
@@ -142,6 +157,46 @@ extension SerialTests {
             } else {
                 Issue.record("no TotalDiskCapacity")
             }
+        }
+
+        @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
+        @MainActor
+        func liveCanaryCrashLogCopy() async throws {
+            let transport = MobileDeviceTransport.shared
+            let box = Self.liveBox
+            transport.start { event in
+                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+            }
+            guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
+                Issue.record("attach an unlocked, trusted iPhone over USB")
+                return
+            }
+            guard let cold = await Self.runListing(h, known: [:], box: box) else { return }
+            guard let entry = cold.settled.filter({ $0.path.hasSuffix(".ips") && $0.size > 0 }).min(by: { $0.size < $1.size }) else {
+                Issue.record("no .ips file on the phone")
+                return
+            }
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("md-tests-crashlog-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let dest = dir.appendingPathComponent((entry.path as NSString).lastPathComponent)
+            var ok: Bool?
+            var progressCalls = 0
+            let t0 = ContinuousClock.now
+            transport.copyFile(h, remotePath: entry.path, size: entry.size, to: dest,
+                               progress: { _ in progressCalls += 1 }, completion: { ok = $0 })
+            let finished = await Self.wait(30, until: { ok != nil })
+            print("liveCanary copy bytes=\(entry.size) ms=\(Self.ms(t0)) progressCalls=\(progressCalls)")
+            #expect(finished && ok == true)
+            #expect(IPhoneCrashLog.fileSize(dest) == entry.size)
+            let head = try Data(contentsOf: dest).prefix(4096)
+            #expect(IPhoneCrashLog.logHeader(fromHeader: Data(head)).bugType == entry.bugType)
+
+            let tmp = FileManager.default.temporaryDirectory
+            let free = IPhoneCrashLog.availableBytes(at: tmp)
+            let total = (try? tmp.resourceValues(forKeys: [.volumeTotalCapacityKey]))?.volumeTotalCapacity.map { Int64($0) }
+            print("liveCanary free=\(free.map(String.init) ?? "nil")")
+            #expect(free != nil && total != nil && free! > 0 && free! < total!)
         }
     }
 }

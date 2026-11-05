@@ -103,8 +103,10 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
 
    Two further boundaries hold with no exceptions: the app writes file **content** only
    inside `~/Library/Application Support/MacDashboard/`, kept iPhone sysdiagnose archives in the
-   archive folder (default `~/Documents/MacDashboard/iPhone`, Settings › iPhone) and the verified
-   `.ipsw` in `~/Downloads` (row 8) (rows 1, 3, 4 delete or move files elsewhere but never author
+   archive folder (default `~/Documents/MacDashboard/iPhone`, Settings › iPhone), the verified
+   `.ipsw` in `~/Downloads` (row 8), read-only copies of iPhone crash logs in the per-user temporary
+   folder (`$TMPDIR/md-crashlog-*`, removed when iPhone mode next starts) and a crash log saved to the
+   place the user picks in the save panel (IPHONE-CRASHLOG-ACTIONS) (rows 1, 3, 4 delete or move files elsewhere but never author
    them), and the app has **no telemetry; the network is used only on an explicit user
    action** (`CONSTRAINTS-EVIDENCE.md` slug `network-stance` in the docs repo). Every host
    the app's own code contacts:
@@ -139,6 +141,9 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
   - `mac_check_state.json` — history (same schema as legacy file, see §7).
 - iPhone archive folder: `~/Documents/MacDashboard/iPhone/<deviceKey>/<archive>` by default, or the
   folder chosen in Settings › iPhone (kept sysdiagnose archives only).
+- iPhone crash-log copies: `$TMPDIR/md-crashlog-<UUID>/<file>` (0700 / 0600), removed when iPhone mode
+  next starts; `~/Library/Application Support/MacDashboard/iphone-log-types.json` — the crash-log type cache (paths,
+  sizes, times, bug types, process names, header timestamps per device key; version 2).
 - Built app: `MacDashboard/dist.noindex/MacDashboard.app` — `APP_NAME="MacDashboard"` /
   `DIST="dist.noindex/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` moves it to
   `~/Applications/MacDashboard.app`, removing any stale bundle under the old
