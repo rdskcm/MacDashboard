@@ -42,6 +42,8 @@ struct MainDashboardView: View {
     /// tier from the window width so the change is inside the animation transaction — never by layout.
     @State private var macActionsCompact = false
     @State private var iphoneActionsCompact = false
+    /// IPHONE-UNLINK Stage C: the restart confirm panel is shown (root overlay below). View state, memory only.
+    @State private var iphoneRestartConfirmShown = false
     /// RESIZE-MOTION C2: the subtitle form the content-fit probe chose last (`subtitleView`); drives opacity only.
     @State private var subtitleLevel = SubtitleLevel.full
     @State private var subtitleLevelSeeded = false
@@ -73,12 +75,21 @@ struct MainDashboardView: View {
             .background {
                 if router.mode == .mac {
                     if router.canGoBack && !router.isInlineConfirmOpen { BackShortcuts { _ = router.back() } }
-                } else if iphone.selectedDeviceKey != nil {
+                } else if iphone.selectedDeviceKey != nil, !iphoneRestartConfirmShown {
                     BackShortcuts { iphone.selectedDeviceKey = nil }
                 }
             }
         }
         // One background owner for both modes (REDESIGN-HOME D13): nothing here depends on `router.mode`.
+        .onChange(of: router.mode) { _, _ in iphoneRestartConfirmShown = false }
+        // IPHONE-UNLINK Stage C: the restart confirm, drawn above the toolbar and the page (mockup :56, :68).
+        .overlayPreferenceValue(IPhoneActionsAnchorKey.self) { anchor in
+            GeometryReader { proxy in
+                if iphoneRestartConfirmShown, router.mode == .iphone, let anchor {
+                    restartLayer(row: proxy[anchor], size: proxy.size)
+                }
+            }
+        }
         .ds3Backdrop(orbs: DS3OrbSpec.window)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { w in
             liveWidth.value = w
@@ -126,7 +137,7 @@ struct MainDashboardView: View {
                 if router.mode == .mac {
                     MacHeaderActions(model: model, router: router, compact: macActionsCompact)
                 } else {
-                    IPhoneHeaderActions(model: iphone, compact: iphoneActionsCompact)
+                    IPhoneHeaderActions(model: iphone, compact: iphoneActionsCompact, onAskRestart: openRestartConfirm)
                 }
             }
             .padding(.trailing, Self.actionsTrailingPad)
@@ -187,6 +198,35 @@ struct MainDashboardView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(tiers.full)
         .help(tiers.full)
+    }
+
+    private func openRestartConfirm() {
+        withAnimation(reduceMotion || DS3Motion.isFrozen ? .easeOut(duration: 0.12) : DS3Motion.popIn) {
+            iphoneRestartConfirmShown = true
+        }
+    }
+
+    /// Instant close (the mockup unmounts); the catcher covers the whole window, header included (mockup :68).
+    @ViewBuilder
+    private func restartLayer(row: CGRect, size: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .frame(width: size.width, height: size.height)
+                .contentShape(Rectangle())
+                .onTapGesture { iphoneRestartConfirmShown = false }
+                .accessibilityHidden(true)
+            IPhoneRestartConfirm(
+                onCancel: { iphoneRestartConfirmShown = false },
+                onConfirm: {
+                    iphoneRestartConfirmShown = false
+                    Task { await iphone.restartConnectionService() }
+                })
+                .frame(width: row.maxX, alignment: .topTrailing)   // trailing edge on the row's trailing edge (mockup right:0)
+                .padding(.top, row.minY + 44)                        // mockup top:44px
+                .transition(.asymmetric(
+                    insertion: reduceMotion || DS3Motion.isFrozen ? .opacity : DS3Motion.popPanelIn(anchor: .topTrailing),
+                    removal: .identity))
+        }
     }
 
     /// The content-fit probe's choice, committed as the visible form. The first write (launch) and Reduce Motion /

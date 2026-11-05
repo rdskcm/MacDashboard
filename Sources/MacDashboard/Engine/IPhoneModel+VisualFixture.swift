@@ -1,7 +1,7 @@
 // Engine/IPhoneModel+VisualFixture.swift
 // IPHONE-DESIGN: fixed iPhone dataset for -visualFixture and the snapshot suite
 // (Tests/MacDashboardTests/ContentSnapshotTests.swift).
-// Memory only: never starts the transport, never saves the store. All values are invented.
+// Memory only: never starts the transport, saves only to the temp stores `IPhoneModel.shared` uses under the fixture (IPHONE-UNLINK D3). All values are invented.
 import Foundation
 
 extension IPhoneModel {

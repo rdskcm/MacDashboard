@@ -1064,11 +1064,25 @@ extension SerialTests {
                             IPhonePendingTileView(status: .readFailed(L.iphoneStatusFailed)) {}
                         }
                     }
+                    HarnessSection(label: "iPhone tiles: actions button (connected, remembered)") {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
+                            IPhoneTileView(record: alexRecord, status: .connected, snapshot: ip.lastSnapshot[alex],
+                                           storage: nil, onMenu: { _ in }) {}
+                            IPhoneTileView(record: ip.devices.first { $0.id == sam }!, status: .remembered,
+                                           snapshot: nil, storage: nil, onMenu: { _ in }) {}
+                        }
+                    }
                     // IPhoneModeView.content is private; the hint it shows above the tiles when stored devices exist
                     // and no phone is attached is rendered directly.
                     HarnessSection(label: "Stored devices, no phone attached: unlock-first hint") {
                         IPhoneUnlockFirstHint(alignment: .leading)
                     }
+                }
+                run.snap("content-iphone-menu", mode, width: 1134) {
+                    IPhoneModeView(model: fixtureIPhone(), initialMenuKey: alex, initialMenuAsking: true).frame(height: 760)
+                }
+                run.snap("content-iphone-menu-narrow", mode, width: 900) {
+                    IPhoneModeView(model: fixtureIPhone(), initialMenuKey: sam).frame(height: 760)
                 }
                 run.snap("content-iphone-notices", mode, width: 1134) {
                     HarnessSection(label: "iPhone banners and notices") {
@@ -1077,6 +1091,8 @@ extension SerialTests {
                             IPhoneListBanner(kind: .restarting)
                             IPhoneNotice(kind: .empty)
                             IPhoneNotice(kind: .unavailable)
+                            IPhoneListBanner(kind: .error(IPhoneModel.UnlinkNotice.trashFailed(count: 2, folder: "/Users/fixture/Documents/MacDashboard/iPhone/0123456789abcdef").message))
+                            IPhoneListBanner(kind: .error(IPhoneModel.UnlinkNotice.saveFailed(name: "Alex’s iPhone").message))
                         }
                     }
                 }
@@ -1368,7 +1384,38 @@ extension SerialTests {
                 run.snap("content-iphone-dialogs", mode, width: 460) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone dialogs: restart confirmation") {
-                            IPhoneRestartConfirm(onCancel: {}, onConfirm: {}).background(DS3.overlay)
+                            IPhoneRestartConfirm(onCancel: {}, onConfirm: {})
+                        }
+                        HarnessSection(label: "iPhone dialogs: tile menu") {
+                            IPhoneTileMenuPanel(name: "Alex’s iPhone", keptArchives: 1, unlinkAllowed: true,
+                                                asking: .constant(false), onOpen: {}, onUnlink: {}, onClose: {})
+                        }
+                        HarnessSection(label: "iPhone dialogs: tile menu, busy") {
+                            IPhoneTileMenuPanel(name: "Alex’s iPhone", keptArchives: 1, unlinkAllowed: false,
+                                                asking: .constant(false), onOpen: {}, onUnlink: {}, onClose: {})
+                        }
+                        HarnessSection(label: "iPhone dialogs: unlink confirm, one kept archive") {
+                            IPhoneTileMenuPanel(name: "Alex’s iPhone", keptArchives: 1, unlinkAllowed: true,
+                                                asking: .constant(true), onOpen: {}, onUnlink: {}, onClose: {})
+                        }
+                        HarnessSection(label: "iPhone dialogs: unlink confirm, no archives") {
+                            IPhoneTileMenuPanel(name: "Sam’s iPhone", keptArchives: 0, unlinkAllowed: true,
+                                                asking: .constant(true), onOpen: {}, onUnlink: {}, onClose: {})
+                        }
+                        HarnessSection(label: "iPhone dialogs: ⋯ glyph at 6×, closed and open (centre lines)") {
+                            HStack(spacing: 16) {
+                                ForEach([false, true], id: \.self) { open in
+                                    IPhoneTileMenuButton(name: "x", open: open) {}
+                                        .scaleEffect(6, anchor: .topLeading)
+                                        .frame(width: 204, height: 204, alignment: .topLeading)
+                                        .overlay {
+                                            ZStack {
+                                                Rectangle().fill(DS3.hot.opacity(0.6)).frame(width: 204, height: 1)
+                                                Rectangle().fill(DS3.hot.opacity(0.6)).frame(width: 1, height: 204)
+                                            }
+                                        }
+                                }
+                            }
                         }
                         HarnessSection(label: "iPhone dialogs: parse choice") {
                             IPhoneImportChoiceSheet(

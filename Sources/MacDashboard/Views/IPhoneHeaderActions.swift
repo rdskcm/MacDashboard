@@ -1,6 +1,6 @@
 // Views/IPhoneHeaderActions.swift
 // iPhone-mode top-bar actions (IPHONE-DESIGN): «Restart connection service…» (secondary, confirmed
-// in a popover) and «Search again» (primary). Below the width where both labels fit, the restart
+// on the pop panel `MainDashboardView` places under the row, IPHONE-UNLINK Stage C) and «Search again» (primary). Below the width where both labels fit, the restart
 // button becomes a 34 pt round icon button: the form is committed at the window root (`HeaderActionsForm`) as one
 // animated button identity; the ViewThatFits is the last-resort fallback for a layout pass that loses more than
 // the margin.
@@ -11,7 +11,7 @@ struct IPhoneHeaderActions: View {
     let model: IPhoneModel
     /// The committed form (RESIZE-MOTION C2, `HeaderActionsForm`), passed by `MainDashboardView`.
     let compact: Bool
-    @State private var confirmingRestart = false
+    let onAskRestart: () -> Void
 
     private var disabled: Bool { model.restartingService || !model.transportAvailable }
 
@@ -25,8 +25,8 @@ struct IPhoneHeaderActions: View {
 
     private func row(compact: Bool) -> IPhoneActionsRow {
         IPhoneActionsRow(compact: compact, restarting: model.restartingService, disabled: disabled,
-                         confirmingRestart: $confirmingRestart,
-                         onConfirmRestart: { Task { await model.restartConnectionService() } },
+                         showsSearch: !model.listShowsEmptyNotice,
+                         onAskRestart: onAskRestart,
                          onSearch: { model.searchAgain() })
     }
 
@@ -34,8 +34,8 @@ struct IPhoneHeaderActions: View {
     @MainActor
     static func fullRowIdealWidth() -> CGFloat {
         ds3IdealWidth(key: "iphone-actions-full|\(L10nStore.shared.language.rawValue)") {
-            IPhoneActionsRow(compact: false, restarting: false, disabled: false, confirmingRestart: .constant(false),
-                             onConfirmRestart: {}, onSearch: {})
+            IPhoneActionsRow(compact: false, restarting: false, disabled: false, showsSearch: true,
+                             onAskRestart: {}, onSearch: {})
         }
     }
 }
@@ -45,11 +45,14 @@ private struct IPhoneActionsRow: View {
     let compact: Bool
     let restarting: Bool
     let disabled: Bool
-    @Binding var confirmingRestart: Bool
-    let onConfirmRestart: () -> Void
+    let showsSearch: Bool
+    let onAskRestart: () -> Void
     let onSearch: () -> Void
 
-    var body: some View { HStack(spacing: 8) { restart; search } }
+    var body: some View {
+        HStack(spacing: 8) { restart; if showsSearch { search } }
+            .anchorPreference(key: IPhoneActionsAnchorKey.self, value: .bounds) { $0 }
+    }
 
     private var restart: some View {
         let font = Font.system(size: 13, weight: .semibold)
@@ -57,7 +60,7 @@ private struct IPhoneActionsRow: View {
         let iconW = ds3IdealWidth(key: "restart|arrow.triangle.2.circlepath|13s") {
             Image(systemName: "arrow.triangle.2.circlepath").font(font)
         }
-        return Button { confirmingRestart = true } label: {
+        return Button { onAskRestart() } label: {
             Color.clear
                 .frame(width: compact ? iconW : fullW)
                 .overlay { Text(L.iphoneRestartService).frame(width: fullW).opacity(compact ? 0 : 1) }
@@ -76,14 +79,6 @@ private struct IPhoneActionsRow: View {
         .disabled(disabled)
         .accessibilityLabel(L.iphoneRestartService)
         .ds3BusyValue(restarting)
-        .popover(isPresented: $confirmingRestart, arrowEdge: .bottom) {
-            IPhoneRestartConfirm(
-                onCancel: { confirmingRestart = false },
-                onConfirm: {
-                    confirmingRestart = false
-                    onConfirmRestart()
-                })
-        }
     }
 
     private var search: some View {
@@ -95,10 +90,11 @@ private struct IPhoneActionsRow: View {
     }
 }
 
-/// Popover content for the restart confirmation (internal so the harness can render it).
+/// Restart confirm on the pop panel (IPHONE-UNLINK Stage C); internal so the harness can render it.
 struct IPhoneRestartConfirm: View {
     let onCancel: () -> Void
     let onConfirm: () -> Void
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -125,5 +121,20 @@ struct IPhoneRestartConfirm: View {
         }
         .padding(18)
         .frame(width: 340)
+        .ds3PopPanel(cornerRadius: 24)
+        .focusable()
+        .focused($focused)
+        .focusEffectDisabled()
+        .onExitCommand(perform: onCancel)
+        .onAppear { focused = true }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L.iphoneRestartConfirmTitle)
+        .accessibilityAddTraits(.isModal)
     }
+}
+
+/// IPHONE-UNLINK Stage C: frame of the iPhone header actions row, read at the window root to place the restart panel.
+struct IPhoneActionsAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = nextValue() ?? value }
 }

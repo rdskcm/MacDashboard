@@ -28,6 +28,18 @@ protocol IPhoneStrings {
     var iphoneUnavailable: String { get }
     func iphoneStatusRemembered(_ date: String) -> String
     func iphoneOpenDeviceA11y(_ name: String) -> String
+    var iphoneTileOpen: String { get }
+    var iphoneUnlinkDevice: String { get }
+    func iphoneUnlinkTitle(_ name: String) -> String
+    var iphoneUnlinkBody: String { get }
+    var iphoneUnlinkConfirm: String { get }
+    var iphoneUnlinkCancel: String { get }
+    func iphoneUnlinkArchives(_ n: Int) -> String
+    func iphoneTileActionsA11y(_ name: String) -> String
+    func iphoneUnlinkConfirmA11y(_ name: String) -> String
+    var iphoneUnlinkBusyHelp: String { get }
+    func iphoneUnlinkSaveFailed(_ name: String) -> String
+    func iphoneUnlinkTrashFailed(_ n: Int, _ folder: String) -> String
 
     var iphoneBatteryTitle: String { get }
     var iphoneHistoryTitle: String { get }
@@ -103,6 +115,23 @@ extension StringsEN: IPhoneStrings {
     var iphoneUnavailable: String { "iPhone connection is not available on this version of macOS." }
     func iphoneStatusRemembered(_ date: String) -> String { "Not connected · last seen \(date)" }
     func iphoneOpenDeviceA11y(_ name: String) -> String { "Open \(name)" }
+    var iphoneTileOpen: String { "Open" }
+    var iphoneUnlinkDevice: String { "Unlink device…" }
+    func iphoneUnlinkTitle(_ name: String) -> String { "Unlink \(name)?" }
+    var iphoneUnlinkBody: String { "The card and its saved battery history are removed. The iPhone appears again the next time it connects to this Mac." }
+    var iphoneUnlinkConfirm: String { "Unlink" }
+    var iphoneUnlinkCancel: String { "Cancel" }
+    func iphoneUnlinkArchives(_ n: Int) -> String {
+        n == 1 ? "1 kept archive moves to the Trash." : "\(n) kept archives move to the Trash."
+    }
+    func iphoneTileActionsA11y(_ name: String) -> String { "Actions for \(name)" }
+    func iphoneUnlinkConfirmA11y(_ name: String) -> String { "Unlink \(name)" }
+    var iphoneUnlinkBusyHelp: String { "Available when the current operation on this iPhone finishes." }
+    func iphoneUnlinkSaveFailed(_ name: String) -> String { "Could not unlink \(name). The device list could not be saved." }
+    func iphoneUnlinkTrashFailed(_ n: Int, _ folder: String) -> String {
+        n == 1 ? "Device unlinked, but 1 kept archive could not be moved to the Trash. It stays in \(folder)."
+               : "Device unlinked, but \(n) kept archives could not be moved to the Trash. They stay in \(folder)."
+    }
     var iphoneBatteryTitle: String { "Battery" }
     var iphoneHistoryTitle: String { "Battery history" }
     var iphoneBatHealth: String { "Health" }
@@ -180,6 +209,24 @@ extension StringsRU: IPhoneStrings {
     var iphoneUnavailable: String { "Подключение к iPhone недоступно на этой версии macOS." }
     func iphoneStatusRemembered(_ date: String) -> String { "Не подключён · был \(date)" }
     func iphoneOpenDeviceA11y(_ name: String) -> String { "Открыть \(name)" }
+    var iphoneTileOpen: String { "Открыть" }
+    var iphoneUnlinkDevice: String { "Отвязать устройство…" }
+    func iphoneUnlinkTitle(_ name: String) -> String { "Отвязать \(name)?" }
+    var iphoneUnlinkBody: String { "Карточка и сохранённая история батареи будут удалены. iPhone появится снова при следующем подключении к этому Mac." }
+    var iphoneUnlinkConfirm: String { "Отвязать" }
+    var iphoneUnlinkCancel: String { "Отмена" }
+    func iphoneUnlinkArchives(_ n: Int) -> String {
+        "\(n) " + ruPlural(n, "сохранённый архив будет перемещён", "сохранённых архива будут перемещены",
+                           "сохранённых архивов будут перемещены") + " в Корзину."
+    }
+    func iphoneTileActionsA11y(_ name: String) -> String { "Действия: \(name)" }
+    func iphoneUnlinkConfirmA11y(_ name: String) -> String { "Отвязать \(name)" }
+    var iphoneUnlinkBusyHelp: String { "Станет доступно, когда завершится текущая операция с этим iPhone." }
+    func iphoneUnlinkSaveFailed(_ name: String) -> String { "Не удалось отвязать \(name). Не получилось сохранить список устройств." }
+    func iphoneUnlinkTrashFailed(_ n: Int, _ folder: String) -> String {
+        "Устройство отвязано, но " + "\(n) " + ruPlural(n, "сохранённый архив", "сохранённых архива", "сохранённых архивов")
+            + " не удалось переместить в Корзину. " + (n == 1 ? "Он остался" : "Они остались") + " в \(folder)."
+    }
     var iphoneBatteryTitle: String { "Батарея" }
     var iphoneHistoryTitle: String { "История батареи" }
     var iphoneBatHealth: String { "Здоровье" }

@@ -146,6 +146,8 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
   (create on first run via `FileManager.urls(for: .applicationSupportDirectory…)`).
   - `mac_report.txt` — the single report file (overwritten).
   - `mac_check_state.json` — history (same schema as legacy file, see §7).
+  - `iphones.json` — remembered iPhones and their battery history. «Unlink device…» removes one phone's record and moves
+    its kept archives (`<archive folder>/<device key>/`) to the Trash.
 - iPhone archive folder: `~/Documents/MacDashboard/iPhone/<deviceKey>/<archive>` by default, or the
   folder chosen in Settings › Devices (kept sysdiagnose archives only).
 - iPhone crash-log copies: `$TMPDIR/md-crashlog-<UUID>/<file>` (0700 / 0600), removed when iPhone mode

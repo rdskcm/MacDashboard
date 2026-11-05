@@ -9,6 +9,28 @@ struct IPhoneModeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Window width, read here because this root's width is set by the window, never by its content.
     @State private var windowWidth: CGFloat = 1150
+    @State private var menuKey: String?
+    @State private var menuAsking = false
+    @AccessibilityFocusState private var voTile: String?
+
+    init(model: IPhoneModel, initialMenuKey: String? = nil, initialMenuAsking: Bool = false) {
+        self.model = model
+        _menuKey = State(initialValue: initialMenuKey)
+        _menuAsking = State(initialValue: initialMenuAsking)
+    }
+
+    private func openMenu(_ key: String, asking: Bool) {
+        menuAsking = asking
+        withAnimation(reduceMotion || DS3Motion.isFrozen ? .easeOut(duration: 0.12) : DS3Motion.popIn) { menuKey = key }
+    }
+
+    /// Instant, as the mockup unmounts the panel. VoiceOver returns to the tile.
+    private func closeMenu() {
+        guard let key = menuKey else { return }
+        menuKey = nil
+        menuAsking = false
+        voTile = key
+    }
 
     var body: some View {
         Group {
@@ -45,8 +67,52 @@ struct IPhoneModeView: View {
             .padding(.top, 28)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .overlayPreferenceValue(IPhoneTileAnchorsKey.self) { anchors in
+                GeometryReader { proxy in
+                    if let key = menuKey, let a = anchors[key], let r = model.devices.first(where: { $0.id == key }) {
+                        menuLayer(record: r, tile: proxy[a], size: proxy.size)
+                    }
+                }
+            }
+            .onPreferenceChange(IPhoneTileMountedKey.self) { keys in
+                if let k = menuKey, !keys.contains(k) { closeMenu() }
+            }
+        }
+        .background {
+            // Catches clicks in the empty viewport below short content.
+            if menuKey != nil {
+                Color.clear.contentShape(Rectangle()).onTapGesture { closeMenu() }.accessibilityHidden(true)
+            }
         }
         .ds3Appear()
+        .onDisappear { closeMenu() }
+        .onChange(of: model.restartingService) { _, busy in if busy { closeMenu() } }
+    }
+
+    @ViewBuilder
+    private func menuLayer(record r: IPhoneDeviceRecord, tile: CGRect, size: CGSize) -> some View {
+        let lifted = !reduceMotion
+        let corner = IPhoneTileMenuMetrics.panelAnchor(tile: tile, lifted: lifted)
+        ZStack(alignment: .topLeading) {
+            // The mockup's outside-click layer (:68): over every tile, under the panel.
+            Color.clear
+                .frame(width: size.width, height: size.height)
+                .contentShape(Rectangle())
+                .onTapGesture { closeMenu() }
+                .accessibilityHidden(true)
+            IPhoneTileMenuPanel(
+                name: r.name, keptArchives: r.keptArchives.count, unlinkAllowed: model.canUnlink(r.id),
+                asking: $menuAsking,
+                onOpen: { closeMenu(); model.selectedDeviceKey = r.id },
+                onUnlink: { Task { await model.unlink(deviceKey: r.id) } },
+                onClose: { closeMenu() })
+                .scaleEffect(lifted ? DS3Motion.tileHoverScale : 1, anchor: .topTrailing)
+                .frame(width: corner.x, alignment: .topTrailing)   // trailing edge at corner.x; the empty part is not hit-testable
+                .padding(.top, corner.y)
+                .transition(.asymmetric(
+                    insertion: reduceMotion || DS3Motion.isFrozen ? .opacity : DS3Motion.popPanelIn(anchor: .topTrailing),
+                    removal: .identity))
+        }
     }
 
     private var header: some View {
@@ -89,13 +155,15 @@ struct IPhoneModeView: View {
             IPhoneListBanner(kind: .restarting)
         } else if let err = model.restartError {
             IPhoneListBanner(kind: .error(err))
+        } else if let n = model.unlinkNotice {
+            IPhoneListBanner(kind: .error(n.message))
         }
     }
 
     @ViewBuilder private var content: some View {
         if !model.transportAvailable {
             IPhoneNotice(kind: .unavailable)
-        } else if tileCount == 0 {
+        } else if model.listShowsEmptyNotice {
             IPhoneNotice(kind: .empty, searchDisabled: model.restartingService,
                          phoneAttached: model.hasAttachedPhone,
                          onSearch: { model.searchAgain() })
@@ -105,10 +173,15 @@ struct IPhoneModeView: View {
                 ForEach(Array(model.sortedDevices.enumerated()), id: \.element.id) { i, r in
                     IPhoneTileView(record: r, status: model.status[r.id] ?? .remembered,
                                    snapshot: model.lastSnapshot[r.id],
-                                   storage: model.identityRows(r.id)?.first { $0.label == .storage && !$0.isPending }?.value) {
+                                   storage: model.identityRows(r.id)?.first { $0.label == .storage && !$0.isPending }?.value,
+                                   menuOpen: menuKey == r.id, unlinkAllowed: model.canUnlink(r.id),
+                                   onMenu: { openMenu(r.id, asking: $0) }) {
                         model.selectedDeviceKey = r.id
                     }
                     .accessibilityIdentifier("iphone-tile-\(i)")
+                    .accessibilityFocused($voTile, equals: r.id)
+                    .anchorPreference(key: IPhoneTileAnchorsKey.self, value: .bounds) { [r.id: $0] }
+                    .preference(key: IPhoneTileMountedKey.self, value: [r.id])
                     .ds3Appear(delay: DS3Motion.tileStagger * Double(i))
                 }
                 ForEach(Array(model.sortedPending.enumerated()), id: \.element.raw) { j, h in
@@ -122,6 +195,19 @@ struct IPhoneModeView: View {
             .animation(.easeOut(duration: reduceMotion ? 0.12 : 0.4), value: model.restartingService)
         }
     }
+}
+
+/// IPHONE-UNLINK: resting frame of every mounted identified tile, by device key.
+private struct IPhoneTileAnchorsKey: PreferenceKey {
+    static var defaultValue: [String: Anchor<CGRect>] = [:]
+    static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+/// IPHONE-UNLINK: keys of the mounted identified tiles (the lazy grid unmounts tiles scrolled far away).
+private struct IPhoneTileMountedKey: PreferenceKey {
+    static var defaultValue: Set<String> = []
+    static func reduce(value: inout Set<String>, nextValue: () -> Set<String>) { value.formUnion(nextValue()) }
 }
 
 /// Error / restarting strip above the device list.
@@ -163,14 +249,22 @@ struct IPhoneTileView: View {
     let status: IPhoneModel.DeviceStatus
     let snapshot: IPhoneSnapshot?
     let storage: String?
+    var menuOpen = false
+    var unlinkAllowed = true
+    var onMenu: ((_ asking: Bool) -> Void)? = nil
     let onOpen: () -> Void
 
     private var connected: Bool { status == .connected }
 
     var body: some View {
         Button(action: onOpen) { tile }
-            .buttonStyle(DS3TileButtonStyle())
+            .buttonStyle(DS3TileButtonStyle(pinned: menuOpen))
             .accessibilityLabel(L.iphoneOpenDeviceA11y(record.name))
+            .accessibilityActions {
+                if let onMenu, unlinkAllowed {
+                    Button(L.iphoneUnlinkDevice) { onMenu(true) }
+                }
+            }
     }
 
     private var tile: some View {
@@ -206,6 +300,10 @@ struct IPhoneTileView: View {
                     .truncationMode(.tail)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if let onMenu {
+                IPhoneTileMenuButton(name: record.name, open: menuOpen) { onMenu(false) }
+                    .frame(height: 52, alignment: .top)   // mockup: align-self start in the 52-pt row
+            }
         }
     }
 
