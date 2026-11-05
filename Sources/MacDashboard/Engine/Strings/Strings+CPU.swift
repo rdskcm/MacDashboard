@@ -25,6 +25,14 @@ protocol CPUStrings {
     var cpuSocTemperature: String { get }
     var cpuSocHot: String { get }
     var cpuSocWarm: String { get }
+    var cpuThermalNominal: String { get }
+    var cpuThermalFair: String { get }
+    var cpuThermalSerious: String { get }
+    var cpuThermalCritical: String { get }
+    var cpuThermalHelpNominal: String { get }
+    var cpuThermalHelpFair: String { get }
+    var cpuThermalHelpSerious: String { get }
+    var cpuThermalHelpCritical: String { get }
     var cpuNoReading: String { get }
     func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String
     func cpuHighLoadFor(_ min: Int) -> String
@@ -67,8 +75,16 @@ extension StringsEN: CPUStrings {
     var cpuUser: String { "User" }
     var cpuSystem: String { "System" }
     var cpuSocTemperature: String { "SoC temperature" }
-    var cpuSocHot: String { "hot · may throttle" }
+    var cpuSocHot: String { "hot" }
     var cpuSocWarm: String { "warm" }
+    var cpuThermalNominal: String { "thermal: normal" }
+    var cpuThermalFair: String { "thermal: elevated" }
+    var cpuThermalSerious: String { "thermal: high" }
+    var cpuThermalCritical: String { "thermal: critical" }
+    var cpuThermalHelpNominal: String { "macOS thermal state: normal. Temperatures are within normal limits." }
+    var cpuThermalHelpFair: String { "macOS thermal state: slightly elevated. Fans, if the Mac has them, may spin up. Energy use is higher." }
+    var cpuThermalHelpSerious: String { "macOS thermal state: high. Fans, if the Mac has them, run at full speed. macOS may reduce performance to cool down." }
+    var cpuThermalHelpCritical: String { "macOS thermal state: critical. Performance is significantly reduced until the Mac cools down." }
     var cpuNoReading: String { "No current reading" }
     func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String { "load \(a) · \(b) · \(c) · \(cores) cores" }
     func cpuHighLoadFor(_ min: Int) -> String { "High load for \(min) min" }
@@ -110,8 +126,16 @@ extension StringsRU: CPUStrings {
     var cpuUser: String { "Пользователь" }
     var cpuSystem: String { "Система" }
     var cpuSocTemperature: String { "Температура SoC" }
-    var cpuSocHot: String { "горячо · возможен троттлинг" }
+    var cpuSocHot: String { "горячо" }
     var cpuSocWarm: String { "тепло" }
+    var cpuThermalNominal: String { "нагрев: норма" }
+    var cpuThermalFair: String { "нагрев: повышен" }
+    var cpuThermalSerious: String { "нагрев: высокий" }
+    var cpuThermalCritical: String { "нагрев: критический" }
+    var cpuThermalHelpNominal: String { "Тепловое состояние macOS: норма. Температура в пределах нормы." }
+    var cpuThermalHelpFair: String { "Тепловое состояние macOS: немного повышено. Вентиляторы, если они есть, могут раскрутиться. Расход энергии выше." }
+    var cpuThermalHelpSerious: String { "Тепловое состояние macOS: высокое. Вентиляторы, если они есть, работают на максимуме. macOS может снижать производительность, чтобы охладиться." }
+    var cpuThermalHelpCritical: String { "Тепловое состояние macOS: критическое. Производительность заметно снижена, пока Mac не остынет." }
     var cpuNoReading: String { "Нет текущих данных" }
     func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String { "нагрузка \(a) · \(b) · \(c) · \(cores) " + ruPlural(cores, "ядро", "ядра", "ядер") }
     func cpuHighLoadFor(_ min: Int) -> String { "Высокая нагрузка уже \(min) мин" }

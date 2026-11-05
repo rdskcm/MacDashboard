@@ -134,6 +134,29 @@ extension SerialTests {
                 $0.socTempC = 97
                 $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
             }
+            // THERMAL-STATE: the SoC tile note per macOS thermal state.
+            let cpuThermalFair = fixtureHome {
+                $0.socTempC = 48
+                $0.applyFixtureThermal(.fair)
+                $0.applyFixtureCPU(cpuOK, highSince: nil)
+            }
+            let cpuThermalSerious = fixtureHome {
+                $0.cpu = CPUUsage(user: 71, sys: 20, idle: 9)
+                $0.socTempC = 93
+                $0.applyFixtureThermal(.serious)
+                $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
+            }
+            let cpuThermalCritical = fixtureHome {
+                $0.cpu = CPUUsage(user: 71, sys: 20, idle: 9)
+                $0.socTempC = 97
+                $0.applyFixtureThermal(.critical)
+                $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
+            }
+            let cpuThermalNoTemp = fixtureHome {
+                $0.socTempC = nil
+                $0.applyFixtureThermal(.nominal)
+                $0.applyFixtureCPU(cpuOK, highSince: nil)
+            }
             let cpuFail = fixtureHome { $0.applyFixtureCPU(cpuFailed, highSince: nil) }
             let cpuLoading = fixtureHome { $0.applyFixtureCPU(BlockState(.cpu, createdAt: homeRef), highSince: nil) }
             // REDESIGN-MEMORY: Memory page states (fixture = low pressure, swap 25 %).
@@ -480,6 +503,24 @@ extension SerialTests {
                 run.snap("content-cpu-hot", mode, width: 1094) {
                     CPUUsageCard(model: cpuHot)
                 }
+                run.snap("content-cpu-thermal-fair", mode, width: 1094) {
+                    CPUUsageCard(model: cpuThermalFair)
+                }
+                run.snap("content-cpu-thermal-serious", mode, width: 1094) {
+                    CPUUsageCard(model: cpuThermalSerious)
+                }
+                run.snap("content-cpu-thermal-critical", mode, width: 1094) {
+                    CPUUsageCard(model: cpuThermalCritical)
+                }
+                run.snap("content-cpu-thermal-notemp", mode, width: 1094) {
+                    CPUUsageCard(model: cpuThermalNoTemp)
+                }
+                // 844 = 900 minimum window - 2 x 28 page padding; the longest RU note must fit.
+                L10nStore.shared.language = .ru
+                run.snap("content-cpu-thermal-narrow-ru", mode, width: 844) {
+                    CPUUsageCard(model: cpuThermalCritical)
+                }
+                L10nStore.shared.language = .en
                 run.snap("content-cpu-failed", mode, width: 1094) {
                     CPUUsageCard(model: cpuFail)
                 }

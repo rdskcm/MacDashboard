@@ -12,6 +12,24 @@ enum Metric: Hashable, Sendable { case cpu, mem }
 /// Mac SoC temperature level (HOME-LEFTOVERS): the one classification every SoC temperature display uses.
 enum SocTempLevel: Equatable, Sendable { case normal, warm, hot }
 
+/// THERMAL-STATE: macOS's own thermal state (ProcessInfo.thermalState), shown beside the SoC temperature.
+/// Never converted into a throttling percentage.
+enum ThermalLevel: Equatable, Sendable {
+    case nominal, fair, serious, critical
+    /// nil for a case added after this code was written (@unknown default).
+    init?(_ s: ProcessInfo.ThermalState) {
+        switch s {
+        case .nominal: self = .nominal
+        case .fair: self = .fair
+        case .serious: self = .serious
+        case .critical: self = .critical
+        @unknown default: return nil
+        }
+    }
+}
+
+enum CPUNoteTone: Equatable { case green, neutral, amber, hot }
+
 /// REDESIGN-CPU thresholds (03-cpu:20) and the high-load run tracker. High = ≥ 85 % for at least 60 s
 /// (TRIAGE-THRESHOLDS-REVIEW D4).
 enum CPULoad {
@@ -53,12 +71,14 @@ enum CPUTagKind: Equatable { case ok, high, loading, failed }
 enum CPUDot: Equatable { case green, amber, hot }
 
 struct CPUHeroModel: Equatable { var value: String; var fraction: Double; var note: String; var high: Bool; var dimmed: Bool }
-struct CPUTileModel: Equatable { var label: String; var value: String; var note: String?; var dot: CPUDot?; var hot: Bool; var dimmed: Bool }
+struct CPUTileModel: Equatable { var label: String; var value: String; var note: String?; var dot: CPUDot?; var hot: Bool; var dimmed: Bool
+    var noteTone: CPUNoteTone? = nil; var help: String? = nil }
 
 struct CPUPageModel: Equatable {
     struct Input {
         var cpu: CPUUsage?; var load: [Double]?; var ncpu: Int; var chip: String?; var socTempC: Int?
         var block: BlockPhase; var highSince: Date?; var now: Date; var intervalSeconds: Int
+        var thermal: ThermalLevel? = nil
     }
 
     var phase: CPUPagePhase
@@ -131,7 +151,7 @@ struct CPUPageModel: Equatable {
             hero = CPUHeroModel(value: L.homePercent(fmtFixed(usage, decimals: 1)),
                                 fraction: min(max(usage / 100, 0), 1),
                                 note: note, high: high, dimmed: false)
-            let soc: CPUTileModel
+            var soc: CPUTileModel
             if let t = i.socTempC {
                 switch CPULoad.socLevel(t) {
                 case .hot:
@@ -141,8 +161,14 @@ struct CPUPageModel: Equatable {
                 case .normal:
                     soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.commonNormal, dot: .green, hot: false, dimmed: false)
                 }
+                if let th = i.thermal {
+                    let n = thermalNote(th)
+                    soc.note = n.text; soc.noteTone = n.tone; soc.help = n.help
+                }
             } else {
-                soc = CPUTileModel(label: L.cpuSocTemperature, value: "—", note: nil, dot: nil, hot: false, dimmed: true)
+                let th = i.thermal.map(thermalNote)
+                soc = CPUTileModel(label: L.cpuSocTemperature, value: "—", note: th?.text, dot: nil, hot: false, dimmed: true,
+                                   noteTone: th?.tone, help: th?.help)
             }
             tiles = [
                 CPUTileModel(label: L.cpuUser, value: L.homePercent(fmtFixed(cpu.user, decimals: 1)), note: nil, dot: nil, hot: false, dimmed: false),
@@ -207,5 +233,17 @@ struct CPUPageModel: Equatable {
         let avail = total - 8
         let hero = min(max(200, avail * 0.8 / 2.8), avail)
         return (hero, avail - hero)
+    }
+}
+
+extension CPUPageModel {
+    /// Note text, tone and tooltip for one state (THERMAL-STATE §4), in the current UI language.
+    static func thermalNote(_ l: ThermalLevel) -> (text: String, tone: CPUNoteTone, help: String) {
+        switch l {
+        case .nominal: return (L.cpuThermalNominal, .green, L.cpuThermalHelpNominal)
+        case .fair: return (L.cpuThermalFair, .neutral, L.cpuThermalHelpFair)
+        case .serious: return (L.cpuThermalSerious, .amber, L.cpuThermalHelpSerious)
+        case .critical: return (L.cpuThermalCritical, .hot, L.cpuThermalHelpCritical)
+        }
     }
 }

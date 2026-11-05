@@ -111,12 +111,23 @@ struct CPUUsageCard: View {
     }
 
     /// State colour from the dot (CPULoad.socLevel via CPUPageModel): hot → hot, warm → amber, else green note / plain value.
+    /// The note ink comes from the thermal tone when present (THERMAL-STATE); the tooltip is attached only when present.
+    @ViewBuilder
     private func tile(_ t: CPUTileModel) -> some View {
         let ink: Color = t.dot == .hot ? DS3.hotInk : (t.dot == .amber ? DS3.amberInk : DS3.greenInk)
-        return SectionTile(label: t.label, value: t.value, note: t.note,
-                           noteInk: ink,
-                           dot: t.dot.map { $0 == .hot ? DS3.hot : ($0 == .amber ? DS3.amber : DS3.green) },
-                           valueInk: t.dimmed ? DS3.muted : ((t.dot == .hot || t.dot == .amber) ? ink : DS3.ink))
+        let noteInk: Color = t.noteTone.map { tone -> Color in
+            switch tone {
+            case .green: return DS3.greenInk
+            case .neutral: return DS3.inkSoft
+            case .amber: return DS3.amberInk
+            case .hot: return DS3.hotInk
+            }
+        } ?? ink
+        let base = SectionTile(label: t.label, value: t.value, note: t.note,
+                               noteInk: noteInk,
+                               dot: t.dot.map { $0 == .hot ? DS3.hot : ($0 == .amber ? DS3.amber : DS3.green) },
+                               valueInk: t.dimmed ? DS3.muted : ((t.dot == .hot || t.dot == .amber) ? ink : DS3.ink))
+        if let h = t.help { base.help(h) } else { base }
     }
 }
 
@@ -124,5 +135,6 @@ struct CPUUsageCard: View {
 private func cpuPageInput(_ model: AppModel) -> CPUPageModel.Input {
     CPUPageModel.Input(cpu: model.cpu, load: model.load, ncpu: model.ncpu, chip: model.headerSystem?.chip,
                        socTempC: model.socTempC, block: model.cpuBlock.phase, highSince: model.cpuHighSince,
-                       now: model.lastSampleAt, intervalSeconds: model.settings.fastIntervalSeconds)
+                       now: model.lastSampleAt, intervalSeconds: model.settings.fastIntervalSeconds,
+                       thermal: model.thermal)
 }

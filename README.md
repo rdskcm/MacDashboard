@@ -51,7 +51,7 @@ feedback and comments. Hope you like it!
   (compatible with the old file format).
 - Detects recent crash logs (7-day window), grouped and collapsed, and flags
   own-app crashes vs. system panics.
-- SOC and internal-disk temperatures, read via Apple Silicon's private HID sensor API.
+- SOC and internal-disk temperatures, read via Apple Silicon's private HID sensor API, plus macOS's own thermal state (`ProcessInfo.thermalState`).
 - A handful of one-click maintenance actions, each explicit and confirmed
   (see "What it can change" below): cleaning up orphaned autostart entries,
   installing `smartmontools` for SMART data on external drives, refreshing
