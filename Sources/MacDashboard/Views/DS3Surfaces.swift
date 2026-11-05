@@ -114,6 +114,9 @@ extension View {
         }
     }
 
+    /// IPHONE-UNLINK: the mockup's overlay panel surface (tile menu, restart confirm). See `DS3PopPanel`.
+    func ds3PopPanel(cornerRadius: CGFloat) -> some View { modifier(DS3PopPanel(cornerRadius: cornerRadius)) }
+
     /// RESIZE-FRAME-COST: the `ds3Elevation` stack rendered once into a nine-slice layer; for static card/header shadows only.
     func ds3ElevationSprite(_ s: DS3Shadow, cornerRadius: CGFloat) -> some View {
         background { DS3ShadowSpriteLayer(kind: s, cornerRadius: cornerRadius).allowsHitTesting(false).accessibilityHidden(true) }
@@ -243,6 +246,30 @@ private struct DS3GlassCard: ViewModifier {
             }
             .overlay(DS3Rim(cornerRadius: cornerRadius))
             .ds3ElevationSprite(.card, cornerRadius: cornerRadius)
+    }
+}
+
+/// IPHONE-UNLINK: `--overlay` over a backdrop blur, inset .5 `line-strong` ring, inset 1-pt `rim-mid` top,
+/// `--shadow-pop`. Material or solid follows `GlassSettings` exactly as `DS3GlassCard` (Reduce Transparency and the
+/// Tinted stop give a solid fill). No `.drawingGroup()` or `.compositingGroup()` around it: `.drawingGroup()` flattens a
+/// material's backdrop sample (CARD-GLASS-BACKDROP finding R2-C4), and a compositing group is not needed.
+private struct DS3PopPanel: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(GlassSettings.self) private var glass: GlassSettings?
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let fill = glass?.fill ?? .standard
+        content
+            .background {
+                ZStack {
+                    if fill.usesMaterial { shape.fill(.regularMaterial) }
+                    shape.fill(DS3.overlay)
+                }
+            }
+            .ds3InsetRims(shape, top: DS3.rimMid, ring: DS3.lineStrong)
+            .ds3Elevation(.pop, in: shape)
+            .contentShape(shape)
     }
 }
 

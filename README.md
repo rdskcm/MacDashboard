@@ -92,6 +92,8 @@ Every report and history file MacDashboard writes stays in
 `~/Library/Application Support/MacDashboard/` on this Mac. Nothing is
 uploaded.
 
+To forget an iPhone, use «Unlink device…» in its tile's «⋯» menu. Its record and battery history are deleted and its kept archives go to the Trash.
+
 When you open an iPhone crash log in Console or save it, the app copies that one file from the phone (read-only) into a private temporary folder, removed the next time the app starts; a saved copy goes only where you choose.
 
 **Honest network disclosure.** MacDashboard is not silent on the network —

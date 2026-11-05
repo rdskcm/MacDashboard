@@ -379,6 +379,12 @@ enum IPhoneData {
         return String(digest.map { String(format: "%02x", $0) }.joined().prefix(16))
     }
 
+    /// IPHONE-UNLINK: the shape `deviceKey(udid:)` produces — exactly 16 characters of `0-9a-f`. A record id from a
+    /// hand-edited store that fails this never becomes a path component.
+    static func isDeviceKey(_ s: String) -> Bool {
+        s.count == 16 && s.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
+    }
+
     // MARK: - Crash-log classification
 
     /// The first line of a crash-log header (up to `\n`) as a JSON object, or nil when the

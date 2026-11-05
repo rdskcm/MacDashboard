@@ -9,7 +9,28 @@ import Observation
 
 @MainActor @Observable
 final class IPhoneModel {
-    static let shared = IPhoneModel()
+    /// Under `-visualFixture` every store lives in a temp folder (IPHONE-UNLINK D3): the fixture's tiles can be
+    /// unlinked, their archives trashed or claims saved without touching the user's App Support or Documents.
+    static let shared: IPhoneModel = {
+        guard VisualFixture.isRequested else { return IPhoneModel() }
+        let tmp = FileManager.default.temporaryDirectory
+        let pid = ProcessInfo.processInfo.processIdentifier
+        removeStaleFixtureFolders(in: tmp, keeping: pid)
+        let dir = tmp.appendingPathComponent("md-fixture-\(pid)", isDirectory: true)
+        return IPhoneModel(store: IPhoneStore(url: dir.appendingPathComponent("iphones.json")),
+                           archiveRoot: dir.appendingPathComponent("archive", isDirectory: true),
+                           logTypeStore: IPhoneLogTypeStore(url: dir.appendingPathComponent(IPhoneLogTypeStore.fileName)))
+    }()
+
+    /// Removes `md-fixture-<pid>` folders of processes that no longer run. Failures are ignored.
+    private nonisolated static func removeStaleFixtureFolders(in tmp: URL, keeping own: Int32) {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: tmp.path) else { return }
+        for n in names where n.hasPrefix("md-fixture-") {
+            guard let pid = Int32(n.dropFirst("md-fixture-".count)), pid > 0, pid != own else { continue }
+            if kill(pid, 0) != 0 && errno == ESRCH { try? fm.removeItem(at: tmp.appendingPathComponent(n)) }
+        }
+    }
 
     enum DeviceStatus: Equatable {
         case connected
@@ -215,6 +236,16 @@ final class IPhoneModel {
     /// Per device: when the last automatic crash-log listing started (memory only).
     @ObservationIgnored private var autoReadAt: [String: Date] = [:]
 
+    // MARK: Unlink (IPHONE-UNLINK)
+    enum UnlinkNotice: Equatable {
+        case saveFailed(name: String)
+        case trashFailed(count: Int, folder: String)
+    }
+    /// Shown as a banner on the Devices list; cleared by the next unlink, «Search again» and a service restart.
+    var unlinkNotice: UnlinkNotice?
+    /// Connections of phones unlinked while attached: ignored until they detach (Decision 2). Memory only.
+    @ObservationIgnored private var ignoredHandles: Set<IPhoneHandle> = []
+
     private let store: IPhoneStore
     private let logTypeStore: IPhoneLogTypeStore
     private let transport: MobileDeviceTransport
@@ -271,10 +302,19 @@ final class IPhoneModel {
 
     /// The kept file, wherever it is: the archive folder first, then the legacy App Support place; nil when gone.
     func keptArchiveURL(deviceKey: String, name: String) -> URL? {
+        Self.resolveKeptArchive(archiveRoot: archiveRoot, legacyRoot: IPhoneStore.legacyArchiveRoot(), deviceKey: deviceKey, name: name)
+    }
+
+    /// A name from `iphones.json` is a plain file name: not empty, `.`, `..`, and without a path separator.
+    nonisolated static func isPlainFileName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && name == (name as NSString).lastPathComponent
+    }
+
+    nonisolated private static func resolveKeptArchive(archiveRoot: URL, legacyRoot: URL, deviceKey: String, name: String) -> URL? {
         let fm = FileManager.default
         let current = archiveRoot.appendingPathComponent(deviceKey, isDirectory: true).appendingPathComponent(name)
         if fm.fileExists(atPath: current.path) { return current }
-        let legacy = IPhoneStore.legacyArchiveRoot().appendingPathComponent(deviceKey, isDirectory: true)
+        let legacy = legacyRoot.appendingPathComponent(deviceKey, isDirectory: true)
             .appendingPathComponent("sysdiagnose", isDirectory: true).appendingPathComponent(name)
         return fm.fileExists(atPath: legacy.path) ? legacy : nil
     }
@@ -346,9 +386,11 @@ final class IPhoneModel {
         switch event {
         case .attached(let h):
             attached.insert(h)
+            guard !ignoredHandles.contains(h) else { return }
             restartError = nil
             refresh(handle: h, trigger: .attach)
         case .detached(let h):
+            ignoredHandles.remove(h)
             attached.remove(h)
             logsLoading.detach(h)
             identityLoading.detach(h)
@@ -371,6 +413,7 @@ final class IPhoneModel {
     }
 
     func refresh(handle h: IPhoneHandle, trigger: ReadTrigger = .user) {
+        guard !ignoredHandles.contains(h) else { return }
         if let key = connected.first(where: { $0.value == h })?.key {
             status[key] = .reading
         }
@@ -568,8 +611,89 @@ final class IPhoneModel {
         importAnswer.removeValue(forKey: deviceKey)?.resume(returning: proceed)
     }
 
+    /// IPHONE-UNLINK: true while `h` is a connection of a phone unlinked during it (tests read this).
+    func isIgnored(_ h: IPhoneHandle) -> Bool { ignoredHandles.contains(h) }
+
+    /// IPHONE-UNLINK Decision 4: no unlink while the app is busy with this phone — an import (or its other-phone
+    /// question), the post-import deletion on the phone, a crash-log copy or save, or the archive folder being moved.
+    func canUnlink(_ key: String) -> Bool {
+        importing[key] == nil && importQuestion[key] == nil && !archiveFolderBusy
+            && phoneCleanup[key] != .deleting
+            && !logAction.keys.contains { $0.hasPrefix(key + "|") && isLogActionBusy($0) }
+    }
+
+    /// «Unlink device…» → Unlink. Order: save the store without the record (a failure changes nothing and shows
+    /// `.saveFailed`), cancel the sysdiagnose request, clear memory, then move the kept archives the record names to
+    /// the Trash off the main actor (resolved there like `keptArchiveURL`; names that are not plain file names are skipped). Never calls the
+    /// transport. No-op for an unknown or malformed key or when `canUnlink` is false. `trash` is injected by tests.
+    func unlink(deviceKey key: String,
+                trash: @escaping @Sendable (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) async {
+        guard IPhoneData.isDeviceKey(key), let record = devices.first(where: { $0.id == key }), canUnlink(key) else { return }
+        unlinkNotice = nil
+        let remaining = devices.filter { $0.id != key }
+        do { try store.save(remaining) } catch {
+            unlinkNotice = .saveFailed(name: record.name)
+            return
+        }
+        cancelSysdiagnoseRequest(deviceKey: key)          // before the record goes (DEVICE-ARCHIVE-CLEANUP)
+        requestPanelShown.remove(key)
+        devices = remaining
+        if let h = connected[key] {
+            ignoredHandles.insert(h)
+            logsLoading.detach(h)
+            identityLoading.detach(h)
+            storageLoading.detach(h)
+        }
+        connected[key] = nil
+        updatePolling(key)                                 // the list watch stops with the connection
+        status[key] = nil
+        lastSnapshot[key] = nil
+        logs[key] = nil
+        logsFailed.remove(key)
+        archiveLogs[key] = nil
+        importResult[key] = nil
+        keptTrashFailed[key] = nil
+        phoneCleanup[key] = nil
+        identityAsked.remove(key)
+        identity[key] = nil
+        identityFailed.remove(key)
+        storage[key] = nil
+        autoReadAt[key] = nil
+        for k in logAction.keys where k.hasPrefix(key + "|") { logAction[k] = nil }
+        for (k, url) in logCopies where k.hasPrefix(key + "|") {
+            logCopies[k] = nil
+            try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+        }
+        if headerCache[key] != nil {
+            headerCache[key] = nil
+            try? logTypeStore.save(headerCache)
+        }
+        if selectedDeviceKey == key { selectedDeviceKey = nil }
+
+        // Only a record that lists kept archives touches the archive folders: a phone without any never makes the
+        // app open ~/Documents (no Files & Folders prompt, REDESIGN-IPHONE Decision 5).
+        guard !record.keptArchives.isEmpty else { return }
+        let names = record.keptArchives.filter(Self.isPlainFileName)
+        let root = archiveRoot, legacy = IPhoneStore.legacyArchiveRoot()
+        let failed: [URL] = await Task.detached(priority: .utility) {
+            var failed: [URL] = []
+            let urls = names.compactMap { IPhoneModel.resolveKeptArchive(archiveRoot: root, legacyRoot: legacy, deviceKey: key, name: $0) }
+            for u in urls { do { try trash(u) } catch { failed.append(u) } }
+            guard failed.isEmpty else { return failed }
+            let own = root.appendingPathComponent(key, isDirectory: true)
+            let legacyDir = legacy.appendingPathComponent(key, isDirectory: true)
+            ArchiveMigration.removeEmptyDirectories([own], stopAt: root)
+            ArchiveMigration.removeEmptyDirectories(
+                [legacyDir.appendingPathComponent("sysdiagnose", isDirectory: true), legacyDir], stopAt: legacy)
+            return failed
+        }.value
+        if let first = failed.first {
+            unlinkNotice = .trashFailed(count: failed.count, folder: first.deletingLastPathComponent().path)
+        }
+    }
+
     private func apply(_ result: Result<IPhoneSnapshot, IPhoneReadError>, for h: IPhoneHandle, trigger: ReadTrigger) {
-        guard attached.contains(h) else { return }
+        guard attached.contains(h), !ignoredHandles.contains(h) else { return }
         switch result {
         case .success(let snap):
             let key = IPhoneData.deviceKey(udid: snap.udid)
@@ -778,6 +902,7 @@ final class IPhoneModel {
 
     func searchAgain() {
         restartError = nil
+        unlinkNotice = nil
         transport.restartDiscovery()
     }
 
@@ -790,6 +915,7 @@ final class IPhoneModel {
         restartingService = true
         defer { restartingService = false }
         restartError = nil
+        unlinkNotice = nil
         let outcome = await Task.detached {
             PrivilegedRunner.run(IPhoneData.usbmuxdRestartCommand)
         }.value
@@ -805,5 +931,14 @@ final class IPhoneModel {
             restartError = L.iphoneRestartFailed(L.privilegedTimedOut)
         }
         return outcome
+    }
+}
+
+extension IPhoneModel.UnlinkNotice {
+    var message: String {
+        switch self {
+        case .saveFailed(let name): return L.iphoneUnlinkSaveFailed(name)
+        case .trashFailed(let n, let folder): return L.iphoneUnlinkTrashFailed(n, folder)
+        }
     }
 }

@@ -64,7 +64,7 @@ private struct DS3ButtonBody: View {
         case .dangerSolid:
             label(.white)
                 .background(Capsule().fill(DS3.hot))
-                .ds3InsetRims(Capsule(), top: .white.opacity(0.35))
+                .ds3InsetRims(Capsule(), top: style.topRim > 0 ? .white.opacity(0.35) : nil)
                 .contentShape(Capsule())
         case .outline:
             // Transparent capsule with a .5 pt strong hairline and accent text (System › «Reset to defaults»).
@@ -170,6 +170,7 @@ struct DS3CircleButtonStyle: ButtonStyle {
     var disabledOpacity: Double = 0.45
     var ring: Color = DS3.line
     var topRim: Color? = nil
+    var fill: Color = DS3.chip
 
     func makeBody(configuration: Configuration) -> some View {
         DS3CircleButtonBody(configuration: configuration, style: self)
@@ -185,7 +186,7 @@ private struct DS3CircleButtonBody: View {
     var body: some View {
         configuration.label
             .frame(width: style.diameter, height: style.diameter)
-            .background(Circle().fill(DS3.chip))
+            .background(Circle().fill(style.fill))
             .ds3InsetRims(Circle(), top: style.topRim, ring: style.ring)
             .contentShape(Circle())
             .scaleEffect(configuration.isPressed && !reduceMotion ? DS3Motion.pressScale : 1)
@@ -196,27 +197,32 @@ private struct DS3CircleButtonBody: View {
 
 /// Big device tile: lifts under the pointer, presses in on click. Hover probe stays on the resting frame
 /// (`hover-offset-hit-test`): the outer wrapper owns `contentShape`/`onHover`, the inner content is offset.
+/// `pinned` holds the hover pose while the tile's menu panel is open (IPHONE-UNLINK); Reduce Motion still drops it.
 struct DS3TileButtonStyle: ButtonStyle {
+    var pinned = false
+
     func makeBody(configuration: Configuration) -> some View {
-        DS3TileButtonBody(configuration: configuration)
+        DS3TileButtonBody(configuration: configuration, pinned: pinned)
     }
 }
 
 private struct DS3TileButtonBody: View {
     let configuration: ButtonStyleConfiguration
+    let pinned: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hover = false
 
     var body: some View {
-        ZStack {
+        let lifted = hover || pinned
+        return ZStack {
             configuration.label
                 .geometryGroup()
-                .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? DS3Motion.tilePressScale : (hover ? DS3Motion.tileHoverScale : 1)))
-                .offset(y: (!reduceMotion && hover && !configuration.isPressed) ? DS3Motion.tileHoverLift : 0)
+                .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? DS3Motion.tilePressScale : (lifted ? DS3Motion.tileHoverScale : 1)))
+                .offset(y: (!reduceMotion && lifted && !configuration.isPressed) ? DS3Motion.tileHoverLift : 0)
         }
         .contentShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
         .onHover { hover = $0 }
-        .animation(reduceMotion ? nil : DS3Motion.tile, value: hover)
+        .animation(reduceMotion ? nil : DS3Motion.tile, value: lifted)
         .animation(reduceMotion ? nil : DS3Motion.tile, value: configuration.isPressed)
     }
 }
