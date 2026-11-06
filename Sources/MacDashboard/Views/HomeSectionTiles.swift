@@ -30,7 +30,7 @@ struct HomeSectionsGrid: View {
     var animatesEntrance = true
 
     var body: some View {
-        let tiles = HomeInput.tiles(model)
+        let tiles = HomeInput.tiles(model, narrow: tier.isNarrow)
         // Equal columns (`equal-split-columns`) from a non-lazy layout: eight static tiles gain nothing from
         // laziness, and a lazy grid leaves the tiles below the fold out of the accessibility tree (the visual
         // and perf harnesses press `home-tile-*` by AX identifier without scrolling).
@@ -53,6 +53,8 @@ struct HomeSectionTile: View {
                 top
                 if tile.skeleton {
                     HomeShimmerCapsule()
+                } else if let row = tile.socRow {
+                    HomeSocStatusRow(row: row)
                 } else {
                     DS3Tag(tone: tile.tagTone.ds3Tag, text: tile.tagText).help(tile.tagText)
                 }
@@ -94,6 +96,56 @@ struct HomeSectionTile: View {
                 HomeMiniKV(kv: kv)
             }
         }
+    }
+}
+
+/// SOC-DETAILS 4.3 (design 7.13): the SoC tile's status row. Full width, height 30, radius 12, padding 0 x 12, gap 9:
+/// rail (or an 8 pt dot for high load), text 12.5 / 650, the right value 12.5 / 700. Calm is a field well with a 1 pt
+/// line ring, attention a 26 to 11 % tint with a 0.5 pt 45 % ring.
+struct HomeSocStatusRow: View {
+    let row: HomeSocRow
+
+    var body: some View {
+        switch row.kind {
+        case .empty:
+            Color.clear.frame(height: 30)
+        case .thermal(let step, let text, let help):
+            content(help: help) { SocThermalRail(step: step, tone: row.textTone.fill, stepWidth: 9) } label: {
+                Text(text).baselineOffset(SocReadoutChip.wordLift(size: 12.5, weight: .semibold))
+            }
+        case .highLoad(let text, let help):
+            content(help: help) { Circle().fill(row.textTone.fill).frame(width: 7, height: 7) } label: { Text(text) }
+        }
+    }
+
+    private func content<Lead: View>(help: String, @ViewBuilder lead: () -> Lead, @ViewBuilder label: () -> Text) -> some View {
+        HStack(spacing: 9) {
+            lead()
+            label()
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(row.textTone.ink)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if let right = row.rightText {
+                Text(right)
+                    .font(.system(size: 12.5, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(row.rightTone.ink)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .frame(height: 30)
+        .background {
+            if row.rowTone.isAttention {
+                Color.clear.ds3TintPanel(row.rowTone.fill, from: 0.26, to: 0.11, ring: 0.45, cornerRadius: 12)
+            } else {
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(DS3.field)
+                    .ds3InsetRims(RoundedRectangle(cornerRadius: 12, style: .continuous), ring: DS3.line, ringWidth: 1)
+            }
+        }
+        .hoverTip(help)
     }
 }
 

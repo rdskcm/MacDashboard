@@ -21,7 +21,9 @@ struct HomeNowCard: View {
         let columns = hasBattery ? (narrow ? 2 : 4) : 3
         let tasks = HomeModel.tasks(input.assessment, report: input.report, disk: input.disk, battery: model.battery)
         let cells = HomeModel.nowCells(input, tasks: tasks, memPressure: model.memPressure, socTempC: model.socTempC,
-                                       gpuUtil: model.gpuUtil, cpu: model.cpu, short: short, narrow: narrow)
+                                       gpuUtil: model.gpuUtil, cpu: model.cpu,
+                                       cpuHigh: model.cpu.map { CPULoad.isHigh($0, since: model.cpuHighSince, now: input.now) } ?? false,
+                                       short: short, narrow: narrow)
         DS3Card(title: L.commonNow, caption: L.homeEverySeconds(model.settings.fastIntervalSeconds)) {
             EqualColumnsLayout(columns: columns, spacing: 8) {
                 ForEach(cells) { cell in
@@ -36,6 +38,8 @@ struct HomeNowCard: View {
 struct HomeNowCellView: View {
     let cell: HomeNowCell
     let onOpen: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: onOpen) {
@@ -66,22 +70,33 @@ struct HomeNowCellView: View {
         .accessibilityIdentifier("home-now-\(cell.kind.rawValue)")
     }
 
-    /// GPU-UTILIZATION: the SoC cell's two figures. Kicker over value, two equal columns; the Spacer after it pins the
-    /// foot to the neighbours' foot line (the Now card's EqualColumnsLayout proposes the row height to every cell).
+    /// GPU-UTILIZATION: the SoC cell's two figures. Kicker over value over a 5 pt bar (SOC-DETAILS 4.2, design 7.13),
+    /// two equal columns; the Spacer after it pins the foot to the neighbours' foot line (the Now card's
+    /// EqualColumnsLayout proposes the row height to every cell). The bar is a `BarFillLayer`, one Core Animation commit
+    /// per tick (`gpu-per-frame`).
     private var figures: some View {
         EqualColumnsLayout(columns: 2, spacing: 8) {
             ForEach(Array(cell.figures.enumerated()), id: \.offset) { _, f in
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(f.kicker)
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(DS3.muted)
                         .lineLimit(1)
                     Text(f.value)
-                        .font(.system(size: 26, weight: .heavy))
-                        .tracking(-0.78)
+                        .font(.system(size: 34, weight: .heavy))   // 760 in the mockup: heavy is the nearest named weight
+                        .tracking(-1.02)
                         .monospacedDigit()
                         .foregroundStyle(f.dimmed ? DS3.muted : DS3.ink)
                         .lineLimit(1)
+                    Capsule().fill(DS3.track)
+                        .frame(height: 5)
+                        .overlay {
+                            BarFillLayer(spans: [BarSpan(key: "fill", fraction: CGFloat(f.fraction), color: homeSeriesColor(f.bar))],
+                                         layout: .single(minWidth: 0, cornerRadius: nil), animated: !reduceMotion)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .opacity(f.dimmed ? 0.5 : 1)
+                        .accessibilityHidden(true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -105,7 +120,9 @@ struct HomeNowCellView: View {
                 .lineLimit(1)
                 .help(cell.label)
             Spacer(minLength: 4)
-            if let text = cell.chipText, let tone = cell.chipTone {
+            if let text = cell.chipText, let tone = cell.chipTone, cell.kind == .cpu, let gauge = cell.chipGauge {
+                socChip(text, tone: tone, gauge: gauge)
+            } else if let text = cell.chipText, let tone = cell.chipTone {
                 Text(text)
                     .font(.system(size: 12, weight: .semibold))
                     .monospacedDigit()
@@ -117,6 +134,31 @@ struct HomeNowCellView: View {
                     .help(text)
             }
         }
+    }
+
+    /// SOC-DETAILS 4.2 (design 7.13): height 24, padding 0 x 10, gauge + value 13 / 700. Calm is a field well with a
+    /// 1 pt line ring, warm / hot a tint panel with a 0.5 pt 45 % ring.
+    @ViewBuilder
+    private func socChip(_ text: String, tone: HomeTone, gauge: HomeChipGauge) -> some View {
+        let attention = tone == .amber || tone == .hot
+        HStack(spacing: 8) {
+            SocTemperatureGauge(zone: gauge.zone, markerX: gauge.markerX, width: 34)
+            Text(text)
+                .font(.system(size: 13, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(attention ? tone.ink : DS3.ink)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 24)
+        .background {
+            if attention {
+                Color.clear.ds3TintPanel(tone.base, from: 0.26, to: 0.11, ring: 0.45, cornerRadius: 999)
+            } else {
+                Capsule().fill(DS3.field).ds3InsetRims(Capsule(), ring: DS3.line, ringWidth: 1)
+            }
+        }
+        .hoverTip(L.socTemperatureHelp)
     }
 
     private var valueRow: some View {

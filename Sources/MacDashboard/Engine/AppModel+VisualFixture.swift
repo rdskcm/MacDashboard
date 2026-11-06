@@ -21,6 +21,10 @@ extension AppModel {
         topCPU = d.topCPU
         topMem = d.topMem
         cpuHistory = d.cpuHistory
+        // SOC-DETAILS: GPU history of the same 61 instants and the reference page-tick state (the page's `.task` must
+        // not overwrite it: `applyFixture` locks the sampler).
+        gpuHistory = d.gpuHistory.map { ($0.0, VisualFixture.gpuUnavailableRequested ? nil : $0.1) }
+        socLive.applyFixture(d.socLive)
         report = d.report
         assessment = d.assessment
         history.applyFixture(d.history)
@@ -80,5 +84,46 @@ extension AppModel {
         energy.applyFixture(.idle)
         // REDESIGN-BACKUPS: destination collected at the reference time, no poll sample, no action in flight.
         timeMachine.applyFixture(updatedAt: ref, backup: nil, action: .idle)
+        // SOC-DETAILS: launch-argument variants of the SoC page (`-fixtureCores`, `-fixtureTemp`, ...).
+        let socOptions = VisualFixture.SocFixtureOptions.fromLaunchArguments()
+        if socOptions != VisualFixture.SocFixtureOptions() { applySocFixture(socOptions) }
+    }
+
+    /// SOC-DETAILS §2.7: one SoC page variant on top of the reference fixture (`applyVisualFixture` first). Each option
+    /// maps to a `socLive.applyFixture`, `applyFixtureCPU` or `applyFixtureThermal` call, so the launch arguments and
+    /// the snapshot suite (`fixtureHome { $0.applySocFixture(...) }`) set the same state.
+    func applySocFixture(_ o: VisualFixture.SocFixtureOptions) {
+        let ref = VisualFixture.referenceDate
+        socTempC = VisualFixture.socTempC(o, reference: socTempC)
+        applyFixtureThermal(VisualFixture.thermal(o))
+        load = VisualFixture.loadAverage(o, reference: load ?? [])
+        switch o.cpu {
+        case .reference: break
+        case .high:
+            cpu = CPUUsage(user: 78.6, sys: 12.6, idle: 8.8)
+            applyFixtureCPU(Self.fixtureCPUBlock(failed: false), highSince: ref.addingTimeInterval(-190))
+        case .failed:
+            applyFixtureCPU(Self.fixtureCPUBlock(failed: true), highSince: nil)
+        case .notYet:
+            applyFixtureCPU(BlockState(.cpu, createdAt: ref), highSince: nil)
+        }
+        let history = VisualFixture.socHistory(o, cpu: cpuHistory, gpu: gpuHistory)
+        cpuHistory = history.cpu
+        gpuHistory = history.gpu
+        socLive.applyFixture(VisualFixture.socLive(o))
+    }
+
+    /// A CPU block that answered at the reference time, or one that failed 8 s later than its last good reading
+    /// (the mockup's "last data 10:29:52").
+    private static func fixtureCPUBlock(failed: Bool) -> BlockState {
+        let ref = VisualFixture.referenceDate
+        var s = BlockState(.cpu, createdAt: ref.addingTimeInterval(-60))
+        s.begin(at: ref.addingTimeInterval(failed ? -40 : -2), showsLoading: false)
+        s.succeed(at: ref.addingTimeInterval(failed ? -8 : 0))
+        if failed {
+            s.begin(at: ref.addingTimeInterval(-5), showsLoading: true)
+            s.fail(.noReading)
+        }
+        return s
     }
 }

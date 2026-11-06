@@ -58,6 +58,31 @@ struct HomeTile: Identifiable, Equatable {
     let kvs: [HomeKV]               // always 2
     let destination: Destination
     let hotRing: Bool
+    /// SOC-DETAILS 4.3: the SoC tile's status row, drawn in place of the tag. nil for every other page.
+    var socRow: HomeSocRow? = nil
+}
+
+/// SOC-DETAILS 4.3 (design 7.13): the SoC tile's full-width status row. Tones reuse the SoC page's `CPUNoteTone`
+/// (green = calm and normal, neutral = elevated, amber, hot); `rowTone` is the tint (calm unless amber / hot).
+struct HomeSocRow: Equatable {
+    enum Kind: Equatable {
+        case thermal(step: Int, text: String, help: String)   // text: the word at 1150, the full text at 900
+        case highLoad(text: String, help: String)
+        case empty                                            // height reserved, nothing drawn
+    }
+    let kind: Kind
+    let rightText: String?
+    let rowTone: CPUNoteTone
+    let textTone: CPUNoteTone
+    let rightTone: CPUNoteTone
+
+    /// VoiceOver text: what the row draws, in reading order.
+    var accessibilityText: String {
+        switch kind {
+        case .thermal(_, let text, _), .highLoad(let text, _): return [text, rightText].compactMap { $0 }.joined(separator: " ")
+        case .empty: return ""
+        }
+    }
 }
 
 extension HomeTile {
@@ -65,7 +90,7 @@ extension HomeTile {
     /// pair. Used by `HomeSectionTile`; covered by HomeModelTests.
     var accessibilityText: String {
         var parts = [name, sub]
-        if !skeleton { parts += [tagText] + kvs.map { "\($0.label) \($0.value)" } }
+        if !skeleton { parts += [socRow?.accessibilityText ?? tagText] + kvs.map { "\($0.label) \($0.value)" } }
         return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }
@@ -102,6 +127,11 @@ struct HomeInput {
     /// Precomputed history figures. The app passes the model's cached digest (recomputed only when the history
     /// changes) and leaves `history` empty; when nil, the digest is derived from `history`.
     var historyDigest: HomeHistoryDigest? = nil
+    /// SOC-DETAILS 4.3: the SoC tile's row reads these (already sampled by the model, no new system read).
+    var socTempC: Int? = nil
+    var thermal: ThermalLevel? = nil
+    var cpu: CPUUsage? = nil
+    var cpuHighSince: Date? = nil
 }
 
 /// The history-derived figures of the History tile: entry count and the two quarter-window monthly slopes.
@@ -403,7 +433,7 @@ enum HomeModel {
 
     // MARK: tiles
 
-    static func tiles(_ input: HomeInput, tasks: [HomeTask], scan: HomeScan) -> [HomeTile] {
+    static func tiles(_ input: HomeInput, tasks: [HomeTask], scan: HomeScan, narrow: Bool = false) -> [HomeTile] {
         var pages: [Page] = [.cpu, .memory, .storage, .battery, .security, .backups, .system, .history]
         if !input.hasBattery { pages.removeAll { $0 == .battery } }
         let skeleton = scan == .firstScan
@@ -421,8 +451,38 @@ enum HomeModel {
                             tagText: skeleton ? "" : (first?.tileTag ?? okTag),
                             skeleton: skeleton, kvs: kvs,
                             destination: first?.destination ?? Destination(page, focus: page.defaultFocus),
-                            hotRing: first?.tone == .hot && !skeleton)
+                            hotRing: first?.tone == .hot && !skeleton,
+                            socRow: page == .cpu ? socRow(for: input, narrow: narrow) : nil)
         }
+    }
+
+    /// The SoC tile's row for the model values of `input`.
+    static func socRow(for i: HomeInput, narrow: Bool) -> HomeSocRow {
+        let high = i.cpu.map { CPULoad.isHigh($0, since: i.cpuHighSince, now: i.now) } ?? false
+        return socRow(thermal: i.thermal, socTempC: i.socTempC, cpuHigh: high,
+                      highMinutes: CPULoad.highMinutes(since: i.cpuHighSince, now: i.now),
+                      cpuPct: i.cpu.map { Int(CPULoad.usage($0).rounded()) }, narrow: narrow)
+    }
+
+    /// Design 7.13 tone rule. High load wins (amber row, "High load", the CPU share on the right, the minutes in the
+    /// tip). Otherwise the thermal state word with its rail step and the chip temperature on the right. Text takes the
+    /// thermal tone, the right value the temperature tone when warm / hot, the row tint the more severe of the two.
+    /// Thermal unknown and load normal: `.empty`.
+    static func socRow(thermal: ThermalLevel?, socTempC: Int?, cpuHigh: Bool, highMinutes: Int?, cpuPct: Int?,
+                       narrow: Bool) -> HomeSocRow {
+        if cpuHigh {
+            return HomeSocRow(kind: .highLoad(text: L.cpuTagHigh, help: highMinutes.map { L.cpuHighLoadFor($0) } ?? L.cpuTagHigh),
+                              rightText: cpuPct.map { L.homePercent("\($0)") },
+                              rowTone: .amber, textTone: .amber, rightTone: .amber)
+        }
+        // Home is the reverse of the page bar: the word only at 1150 (the row is 226 wide), the full text at 900 (378).
+        let r = SocReadout.make(socTempC: socTempC, thermal: thermal, powerW: nil, narrow: false, tagVisible: false)
+        guard let th = r.thermal else { return HomeSocRow(kind: .empty, rightText: nil, rowTone: .green, textTone: .green, rightTone: .green) }
+        let tempTone: CPUNoteTone? = r.temperature.flatMap { $0.zone == 2 ? .hot : ($0.zone == 1 ? .amber : nil) }
+        func severity(_ t: CPUNoteTone?) -> Int { t == .hot ? 2 : (t == .amber ? 1 : 0) }
+        let rowTone: CPUNoteTone = severity(tempTone) >= severity(th.tone) ? (tempTone ?? .green) : th.tone
+        return HomeSocRow(kind: .thermal(step: th.step, text: narrow ? th.full : th.word, help: "\(th.full). \(th.help)"),
+                          rightText: r.temperature?.value, rowTone: rowTone, textTone: th.tone, rightTone: tempTone ?? th.tone)
     }
 
     /// OK tag, normal sub line and the two mini KVs of one tile.
@@ -530,7 +590,15 @@ struct HomeBatteryBar: Equatable {
 }
 
 /// GPU-UTILIZATION: one of the SoC cell's two figures (CPU, GPU). `spoken` is its VoiceOver text.
-struct HomeNowFigure: Equatable { let kicker: String; let value: String; let spoken: String; let dimmed: Bool }
+/// `fraction` (0...1) and `bar` (the fill's series colour) draw the 5 pt bar under the figure.
+struct HomeNowFigure: Equatable {
+    let kicker: String; let value: String; let spoken: String; let dimmed: Bool
+    var fraction: Double = 0
+    var bar: HomeSeries = .s1
+}
+
+/// The temperature gauge of the Now chip: zone 0 normal / 1 warm / 2 hot and the marker position (design 7.12).
+struct HomeChipGauge: Equatable { let zone: Int; let markerX: Double }
 
 struct HomeNowCell: Identifiable, Equatable {
     var id: HomeNowKind { kind }
@@ -548,6 +616,8 @@ struct HomeNowCell: Identifiable, Equatable {
     let legend: [HomeLegendItem]
     let foot: String
     let destination: Destination
+    /// SoC cell only, nil when the temperature is unavailable (no chip then).
+    var chipGauge: HomeChipGauge? = nil
 }
 
 extension HomeNowCell {
@@ -572,7 +642,7 @@ extension HomeModel {
 
     /// The Now card cells (battery omitted when the Mac has none).
     static func nowCells(_ input: HomeInput, tasks: [HomeTask], memPressure: MemoryPressureLevel?, socTempC: Int?, gpuUtil: Int?,
-                         cpu: CPUUsage?, short: Bool, narrow: Bool) -> [HomeNowCell] {
+                         cpu: CPUUsage?, cpuHigh: Bool = false, short: Bool, narrow: Bool) -> [HomeNowCell] {
         func task(_ k: AttentionKind) -> HomeTask? { tasks.first { $0.kind == k } }
         func loadingCell(_ kind: HomeNowKind, _ label: String, _ dest: Destination,
                          figures: [HomeNowFigure] = []) -> HomeNowCell {
@@ -588,7 +658,7 @@ extension HomeModel {
         // CPU
         let cpuDest = Destination(.cpu, focus: .cpu)
         if let cpu {
-            var chipTone: HomeTone? = nil, chipText: String? = nil
+            var chipTone: HomeTone? = nil, chipText: String? = nil, chipGauge: HomeChipGauge? = nil
             if let t = socTempC {
                 chipText = "\(t) °C"
                 switch CPULoad.socLevel(t) {   // the CPU page tile reads the same level
@@ -596,22 +666,26 @@ extension HomeModel {
                 case .warm: chipTone = .amber
                 case .normal: chipTone = .green
                 }
+                let zone = chipTone == .hot ? 2 : (chipTone == .amber ? 1 : 0)
+                chipGauge = HomeChipGauge(zone: zone, markerX: SocReadout.markerX(celsius: t))
             }
             let foot: String
             if let l = input.load, let l0 = l.first { foot = L.homeLoadCores(fmtFixed(l0, decimals: 2), input.ncpu) }
             else { foot = L.homeCoresOnly(input.ncpu) }
             let cpuPct = L.homePercent(fmtFixed(cpu.user + cpu.sys, decimals: 0))
-            let cpuFigure = HomeNowFigure(kicker: L.commonCPU, value: cpuPct, spoken: "\(L.commonCPU) \(cpuPct)", dimmed: false)
+            let cpuFigure = HomeNowFigure(kicker: L.commonCPU, value: cpuPct, spoken: "\(L.commonCPU) \(cpuPct)", dimmed: false,
+                                         fraction: min(1, max(0, CPULoad.usage(cpu) / 100)), bar: cpuHigh ? .amber : .s1)
             let gpuFigure: HomeNowFigure = gpuUtil.map {
-                HomeNowFigure(kicker: L.commonGPU, value: L.homePercent("\($0)"), spoken: "\(L.commonGPU) \(L.homePercent("\($0)"))", dimmed: false)
-            } ?? HomeNowFigure(kicker: L.commonGPU, value: "—", spoken: "\(L.commonGPU): \(L.gpuNotAvailable)", dimmed: true)
+                HomeNowFigure(kicker: L.commonGPU, value: L.homePercent("\($0)"), spoken: "\(L.commonGPU) \(L.homePercent("\($0)"))", dimmed: false,
+                              fraction: min(1, max(0, Double($0) / 100)), bar: .s6)
+            } ?? HomeNowFigure(kicker: L.commonGPU, value: "—", spoken: "\(L.commonGPU): \(L.gpuNotAvailable)", dimmed: true, bar: .s6)
             cells.append(HomeNowCell(kind: .cpu, label: L.commonSoC, tone: .neutral, chipTone: chipTone, chipText: chipText,
                                      big: "", of: "", figures: [cpuFigure, gpuFigure], loading: false,
-                                     segments: [], batteryBar: nil, legend: [], foot: foot, destination: cpuDest))
+                                     segments: [], batteryBar: nil, legend: [], foot: foot, destination: cpuDest, chipGauge: chipGauge))
         } else {
             cells.append(loadingCell(.cpu, L.commonSoC, cpuDest, figures: [
                 HomeNowFigure(kicker: L.commonCPU, value: "—", spoken: "", dimmed: true),
-                HomeNowFigure(kicker: L.commonGPU, value: "—", spoken: "", dimmed: true)]))
+                HomeNowFigure(kicker: L.commonGPU, value: "—", spoken: "", dimmed: true, bar: .s6)]))
         }
 
         // Memory

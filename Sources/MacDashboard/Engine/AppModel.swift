@@ -11,6 +11,15 @@ import Observation
 @MainActor
 @Observable
 final class AppModel {
+    /// Fast-task history window: the last 61 samples (SOC-DETAILS D5).
+    nonisolated static let historyLimit = 61
+
+    /// Appends one sample and keeps only the last `historyLimit`.
+    nonisolated static func appendTrimmed<V>(_ history: inout [(Date, V)], _ sample: (Date, V)) {
+        history.append(sample)
+        if history.count > historyLimit { history.removeFirst(history.count - historyLimit) }
+    }
+
     // Per-field observable state (replaces the monolithic `live` snapshot). Each is
     // assigned under an equality guard in the live loop so a card reading only one
     // field doesn't re-render when an unrelated field changed — @Observable fires a
@@ -30,6 +39,9 @@ final class AppModel {
     /// GPU-UTILIZATION: whole-machine GPU load %, `Device Utilization %` of the IOAccelerator entry (undocumented key),
     /// sampled by the fast task next to socTempC. nil = unavailable — the SoC page and the Home SoC cell show «—».
     var gpuUtil: Int? = nil
+    /// SOC-DETAILS D6: the GPU load kept next to `cpuHistory` for the SoC page's 2-minute chart. Appended on every fast
+    /// tick (nil allowed: a nil reading breaks only the GPU line), trimmed to 61 samples (D5).
+    var gpuHistory: [(Date, Int?)] = []
     /// THERMAL-STATE: macOS thermal state from ProcessInfo, updated by thermalStateDidChangeNotification (no polling).
     private(set) var thermal: ThermalLevel? = nil
     var topCPU: [ProcEntry] = []
@@ -114,7 +126,7 @@ final class AppModel {
         reportText = text
     }
 
-    var cpuHistory: [(Date, Double)]  // last 60 points of user+sys for sparkline
+    var cpuHistory: [(Date, Double)]  // last 61 points of user+sys (SOC-DETAILS D5: the chart's 2 minutes at the 2 s setting)
     var report: FullReport            // sections fill in as collected
 
     /// Last non-nil `report.system`, retained across refreshes. `refreshReport()` rebuilds
@@ -235,6 +247,11 @@ final class AppModel {
     /// Home History digest); views read `model.history.<member>`.
     let history: HistoryController
 
+    /// SOC-DETAILS D22: the SoC page tick (per-core load, frequency, whole-Mac power, top GPU processes). Idle until the
+    /// SoC page's `.task` runs `socLive.run()`; it reads nothing while the page is closed, the app is in the background
+    /// or the window is hidden.
+    let socLive: SocLiveSampler
+
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
     init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live) {
         self.settings = settings
@@ -286,6 +303,8 @@ final class AppModel {
                                                                      checkUpdates: { st.startUpdateCheckIfNeeded(trigger: .button) }))
         history = HistoryController(host: reportHost, time: time,
                                     deps: .live(directory: url.deletingLastPathComponent(), settings: settings))
+        socLive = SocLiveSampler(interval: { settings.fastIntervalSeconds },
+                                 isPaused: { link.model?.isPaused ?? true }, time: time)
         if let countedAt = st.folderSizesCountedAt { foldersBlock.succeed(at: countedAt) }   // cached count = last good
         // ARCH-SETTINGS-PATH: the one write path — any change of an assessment setting re-assesses this model.
         settings.onAssessmentSettingsChange = { [weak self] old in self?.assessmentSettingsChanged(from: old) }
@@ -495,11 +514,10 @@ final class AppModel {
                 self.lastSampleAt = snap.t
                 if let cpu = snap.cpu {
                     self.recordCPUSample(cpu, at: snap.t)
-                    self.cpuHistory.append((snap.t, cpu.user + cpu.sys))
-                    if self.cpuHistory.count > 60 {
-                        self.cpuHistory.removeFirst(self.cpuHistory.count - 60)
-                    }
+                    Self.appendTrimmed(&self.cpuHistory, (snap.t, cpu.user + cpu.sys))
                 }
+                // SOC-DETAILS D6: one memory append, no new system call. A failed GPU read is kept as nil (a gap).
+                Self.appendTrimmed(&self.gpuHistory, (snap.t, gpuUtil))
                 // `self.report` is a partial during a collect and a partial must never be
                 // assessed — it would resurrect the header churn (V2-HEADER-CHURN). But the
                 // live disk/swap readings are ready every tick, so instead of freezing the

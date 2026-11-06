@@ -331,7 +331,7 @@ struct MacContentView: View {
                     .zIndex(0)   // default (opacity) transition: fades out under an opening page and in on Back
             }
             if router.destination.page == .cpu {
-                CPUPage(model: model, router: router)
+                CPUPage(model: model, router: router, narrow: breakpoints.narrow)
                     .id(router.destination.page)
                     .transition(.identity)   // pages have no fade of their own (as before)
                     .zIndex(1)               // a removing Home stays under the incoming page
