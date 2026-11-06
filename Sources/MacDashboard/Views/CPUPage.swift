@@ -1,8 +1,11 @@
 // Views/CPUPage.swift
 // REDESIGN-CPU: the CPU section page (handoff 03-cpu) on the shared §8 blocks (SectionPageBlocks.swift):
 // page bar (Back, icon, title, sub line, state tag) and the restyled Processes card. GPU-UTILIZATION: it is
-// now the SoC page: CPU card, GPU card, chip-temperature block (SoCCards) and the Processes card.
-// All texts and states come from the pure `CPUPageModel`; this file only draws them.
+// now the SoC page. SOC-DETAILS Stage 2 (mockups/SoC.dc.html): the page bar carries the readout chip (chip
+// temperature, thermal state, whole-Mac power); the page is CPU / GPU pair (SoCCards), CPU cores card
+// (SocCoresCard), the 2-minute chart card (SocChartCard) and the Processes card, with the CPU read-failure
+// note above the pair only in that state.
+// All texts and states come from the pure `CPUPageModel` / `SocPageModel`; this file only draws them.
 
 import SwiftUI
 
@@ -10,23 +13,30 @@ import SwiftUI
 struct CPUPage: View {
     let model: AppModel
     let router: NavigationRouter
+    /// Window below 1000 pt (`breakpoints.narrow`): the sub line and the readout chip shorten (design 7.3). The
+    /// default keeps callers that have no breakpoint (the HiddenContent test) compiling.
+    var narrow = false
 
     @State private var pulse: CardID? = nil
 
-    /// Reads no live model field (only `router.navigationSerial` / `destination`): `CPUPageBar` and
-    /// `SoCCards` do the reading, so a 2 s tick never re-evaluates the page itself (same rule as `HomeNowCard`).
+    /// Reads no live model field (only `router.navigationSerial` / `destination`): `CPUPageBar`, `SoCCards` and the
+    /// other cards do the reading, so a 2 s tick never re-evaluates the page itself (same rule as `HomeNowCard`).
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    SocFailureNote(model: model)
                     SoCCards(model: model)
                         .id(CardID.cpu)
                         .sectionFocusPulse(pulse == .cpu)
-                        .ds3Appear(delay: 0.08)
+                    SocCoresCard(model: model)
+                        .ds3Appear(delay: 0.24)
+                    SocChartCard(model: model)
+                        .ds3Appear(delay: 0.30)
                     ProcessListCard(model: model, initialMetric: .cpu, onConfirmShown: { router.isInlineConfirmOpen = $0 })
                         .id(CardID.procs)
                         .sectionFocusPulse(pulse == .procs)
-                        .ds3Appear(delay: 0.14)
+                        .ds3Appear(delay: 0.36)
                 }
                 .padding(.horizontal, 28)
                 .padding(.bottom, 36)
@@ -34,7 +44,7 @@ struct CPUPage: View {
             }
             .contentMargins(.top, 16, for: .scrollContent)
             .ds3KeepFocusScroll(pulse, top: .cpu, proxy: proxy, router: router)
-            .safeAreaInset(edge: .top, spacing: 0) { CPUPageBar(model: model, onBack: { _ = router.back() }) }
+            .safeAreaInset(edge: .top, spacing: 0) { CPUPageBar(model: model, narrow: narrow, onBack: { _ = router.back() }) }
             .task(id: router.navigationSerial) {
                 // Deep link: scroll the focused card under the bar (the CPU card is already on top) and pulse it.
                 let d = router.destination
@@ -47,6 +57,9 @@ struct CPUPage: View {
         }
         .ds3Appear(offset: CGSize(width: 28, height: 0), scale: 1, animation: DS3Motion.page)
         .onDisappear { router.isInlineConfirmOpen = false }
+        // SOC-DETAILS D22: the page tick lives exactly as long as this page (SwiftUI cancels the task on unmount), so
+        // nothing is read while another page is shown, the app is in the background or the window is hidden.
+        .task { await model.socLive.run() }
     }
 }
 
@@ -57,15 +70,20 @@ struct CPUPage: View {
 @MainActor
 struct CPUPageBar: View {
     let model: AppModel
+    /// Window below 1000 pt (`breakpoints.narrow`).
+    let narrow: Bool
     let onBack: () -> Void
 
     var body: some View {
-        let m = CPUPageModel.make(cpuPageInput(model))
+        let m = CPUPageModel.make(cpuPageInput(model, compactSub: narrow))
+        // §7.3: the state tag is hidden in the OK state (it only repeated the calm green of the readout chip).
+        let tagVisible = m.tag != .ok
         SectionPageBar(symbol: Page.cpu.symbol, title: Page.cpu.title, sub: m.sub, subIsFailure: m.subIsFailure,
                        onBack: onBack) {
-            DS3Tag(tone: tone(m.tag), text: m.tagText).help(m.tagText)
+            if tagVisible { DS3Tag(tone: tone(m.tag), text: m.tagText).help(m.tagText) }
         } trailing: {
-            EmptyView()
+            SocReadoutChip(model: model, narrow: narrow, tagVisible: tagVisible)
+                .layoutPriority(1)
         }
     }
 
@@ -81,81 +99,53 @@ struct CPUPageBar: View {
 
 // MARK: - SoC cards
 
-/// Internal: the visual fixture renders it. CPU card, GPU card (equal height) and the chip-temperature block.
+/// Internal: the visual fixture renders it. CPU card and GPU card, equal height by construction: both are
+/// header 32 · 16 · hero 147 · 16 · detail 218 = 473 pt, so neither can have a hole (design 7.4).
 @MainActor
 struct SoCCards: View {
     let model: AppModel
 
     var body: some View {
         let m = CPUPageModel.make(cpuPageInput(model))
-        VStack(alignment: .leading, spacing: 16) {
-            EqualColumnsLayout(columns: 2, spacing: 16, fillsHeight: true) {
-                DS3Card(title: L.commonCPU, caption: m.caption, fillsHeight: true) {
-                    if m.showsWait {
-                        SectionWait(text: L.commonCollectingData)
-                    } else {
-                        VStack(alignment: .leading, spacing: 16) {
-                            if let note = m.failureNote { SectionNote(tone: DS3.hot, text: note) }
-                            SectionHero(label: L.cpuUsage, value: m.hero.value, fraction: m.hero.fraction, note: m.hero.note,
-                                        tone: m.hero.high ? DS3.amber : DS3.accent,
-                                        toneInk: m.hero.high ? DS3.amberInk : DS3.accentInk,
-                                        dimmed: m.hero.dimmed)
-                                .fixedSize(horizontal: false, vertical: true)
-                            EqualColumnsLayout(columns: 2, spacing: 8, fillsHeight: true) {
-                                ForEach(m.tiles.indices, id: \.self) { tile(m.tiles[$0]) }
-                            }
-                            Spacer(minLength: 0)
-                        }
+        let loadAverage = SocLoadAverage.make(load: model.load)
+        EqualColumnsLayout(columns: 2, spacing: 16, fillsHeight: true) {
+            DS3Card(title: L.commonCPU, caption: m.caption, fillsHeight: true) {
+                VStack(alignment: .leading, spacing: 16) {
+                    SectionHero(label: L.cpuUsage, value: m.hero.value, fraction: m.hero.fraction, note: m.hero.note,
+                                tone: m.hero.high ? DS3.amber : DS3.accent,
+                                toneInk: m.hero.high ? DS3.amberInk : DS3.accentInk,
+                                barTone: m.hero.high ? nil : DS3.s1,
+                                dimmed: m.hero.dimmed)
+                        .frame(height: 147)
+                    VStack(spacing: 8) {
+                        SocSplitPanel(split: m.split).equatable()
+                        SocLoadAverageTile(load: loadAverage).equatable()
                     }
-                }
-                DS3Card(title: L.commonGPU, fillsHeight: true) {
-                    if m.showsWait {
-                        SectionWait(text: L.commonCollectingData)
-                    } else {
-                        VStack(alignment: .leading, spacing: 16) {
-                            SectionHero(label: L.cpuUsage, value: m.gpu.value, fraction: m.gpu.fraction, note: m.gpu.note,
-                                        tone: DS3.accent, toneInk: DS3.accentInk, dimmed: m.gpu.dimmed)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                        }
-                    }
+                    .frame(height: 218)
                 }
             }
-            DS3Card(title: L.socChipTemperature) {
-                if m.showsWait {
-                    SectionWait(text: L.commonCollectingData)
-                } else {
-                    tile(m.temperature)
+            .ds3Appear(delay: 0.12)
+            DS3Card(title: L.commonGPU, caption: SocGPUListModel.caption(coreCount: model.socLive.gpuCoreCount),
+                    fillsHeight: true) {
+                VStack(alignment: .leading, spacing: 16) {
+                    // §7.4 bar colour rule: a bar that shows one series takes its colour (the GPU series is lime).
+                    // The panel and label follow the mockup (blue accent); only the bar is lime.
+                    SectionHero(label: L.cpuUsage, value: m.gpu.value, fraction: m.gpu.fraction, note: m.gpu.note,
+                                tone: DS3.accent, toneInk: DS3.accentInk, barTone: DS3.s6, dimmed: m.gpu.dimmed)
+                        .frame(height: 147)
+                    SocGPUList(model: model)
                 }
             }
+            .ds3Appear(delay: 0.18)
         }
-    }
-
-    /// State colour from the dot (CPULoad.socLevel via CPUPageModel): hot → hot, warm → amber, else green note / plain value.
-    /// The note ink comes from the thermal tone when present (THERMAL-STATE); the tooltip is attached only when present.
-    @ViewBuilder
-    private func tile(_ t: CPUTileModel) -> some View {
-        let ink: Color = t.dot == .hot ? DS3.hotInk : (t.dot == .amber ? DS3.amberInk : DS3.greenInk)
-        let noteInk: Color = t.noteTone.map { tone -> Color in
-            switch tone {
-            case .green: return DS3.greenInk
-            case .neutral: return DS3.inkSoft
-            case .amber: return DS3.amberInk
-            case .hot: return DS3.hotInk
-            }
-        } ?? ink
-        let base = SectionTile(label: t.label, value: t.value, note: t.note,
-                               noteInk: noteInk,
-                               dot: t.dot.map { $0 == .hot ? DS3.hot : ($0 == .amber ? DS3.amber : DS3.green) },
-                               valueInk: t.dimmed ? DS3.muted : ((t.dot == .hot || t.dot == .amber) ? ink : DS3.ink))
-        if let h = t.help { base.help(h) } else { base }
     }
 }
 
+/// Internal: `SocFailureNote` and the snapshot tests build the same input. `compactSub`: window below 1000 pt.
 @MainActor
-private func cpuPageInput(_ model: AppModel) -> CPUPageModel.Input {
-    CPUPageModel.Input(cpu: model.cpu, load: model.load, ncpu: model.ncpu, chip: model.headerSystem?.chip,
-                       socTempC: model.socTempC, block: model.cpuBlock.phase, highSince: model.cpuHighSince,
+func cpuPageInput(_ model: AppModel, compactSub: Bool = false) -> CPUPageModel.Input {
+    CPUPageModel.Input(cpu: model.cpu, ncpu: model.ncpu, chip: model.headerSystem?.chip,
+                       block: model.cpuBlock.phase, highSince: model.cpuHighSince,
                        now: model.lastSampleAt, intervalSeconds: model.settings.fastIntervalSeconds,
-                       thermal: model.thermal, gpuUtil: model.gpuUtil)
+                       gpuUtil: model.gpuUtil, compactSub: compactSub)
 }

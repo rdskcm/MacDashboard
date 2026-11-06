@@ -51,7 +51,8 @@ extension HomeInput {
                          system: model.headerSystem, claudeBackup: model.claudeBackup,
                          backupStaleHours: model.settings.backupStaleHours, lowSpacePercent: model.settings.lowSpacePercent,
                          history: [], now: model.now(),
-                         historyDigest: model.history.homeDigest)
+                         historyDigest: model.history.homeDigest,
+                         socTempC: model.socTempC, thermal: model.thermal, cpu: model.cpu, cpuHighSince: model.cpuHighSince)
     }
 
     /// What the attention slot needs (tasks and chips): the assessment, the report, the scan state and
@@ -69,11 +70,11 @@ extension HomeInput {
 
     /// The eight section tiles (seven without a battery) for the current model state.
     @MainActor
-    static func tiles(_ model: AppModel) -> [HomeTile] {
+    static func tiles(_ model: AppModel, narrow: Bool = false) -> [HomeTile] {
         let input = make(model)
         let scan = HomeModel.scan(input.scan)
         let tasks = HomeModel.tasks(input.assessment, report: input.report, disk: input.disk, battery: model.battery)
-        return HomeModel.tiles(input, tasks: tasks, scan: scan)
+        return HomeModel.tiles(input, tasks: tasks, scan: scan, narrow: narrow)
     }
 }
 

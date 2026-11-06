@@ -68,6 +68,9 @@ enum DS3 {
     static let s5 = Color(light: Color(hex: 0x4A3AA7), dark: Color(hex: 0x9085E9))      // other (Home disk bar)
     static let s6 = Color(light: Color(hex: 0x74B816), dark: Color(hex: 0xA3E635))      // other / compressed
     static let s7 = Color(light: Color(hex: 0xB5AFA4), dark: Color(hex: 0xD6D1C7))      // speculative (reclaimable, calm)
+    static let s8 = Color(light: Color(hex: 0x22B5E1), dark: Color(hex: 0x78C7FD))      // sky (SoC E cores)
+    static let s9 = Color(light: Color(hex: 0x7C09AA), dark: Color(hex: 0xA149A0))      // purple (SoC other core types)
+    static let sidle = Color(light: Color(hex: 0xAFAAA3), dark: Color(hex: 0x4B4741))   // SoC CPU split Idle
     static let sfree = Color(light: Color(hex: 0x9A958C), dark: Color(hex: 0x6B665E))   // system
 
     static let rimHi = Color(light: Color.white.opacity(1), dark: Color.white.opacity(0.55))

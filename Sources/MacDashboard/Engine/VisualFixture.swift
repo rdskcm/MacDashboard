@@ -202,6 +202,10 @@ enum VisualFixture {
         var topCPU: [ProcEntry]
         var topMem: [ProcEntry]
         var cpuHistory: [(Date, Double)]
+        /// SOC-DETAILS: GPU load of the same 61 instants as `cpuHistory` (values 0...30).
+        var gpuHistory: [(Date, Int?)]
+        /// SOC-DETAILS: the reference page-tick state (logic 3.1, 3.5, 3.6, 3.8, 3.4); `socLive(options:)` derives variants.
+        var socLive: SocLiveFixture
         var report: FullReport
         var wakeHolders: [WakeHolder]
         var assessment: Assessment
@@ -255,10 +259,13 @@ enum VisualFixture {
             var e2 = e; e2.rank = i + 1; return e2
         }
 
+        // SOC-DETAILS D5: 61 samples at 2 s reach the left edge of the 2-minute chart; the GPU series steps 0...30.
         var cpuHistory: [(Date, Double)] = []
-        for i in 0..<60 {
-            let t = referenceDate.addingTimeInterval(-Double(59 - i) * 2)
+        var gpuHistory: [(Date, Int?)] = []
+        for i in 0..<61 {
+            let t = referenceDate.addingTimeInterval(-Double(60 - i) * 2)
             cpuHistory.append((t, 12 + Double((i * 7) % 23)))
+            gpuHistory.append((t, (i * 5) % 31))
         }
 
         var report = FullReport()
@@ -358,9 +365,195 @@ enum VisualFixture {
         return Dataset(
             load: load, cpu: cpu, mem: mem, swap: swap, disk: disk, battery: battery,
             socTempC: socTempC, gpuUtil: gpuUtil, topCPU: topCPU, topMem: topMem, cpuHistory: cpuHistory,
+            gpuHistory: gpuHistory, socLive: referenceSocLive(),
             report: report, wakeHolders: wakeHolders, assessment: assessment,
             history: history, reportText: reportText, claudeBackup: claudeBackup,
             claudeAttempt: claudeAttempt, claudeSize: claudeSize, claudeJob: claudeJob
         )
+    }
+}
+
+// MARK: - SoC page states (SOC-DETAILS Stage 2, design/mockups SoC.dc.html fixture bar)
+
+extension VisualFixture {
+    /// The reference page-tick state: 4P + 4E, P 3.95 GHz and E 1.27 GHz, five GPU rows at rest, 6.8 W, 8 GPU cores.
+    /// Placeholder values from the reference Mac (logic 3.1, 3.5, 3.6, 3.8).
+    static func referenceSocLive() -> SocLiveFixture { socLive(SocFixtureOptions()) }
+
+    private static func performanceGroup(count: Int, firstIndex: Int) -> CoreGroup {
+        CoreGroup(name: "Performance", count: count, coreIndices: Array(firstIndex..<(firstIndex + count)))
+    }
+
+    private static func efficiencyGroup(count: Int) -> CoreGroup {
+        CoreGroup(name: "Efficiency", count: count, coreIndices: Array(0..<count))
+    }
+
+    /// Rows with pids 108, 101, 105, 109, 110 for the reference five (any other name gets 200...). A nil share is the
+    /// "above 101 %" row, shown as "—". Lifetime counters step down so ties keep the given order.
+    private static func gpuRows(_ rows: [(String, Double?)]) -> [GPUProcessRow] {
+        let pids: [Int32] = [108, 101, 105, 109, 110]
+        return rows.enumerated().map { i, r in
+            GPUProcessRow(id: i < pids.count ? pids[i] : Int32(200 + i), name: r.0, sharePct: r.1,
+                          lifetimeNs: UInt64(5_000_000 - i * 1_000_000))
+        }
+    }
+
+    /// Launch-argument variants (read only under `-visualFixture`, pattern `gpuUnavailableRequested`) and the same
+    /// values the snapshot suite sets directly. `AppModel.applySocFixture(_:)` applies them.
+    struct SocFixtureOptions: Equatable {
+        /// `-fixtureCores 16P+4E | 3types | unknown | notyet | unavailable`
+        enum Cores: String { case reference, p16e4 = "16P+4E", threeTypes = "3types", unknown, notYet = "notyet", unavailable }
+        /// `-fixtureFreq idle | unavailable | notyet`
+        enum Freq: String { case reference, idle, unavailable, notYet = "notyet" }
+        /// `-fixtureGPUList load | idle | longnames | empty | unavailable | notyet`
+        enum GPUList: String { case reference, load, idle, longNames = "longnames", empty, unavailable, notYet = "notyet" }
+        /// `-fixtureTemp warm | hot | unavailable`
+        enum Temp: String { case reference, warm, hot, unavailable }
+        /// `-fixtureThermal elevated | high | critical | unknown`
+        enum Thermal: String { case reference, elevated, high, critical, unknown }
+        /// `-fixtureCPU high | failed | notyet`
+        enum CPU: String { case reference, high, failed, notYet = "notyet" }
+        /// `-fixtureChart partial | gap | gpumissing | collecting | unavailable`
+        enum Chart: String { case reference, partial, gap, gpuMissing = "gpumissing", collecting, unavailable }
+
+        var cores: Cores = .reference
+        var freq: Freq = .reference
+        var gpuList: GPUList = .reference
+        var temp: Temp = .reference
+        var thermal: Thermal = .reference
+        var cpu: CPU = .reference
+        var chart: Chart = .reference
+        /// `-fixturePower unavailable`
+        var powerUnavailable = false
+        /// `-fixtureWide 1`: 3-digit values (128.00 load, 128 GPU cores, 128.4 W).
+        var wide = false
+
+        /// Unknown or missing values keep the reference state.
+        static func fromLaunchArguments(_ args: [String] = ProcessInfo.processInfo.arguments) -> SocFixtureOptions {
+            func value(_ flag: String) -> String? {
+                guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+                return args[i + 1]
+            }
+            var o = SocFixtureOptions()
+            if let v = value("-fixtureCores").flatMap(Cores.init(rawValue:)) { o.cores = v }
+            if let v = value("-fixtureFreq").flatMap(Freq.init(rawValue:)) { o.freq = v }
+            if let v = value("-fixtureGPUList").flatMap(GPUList.init(rawValue:)) { o.gpuList = v }
+            if let v = value("-fixtureTemp").flatMap(Temp.init(rawValue:)) { o.temp = v }
+            if let v = value("-fixtureThermal").flatMap(Thermal.init(rawValue:)) { o.thermal = v }
+            if let v = value("-fixtureCPU").flatMap(CPU.init(rawValue:)) { o.cpu = v }
+            if let v = value("-fixtureChart").flatMap(Chart.init(rawValue:)) { o.chart = v }
+            o.powerUnavailable = value("-fixturePower") == "unavailable"
+            o.wide = args.contains("-fixtureWide")
+            return o
+        }
+    }
+
+    /// Chip temperature of a variant; the reference is the dataset's 48 °C.
+    static func socTempC(_ o: SocFixtureOptions, reference: Int?) -> Int? {
+        switch o.temp {
+        case .reference: return reference
+        case .warm: return 88
+        case .hot: return 97
+        case .unavailable: return nil
+        }
+    }
+
+    /// macOS thermal state of a variant; the reference is nominal, `.unknown` shows no thermal segment.
+    static func thermal(_ o: SocFixtureOptions) -> ThermalLevel? {
+        switch o.thermal {
+        case .reference: return .nominal
+        case .elevated: return .fair
+        case .high: return .serious
+        case .critical: return .critical
+        case .unknown: return nil
+        }
+    }
+
+    /// The page-tick state of a variant. Under `-fixtureCPU high` the cores, the E frequency and the power follow the
+    /// mockup's high-load numbers (a busy Mac).
+    static func socLive(_ o: SocFixtureOptions) -> SocLiveFixture {
+        let high = o.cpu == .high
+        func groups(_ spec: [(CoreGroup, [Int?], [Int?], Double)]) -> [CoreGroupLoad] {
+            spec.map { CoreGroupLoad(group: $0.0, loads: high ? $0.2 : $0.1, frequency: frequency(o, mhz: $0.3, group: $0.0)) }
+        }
+        /// Deterministic busy loads for the layout the mockup has no numbers for.
+        func busy(_ n: Int) -> [Int?] { (0..<n).map { 88 + ($0 * 5) % 12 } }
+        let eMHz = high ? 2420.0 : 1270.0
+        var f = SocLiveFixture()
+        switch o.cores {
+        case .reference, .notYet, .unavailable:
+            f.cores = groups([(performanceGroup(count: 4, firstIndex: 4), [13, 1, 2, 1], [98, 96, 99, 97], 3950),
+                              (efficiencyGroup(count: 4), [14, 14, 9, 6], [91, 88, 93, 90], eMHz)])
+        case .p16e4:
+            f.cores = groups([(performanceGroup(count: 16, firstIndex: 4),
+                               [62, 8, 3, 41, 12, 0, 5, 1, 77, 2, nil, 9, 4, 15, 1, 6], busy(16), 3950),
+                              (efficiencyGroup(count: 4), [21, 17, 9, 11], [93, 90, 88, 95], eMHz)])
+        case .threeTypes:
+            f.cores = groups([(CoreGroup(name: "Super", count: 2, coreIndices: [8, 9]), [41, 7], [97, 95], 4100),
+                              (performanceGroup(count: 4, firstIndex: 4), [13, 1, 2, 1], [98, 96, 99, 97], 3950),
+                              (efficiencyGroup(count: 4), [14, 14, 9, 6], [91, 88, 93, 90], eMHz)])
+        case .unknown:
+            // Type unknown (logic 3.1): one unnamed group, no frequency channel.
+            f.cores = [CoreGroupLoad(group: CoreGroup(name: nil, count: 8, coreIndices: Array(0..<8)),
+                                     loads: high ? [91, 88, 93, 90, 98, 96, 99, 97] : [14, 14, 9, 6, 13, 1, 2, 1],
+                                     frequency: .unavailable)]
+        }
+        if o.cores == .notYet || o.cores == .unavailable {
+            f.cores = f.cores?.map { CoreGroupLoad(group: $0.group, loads: Array(repeating: nil, count: $0.group.count),
+                                                    frequency: $0.frequency) }
+            f.hasCoreReading = o.cores != .notYet
+            f.coreLoadsFailed = o.cores == .unavailable
+        }
+        switch o.gpuList {
+        case .reference:
+            f.gpuRows = .rows(gpuRows([("Terminal", 0.2), ("WindowServer", 0.2), ("Finder", 0), ("Dock", 0), ("loginwindow", 0)]))
+        case .load:
+            f.gpuRows = .rows(gpuRows([("gpu-bench", 61.4), ("WindowServer", 8.2), ("Terminal", 0.6), ("Dock", 0.1), ("Finder", 0)]))
+        case .idle:
+            f.gpuRows = .rows(gpuRows([("WindowServer", 0), ("Terminal", 0), ("Finder", 0), ("Dock", 0), ("loginwindow", 0)]))
+        case .longNames:
+            f.gpuRows = .rows(gpuRows([("com.apple.appkit.xpc.openAndSavePanelService", 1.2), ("ThemeWidgetContr", 0.4),
+                                       ("WindowServer", nil), ("Terminal", 0.2), ("Finder", 0)]))
+        case .empty: f.gpuRows = .empty
+        case .unavailable: f.gpuRows = .unavailable
+        case .notYet: f.gpuRows = .notYet
+        }
+        f.powerW = o.powerUnavailable ? nil : (o.wide ? 128.4 : (high ? 14.1 : 6.8))
+        f.gpuCoreCount = o.wide ? 128 : 8
+        return f
+    }
+
+    /// Frequency of one group in a variant. The reference E is 1.27 GHz, P 3.95 GHz; `-fixtureFreq idle` idles P only
+    /// (the E cores are active even at rest, logic 3.8). A group of unknown type has no channel.
+    private static func frequency(_ o: SocFixtureOptions, mhz: Double, group: CoreGroup) -> FrequencyState {
+        switch o.freq {
+        case .reference: return .mhz(mhz)
+        case .idle: return group.name?.hasPrefix("Efficiency") == true ? .mhz(mhz) : .idle
+        case .unavailable: return .unavailable
+        case .notYet: return .notYet
+        }
+    }
+
+    /// Load average of a variant (3 digits before the decimal point under `wide`).
+    static func loadAverage(_ o: SocFixtureOptions, reference: [Double]) -> [Double] {
+        if o.wide { return [128.00, 96.41, 64.12] }
+        return o.cpu == .high ? [3.13, 2.50, 2.04] : reference
+    }
+
+    /// The history of a variant: `partial` keeps the newest 20 samples, `gap` removes 10 in the middle, `collecting`
+    /// keeps one, `gpumissing` turns every GPU value into nil, `unavailable` has no CPU value and nil GPU values.
+    static func socHistory(_ o: SocFixtureOptions, cpu: [(Date, Double)], gpu: [(Date, Int?)])
+        -> (cpu: [(Date, Double)], gpu: [(Date, Int?)]) {
+        func shape<T>(_ a: [T]) -> [T] {
+            switch o.chart {
+            case .reference, .gpuMissing, .unavailable: return a
+            case .partial: return Array(a.suffix(20))
+            case .gap: return Array(a.prefix(20)) + Array(a.dropFirst(30))
+            case .collecting: return Array(a.suffix(1))
+            }
+        }
+        let gpuShaped = shape(gpu)
+        let gpuNil = o.chart == .gpuMissing || o.chart == .unavailable
+        return (o.chart == .unavailable ? [] : shape(cpu), gpuNil ? gpuShaped.map { ($0.0, nil) } : gpuShaped)
     }
 }

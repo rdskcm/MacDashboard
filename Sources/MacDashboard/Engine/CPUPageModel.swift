@@ -57,6 +57,11 @@ enum CPULoad {
         return now
     }
 
+    /// High load as the CPU page and Home decide it: usage at or above the threshold and the run lasted a minute.
+    static func isHigh(_ c: CPUUsage, since: Date?, now: Date) -> Bool {
+        usage(c) >= highUsagePct && highMinutes(since: since, now: now) != nil
+    }
+
     /// nil when since is nil or now − since < 60 s; else Int((now − since) / 60) (floor).
     static func highMinutes(since: Date?, now: Date) -> Int? {
         guard let since else { return nil }
@@ -68,18 +73,16 @@ enum CPULoad {
 
 enum CPUPagePhase: Equatable { case loading, live, high, failed(BlockFailure, lastGoodAt: Date?) }
 enum CPUTagKind: Equatable { case ok, high, loading, failed }
-enum CPUDot: Equatable { case green, amber, hot }
 
 struct CPUHeroModel: Equatable { var value: String; var fraction: Double; var note: String; var high: Bool; var dimmed: Bool }
-struct CPUTileModel: Equatable { var label: String; var value: String; var note: String?; var dot: CPUDot?; var hot: Bool; var dimmed: Bool
-    var noteTone: CPUNoteTone? = nil; var help: String? = nil }
 
 struct CPUPageModel: Equatable {
     struct Input {
-        var cpu: CPUUsage?; var load: [Double]?; var ncpu: Int; var chip: String?; var socTempC: Int?
+        var cpu: CPUUsage?; var ncpu: Int; var chip: String?
         var block: BlockPhase; var highSince: Date?; var now: Date; var intervalSeconds: Int
-        var thermal: ThermalLevel? = nil
         var gpuUtil: Int? = nil
+        /// SOC-DETAILS §7.3: below 1000 pt with the state tag visible the sub line drops "updates every N s".
+        var compactSub: Bool = false
     }
 
     var phase: CPUPagePhase
@@ -90,10 +93,8 @@ struct CPUPageModel: Equatable {
     var caption: String         // CPU card caption
     var failureNote: String?    // non-nil only in .failed
     var hero: CPUHeroModel
-    var tiles: [CPUTileModel]   // always 2: User, System
+    var split: SocSplit         // User / System / Idle (logic 3.3); "—" without a reading
     var gpu: CPUHeroModel       // GPU card hero
-    var temperature: CPUTileModel   // the shared chip-temperature block (was tiles[2])
-    var showsWait: Bool         // phase == .loading
 
     static func make(_ i: Input) -> CPUPageModel {
         let phase: CPUPagePhase
@@ -102,7 +103,7 @@ struct CPUPageModel: Equatable {
         case .loading: phase = .loading
         case .ok:
             if let cpu = i.cpu {
-                phase = (CPULoad.usage(cpu) >= CPULoad.highUsagePct && CPULoad.highMinutes(since: i.highSince, now: i.now) != nil) ? .high : .live
+                phase = CPULoad.isHigh(cpu, since: i.highSince, now: i.now) ? .high : .live
             } else {
                 phase = .loading
             }
@@ -118,10 +119,10 @@ struct CPUPageModel: Equatable {
         switch phase {
         case .live:
             tag = .ok; tagText = L.commonOK
-            sub = chipPrefix + L.cpuSubLive(i.ncpu, i.intervalSeconds)
+            sub = chipPrefix + (i.compactSub ? L.homeCoresOnly(i.ncpu) : L.cpuSubLive(i.ncpu, i.intervalSeconds))
         case .high:
             tag = .high; tagText = L.cpuTagHigh
-            sub = chipPrefix + L.cpuSubLive(i.ncpu, i.intervalSeconds)
+            sub = chipPrefix + (i.compactSub ? L.homeCoresOnly(i.ncpu) : L.cpuSubLive(i.ncpu, i.intervalSeconds))
         case .loading:
             tag = .loading; tagText = L.commonCollectingData
             sub = chipPrefix + L.cpuSubCollecting
@@ -137,26 +138,6 @@ struct CPUPageModel: Equatable {
             failureNote = reason + " " + L.readRetriesAutomatically
         }
 
-        // Temperature block: independent of the CPU phase (GPU-UTILIZATION D9).
-        var soc: CPUTileModel
-        if let t = i.socTempC {
-            switch CPULoad.socLevel(t) {
-            case .hot:
-                soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.cpuSocHot, dot: .hot, hot: true, dimmed: false)
-            case .warm:
-                soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.cpuSocWarm, dot: .amber, hot: false, dimmed: false)
-            case .normal:
-                soc = CPUTileModel(label: L.cpuSocTemperature, value: "\(t) °C", note: L.commonNormal, dot: .green, hot: false, dimmed: false)
-            }
-            if let th = i.thermal {
-                let n = thermalNote(th)
-                soc.note = n.text; soc.noteTone = n.tone; soc.help = n.help
-            }
-        } else {
-            let th = i.thermal.map(thermalNote)
-            soc = CPUTileModel(label: L.cpuSocTemperature, value: "—", note: th?.text, dot: nil, hot: false, dimmed: true,
-                               noteTone: th?.tone, help: th?.help)
-        }
         let gpu: CPUHeroModel
         if let g = i.gpuUtil {
             gpu = CPUHeroModel(value: L.homePercent("\(g)"), fraction: Double(g) / 100, note: L.gpuWholeMac, high: false, dimmed: false)
@@ -165,48 +146,47 @@ struct CPUPageModel: Equatable {
         }
 
         let hero: CPUHeroModel
-        var tiles: [CPUTileModel]
+        let split: SocSplit
         let showsReading = phase == .live || phase == .high
         if showsReading, let cpu = i.cpu {
             let usage = CPULoad.usage(cpu)
             let high = phase == .high
+            // D18: the load average has its own tile; the note is the core count, or the high-load text.
             let note: String
             if high, let m = CPULoad.highMinutes(since: i.highSince, now: i.now) {
                 note = L.cpuHighLoadFor(m)
-            } else if let l = i.load, l.count == 3 {
-                note = L.cpuLoadNote(fmtFixed(l[0], decimals: 2), fmtFixed(l[1], decimals: 2), fmtFixed(l[2], decimals: 2), i.ncpu)
             } else {
                 note = L.homeCoresOnly(i.ncpu)
             }
             hero = CPUHeroModel(value: L.homePercent(fmtFixed(usage, decimals: 1)),
                                 fraction: min(max(usage / 100, 0), 1),
                                 note: note, high: high, dimmed: false)
-            tiles = [
-                CPUTileModel(label: L.cpuUser, value: L.homePercent(fmtFixed(cpu.user, decimals: 1)), note: nil, dot: nil, hot: false, dimmed: false),
-                CPUTileModel(label: L.cpuSystem, value: L.homePercent(fmtFixed(cpu.sys, decimals: 1)), note: nil, dot: nil, hot: false, dimmed: false),
-            ]
+            split = SocSplit.make(cpu: cpu)
         } else {
-            hero = CPUHeroModel(value: "—", fraction: 0, note: L.cpuNoReading, high: false, dimmed: true)
-            tiles = [L.cpuUser, L.cpuSystem].map {
-                CPUTileModel(label: $0, value: "—", note: nil, dot: nil, hot: false, dimmed: true)
-            }
+            // D17: the not-yet state is part of the hero ("—" + "collecting data…"), not a replacement of the card.
+            let note: String
+            if case .failed = phase { note = L.cpuNoReading } else { note = L.cpuSubCollecting }
+            hero = CPUHeroModel(value: "—", fraction: 0, note: note, high: false, dimmed: true)
+            split = SocSplit.make(cpu: nil)
         }
 
         var isFailed = false
         if case .failed = phase { isFailed = true }
         return CPUPageModel(phase: phase, tag: tag, tagText: tagText, sub: sub, subIsFailure: isFailed,
-                            caption: caption, failureNote: failureNote, hero: hero, tiles: tiles, gpu: gpu, temperature: soc,
-                            showsWait: phase == .loading)
+                            caption: caption, failureNote: failureNote, hero: hero, split: split, gpu: gpu)
     }
 
     /// "HH:mm:ss" in the current zone, POSIX digits (pattern of HomeModel.hhmm).
-    static func hhmmss(_ d: Date) -> String {
+    static func hhmmss(_ d: Date) -> String { hhmmssFormatter.string(from: d) }
+
+    /// One formatter for every call (building one per hover snap is costly).
+    private static let hhmmssFormatter: DateFormatter = {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.timeZone = .current
         df.dateFormat = "HH:mm:ss"
-        return df.string(from: d)
-    }
+        return df
+    }()
 
     // MARK: Processes card
 

@@ -9,6 +9,22 @@ import Testing
 @testable import MacDashboard
 
 
+/// SOC-DETAILS Stage 2: the SoC page body as `CPUPage` stacks it, without the scroll view and the bar: the
+/// read-failure note (only when failed), the CPU / GPU pair, the cores card and the 2-minute chart card.
+@MainActor
+private struct SocPageBodyFixture: View {
+    let model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SocFailureNote(model: model)
+            SoCCards(model: model)
+            SocCoresCard(model: model)
+            SocChartCard(model: model)
+        }
+    }
+}
+
 extension SerialTests {
     @Suite(.enabled(if: SnapshotEnv.outDir != nil, "set MACDASH_SNAPSHOTS: run tools/visual/snapshots.sh"))
     struct SnapshotTests {
@@ -108,58 +124,61 @@ extension SerialTests {
                 s.fail(.timedOut)
                 return s
             }()
-            // REDESIGN-CPU: CPU page states (ok / failed with a last good reading / first sample pending).
-            let cpuOK: BlockState = {
-                var s = BlockState(.cpu, createdAt: homeRef.addingTimeInterval(-4))
-                s.begin(at: homeRef.addingTimeInterval(-2), showsLoading: false)
-                s.succeed(at: homeRef)
-                return s
-            }()
-            let cpuFailed: BlockState = {
-                var s = BlockState(.cpu, createdAt: homeRef.addingTimeInterval(-60))
-                s.begin(at: homeRef.addingTimeInterval(-40), showsLoading: false)
-                s.succeed(at: homeRef.addingTimeInterval(-38))
-                s.begin(at: homeRef.addingTimeInterval(-5), showsLoading: true)
-                s.fail(.timedOut)
-                return s
-            }()
-            let cpuHigh = fixtureHome {
-                $0.cpu = CPUUsage(user: 71, sys: 20, idle: 9)
-                $0.socTempC = 93
-                $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
+            // SOC-DETAILS Stage 2: SoC page states. One model per state; `applySocFixture` sets the same values the
+            // `-fixtureCores`, `-fixtureTemp`, ... launch arguments set in the app (D29).
+            typealias SocOptions = VisualFixture.SocFixtureOptions
+            @MainActor func socModel(_ options: SocOptions, _ tweak: (AppModel) -> Void = { _ in }) -> AppModel {
+                fixtureHome { $0.applySocFixture(options); tweak($0) }
             }
-            // HOME-LEFTOVERS: cpuHigh's 93 °C is now the warm SoC state (CPULoad.socLevel); cpuHot keeps the hot tile covered.
-            let cpuHot = fixtureHome {
-                $0.cpu = CPUUsage(user: 71, sys: 20, idle: 9)
-                $0.socTempC = 97
-                $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
+            let socHigh = socModel(SocOptions(cpu: .high))
+            let socFailed = socModel(SocOptions(cpu: .failed))
+            // SOC-DETAILS Stage 3: the chart card's data states and the pinned hovers (`initialHover` as History's).
+            let socChartPartial = socModel(SocOptions(chart: .partial))
+            let socChartGap = socModel(SocOptions(chart: .gap))
+            let socChartGPUMissing = socModel(SocOptions(chart: .gpuMissing))
+            let socChartCollecting = socModel(SocOptions(chart: .collecting))
+            let socChartUnavailable = socModel(SocOptions(chart: .unavailable))
+            let socChartSamples = m.socChartSeries.hoverSamples
+            let socChartTopIndex = SocChartModel.topCPUIndex(socChartSamples) ?? 0
+            let socNotYet = socModel(SocOptions(cores: .notYet, freq: .notYet, gpuList: .notYet))
+            let socCores16 = socModel(SocOptions(cores: .p16e4))
+            let socCores3 = socModel(SocOptions(cores: .threeTypes))
+            let socCoresUnknown = socModel(SocOptions(cores: .unknown))
+            let socCoresUnavailable = socModel(SocOptions(cores: .unavailable))
+            let socFreqIdle = socModel(SocOptions(freq: .idle))
+            let socListLoad = socModel(SocOptions(gpuList: .load))
+            let socListIdle = socModel(SocOptions(gpuList: .idle))
+            let socListLong = socModel(SocOptions(gpuList: .longNames))
+            let socListEmpty = socModel(SocOptions(gpuList: .empty))
+            let socListUnavailable = socModel(SocOptions(gpuList: .unavailable))
+            let socPrivateUnavailable = socModel(SocOptions(freq: .unavailable, gpuList: .unavailable, chart: .gpuMissing,
+                                                            powerUnavailable: true)) { $0.gpuUtil = nil }
+            let socWide = socModel(SocOptions(wide: true))
+            let socRuCritical = socModel(SocOptions(temp: .hot, thermal: .critical))
+            let socWarmHigh = socModel(SocOptions(temp: .warm, thermal: .high))
+            let socHotCritical = socModel(SocOptions(temp: .hot, thermal: .critical))
+            // SOC-DETAILS Stage 4: the Home SoC cell and the Sections SoC row. `socHome` sets temperature and thermal
+            // state on the reference model (high load = the `-fixtureCPU high` model).
+            @MainActor func socHome(_ temp: Int?, _ thermal: ThermalLevel?, high: Bool = false) -> AppModel {
+                socModel(SocOptions(cpu: high ? .high : .reference)) { $0.socTempC = temp; $0.applyFixtureThermal(thermal) }
             }
-            // THERMAL-STATE: the SoC tile note per macOS thermal state.
-            let cpuThermalFair = fixtureHome {
-                $0.socTempC = 48
-                $0.applyFixtureThermal(.fair)
-                $0.applyFixtureCPU(cpuOK, highSince: nil)
+            let socRowCases: [(String, AppModel)] = [
+                ("normal · 58", socHome(58, .nominal)), ("elevated · 58", socHome(58, .fair)),
+                ("normal · 97", socHome(97, .nominal)), ("elevated · 88", socHome(88, .fair)),
+                ("high · 58", socHome(58, .serious)), ("high · 88", socHome(88, .serious)),
+                ("critical · 97", socHome(97, .critical)), ("high load", socHome(58, .nominal, high: true)),
+                ("thermal unknown, load normal (empty)", socHome(58, nil))]
+            @MainActor func socRowGrid(columns: Int, narrow: Bool) -> some View {
+                EqualColumnsLayout(columns: columns, spacing: 16) {
+                    ForEach(Array(socRowCases.enumerated()), id: \.offset) { _, c in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HarnessLabel(text: c.0)
+                            HomeSectionTile(tile: HomeInput.tiles(c.1, narrow: narrow)[0]) {}
+                        }
+                    }
+                }
             }
-            let cpuThermalSerious = fixtureHome {
-                $0.cpu = CPUUsage(user: 71, sys: 20, idle: 9)
-                $0.socTempC = 93
-                $0.applyFixtureThermal(.serious)
-                $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
-            }
-            let cpuThermalCritical = fixtureHome {
-                $0.cpu = CPUUsage(user: 71, sys: 20, idle: 9)
-                $0.socTempC = 97
-                $0.applyFixtureThermal(.critical)
-                $0.applyFixtureCPU(cpuOK, highSince: homeRef.addingTimeInterval(-4 * 60))
-            }
-            let cpuThermalNoTemp = fixtureHome {
-                $0.socTempC = nil
-                $0.applyFixtureThermal(.nominal)
-                $0.applyFixtureCPU(cpuOK, highSince: nil)
-            }
-            let cpuGPUUnavailable = fixtureHome { $0.gpuUtil = nil; $0.applyFixtureCPU(cpuOK, highSince: nil) }
-            let cpuFail = fixtureHome { $0.applyFixtureCPU(cpuFailed, highSince: nil) }
-            let cpuLoading = fixtureHome { $0.applyFixtureCPU(BlockState(.cpu, createdAt: homeRef), highSince: nil) }
+            let socBarUnavailable = socModel(SocOptions(temp: .unavailable, thermal: .unknown, powerUnavailable: true))
             // REDESIGN-MEMORY: Memory page states (fixture = low pressure, swap 25 %).
             let memFailedBlock: BlockState = {
                 var s = BlockState(.memory, createdAt: homeRef.addingTimeInterval(-60))
@@ -494,52 +513,56 @@ extension SerialTests {
                 run.snap("content-processes-mem", mode, width: 589) {
                     ProcessListCard(model: m, initialMetric: .mem)
                 }
-                // 1094 = 1150 window - 2 x 28 page padding.
-                run.snap("content-soc-live", mode, width: 1094) {
-                    SoCCards(model: m)
+                // SOC-DETAILS Stage 2. 1094 = 1150 window - 2 x 28 page padding, 844 = 900 - 56, 1744 = 1800 - 56.
+                run.snap("content-soc-live", mode, width: 1094) { SocPageBodyFixture(model: m) }
+                run.snap("content-soc-narrow", mode, width: 844) { SocPageBodyFixture(model: m) }
+                run.snap("content-soc-wide", mode, width: 1744) { SocPageBodyFixture(model: m) }
+                run.snap("content-soc-high", mode, width: 1094) { SocPageBodyFixture(model: socHigh) }
+                run.snap("content-soc-failed", mode, width: 1094) { SocPageBodyFixture(model: socFailed) }
+                run.snap("content-soc-notyet", mode, width: 1094) { SocPageBodyFixture(model: socNotYet) }
+                run.snap("content-soc-chart-full", mode, width: 1094) { SocChartCard(model: m) }
+                run.snap("content-soc-chart-narrow", mode, width: 844) { SocChartCard(model: m) }
+                run.snap("content-soc-chart-wide", mode, width: 1744) { SocChartCard(model: m) }
+                run.snap("content-soc-chart-partial", mode, width: 1094) { SocChartCard(model: socChartPartial) }
+                run.snap("content-soc-chart-gap", mode, width: 1094) { SocChartCard(model: socChartGap) }
+                run.snap("content-soc-chart-gpu-missing", mode, width: 1094) { SocChartCard(model: socChartGPUMissing) }
+                run.snap("content-soc-chart-collecting", mode, width: 1094) { SocChartCard(model: socChartCollecting) }
+                run.snap("content-soc-chart-unavailable", mode, width: 1094) { SocChartCard(model: socChartUnavailable) }
+                run.snap("content-soc-chart-hover-top", mode, width: 1094) { SocChartCard(model: m, initialHover: socChartTopIndex) }
+                run.snap("content-soc-chart-hover-left", mode, width: 1094) { SocChartCard(model: m, initialHover: 0) }
+                run.snap("content-soc-chart-hover-right", mode, width: 1094) {
+                    SocChartCard(model: m, initialHover: socChartSamples.count - 1)
                 }
-                run.snap("content-soc-high", mode, width: 1094) {
-                    SoCCards(model: cpuHigh)
-                }
-                run.snap("content-soc-hot", mode, width: 1094) {
-                    SoCCards(model: cpuHot)
-                }
-                run.snap("content-soc-thermal-fair", mode, width: 1094) {
-                    SoCCards(model: cpuThermalFair)
-                }
-                run.snap("content-soc-thermal-serious", mode, width: 1094) {
-                    SoCCards(model: cpuThermalSerious)
-                }
-                run.snap("content-soc-thermal-critical", mode, width: 1094) {
-                    SoCCards(model: cpuThermalCritical)
-                }
-                run.snap("content-soc-thermal-notemp", mode, width: 1094) {
-                    SoCCards(model: cpuThermalNoTemp)
-                }
-                // 844 = 900 minimum window - 2 x 28 page padding; the longest RU note must fit.
+                run.snap("content-soc-cores-16p4e", mode, width: 1094) { SocCoresCard(model: socCores16) }
+                run.snap("content-soc-cores-16p4e-narrow", mode, width: 844) { SocCoresCard(model: socCores16) }
+                run.snap("content-soc-cores-3types", mode, width: 1094) { SocCoresCard(model: socCores3) }
+                run.snap("content-soc-cores-unknown", mode, width: 1094) { SocCoresCard(model: socCoresUnknown) }
+                run.snap("content-soc-cores-unavailable", mode, width: 1094) { SocCoresCard(model: socCoresUnavailable) }
+                run.snap("content-soc-freq-idle", mode, width: 1094) { SocCoresCard(model: socFreqIdle) }
+                run.snap("content-soc-gpu-list-load", mode, width: 1094) { SoCCards(model: socListLoad) }
+                run.snap("content-soc-gpu-list-idle", mode, width: 1094) { SoCCards(model: socListIdle) }
+                run.snap("content-soc-gpu-list-longnames", mode, width: 1094) { SoCCards(model: socListLong) }
+                run.snap("content-soc-gpu-list-empty", mode, width: 1094) { SoCCards(model: socListEmpty) }
+                run.snap("content-soc-gpu-list-unavailable", mode, width: 1094) { SoCCards(model: socListUnavailable) }
+                run.snap("content-soc-all-private-unavailable", mode, width: 1094) { SocPageBodyFixture(model: socPrivateUnavailable) }
+                run.snap("content-soc-wide-values", mode, width: 844) { SocPageBodyFixture(model: socWide) }
+                // Russian at the minimum window: the page bar (900 wide, the body padded by 28 on each side).
                 L10nStore.shared.language = .ru
-                run.snap("content-soc-thermal-narrow-ru", mode, width: 844) {
-                    SoCCards(model: cpuThermalCritical)
+                run.snap("content-soc-ru-narrow", mode, width: 900) {
+                    VStack(spacing: 16) {
+                        CPUPageBar(model: socRuCritical, narrow: true) {}
+                        SocPageBodyFixture(model: socRuCritical).padding(.horizontal, 28)
+                    }
                 }
                 L10nStore.shared.language = .en
-                run.snap("content-soc-gpu-unavailable", mode, width: 1094) {
-                    SoCCards(model: cpuGPUUnavailable)
-                }
-                run.snap("content-soc-narrow", mode, width: 844) {
-                    SoCCards(model: m)
-                }
-                run.snap("content-soc-failed", mode, width: 1094) {
-                    SoCCards(model: cpuFail)
-                }
-                run.snap("content-soc-loading", mode, width: 1094) {
-                    SoCCards(model: cpuLoading)
-                }
+                // The readout chip: normal, warm + high, hot + critical, all unavailable, and 900 compact with a tag.
                 run.snap("content-soc-bars", mode, width: 1150) {
                     VStack(spacing: 12) {
-                        CPUPageBar(model: m) {}
-                        CPUPageBar(model: cpuHigh) {}
-                        CPUPageBar(model: cpuFail) {}
-                        CPUPageBar(model: cpuLoading) {}
+                        CPUPageBar(model: m, narrow: false) {}
+                        CPUPageBar(model: socWarmHigh, narrow: false) {}
+                        CPUPageBar(model: socHotCritical, narrow: false) {}
+                        CPUPageBar(model: socBarUnavailable, narrow: false) {}
+                        CPUPageBar(model: socHigh, narrow: true) {}.frame(width: 900)
                     }
                 }
                 run.snap("content-memory-usage-live", mode, width: 1094) {
@@ -1089,6 +1112,18 @@ extension SerialTests {
                             HomeNowCard(model: fixtureHome { $0.gpuUtil = nil },
                                         router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }
+                        HarnessSection(label: "SoC chip: warm 88 °C") {
+                            HomeNowCard(model: socHome(88, .nominal), router: NavigationRouter(), tier: .mid, animatesEntrance: false)
+                        }
+                        HarnessSection(label: "SoC chip: hot 97 °C") {
+                            HomeNowCard(model: socHome(97, .nominal), router: NavigationRouter(), tier: .mid, animatesEntrance: false)
+                        }
+                        HarnessSection(label: "SoC: temperature unavailable (no chip)") {
+                            HomeNowCard(model: socHome(nil, .nominal), router: NavigationRouter(), tier: .mid, animatesEntrance: false)
+                        }
+                        HarnessSection(label: "SoC: high load (amber CPU bar)") {
+                            HomeNowCard(model: socHome(58, .nominal, high: true), router: NavigationRouter(), tier: .mid, animatesEntrance: false)
+                        }
                         HarnessSection(label: "Task tones") {
                             HomeNowCard(model: fixtureHome {
                                 $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "SMART: errors",
@@ -1103,6 +1138,12 @@ extension SerialTests {
                         }
                     }
                 }
+                // SOC-DETAILS 4.5: the Sections SoC row in nine states, at 4-column (1094) and 2-column (844) tile widths.
+                run.snap("content-home-soc-rows", mode, width: 1094) { socRowGrid(columns: 4, narrow: false) }
+                run.snap("content-home-soc-rows-narrow", mode, width: 844) { socRowGrid(columns: 2, narrow: true) }
+                L10nStore.shared.language = .ru
+                run.snap("content-home-soc-rows-narrow-ru", mode, width: 844) { socRowGrid(columns: 2, narrow: true) }
+                L10nStore.shared.language = .en
                 run.snap("content-iphone-tiles", mode, width: 1134) {
                     let ip = fixtureIPhone()
                     let alexRecord = ip.devices.first { $0.id == alex }!

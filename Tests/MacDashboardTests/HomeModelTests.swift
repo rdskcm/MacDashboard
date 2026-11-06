@@ -247,7 +247,8 @@ extension SerialTests {
             #expect(stor.tagTone == .hot && stor.tagText == "drive failing", "storage tag from its first (hottest) task")
             let cpu = tiles.first { $0.page == .cpu }!
             #expect(cpu.kvs[0].label == L.homeKVLoad15 && cpu.kvs[0].value == fmtFixed(1, decimals: 2) && cpu.kvs[1].value == "412" && cpu.sub == "Apple M3 · 8 cores")
-            #expect(cpu.accessibilityText == "\(cpu.name), Apple M3 · 8 cores, \(cpu.tagText), Load 15 min \(fmtFixed(1, decimals: 2)), Processes 412")
+            #expect(cpu.socRow?.kind == .empty, "no thermal reading: the SoC tile's row is empty and the old tag is not spoken")
+            #expect(cpu.accessibilityText == "\(cpu.name), Apple M3 · 8 cores, Load 15 min \(fmtFixed(1, decimals: 2)), Processes 412")
             let sysTile = tiles.first { $0.page == .system }!
             let brewKV = sysTile.kvs.first { $0.label == "Homebrew" }
             #expect(brewKV?.value == L.homeBrewOutdatedShort(3) && brewKV?.tone == nil, "Homebrew KV is not amber at 3 outdated")
@@ -568,6 +569,91 @@ extension SerialTests {
             L10nStore.shared.language = .ru
             let ru = nowCells(report, live, pressure: .normal)[0]
             #expect(ru.figures[0].kicker == "Процессор" && ru.figures[1].kicker == "Графика")
+        }
+
+        /// SOC-DETAILS 4.1: fraction, bar colour and gauge of the SoC cell.
+        @Test func nowSoCBarsAndGauge() {
+            let (report, live) = nowFixture()
+            let a = Assess.assess(report: report, live: live, memPressure: .normal)
+            func cell(temp: Int?, gpu: Int?, high: Bool, cpu: CPUUsage? = CPUUsage(user: 60.2, sys: 25.5, idle: 14.3)) -> HomeNowCell {
+                HomeModel.nowCells(homeInput(report, live, assessment: a), tasks: [], memPressure: .normal, socTempC: temp, gpuUtil: gpu,
+                                   cpu: cpu, cpuHigh: high, short: false, narrow: false)[0]
+            }
+            let calm = cell(temp: 58, gpu: 23, high: false)
+            #expect(abs(calm.figures[0].fraction - 0.857) < 0.001 && calm.figures[0].bar == .s1)
+            #expect(abs(calm.figures[1].fraction - 0.23) < 0.001 && calm.figures[1].bar == .s6)
+            #expect(calm.chipGauge == HomeChipGauge(zone: 0, markerX: SocReadout.markerX(celsius: 58)))
+            #expect(cell(temp: 90, gpu: 23, high: false).chipGauge?.zone == 1)
+            #expect(cell(temp: 97, gpu: 23, high: false).chipGauge?.zone == 2)
+            #expect(cell(temp: 97, gpu: 23, high: false).chipGauge?.markerX == SocReadout.markerX(celsius: 97))
+            #expect(cell(temp: nil, gpu: 23, high: false).chipGauge == nil && cell(temp: nil, gpu: 23, high: false).chipText == nil)
+            #expect(cell(temp: 58, gpu: 23, high: true).figures[0].bar == .amber, "high load turns the CPU bar amber")
+            #expect(cell(temp: 58, gpu: 23, high: true).figures[1].bar == .s6)
+            let noGPU = cell(temp: 58, gpu: nil, high: false).figures[1]
+            #expect(noGPU.fraction == 0 && noGPU.dimmed)
+            #expect(cell(temp: 58, gpu: 23, high: false, cpu: CPUUsage(user: 90, sys: 30, idle: 0)).figures[0].fraction == 1, "clamped")
+        }
+
+        /// SOC-DETAILS 4.3: the Sections SoC row, design 7.13 tone rule.
+        @Test func socRowCases() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            func row(_ th: ThermalLevel?, _ t: Int?, high: Bool = false, narrow: Bool = false) -> HomeSocRow {
+                HomeModel.socRow(thermal: th, socTempC: t, cpuHigh: high, highMinutes: high ? 3 : nil, cpuPct: 91, narrow: narrow)
+            }
+            func step(_ r: HomeSocRow) -> Int? { if case .thermal(let s, _, _) = r.kind { return s } else { return nil } }
+            func text(_ r: HomeSocRow) -> String? {
+                switch r.kind { case .thermal(_, let t, _), .highLoad(let t, _): return t; case .empty: return nil }
+            }
+            let nom58 = row(.nominal, 58)
+            #expect(step(nom58) == 0 && text(nom58) == "normal" && nom58.rightText == "58 °C")
+            #expect(nom58.rowTone == .green && nom58.textTone == .green && nom58.rightTone == .green)
+            let el58 = row(.fair, 58)
+            #expect(step(el58) == 1 && text(el58) == "elevated" && el58.rowTone == .green && el58.textTone == .neutral && el58.rightTone == .neutral)
+            let nom97 = row(.nominal, 97)
+            #expect(nom97.rowTone == .hot && nom97.textTone == .green && nom97.rightTone == .hot, "normal and 97 °C: hot row, hot value")
+            let el88 = row(.fair, 88)
+            #expect(el88.rowTone == .amber && el88.textTone == .neutral && el88.rightTone == .amber)
+            let hi58 = row(.serious, 58)
+            #expect(step(hi58) == 2 && hi58.rowTone == .amber && hi58.textTone == .amber && hi58.rightTone == .amber)
+            let hi88 = row(.serious, 88)
+            #expect(hi88.rowTone == .amber && hi88.rightTone == .amber)
+            let crit97 = row(.critical, 97)
+            #expect(step(crit97) == 3 && crit97.rowTone == .hot && crit97.textTone == .hot && crit97.rightTone == .hot)
+            let crit58 = row(.critical, 58)
+            #expect(crit58.rowTone == .hot && crit58.rightTone == .hot, "no temperature tone: the right value follows the thermal text")
+            let load = row(.nominal, 97, high: true)
+            #expect(load.kind == .highLoad(text: "High load", help: "High load for 3 min") && load.rightText == "91%")
+            #expect(load.rowTone == .amber && load.textTone == .amber && load.rightTone == .amber, "high load wins over temperature")
+            #expect(row(nil, 58).kind == .empty && row(nil, nil).kind == .empty && row(nil, 58).rightText == nil)
+            #expect(row(.nominal, nil).rightText == nil && step(row(.nominal, nil)) == 0)
+            #expect(text(row(.nominal, 58, narrow: false)) == "normal" && text(row(.nominal, 58, narrow: true)) == "thermal: normal")
+            if case .thermal(_, _, let help) = row(.nominal, 58, narrow: true).kind { #expect(help.hasPrefix("thermal: normal. ")) }
+            L10nStore.shared.language = .ru
+            let ru = row(.critical, 97, narrow: true)
+            #expect(text(ru) == "нагрев: критический" && ru.rightText == "97 °C")
+            #expect(row(.nominal, 58, high: true).rightText == "91 %")
+        }
+
+        @Test func tileCarriesSocRowOnlyOnCPU() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            let (report, live) = nowFixture()
+            var input = homeInput(report, live)
+            input.thermal = .fair; input.socTempC = 58; input.cpu = CPUUsage(user: 10, sys: 5, idle: 85)
+            let tasks = HomeModel.tasks(input.assessment, report: report, disk: live.disk, battery: live.battery)
+            let tiles = HomeModel.tiles(input, tasks: tasks, scan: .ok(at: input.now))
+            #expect(tiles.filter { $0.socRow != nil }.map(\.page) == [.cpu])
+            #expect(tiles[0].socRow?.rightText == "58 °C")
+            #expect(tiles[0].accessibilityText.contains("elevated 58 °C"))
+            input.cpu = CPUUsage(user: 70, sys: 20, idle: 10)
+            input.cpuHighSince = input.now.addingTimeInterval(-190)
+            let high = HomeModel.tiles(input, tasks: tasks, scan: .ok(at: input.now))[0].socRow
+            #expect(high?.kind == .highLoad(text: L.cpuTagHigh, help: L.cpuHighLoadFor(3)) && high?.rightText == "90%")
+            input.cpuHighSince = input.now.addingTimeInterval(-20)   // under a minute: not high yet
+            if case .thermal? = HomeModel.tiles(input, tasks: tasks, scan: .ok(at: input.now))[0].socRow?.kind {} else { Issue.record("expected thermal row") }
         }
 
         @Test func nowRu() {

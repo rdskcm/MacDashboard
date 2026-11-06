@@ -74,6 +74,8 @@ struct SectionHero: View {
     let note: String
     let tone: Color
     let toneInk: Color
+    /// Bar colour when it differs from the panel tint (the GPU hero: blue panel, lime bar).
+    var barTone: Color? = nil
     var dimmed = false
 
     var body: some View {
@@ -93,7 +95,7 @@ struct SectionHero: View {
                 .frame(height: 40)
                 .padding(.top, 10)
             Spacer(minLength: 10)
-            DS3Bar(fraction: fraction, height: 8, fill: AnyShapeStyle(tone))
+            DS3Bar(fraction: fraction, height: 8, fill: AnyShapeStyle(barTone ?? tone))
             Text(note)
                 .font(.system(size: 12.5))
                 .foregroundStyle(DS3.muted)

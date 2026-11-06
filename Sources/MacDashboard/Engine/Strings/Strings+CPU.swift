@@ -22,7 +22,6 @@ protocol CPUStrings {
     var cpuUsage: String { get }
     var cpuUser: String { get }
     var cpuSystem: String { get }
-    var cpuSocTemperature: String { get }
     var socChipTemperature: String { get }
     var gpuNotAvailable: String { get }
     var gpuWholeMac: String { get }
@@ -37,7 +36,6 @@ protocol CPUStrings {
     var cpuThermalHelpSerious: String { get }
     var cpuThermalHelpCritical: String { get }
     var cpuNoReading: String { get }
-    func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String
     func cpuHighLoadFor(_ min: Int) -> String
     var cpuTagHigh: String { get }
     var cpuTagReadError: String { get }
@@ -55,6 +53,41 @@ protocol CPUStrings {
     var processQuitting: String { get }
     func processForceQuitQuestion(_ name: String) -> String
     func processSignalFailed(_ name: String) -> String
+
+    // MARK: SoC page details (SOC-DETAILS stage 1: the keys the pure view models in Engine/SocPageModel.swift use)
+    var socCoresUnknown: String { get }
+    var socLoadPerCore: String { get }
+    var socFrequencyIdle: String { get }
+    var socFrequencyHelp: String { get }
+    func socGHz(_ s: String) -> String
+    func socGPUCores(_ n: Int) -> String
+    var socTopByGPU: String { get }
+    var socPowerLabel: String { get }
+    var socPowerUnavailable: String { get }
+    func socWatts(_ s: String) -> String
+    var socPowerPrefix: String { get }
+    var socChartMinus2: String { get }
+    var socChartMinus1: String { get }
+    var socChartNow: String { get }
+    var cpuThermalWordNominal: String { get }
+    var cpuThermalWordFair: String { get }
+    var cpuThermalWordSerious: String { get }
+    var cpuThermalWordCritical: String { get }
+
+    // MARK: SoC page layout (SOC-DETAILS stage 2)
+    var socCoresTitle: String { get }
+    var socCoreTypePerformance: String { get }
+    var socCoreTypeEfficiency: String { get }
+    var socFrequency: String { get }
+    var cpuIdle: String { get }
+    var socLoadAverage: String { get }
+    func socLoadMin(_ n: Int) -> String
+    var socLoadAverageHelp: String { get }
+    var socLoadAverageUnavailable: String { get }
+    var socGPUListEmpty: String { get }
+    var socTemperatureHelp: String { get }
+    var socTemperatureUnavailable: String { get }
+    var socChartTitle: String { get }
 }
 
 extension StringsEN: CPUStrings {
@@ -77,7 +110,6 @@ extension StringsEN: CPUStrings {
     var cpuUsage: String { "Usage" }
     var cpuUser: String { "User" }
     var cpuSystem: String { "System" }
-    var cpuSocTemperature: String { "SoC temperature" }
     var socChipTemperature: String { "Chip temperature" }
     var gpuNotAvailable: String { "Not available on this Mac" }
     var gpuWholeMac: String { "Whole Mac, including what macOS draws" }
@@ -92,7 +124,6 @@ extension StringsEN: CPUStrings {
     var cpuThermalHelpSerious: String { "macOS thermal state: high. Fans, if the Mac has them, run at full speed. macOS may reduce performance to cool down." }
     var cpuThermalHelpCritical: String { "macOS thermal state: critical. Performance is significantly reduced until the Mac cools down." }
     var cpuNoReading: String { "No current reading" }
-    func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String { "load \(a) · \(b) · \(c) · \(cores) cores" }
     func cpuHighLoadFor(_ min: Int) -> String { "High load for \(min) min" }
     var cpuTagHigh: String { "High load" }
     var cpuTagReadError: String { "Read error" }
@@ -109,6 +140,41 @@ extension StringsEN: CPUStrings {
     var processQuitting: String { "Quitting…" }
     func processForceQuitQuestion(_ name: String) -> String { "Force quit “\(name)”? Unsaved changes will be lost." }
     func processSignalFailed(_ name: String) -> String { "Couldn’t quit “\(name)”." }
+
+    // MARK: SoC page details (SOC-DETAILS)
+    var socCoresUnknown: String { "Cores" }
+    var socLoadPerCore: String { "load per core" }
+    var socFrequencyIdle: String { "idle" }
+    var socFrequencyHelp: String { "Average speed while the cores were active." }
+    func socGHz(_ s: String) -> String { "\(s) GHz" }
+    func socGPUCores(_ n: Int) -> String { "\(n) GPU cores" }
+    var socTopByGPU: String { "top by GPU" }
+    var socPowerLabel: String { "Power, whole Mac" }
+    var socPowerUnavailable: String { "Power, whole Mac: Not available on this Mac" }
+    func socWatts(_ s: String) -> String { "\(s) W" }
+    var socPowerPrefix: String { "Mac" }
+    var socChartMinus2: String { "−2 min" }
+    var socChartMinus1: String { "−1 min" }
+    var socChartNow: String { "now" }
+    var cpuThermalWordNominal: String { "normal" }
+    var cpuThermalWordFair: String { "elevated" }
+    var cpuThermalWordSerious: String { "high" }
+    var cpuThermalWordCritical: String { "critical" }
+
+    // MARK: SoC page layout (SOC-DETAILS stage 2)
+    var socCoresTitle: String { "CPU cores" }
+    var socCoreTypePerformance: String { "Performance" }
+    var socCoreTypeEfficiency: String { "Efficiency" }
+    var socFrequency: String { "Frequency" }
+    var cpuIdle: String { "Idle" }
+    var socLoadAverage: String { "Load average" }
+    func socLoadMin(_ n: Int) -> String { "\(n) min" }
+    var socLoadAverageHelp: String { "Average number of tasks running or waiting. Compare it with the number of cores." }
+    var socLoadAverageUnavailable: String { "Load average: Not available on this Mac" }
+    var socGPUListEmpty: String { "No process is using the GPU." }
+    var socTemperatureHelp: String { "Chip temperature. Warm from 85 °C, hot from 95 °C." }
+    var socTemperatureUnavailable: String { "Chip temperature: Not available on this Mac" }
+    var socChartTitle: String { "CPU and GPU, last 2 minutes" }
 }
 
 extension StringsRU: CPUStrings {
@@ -131,7 +197,6 @@ extension StringsRU: CPUStrings {
     var cpuUsage: String { "Загрузка" }
     var cpuUser: String { "Пользователь" }
     var cpuSystem: String { "Система" }
-    var cpuSocTemperature: String { "Температура SoC" }
     var socChipTemperature: String { "Температура чипа" }
     var gpuNotAvailable: String { "Недоступно на этом Mac" }
     var gpuWholeMac: String { "Весь Mac, включая отрисовку macOS" }
@@ -146,7 +211,6 @@ extension StringsRU: CPUStrings {
     var cpuThermalHelpSerious: String { "Тепловое состояние macOS: высокое. Вентиляторы, если они есть, работают на максимуме. macOS может снижать производительность, чтобы охладиться." }
     var cpuThermalHelpCritical: String { "Тепловое состояние macOS: критическое. Производительность заметно снижена, пока Mac не остынет." }
     var cpuNoReading: String { "Нет текущих данных" }
-    func cpuLoadNote(_ a: String, _ b: String, _ c: String, _ cores: Int) -> String { "нагрузка \(a) · \(b) · \(c) · \(cores) " + ruPlural(cores, "ядро", "ядра", "ядер") }
     func cpuHighLoadFor(_ min: Int) -> String { "Высокая нагрузка уже \(min) мин" }
     var cpuTagHigh: String { "Высокая нагрузка" }
     var cpuTagReadError: String { "Ошибка чтения" }
@@ -163,4 +227,39 @@ extension StringsRU: CPUStrings {
     var processQuitting: String { "Завершение…" }
     func processForceQuitQuestion(_ name: String) -> String { "Снять «\(name)» принудительно? Несохранённые изменения будут потеряны." }
     func processSignalFailed(_ name: String) -> String { "Не удалось завершить «\(name)»." }
+
+    // MARK: SoC page details (SOC-DETAILS)
+    var socCoresUnknown: String { "Ядра" }
+    var socLoadPerCore: String { "загрузка каждого ядра" }
+    var socFrequencyIdle: String { "простой" }
+    var socFrequencyHelp: String { "Средняя частота, пока ядра были активны." }
+    func socGHz(_ s: String) -> String { "\(s) ГГц" }
+    func socGPUCores(_ n: Int) -> String { "\(n) " + ruPlural(n, "ядро", "ядра", "ядер") + " GPU" }
+    var socTopByGPU: String { "топ по GPU" }
+    var socPowerLabel: String { "Потребление всего Mac" }
+    var socPowerUnavailable: String { "Потребление всего Mac: Недоступно на этом Mac" }
+    func socWatts(_ s: String) -> String { "\(s) Вт" }
+    var socPowerPrefix: String { "Mac" }
+    var socChartMinus2: String { "−2 мин" }
+    var socChartMinus1: String { "−1 мин" }
+    var socChartNow: String { "сейчас" }
+    var cpuThermalWordNominal: String { "норма" }
+    var cpuThermalWordFair: String { "повышен" }
+    var cpuThermalWordSerious: String { "высокий" }
+    var cpuThermalWordCritical: String { "критический" }
+
+    // MARK: SoC page layout (SOC-DETAILS stage 2)
+    var socCoresTitle: String { "Ядра CPU" }
+    var socCoreTypePerformance: String { "Производительные" }
+    var socCoreTypeEfficiency: String { "Энергоэффективные" }
+    var socFrequency: String { "Частота" }
+    var cpuIdle: String { "Простой" }
+    var socLoadAverage: String { "Средняя нагрузка" }
+    func socLoadMin(_ n: Int) -> String { "\(n) мин" }
+    var socLoadAverageHelp: String { "Среднее число задач, которые выполняются или ждут. Сравните его с числом ядер." }
+    var socLoadAverageUnavailable: String { "Средняя нагрузка: Недоступно на этом Mac" }
+    var socGPUListEmpty: String { "Ни один процесс не использует GPU." }
+    var socTemperatureHelp: String { "Температура чипа. Тепло от 85 °C, горячо от 95 °C." }
+    var socTemperatureUnavailable: String { "Температура чипа: Недоступно на этом Mac" }
+    var socChartTitle: String { "CPU и GPU за последние 2 минуты" }
 }
