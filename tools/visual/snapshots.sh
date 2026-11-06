@@ -1,40 +1,62 @@
 #!/bin/bash
 # tools/visual/snapshots.sh — offscreen snapshot suite (HARNESS-REDESIGN-RETARGET).
-# Renders every state of Tests/MacDashboardTests/ContentSnapshotTests.swift (dark + light) inside `swift test`,
+# Renders every state of Tests/MacDashboardTests/ContentSnapshotTests.swift (dark + light) in the SwiftPM test process,
 # compares each PNG with Tests/Snapshots/<state>.png (`vbtool snap-compare`, built -O) and writes a run directory.
 #
-#   tools/visual/snapshots.sh [--out DIR]
-#   tools/visual/snapshots.sh --bless RUN_DIR [STATE ...]
+#   tools/visual/snapshots.sh [--out DIR] [--process-name MacDashboardTests.NAME]
+#   tools/visual/snapshots.sh --bless RUN_DIR [STATE ...] [--allow-dirty]
 #   tools/visual/snapshots.sh -h
+#
+# --bless refuses a run whose build-info.txt git_commit ends in -dirty (rendered from uncommitted changes);
+# --allow-dirty overrides that, only for a change the block's spec names as intended.
+# --process-name (verification only) runs the test process under that name, so its defaults domain is that isolated
+# domain instead of the shared swiftpm-testing-helper one.
 #
 # Exit (run):   0 every state same | 2 any CHANGED, SIZE-CHANGED, NO-REF, ORPHAN-REF, MANIFEST-ORPHAN
 #               (contact-sheet.png written when a state differs) | 64 usage |
 #               65 main display backing scale is not 2 | 70 build, test or runtime error.
-# Exit (bless): 0 blessed | 1 refused (incomplete results, unknown state, RENDER-FAILED state).
+# Exit (bless): 0 blessed | 1 refused (incomplete results, dirty run without --allow-dirty, no build-info
+#               git_commit, unknown state, RENDER-FAILED state).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 REF_DIR="$ROOT/Tests/Snapshots"
 MANIFEST="$REF_DIR/manifest.txt"
 
-usage() { sed -n 2,13p "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n 2,19p "$0" | sed 's/^# \{0,1\}//'; }
 
 OUT=""
 BLESS_DIR=""
 BLESS_STATES=()
 MODE=run
+ALLOW_DIRTY=0
+PROC_NAME=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --out) [ $# -ge 2 ] || { usage >&2; exit 64; }; OUT="$2"; shift 2 ;;
+    --process-name) [ $# -ge 2 ] || { usage >&2; exit 64; }; PROC_NAME="$2"; shift 2 ;;
+    --allow-dirty) ALLOW_DIRTY=1; shift ;;
     --bless)
       [ $# -ge 2 ] || { usage >&2; exit 64; }
       MODE=bless; BLESS_DIR="$2"; shift 2
-      while [ $# -gt 0 ]; do BLESS_STATES+=("$1"); shift; done ;;
+      while [ $# -gt 0 ]; do
+        if [ "$1" = --allow-dirty ]; then ALLOW_DIRTY=1; else BLESS_STATES+=("$1"); fi
+        shift
+      done ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 64 ;;
   esac
 done
+if [ "$ALLOW_DIRTY" = 1 ] && [ "$MODE" != bless ]; then
+  echo "--allow-dirty applies only to --bless" >&2; usage >&2; exit 64
+fi
+if [ -n "$PROC_NAME" ]; then
+  if [ "$MODE" != run ]; then echo "--process-name applies only to a run" >&2; usage >&2; exit 64; fi
+  if ! [[ "$PROC_NAME" =~ ^MacDashboardTests\.[A-Za-z0-9._-]+$ ]]; then
+    echo "--process-name must be MacDashboardTests.<letters, digits, . _ ->: $PROC_NAME" >&2; exit 64
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # --bless
@@ -44,6 +66,19 @@ if [ "$MODE" = bless ]; then
   if [ ! -f "$RES" ] || ! grep -q '^# complete ' "$RES"; then
     echo "REFUSED: bless: $RES missing or incomplete (no '# complete' line)" >&2; exit 1
   fi
+  INFO="$BLESS_DIR/build-info.txt"
+  GIT_COMMIT="$(awk -F': ' '/^git_commit:/{print $2}' "$INFO" 2>/dev/null | head -1 | tr -d ' \r')"
+  if [ -z "$GIT_COMMIT" ]; then
+    echo "REFUSED: bless: $INFO missing or has no git_commit line (not a snapshots.sh run directory)" >&2; exit 1
+  fi
+  case "$GIT_COMMIT" in
+    *-dirty)
+      if [ "$ALLOW_DIRTY" != 1 ]; then
+        echo "REFUSED: bless: $INFO records git_commit $GIT_COMMIT: the run was rendered from uncommitted changes, so its PNGs may match no commit. Commit the change and run tools/visual/snapshots.sh again, or add --allow-dirty when the block's spec names this change as intended." >&2
+        exit 1
+      fi
+      echo "WARNING: bless: run rendered from uncommitted changes ($GIT_COMMIT), allowed by --allow-dirty" >&2 ;;
+  esac
   if [ ${#BLESS_STATES[@]} -eq 0 ]; then
     while IFS= read -r st; do BLESS_STATES+=("$st"); done < <(
       awk -F'\t' 'NR>1 && $1 !~ /^#/ && ($8=="CHANGED"||$8=="SIZE-CHANGED"||$8=="NO-REF"||$8=="ORPHAN-REF"){print $1}' "$RES")
@@ -57,8 +92,6 @@ if [ "$MODE" = bless ]; then
       echo "REFUSED: bless: $st is RENDER-FAILED in results.tsv (no usable current/$st.png)" >&2; exit 1
     fi
   done
-  INFO="$BLESS_DIR/build-info.txt"
-  GIT_COMMIT="$(awk -F': ' '/^git_commit:/{print $2}' "$INFO" | head -1)"
   MACOS_V="$(awk -F': ' '/^macos:/{print $2}' "$INFO" | head -1)"
   XCODE_V="$(awk -F': ' '/^xcodebuild_version:/{print $2}' "$INFO" | head -1)"
   TODAY="$(date +%Y-%m-%d)"
@@ -107,7 +140,31 @@ fi
 
 GIT_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD)"
 if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then GIT_COMMIT="${GIT_COMMIT}-dirty"; fi
+# SNAPSHOT-DRIFT-HUNT: formatting pins on the test process's command line (argument domain, in place before any code
+# runs; an in-process pin is too late because Foundation resolves the locale first). They override every host Region
+# setting and reproduce the references: en_US, 12-hour, short date dd.MM.y, default week and number symbols.
+# Keep in step with SnapshotEnv.formattingLocaleIsPinned().
+PIN_ARGS=(
+  -AppleLocale en_US
+  -AppleLanguages '(en-US)'
+  -AppleICUDateFormatStrings '{ 1 = "dd.MM.y"; }'
+  -AppleICUTimeFormatStrings '{ }'
+  -AppleICUForce24HourTime NO
+  -AppleICUForce12HourTime NO
+  -AppleFirstWeekday '{ }'
+  -AppleMinDaysInFirstWeek '{ }'
+  -AppleICUNumberSymbols '{ }'
+)
+# `swift test` cannot pass arguments to the test process, so the script starts what it starts: swiftpm-testing-helper
+# of the active toolchain with the test bundle (SwiftPM's current .build layout).
+SWIFT_BIN="$(xcrun --find swift 2>/dev/null || true)"
+HELPER="${SWIFT_BIN%/bin/swift}/libexec/swift/pm/swiftpm-testing-helper"
+BUNDLE="$ROOT/.build/out/Products/Debug/MacDashboardTests.xctest/Contents/MacOS/MacDashboardTests"
+PLAT="$(xcrun --show-sdk-platform-path 2>/dev/null || true)/Developer"
+DATEFMT_GLOBAL="$(defaults read -g AppleICUDateFormatStrings 2>/dev/null | tr -s ' \n' ' ' || true)"
+[ -n "$DATEFMT_GLOBAL" ] || DATEFMT_GLOBAL=unset
 SCROLLBARS_GLOBAL="$(defaults read -g AppleShowScrollBars 2>/dev/null || echo unset)"
+LOCALE_GLOBAL="$(defaults read -g AppleLocale 2>/dev/null || echo unset)"
 XCODEBUILD_V="$(xcodebuild -version 2>/dev/null | head -1 || true)"
 [ -n "$XCODEBUILD_V" ] || XCODEBUILD_V="none (CLT only)"
 {
@@ -121,6 +178,8 @@ XCODEBUILD_V="$(xcodebuild -version 2>/dev/null | head -1 || true)"
   echo "increase_contrast: $(defaults read com.apple.universalaccess increaseContrast 2>/dev/null || echo 0)"
   echo "accent_color: $(defaults read -g AppleAccentColor 2>/dev/null || echo multicolor)"
   echo "scrollbars: WhenScrolling (pinned in-process via argument domain; global=$SCROLLBARS_GLOBAL)"
+  echo "locale: pinned on the test command line: ${PIN_ARGS[*]} (global AppleLocale=$LOCALE_GLOBAL; global AppleICUDateFormatStrings=$DATEFMT_GLOBAL)"
+  echo "process_name: ${PROC_NAME:-swiftpm-testing-helper}"
   echo "rule: channel_tolerance=24 max_changed_pixels=0"
 } > "$OUT/build-info.txt"
 
@@ -134,8 +193,20 @@ case "$HOME_BENCH" in
   "$HOME"/Library/*) echo "ERROR: bench home is inside ~/Library: $HOME_BENCH" >&2; exit 70 ;;
 esac
 rm -rf "$HOME_BENCH"; mkdir -p "$HOME_BENCH" || exit 70
+for f in "$HELPER" "$BUNDLE"; do
+  [ -x "$f" ] || { echo "ERROR: not found: $f (SwiftPM or Xcode layout changed; update snapshots.sh)" >&2; exit 70; }
+done
+TEST_EXE="$HELPER"
+if [ -n "$PROC_NAME" ]; then
+  TEST_EXE="$OUT/.bin/$PROC_NAME"
+  ln -s "$HELPER" "$TEST_EXE" || { echo "ERROR: cannot link $TEST_EXE" >&2; exit 70; }
+fi
 
-(cd "$ROOT" && MACDASH_SNAPSHOTS="$OUT" CFFIXED_USER_HOME="$HOME_BENCH" swift test --skip-build --filter SnapshotTests) > "$OUT/swift-test.log" 2>&1
+(cd "$ROOT" || exit 70
+ export MACDASH_SNAPSHOTS="$OUT" CFFIXED_USER_HOME="$HOME_BENCH"
+ export DYLD_FRAMEWORK_PATH="$PLAT/Library/Frameworks:$PLAT/Library/PrivateFrameworks" DYLD_LIBRARY_PATH="$PLAT/usr/lib"
+ exec -a "$(basename "$TEST_EXE")" "$TEST_EXE" --test-bundle-path "$BUNDLE" --skip-build --filter SnapshotTests "$BUNDLE" \
+   --testing-library swift-testing "${PIN_ARGS[@]}") > "$OUT/swift-test.log" 2>&1
 rc=$?
 
 if ! grep -q '^# complete ' "$OUT/rendered.tsv" 2>/dev/null; then
