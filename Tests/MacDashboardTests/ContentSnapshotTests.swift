@@ -32,6 +32,17 @@ extension SerialTests {
             let outDir = try #require(SnapshotEnv.outDir)
             SnapshotEnv.pinOverlayScrollers()
             try #require(NSScroller.preferredScrollerStyle == .overlay, "scroller pin did not take effect in this process")
+            // SNAPSHOT-DRIFT-HUNT: the formatting pins come from snapshots.sh's command line (argument domain). Log the
+            // process name (= its defaults domain), the effective AppleLocale (argument domain first) and the value in
+            // this process's own app domain (the layer below the pins, where the hostile-host check writes).
+            let appDomainLocale = CFPreferencesCopyValue("AppleLocale" as CFString, kCFPreferencesCurrentApplication,
+                                                         kCFPreferencesCurrentUser, kCFPreferencesAnyHost) as? String
+            print("SNAPSHOT-ENV: process=\(ProcessInfo.processInfo.processName) "
+                  + "effective AppleLocale=\(UserDefaults.standard.string(forKey: "AppleLocale") ?? "unset") "
+                  + "app-domain AppleLocale=\(appDomainLocale ?? "unset")")
+            print("SNAPSHOT-ENV: \(SnapshotEnv.localeReport())")
+            try #require(SnapshotEnv.formattingLocaleIsPinned(),
+                         "formatting pins missing or overridden (run through tools/visual/snapshots.sh): \(SnapshotEnv.localeReport())")
             // D7: never against the real home (AppModel() reads the history file at init).
             let realHome = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) } ?? ""
             try #require(!realHome.isEmpty && NSHomeDirectory() != realHome,
@@ -62,7 +73,31 @@ extension SerialTests {
             settings.claudeLogPath = nil
             settings.notifyEnabled = NotifyCategory.allOnByDefault
             defer { (settings.fastIntervalSeconds, settings.ignoredWakeHolderEntries, settings.backupStaleDays, settings.lowSpacePercent, settings.appearance, settings.orbsEnabled, settings.snapshotMinutes, settings.claudeLogPath, settings.notifyEnabled) = saved }
-            L10nStore.shared.language = .en
+            // SNAPSHOT-DRIFT-HUNT (N1 option i): the Language control shows `choice`, which L10nStore.init reads from the
+            // persisted defaults of the shared test-helper domain. Pin it with `language`; restore the value and the
+            // persisted key so the domain is left as found (D2).
+            let l10n = L10nStore.shared
+            let savedChoice = l10n.choice
+            let savedChoiceKey = UserDefaults.standard.object(forKey: L10nStore.choiceKey)
+            let savedLanguageKey = UserDefaults.standard.object(forKey: L10nStore.defaultsKey)
+            print("SNAPSHOT-ENV: language choice was \(savedChoice.rawValue), pinned to en")
+            l10n.choice = .en
+            l10n.language = .en
+            defer {
+                l10n.choice = savedChoice
+                if let savedChoiceKey {
+                    UserDefaults.standard.set(savedChoiceKey, forKey: L10nStore.choiceKey)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: L10nStore.choiceKey)
+                }
+                if let savedLanguageKey {
+                    UserDefaults.standard.set(savedLanguageKey, forKey: L10nStore.defaultsKey)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: L10nStore.defaultsKey)
+                }
+                print("SNAPSHOT-ENV: language choice restored to \(l10n.choice.rawValue)")
+            }
+            try #require(l10n.choice == .en && l10n.language == .en, "language pin did not take effect in this process")
             let run = try SnapshotRun(out: outDir)
             let m = AppModel()
             m.applyVisualFixture()

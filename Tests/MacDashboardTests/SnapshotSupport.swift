@@ -21,6 +21,48 @@ enum SnapshotEnv {
         d["AppleShowScrollBars"] = scrollerPinValue
         UserDefaults.standard.setVolatileDomain(d, forName: UserDefaults.argumentDomain)
     }
+
+    /// SNAPSHOT-DRIFT-HUNT: the formatting pins are launch arguments of the test process, set by
+    /// tools/visual/snapshots.sh (`PIN_ARGS`): Foundation resolves the current locale before any test code runs, so an
+    /// in-process pin is too late. These checks prove the pins arrived; keep them in step with `PIN_ARGS`.
+    /// Short time and short date of 1970-01-01 03:00 UTC in the process's formatting locale; ICU's narrow and
+    /// no-break spaces become plain spaces. The pins give ("3:00 AM", "01.01.1970").
+    static func localeProbe() -> (time: String, date: String) {
+        let f = DateFormatter()
+        f.locale = .autoupdatingCurrent
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        let instant = Date(timeIntervalSince1970: 3 * 3600)
+        f.dateStyle = .none
+        f.timeStyle = .short
+        let time = f.string(from: instant)
+        f.dateStyle = .short
+        f.timeStyle = .none
+        let date = f.string(from: instant)
+        func plain(_ s: String) -> String {
+            s.replacingOccurrences(of: "\u{202F}", with: " ").replacingOccurrences(of: "\u{00A0}", with: " ")
+        }
+        return (plain(time), plain(date))
+    }
+
+    /// True when the process formats as snapshots.sh pins it: en_US, 12-hour, short date dd.MM.y, Sunday first,
+    /// "." decimal and "," grouping.
+    static func formattingLocaleIsPinned() -> Bool {
+        let l = Locale.autoupdatingCurrent
+        let p = localeProbe()
+        return l.language.languageCode?.identifier == "en" && l.region?.identifier == "US"
+            && p.time == "3:00 AM" && p.date == "01.01.1970"
+            && Calendar.autoupdatingCurrent.firstWeekday == 1
+            && l.decimalSeparator == "." && l.groupingSeparator == ","
+    }
+
+    /// One line for swift-test.log: the formatting locale this process renders with.
+    static func localeReport() -> String {
+        let l = Locale.autoupdatingCurrent
+        let p = localeProbe()
+        return "current=\(Locale.current.identifier) autoupdating=\(l.identifier) languages=\(Locale.preferredLanguages) "
+            + "time=\(p.time) date=\(p.date) firstWeekday=\(Calendar.autoupdatingCurrent.firstWeekday) "
+            + "decimal=\(l.decimalSeparator ?? "nil") grouping=\(l.groupingSeparator ?? "nil")"
+    }
 }
 
 /// Red caption above a section (copy of tools/harness/HarnessKit.swift `HarnessLabel`/`HarnessSection`).
@@ -222,6 +264,11 @@ extension SerialTests.SnapshotTests {
     @Test @MainActor func scrollerStyleIsOverlay() throws {
         SnapshotEnv.pinOverlayScrollers()
         #expect(NSScroller.preferredScrollerStyle == .overlay, "scroller pin did not take effect in this process")
+    }
+    /// Fails loudly if the formatting pins of tools/visual/snapshots.sh did not reach this process.
+    @Test @MainActor func formattingLocaleIsEnUS() throws {
+        #expect(SnapshotEnv.formattingLocaleIsPinned(),
+                "formatting pins missing or overridden (run through tools/visual/snapshots.sh): \(SnapshotEnv.localeReport())")
     }
     @Test func captureOfMissingWindowThrows() {
         #expect(throws: WindowCaptureError.self) {
