@@ -1,7 +1,7 @@
 // Engine/ReportHost.swift
 // ARCH-MODEL-SPLIT step 0: how a feature controller reaches the coordinator's report without a back-reference.
-// Every section cluster does the same things: read the report, write its own section after the in-flight pass
-// has ended, and (some) re-assess. The coordinator builds one ReportHost; controllers keep it as a `let`.
+// Every section cluster does the same things: read the report, land its own section after the in-flight pass
+// has committed (`afterPass`), and (some) re-assess. The coordinator builds one ReportHost; controllers keep it as a `let`.
 // One struct, grown per block of the series; never a protocol.
 import Foundation
 
@@ -13,10 +13,12 @@ struct ReportHost {
     var update: @MainActor ((inout FullReport) -> Void) -> Void
     /// True while a `refreshReport()` pass is in flight (`isCollectingReport`).
     var isCollecting: @MainActor () -> Bool
-    /// Waits (polling) until no pass is in flight. Bounded: returns `false` when the bound expired while a pass was
-    /// still running — the caller's write then lands in a partial. No caller acts on the value yet (suspected
-    /// defect 1, characterised by ReportHostTests; fix row pending).
-    var awaitPassEnd: @MainActor () async -> Bool
+    /// Runs `work` at once when no pass is in flight; otherwise queues it to run synchronously at the end of the
+    /// in-flight pass — after its commit (`report = final` and the commit assessment), before a coalesced pending
+    /// pass starts — in the order queued. Dropped, never run, when the pass is cancelled (`AppModel.stop()`).
+    /// `work` is an updater's whole landing — its section write, its `reassess()` and its stamps — so they apply
+    /// together or not at all (PASS-WAIT-PARTIAL). `work` must not start a report pass.
+    var afterPass: @MainActor (_ work: @escaping @MainActor () -> Void) -> Void
     /// Re-assesses the committed report (`homeReport`), never a partial.
     var reassess: @MainActor () -> Void
     /// True while no effectively visible window is frontmost (`AppModel.isPaused`, set by AppActivityMonitor):

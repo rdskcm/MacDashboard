@@ -204,7 +204,11 @@ final class AppModel {
     /// off exactly one follow-up refresh on completion instead of silently dropping
     /// the request. Not a counter: N coalesced requests → one follow-up. nil = none;
     /// `.button` wins when merged (CollectTrigger.merged).
-    private var reportRefreshPending: CollectTrigger? = nil
+    /// Internal, not private: ReportHostTests sets it to chain a pending pass (PASS-WAIT-PARTIAL).
+    var reportRefreshPending: CollectTrigger? = nil
+    /// PASS-WAIT-PARTIAL: updater landings queued by `runAfterPass(_:)` while a pass is in flight. The pass's `defer`
+    /// runs them after its commit; a cancelled pass and `stop()` drop them.
+    @ObservationIgnored private var afterPassQueue: [@MainActor () -> Void] = []
 
     /// Set by `AppActivityMonitor` (AppShell.swift) through `setPaused(_:)` whenever there is no effectively visible,
     /// non-panel window on a frontmost app, so the live loop can skip the (relatively heavy — spawns `top` twice)
@@ -217,6 +221,11 @@ final class AppModel {
     private let actions: AppActions
     /// ARCH-MODEL-SPLIT: the clock/sleep the pass wait and the controllers use; tests inject a virtual one.
     private let time: TimeSource
+    /// PASS-WAIT-PARTIAL: one report pass's collect — the hidden crash names and the brew session cache in, the final
+    /// report out, every snapshot through `onSection`. The app uses ReportCollector; tests inject a fake (no process spawned).
+    typealias PassCollect = @MainActor (_ hiddenCrashReports: Set<String>, _ cachedBrew: BrewSnapshot?,
+                                        _ onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport
+    private let passCollect: PassCollect
     /// ARCH-MODEL-SPLIT: how controllers reach `report` / the pass / the assessment without a back-reference.
     private let link = CoordinatorLink()
     /// The one host every controller gets; tests drive it directly.
@@ -253,10 +262,16 @@ final class AppModel {
     let socLive: SocLiveSampler
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
-    init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live) {
+    /// `passCollect`: tests pass a fake pass; the app passes nothing.
+    init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live,
+         passCollect: PassCollect? = nil) {
         self.settings = settings
         self.actions = actions
         self.time = time
+        let livePassCollect: PassCollect = { hidden, cachedBrew, onSection in
+            await ReportCollector(hiddenCrashReports: hidden).collect(skipSlow: false, cachedBrew: cachedBrew, onSection: onSection)
+        }
+        self.passCollect = passCollect ?? livePassCollect
         cpuHistory = []
         report = FullReport()
         assessment = Assessment()
@@ -272,7 +287,7 @@ final class AppModel {
             read: { link.model?.report ?? FullReport() },
             update: { mutate in if let m = link.model { mutate(&m.report) } },
             isCollecting: { link.model?.isCollectingReport ?? false },
-            awaitPassEnd: { await link.model?.waitForReportRefreshToFinish() ?? true },
+            afterPass: { work in link.model?.runAfterPass(work) },
             reassess: { link.model?.reassessCommitted() },
             isPaused: { link.model?.isPaused ?? true },
             refreshClaudeBackup: { await link.model?.refreshClaudeBackup() },
@@ -603,6 +618,7 @@ final class AppModel {
         slowTask = nil
         reportTask?.cancel()
         reportTask = nil
+        afterPassQueue.removeAll()   // PASS-WAIT-PARTIAL: queued landings never run after stop()
         smart.stop()
         brew.stop()
         energy.stop()
@@ -646,7 +662,8 @@ final class AppModel {
         beginPass(trigger: trigger)
     }
 
-    private func beginPass(trigger: CollectTrigger) {
+    /// Starts one pass. Internal, not private: ReportHostTests starts a pass on a fake collect without `refreshReport`'s update check and folder count (PASS-WAIT-PARTIAL).
+    func beginPass(trigger: CollectTrigger) {
         reportTask?.cancel()
         // Snapshot BEFORE the collect wipes `report` section by section: this is what the
         // fast tick assesses for the duration of the pass (V2-HONEST-READINGS).
@@ -658,6 +675,17 @@ final class AppModel {
             guard let self else { return }
             defer {
                 self.isCollectingReport = false   // always clear, incl. cancellation
+                // PASS-WAIT-PARTIAL: updater landings queued during this pass run now — after the commit below has
+                // set `report = final` and assessed it, before a pending pass starts — so this pass cannot overwrite
+                // them. A cancelled pass (stop()) drops them.
+                let landings = self.afterPassQueue
+                self.afterPassQueue = []
+                if !Task.isCancelled {
+                    for work in landings {
+                        work()
+                        assert(!self.isCollectingReport, "an afterPass landing must not start a pass (ReportHost contract)")
+                    }
+                }
                 // CRASH-REPORT-DISMISS: a hide / unhide / delete / Refresh parked during this pass re-scans now, so this
                 // pass's crash section (taken with the hidden list it started with) does not stand. Deliberately NOT
                 // guarded by `!Task.isCancelled` (fix wave 2, C3): a cancelled pass must not leave `crashReports.action` working.
@@ -673,7 +701,7 @@ final class AppModel {
             let cachedBrew = self.brew.cachedSnapshot(now: self.time.now())
             let hiddenCrashes = self.crashReports.hiddenNames
             let collected = await CommandRunner.$qos.withValue(trigger.commandQoS) {
-                await ReportCollector(hiddenCrashReports: hiddenCrashes).collect(skipSlow: false, cachedBrew: cachedBrew) { partial in
+                await self.passCollect(hiddenCrashes, cachedBrew) { partial in
                     // onSection is @MainActor; we're already isolated here. Detect the
                     // .smart section's arrival by its progress-flag transition (false/absent
                     // -> true) BEFORE overwriting self.report, so `smart.updatedAt` reflects the
@@ -746,18 +774,11 @@ final class AppModel {
         }
     }
 
-    /// Waits (cooperatively, polling) until no refreshReport() pass is in flight, so this
-    /// updater's field write can't be clobbered by a subsequent onSection snapshot that
-    /// hasn't collected this section in its own pass yet. Bounded so a stuck refresh can
-    /// never starve this updater forever. Returns false when the bound expired with a pass
-    /// still in flight (ReportHost.awaitPassEnd; suspected defect 1, ReportHostTests).
-    @discardableResult
-    func waitForReportRefreshToFinish() async -> Bool {
-        let deadline = time.now().addingTimeInterval(15)
-        while isCollectingReport && !Task.isCancelled && time.now() < deadline {
-            await time.sleep(.milliseconds(200))
-        }
-        return !isCollectingReport
+    /// `ReportHost.afterPass` (PASS-WAIT-PARTIAL): `work` now when no pass is in flight, else queued for the pass's
+    /// `defer` (see `afterPassQueue`). Replaces the bounded 15 s poll, whose give-up wrote into the partial (findings C1–C3).
+    func runAfterPass(_ work: @escaping @MainActor () -> Void) {
+        guard isCollectingReport else { work(); return }
+        afterPassQueue.append(work)
     }
 
     /// REDESIGN-BATTERY: the Battery page's ioreg loop, awaited by the page's `.task` and cancelled by SwiftUI when the

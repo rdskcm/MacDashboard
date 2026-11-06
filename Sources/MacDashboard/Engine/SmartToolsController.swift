@@ -118,18 +118,19 @@ final class SmartToolsController {
         }
     }
 
-    /// Lands one read after the in-flight pass has ended (a pass would overwrite `report.smart` when it commits).
-    /// No re-assess: the fast tick assesses every ~2 s, and `report.smart` is committed before it because this waits.
+    /// Lands one read after any in-flight pass (ReportHost.afterPass; a pass would overwrite `report.smart` when it commits).
+    /// No re-assess: the fast tick assesses every ~2 s and reads the committed report this lands in.
     /// `keepOldOnFailedRead` (volume events): an empty disk list (disk0 is always listed) or a failed destination
     /// read leaves the old value, so a busy `diskutil` during a mount burst does not blank a card.
     private func land(disks: [SmartDisk], tmDest: TMDestination??, keepOldOnFailedRead: Bool = false) async {
-        _ = await host.awaitPassEnd()
-        guard !Task.isCancelled else { return }
-        if !(keepOldOnFailedRead && disks.isEmpty) { host.write(\.smart, .some(disks)) }
-        if !(keepOldOnFailedRead && tmDest == nil) { deps.markTMUpdated(tmDest) }
         await host.refreshClaudeBackup()
         guard !Task.isCancelled else { return }
-        updatedAt = time.now()
+        host.afterPass { [weak self] in
+            guard let self else { return }
+            if !(keepOldOnFailedRead && disks.isEmpty) { self.host.write(\.smart, .some(disks)) }
+            if !(keepOldOnFailedRead && tmDest == nil) { self.deps.markTMUpdated(tmDest) }
+            self.updatedAt = self.time.now()
+        }
     }
 
     /// In-app smartmontools install (Block N8), from the Диски card when Homebrew is present but smartctl isn't.

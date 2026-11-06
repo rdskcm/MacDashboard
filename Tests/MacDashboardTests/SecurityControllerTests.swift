@@ -52,7 +52,7 @@ extension SerialTests {
             #expect(c.action == .enabling(.firewall) && c.firewallApplying)
             await c.enableTask?.value
             #expect(fake.commands == [SecurityPageModel.privilegedEnableCommand(.firewall)])
-            #expect(host.awaitCalls == 1)
+            #expect(host.afterPassCalls == 1)
             #expect(host.report.security == fake.state)
             #expect(host.reassessCalls == 1)
             #expect(c.action == .idle && c.adviceError == nil)
@@ -108,7 +108,7 @@ extension SerialTests {
             c.refreshNow()
             #expect(fake.checkUpdatesCalls == 1 && c.refreshing)
             await c.refreshTask?.value
-            #expect(host.awaitCalls == 1 && host.report.security == fake.state)
+            #expect(host.afterPassCalls == 1 && host.report.security == fake.state)
             #expect(host.reassessCalls == 1 && fake.rescanCalls == 1 && !c.refreshing)
 
             fake.holdCollect = true
@@ -166,14 +166,16 @@ extension SerialTests {
             #expect(host2.updateCalls == 0 && host2.reassessCalls == 0 && fake2.rescanCalls == 0)
         }
 
-        /// 7. (R8) when the pass wait gives up the controller still re-assesses only through the host.
-        @Test func writesAndReassessesThroughHostWhenWaitGivesUp() async {
+        /// 7. (PASS-WAIT-PARTIAL R2) with a pass in flight the enable lands — write, re-assess, `.idle` — only when it ends.
+        @Test func enableDuringAPassLandsOnlyWhenThePassEnds() async {
             let (c, host, fake) = make()
-            host.passEnds = false
+            host.collecting = true
             c.enableNow(.firewall)
             await c.enableTask?.value
-            #expect(host.report.security == fake.state)
-            #expect(host.reassessCalls == 1)
+            #expect(host.afterPassCalls == 1 && host.report.security == nil && host.reassessCalls == 0)
+            #expect(c.action == .enabling(.firewall))
+            host.endPass()
+            #expect(host.report.security == fake.state && host.reassessCalls == 1 && c.action == .idle)
         }
 
         /// 8. (R6) fixture setter.

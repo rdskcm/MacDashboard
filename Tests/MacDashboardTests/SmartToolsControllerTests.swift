@@ -80,7 +80,7 @@ extension SerialTests {
             let sampler = c.samplerTask
             await sampler?.value
             #expect(clock.sleeps == [.seconds(300), .seconds(300)])
-            #expect(fake.collectCalls == 1 && host.awaitCalls == 1 && host.updateCalls == 1)
+            #expect(fake.collectCalls == 1 && host.afterPassCalls == 1 && host.updateCalls == 1)
             #expect(host.report.smart == fake.disks && fake.recorded == [.some(nil)])
             #expect(host.claudeRefreshCalls == 1 && host.reassessCalls == 0)
             #expect(c.updatedAt == clock.base.addingTimeInterval(300) && c.samplerTask == nil)
@@ -124,9 +124,19 @@ extension SerialTests {
             await settle { fake.collectCalls == 1 }
             c.refreshNow()
             fake.releaseCollect(); await c.refreshTask?.value
-            #expect(fake.collectCalls == 1 && host.awaitCalls == 1 && host.report.smart == fake.disks)
+            #expect(fake.collectCalls == 1 && host.afterPassCalls == 1 && host.report.smart == fake.disks)
             #expect(fake.recorded == [.some(nil)] && host.claudeRefreshCalls == 1 && host.reassessCalls == 0)
             #expect(c.updatedAt == clock.now)
+        }
+        // PASS-WAIT-PARTIAL R2: with a pass in flight the SMART write, the TM record and the stamp wait for its end.
+        @Test func refreshNowDuringAPassLandsAndStampsOnlyWhenThePassEnds() async {
+            let (c, host, fake, clock) = make()
+            host.collecting = true
+            c.refreshNow(); await c.refreshTask?.value
+            #expect(host.afterPassCalls == 1 && host.report.smart == nil && fake.recorded.isEmpty && c.updatedAt == nil)
+            #expect(host.claudeRefreshCalls == 1)
+            host.endPass()
+            #expect(host.report.smart == fake.disks && fake.recorded == [.some(nil)] && c.updatedAt == clock.now)
         }
         // 7 (R4)
         @Test func installSuccessFlipsToInstalledAndRechecksSmart() async {
@@ -193,7 +203,7 @@ extension SerialTests {
             #expect(tasks.allSatisfy { $0?.isCancelled == true })
             fake.releaseCollect(); fake.releaseInstall()
             for t in tasks { await t?.value }
-            #expect(host.awaitCalls == 0 && host.updateCalls == 0 && host.claudeRefreshCalls == 0 && fake.recorded.isEmpty)
+            #expect(host.afterPassCalls == 0 && host.updateCalls == 0 && host.claudeRefreshCalls == 0 && fake.recorded.isEmpty)
             #expect(c.updatedAt == nil && c.installFailure == nil && !c.installing && c.toolsState == .installable)
             #expect(fake.collectCalls == 2)                            // the cancelled sampler did not loop again
             fake.holdCollect = false
@@ -212,7 +222,7 @@ extension SerialTests {
             c.volumesChanged()
             await c.volumeReadTask?.value
             #expect(clock.sleeps == [VolumeEvents.debounce, VolumeEvents.followUp])
-            #expect(fake.collectCalls == 2 && host.awaitCalls == 2 && fake.recorded.count == 2)
+            #expect(fake.collectCalls == 2 && host.afterPassCalls == 2 && fake.recorded.count == 2)
             #expect(host.report.smart == fake.disks && c.updatedAt != nil)
         }
         // R5: a burst costs one plan
@@ -234,7 +244,7 @@ extension SerialTests {
             fake.releaseCollect()
             await c.volumeReadTask?.value
             #expect(fake.collectCalls == 3)        // the discarded read, then the new plan's two
-            #expect(host.awaitCalls == 2)          // the discarded read never landed
+            #expect(host.afterPassCalls == 2)          // the discarded read never landed
         }
         // R6: paused → no spawn; one plan on resume, without the debounce
         @Test func aPausedVolumeEventSpawnsNothingAndReadsOnResume() async {

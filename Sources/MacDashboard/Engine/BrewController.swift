@@ -154,26 +154,26 @@ final class BrewController {
         }
     }
 
-    /// The re-check tail shared by `upgradeNow()` and `refreshNow()`: collect a fresh snapshot (no index update), wait
-    /// for any report pass, write the four report fields and refill the cache. nil = cancelled (teardown): nothing written.
+    /// The re-check tail shared by `upgradeNow()` and `refreshNow()`: collect a fresh snapshot (no index update), then land the four report fields and the cache after any report pass (ReportHost.afterPass). Returns the snapshot as read; nil = cancelled (teardown): nothing queued.
     private func recollect() async -> BrewSnapshot? {
         let info = await deps.collect()
         guard !Task.isCancelled else { return nil }
 
         // The collect that starts while `brew upgrade` runs captures the PRE-upgrade cached snapshot and would write it
-        // over these values when it commits. Same reason the sibling updaters wait — see ReportHost.awaitPassEnd.
-        _ = await host.awaitPassEnd()
-        guard !Task.isCancelled else { return nil }
-
-        host.update { report in
-            report.brewStatus = info.status
-            report.brewOutdated = info.outdated
-            report.brewOutdatedDetail = info.outdatedDetail
-            report.brewInstalledCount = info.installedCount
+        // over these values when it commits: land after it (ReportHost.afterPass). The four fields and the cache apply
+        // together, after the pass's own `record(final)`, so the cache never holds a snapshot the report does not show.
+        host.afterPass { [weak self] in
+            guard let self else { return }
+            self.host.update { report in
+                report.brewStatus = info.status
+                report.brewOutdated = info.outdated
+                report.brewOutdatedDetail = info.outdatedDetail
+                report.brewInstalledCount = info.installedCount
+            }
+            let failed = ReportCollector.brewCheckFailed(status: info.status, outdated: info.outdated)
+            self.cache = failed ? nil : info
+            self.checkedAt = failed ? nil : self.time.now()
         }
-        let failed = ReportCollector.brewCheckFailed(status: info.status, outdated: info.outdated)
-        cache = failed ? nil : info
-        checkedAt = failed ? nil : time.now()
         return info
     }
 

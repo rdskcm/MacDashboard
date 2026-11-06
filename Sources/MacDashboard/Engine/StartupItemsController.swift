@@ -72,8 +72,7 @@ final class StartupItemsController {
 
     // MARK: - Check for stale
 
-    /// «Check for stale» (REDESIGN-SYSTEM): re-collects the autostart section, waits for any report pass, writes it,
-    /// then reveals the stale marks. A second press while a check runs is ignored.
+    /// «Check for stale» (REDESIGN-SYSTEM): re-collects the autostart section, then lands it and reveals the stale marks after any report pass (ReportHost.afterPass). A second press while a check runs is ignored.
     func checkStaleNow() {
         guard !checking else { return }
         checking = true
@@ -82,12 +81,14 @@ final class StartupItemsController {
             defer { self.checking = false }
             let info = await self.deps.collect()
             guard !Task.isCancelled else { return }
-            // A pass in flight would overwrite this section with its own (older) scan when it commits.
-            _ = await self.host.awaitPassEnd()
-            guard !Task.isCancelled else { return }
-            self.host.write(\.autostart, info as AutostartInfo?)
-            self.checkedAt = self.time.now()
-            self.removedCount = 0
+            // A pass in flight would overwrite this section with its own (older) scan when it commits: land after it
+            // (ReportHost.afterPass). The stale marks are revealed with the write, not before.
+            self.host.afterPass { [weak self] in
+                guard let self else { return }
+                self.host.write(\.autostart, info as AutostartInfo?)
+                self.checkedAt = self.time.now()
+                self.removedCount = 0
+            }
         }
     }
 
@@ -240,13 +241,17 @@ final class StartupItemsController {
     /// a recollect rebuilds every section blank and the whole card would flash through its "collecting" state.
     /// A local mutation lets the card animate just the removed rows.
     private func removeLocally(_ paths: Set<String>) {
-        guard var auto = host.read().autostart, !paths.isEmpty else { return }
-        let before = auto.userAgents.count + auto.systemAgents.count + auto.systemDaemons.count
-        auto.userAgents.removeAll { paths.contains($0.path) }
-        auto.systemAgents.removeAll { paths.contains($0.path) }
-        auto.systemDaemons.removeAll { paths.contains($0.path) }
-        removedCount += before - (auto.userAgents.count + auto.systemAgents.count + auto.systemDaemons.count)
-        host.write(\.autostart, auto as AutostartInfo?)
+        guard !paths.isEmpty else { return }
+        // PASS-WAIT-PARTIAL R11: runs at once when idle, after the commit during a pass (a partial write would be lost).
+        host.afterPass { [weak self] in
+            guard let self, var auto = self.host.read().autostart else { return }
+            let before = auto.userAgents.count + auto.systemAgents.count + auto.systemDaemons.count
+            auto.userAgents.removeAll { paths.contains($0.path) }
+            auto.systemAgents.removeAll { paths.contains($0.path) }
+            auto.systemDaemons.removeAll { paths.contains($0.path) }
+            self.removedCount += before - (auto.userAgents.count + auto.systemAgents.count + auto.systemDaemons.count)
+            self.host.write(\.autostart, auto as AutostartInfo?)
+        }
         // Deliberately NO reassess: `report` is a PARTIAL for most of a collect and a partial must never be
         // assessed (assessment-complete-collect). Nothing is lost: `Assess.assess` reads nothing from
         // `report.autostart`, so a recompute could never change the verdict.

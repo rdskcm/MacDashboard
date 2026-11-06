@@ -72,11 +72,13 @@ final class SecurityController {
             case .success:
                 let s = await self.deps.collect()
                 guard !Task.isCancelled else { self.action = .idle; return }
-                _ = await self.host.awaitPassEnd()
-                guard !Task.isCancelled else { self.action = .idle; return }
-                self.host.write(\.security, .some(s))
-                self.host.reassess()                               // the committed report, never a partial
-                self.action = .idle
+                // Lands after any in-flight pass (ReportHost.afterPass); the enabling state lasts until it has landed.
+                self.host.afterPass { [weak self] in
+                    guard let self else { return }
+                    self.host.write(\.security, .some(s))
+                    self.host.reassess()                           // the committed report, never a partial
+                    self.action = .idle
+                }
             case .cancelled:
                 self.action = .failed(p, .cancelled)
             case .timedOut:
@@ -99,13 +101,14 @@ final class SecurityController {
             defer { self.refreshing = false }
             let s = await self.deps.collect()
             guard !Task.isCancelled else { return }
-            _ = await self.host.awaitPassEnd()
-            guard !Task.isCancelled else { return }
-            self.host.write(\.security, .some(s))
-            self.host.reassess()
-            // The crash folders go through the one crash re-scan owner, so this Refresh can never write a list older
-            // than a hide / unhide / delete that finished meanwhile (CRASH-REPORT-DISMISS fix wave 2).
-            self.deps.rescanCrashes()
+            self.host.afterPass { [weak self] in
+                guard let self else { return }
+                self.host.write(\.security, .some(s))
+                self.host.reassess()
+                // The crash folders go through the one crash re-scan owner, so this Refresh can never write a list older
+                // than a hide / unhide / delete that finished meanwhile (CRASH-REPORT-DISMISS fix wave 2).
+                self.deps.rescanCrashes()
+            }
         }
     }
 
