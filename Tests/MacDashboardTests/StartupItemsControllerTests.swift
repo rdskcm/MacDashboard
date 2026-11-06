@@ -75,10 +75,21 @@ extension SerialTests {
             c.checkStaleNow()
             #expect(c.checking && c.checkTask != nil)
             await c.checkTask?.value
-            #expect(fake.collectCalls == 1 && host.awaitCalls == 1 && host.updateCalls == 1)
+            #expect(fake.collectCalls == 1 && host.afterPassCalls == 1 && host.updateCalls == 1)
             #expect(host.report.autostart == fake.info)
             #expect(c.checkedAt == clock.now && c.removedCount == 0 && !c.checking)
             #expect(host.reassessCalls == 0)
+        }
+        // PASS-WAIT-PARTIAL R2: with a pass in flight the section, the check stamp and the removed-count reset wait for its end.
+        @Test func checkStaleDuringAPassWritesAndStampsOnlyWhenThePassEnds() async {
+            let (c, host, fake, clock) = make()
+            c.applyFixture(checkedAt: nil, removed: 3, checking: false, deleting: [], failure: nil)
+            host.collecting = true
+            c.checkStaleNow(); await c.checkTask?.value
+            #expect(host.afterPassCalls == 1 && host.updateCalls == 0 && c.checkedAt == nil && c.removedCount == 3)
+            #expect(!c.checking)
+            host.endPass()
+            #expect(host.report.autostart == fake.info && c.checkedAt == clock.now && c.removedCount == 0)
         }
         // 2
         @Test func checkStaleIsIgnoredWhileChecking() async {
@@ -112,7 +123,7 @@ extension SerialTests {
             #expect(c.checkTask == nil)
             fake.releaseCollect()
             await task?.value
-            #expect(host.updateCalls == 0 && host.awaitCalls == 0)
+            #expect(host.updateCalls == 0 && host.afterPassCalls == 0)
             #expect(c.checkedAt == nil && !c.checking)
             #expect(host.reassessCalls == 0)
         }
@@ -125,8 +136,19 @@ extension SerialTests {
             #expect(fake.trashed == [u1] && fake.privileged.isEmpty)
             #expect(host.report.autostart?.userAgents.map(\.path) == [u2])
             #expect(c.removedCount == 1 && c.deletingPaths.isEmpty && c.deleteFailure == nil)
-            #expect(c.deleteRestore.paths.isEmpty && c.deleteTasks.isEmpty && host.awaitCalls == 0)
+            #expect(c.deleteRestore.paths.isEmpty && c.deleteTasks.isEmpty && host.afterPassCalls == 1)
             #expect(host.reassessCalls == 0)
+        }
+        // PASS-WAIT-PARTIAL R11: with a pass in flight the local row removal waits for its end.
+        @Test func userLevelDeleteDuringAPassDropsTheRowOnlyWhenThePassEnds() async {
+            let (c, host, fake, _) = make()
+            host.collecting = true
+            c.deleteOrphan(path: u1, isSystemLevel: false)
+            await drain(c)
+            #expect(fake.trashed == [u1])
+            #expect(host.report.autostart?.userAgents.map(\.path) == [u1, u2] && c.removedCount == 0)
+            host.endPass()
+            #expect(host.report.autostart?.userAgents.map(\.path) == [u2] && c.removedCount == 1)
         }
         // 6
         @Test func systemLevelDeleteMakesOnePrivilegedCall() async {

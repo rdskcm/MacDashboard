@@ -54,9 +54,9 @@ final class EnergyController {
             readNeeded = false
             let settings = await deps.collect()
             guard !Task.isCancelled else { return }
-            _ = await host.awaitPassEnd()
-            guard !Task.isCancelled else { return }
-            host.write(\.energy, settings)
+            // A pass in flight would overwrite `report.energy` when it commits: land after it (ReportHost.afterPass).
+            let host = self.host
+            host.afterPass { host.write(\.energy, settings) }
         } while readNeeded
     }
 

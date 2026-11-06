@@ -245,15 +245,17 @@ final class TimeMachineController {
             defer { self.refreshing = false }
             let (dest, snapshots) = await self.deps.collect()
             guard !Task.isCancelled else { return }
-            // A pass in flight would overwrite these sections with its own scan when it commits (ReportHost.awaitPassEnd).
-            _ = await self.host.awaitPassEnd()
-            guard !Task.isCancelled else { return }
-            if let dest { self.host.write(\.tmDest, .some(dest)) }                  // nil = tmutil failed: keep the old value
-            if let snapshots { self.host.write(\.snapshots, .some(snapshots)) }
-            self.updatedAt = self.time.now()
             await self.host.refreshClaudeBackup()
             guard !Task.isCancelled else { return }
-            self.host.reassess()                                                     // the committed report, never a partial
+            // A pass in flight would overwrite these sections with its own scan when it commits: land after it
+            // (ReportHost.afterPass). The write, the stamp and the re-assess apply together.
+            self.host.afterPass { [weak self] in
+                guard let self else { return }
+                if let dest { self.host.write(\.tmDest, .some(dest)) }              // nil = tmutil failed: keep the old value
+                if let snapshots { self.host.write(\.snapshots, .some(snapshots)) }
+                self.updatedAt = self.time.now()
+                self.host.reassess()                                                 // the committed report, never a partial
+            }
         }
     }
 

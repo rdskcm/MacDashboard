@@ -28,12 +28,15 @@ import Testing
 @MainActor final class FakeHost {
     var report = FullReport()
     var collecting = false
-    var passEnds = true
+    /// Landings `afterPass` queued while `collecting`; `endPass()` runs them in order, as AppModel's pass `defer` does.
+    private(set) var queued: [@MainActor () -> Void] = []
+    private(set) var afterPassCalls = 0
+    /// The fake pass committed: clears `collecting`, then runs the queued landings in order.
+    func endPass() { collecting = false; let q = queued; queued = []; for work in q { work() } }
     var paused = false
     /// BACKUP-CARD-FAILURE: what `refreshClaudeBackup` also does (AppModel calls `claudeRun.refreshAttempt()` there).
     var onClaudeRefresh: @MainActor () async -> Void = {}
     private(set) var updateCalls = 0
-    private(set) var awaitCalls = 0
     private(set) var reassessCalls = 0
     private(set) var claudeRefreshCalls = 0
     /// One block-API call, in order.
@@ -49,7 +52,7 @@ import Testing
         ReportHost(read: { self.report },
                    update: { mutate in self.updateCalls += 1; mutate(&self.report) },
                    isCollecting: { self.collecting },
-                   awaitPassEnd: { self.awaitCalls += 1; return self.passEnds },
+                   afterPass: { work in self.afterPassCalls += 1; if self.collecting { self.queued.append(work) } else { work() } },
                    reassess: { self.reassessCalls += 1 },
                    isPaused: { self.paused },
                    refreshClaudeBackup: { self.claudeRefreshCalls += 1; await self.onClaudeRefresh() },

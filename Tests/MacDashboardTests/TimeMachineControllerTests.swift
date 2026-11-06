@@ -255,9 +255,22 @@ extension SerialTests {
             fake.collected = (.some(d), ["com.apple.TimeMachine.2026-10-29-101500.local"])
             c.refreshNow()
             await c.refreshTask?.value
-            #expect(host.awaitCalls == 1 && host.updateCalls == 2)
+            #expect(host.afterPassCalls == 1 && host.updateCalls == 2)
             #expect(host.report.tmDest == .some(d) && host.report.snapshots == ["com.apple.TimeMachine.2026-10-29-101500.local"])
             #expect(c.updatedAt == clock.now && host.claudeRefreshCalls == 1 && host.reassessCalls == 1)
+        }
+        // PASS-WAIT-PARTIAL R2: with a pass in flight the writes, the stamp and the re-assess wait for its end.
+        @Test func refreshNowDuringAPassLandsStampsAndReassessesOnlyWhenThePassEnds() async {
+            let (c, host, fake, clock) = make()
+            let d = dest(mounted: true)
+            fake.collected = (.some(d), ["com.apple.TimeMachine.2026-10-29-101500.local"])
+            host.collecting = true
+            c.refreshNow(); await c.refreshTask?.value
+            #expect(host.afterPassCalls == 1 && host.updateCalls == 0 && c.updatedAt == nil && host.reassessCalls == 0)
+            #expect(host.claudeRefreshCalls == 1)
+            host.endPass()
+            #expect(host.report.tmDest == .some(d) && host.report.snapshots == ["com.apple.TimeMachine.2026-10-29-101500.local"])
+            #expect(c.updatedAt == clock.now && host.reassessCalls == 1)
         }
         // 12 (R2): a failed tmutil read keeps the old values; the stamp and the re-check still happen
         @Test func refreshNowKeepsTheOldValuesWhenTmutilFailed() async {
@@ -295,7 +308,7 @@ extension SerialTests {
             for t in commands { await t.value }
             await refresh?.value
             #expect(c.action == .starting)                             // a cancelled command writes no outcome
-            #expect(host.updateCalls == 0 && host.awaitCalls == 0 && host.claudeRefreshCalls == 0)
+            #expect(host.updateCalls == 0 && host.afterPassCalls == 0 && host.claudeRefreshCalls == 0)
             #expect(host.reassessCalls == 0 && c.updatedAt == nil)
         }
         // 15 (R7)

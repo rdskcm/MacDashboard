@@ -50,12 +50,21 @@ extension SerialTests {
         @Test func refreshWritesTheSectionAfterThePassEndsAndOnlyWhenChanged() async {
             let (c, host, fake, _) = make()
             await c.refresh()
-            #expect(fake.collectCalls == 1 && host.awaitCalls == 1 && host.updateCalls == 1)
+            #expect(fake.collectCalls == 1 && host.afterPassCalls == 1 && host.updateCalls == 1)
             #expect(host.report.energy == fake.settings)
             #expect(c.refreshing == false && host.reassessCalls == 0)
             await c.refresh()                                   // same settings again
-            #expect(fake.collectCalls == 2 && host.awaitCalls == 2)
+            #expect(fake.collectCalls == 2 && host.afterPassCalls == 2)
             #expect(host.updateCalls == 1)                      // no mutation for an unchanged value
+        }
+        // PASS-WAIT-PARTIAL R2: with a pass in flight nothing is written until it ends.
+        @Test func refreshDuringAPassWritesOnlyWhenThePassEnds() async {
+            let (c, host, fake, _) = make()
+            host.collecting = true
+            await c.refresh()
+            #expect(host.afterPassCalls == 1 && host.updateCalls == 0 && host.report.energy == nil && !c.refreshing)
+            host.endPass()
+            #expect(host.report.energy == fake.settings && host.updateCalls == 1)
         }
         // 2
         @Test func refreshDuringARefreshReadsOnceMoreAndReturnsAfterIt() async {

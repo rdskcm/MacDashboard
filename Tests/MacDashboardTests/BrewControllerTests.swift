@@ -100,11 +100,22 @@ extension SerialTests {
             c.refreshNow()
             #expect(c.refreshing)
             await c.refreshTask?.value
-            #expect(fake.collectCalls == 1 && host.awaitCalls == 1 && host.updateCalls == 1)
+            #expect(fake.collectCalls == 1 && host.afterPassCalls == 1 && host.updateCalls == 1)
             #expect(host.report.brewStatus == fake.snapshot.status && host.report.brewOutdated == ["git"])
             #expect(host.report.brewInstalledCount == 12)
             #expect(c.cachedSnapshot(now: clock.now) == fake.snapshot && c.checkedAt == clock.now)
             #expect(c.refreshing == false)
+        }
+        // PASS-WAIT-PARTIAL R2, D10: with a pass in flight the four fields and the cache wait for its end, together.
+        @Test func refreshNowDuringAPassWritesAndFillsTheCacheOnlyWhenThePassEnds() async {
+            let (c, host, fake, clock) = make()
+            host.collecting = true
+            c.refreshNow(); await c.refreshTask?.value
+            #expect(host.afterPassCalls == 1 && host.updateCalls == 0 && c.checkedAt == nil)
+            #expect(c.cachedSnapshot(now: clock.now) == nil && !c.refreshing)
+            host.endPass()
+            #expect(host.updateCalls == 1 && host.report.brewOutdated == ["git"])
+            #expect(c.cachedSnapshot(now: clock.now) == fake.snapshot && c.checkedAt == clock.now)
         }
         // 5
         @Test func refreshNowIsIgnoredWhileRefreshingOrUpgrading() async {
@@ -194,7 +205,7 @@ extension SerialTests {
             #expect(c.upgradeTask == nil)
             await task?.value
             #expect(fake.upgradeCancelled)
-            #expect(fake.collectCalls == 0 && host.updateCalls == 0 && host.awaitCalls == 0)
+            #expect(fake.collectCalls == 0 && host.updateCalls == 0 && host.afterPassCalls == 0)
             #expect(!c.upgrading && !c.upgradeStoppable && c.upgradeError == nil && c.upgradeNotice == nil)
         }
         // 12 (R5 + D7: stop() cancels an in-flight re-check; nothing is written)
@@ -207,7 +218,7 @@ extension SerialTests {
             c.stop()
             #expect(c.refreshTask == nil)
             fake.releaseCollect(); await task?.value
-            #expect(host.updateCalls == 0 && host.awaitCalls == 0 && c.checkedAt == nil && !c.refreshing)
+            #expect(host.updateCalls == 0 && host.afterPassCalls == 0 && c.checkedAt == nil && !c.refreshing)
         }
         // 13 (R4: progress arrives through a main-actor Task while upgrading; a late value is dropped)
         @Test func progressIsShownWhileUpgradingAndDroppedAfter() async {
