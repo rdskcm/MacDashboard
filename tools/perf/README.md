@@ -36,6 +36,7 @@ Outputs in the run directory: `summary.tsv` (`scenario arm run metric value thre
 AX identifier dump with frames, `drv winfo`, screenshot, display state — or the run's log for a trace or analysis failure:
 `<tag>-rec.txt`, `<tag>-export.err`, `<tag>-analysis.txt` or `<tag>-drv.txt`) and `error-runs.tsv` (runs of ERROR scenarios, no verdict),
 and the last stdout line `GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1> error=<e>`.
+`analyze.py tp` refuses a trace with no samples in its window, none on the main thread, no hitches export, or (G6, with substrings) no symbolicated frame; `ca` refuses an empty commit table or a window outside the trace; `top` refuses a window with no app sample (exit 2 in every case, so the run is an ERROR). `analyze.py verdict` writes a FAIL row (value `-`, threshold `… missing for the candidate`) for a metric with an absolute limit, or with a regression rule and a baseline value, that the candidate never produced.
 
 ## 3. Exit codes
 

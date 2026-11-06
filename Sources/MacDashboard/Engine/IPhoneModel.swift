@@ -273,7 +273,7 @@ final class IPhoneModel {
     func start() {
         guard !started else { return }
         started = true
-        // Before any import can start (D7).
+        // Temp folders of imports a previous run left behind; removed before any import can start.
         IPhoneData.removeStaleImportRoots(in: FileManager.default.temporaryDirectory)
         // IPHONE-CRASHLOG-ACTIONS (Decision 3): crash-log copies of the previous run.
         IPhoneData.removeStaleImportRoots(in: FileManager.default.temporaryDirectory, prefix: IPhoneCrashLog.tempPrefix)
@@ -594,8 +594,8 @@ final class IPhoneModel {
     }
 
     /// Called by the importer after parsing, before keeping or merging. Answers at once on a
-    /// match or an unknown identity; on a mismatch publishes `importQuestion` and waits.
-    private func confirmIdentity(deviceKey: String, archiveName: String, archiveMAh: Set<Int>) async -> Bool {
+    /// match or an unknown identity; on a mismatch publishes `importQuestion` and waits. Internal for `IPhoneImportQuestionTests`.
+    func confirmIdentity(deviceKey: String, archiveName: String, archiveMAh: Set<Int>) async -> Bool {
         guard case .mismatch(let q) = IPhoneData.archiveIdentity(archiveName: archiveName, archiveMAh: archiveMAh,
                                                                  deviceKey: deviceKey, devices: devices) else { return true }
         identityAsked.insert(deviceKey)
@@ -780,8 +780,12 @@ final class IPhoneModel {
     }
 
     /// `IPhoneImportCard` reports its mount state (onAppear / onDisappear): the panel is visible only while the card is.
+    /// FIX-LEFTOVERS (IPHONE-MIXUP): the card leaving the screen with the «another phone» question open is that
+    /// question's Cancel — its sheet went with the card, and an unanswered question would hold `importing` (folder
+    /// chooser, unlink, list watch) with nothing on screen. A question published while the card is away waits for it.
     func setRequestPanelShown(deviceKey: String, _ shown: Bool) {
         if shown { requestPanelShown.insert(deviceKey) } else { requestPanelShown.remove(deviceKey) }
+        if !shown, importQuestion[deviceKey] != nil { answerImportQuestion(deviceKey: deviceKey, proceed: false) }
         updatePolling(deviceKey)
     }
 
