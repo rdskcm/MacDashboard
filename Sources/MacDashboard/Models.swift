@@ -87,7 +87,7 @@ struct SystemInfo: Equatable {
     var osName: String?; var osVersion: String?; var osBuild: String?
     var modelName: String?; var modelId: String?
     var chip: String?           // "Apple M3" | Intel brand string
-    var cores: String?          // "8 (4 Performance and 4 Efficiency)" | "18" (Intel, or a proc shape whose tiers can't be named)
+    var cores: String?          // "8 (4 Performance and 4 Efficiency)" | "6" (Intel, or a proc shape whose tiers can't be named)
     var memBytes: Int64?
     var uptime: String?         // human, Russian ("2 дня 3 мин")
     var hostName: String?

@@ -5,32 +5,42 @@
       Time Profiler + Hitches. Reads <prefix>-toc.xml, <prefix>-time-profile.xml, <prefix>-hitches.xml
       and the marks in <prefix>-drv.txt. Window = [first t0 + LO, first t0 + HI) (default: first t0 to
       last t1; no marks: the whole trace). Prints a per-second table and `METRIC <name> <value>` lines.
+      Exits 2 when the window holds no samples, none on a "Main Thread" thread, or <prefix>-hitches.xml is missing,
+      and, with substrings, when no sample in the window has a symbolicated frame.
   analyze.py ca  <prefix> [t0 t1]
       Core Animation commit / server intervals (<prefix>-coreanimation-*.xml): whole-trace totals scaled to
       20 s, plus per-window numbers for every labelled mark pair in <prefix>-drv.txt or for the given
       absolute epochs t0 t1.
+      Exits 2 when the commit table has no rows or a window is empty or outside the trace.
   analyze.py top <top-file> <pid> [t0 t1]
       Mean app % and WindowServer % from the sampler output of gate.sh (first sample dropped), optionally
       restricted to the samples whose interval centre lies in [t0, t1).
+      Exits 2 when no sample of <pid> falls in the window (ws_pct is printed only when WindowServer was sampled).
   analyze.py verdict <out-dir> [--g1-max PCT]
       Reads <out-dir>/runs.tsv, writes summary.tsv, appends the per-scenario tables to report.md, prints
       `COUNTS pass=<k> fail=<m> noisy=<j>`.
+      A scenario in runs.tsv whose candidate lacks a metric that has an absolute rule, or a regression rule with a
+      baseline value, gets a FAIL row for it.
   analyze.py pos <pos-log>
       Position log of a scroll window (drv wave, SCROLL-BENCH-EDGES): prints `METRIC end_contact_pct`, `METRIC pos_reads`,
       `METRIC motion_s`, and `POS-INVALID <why>` when more than 5 % of the reads are within 3 pt of an end of the range
       or fewer than 50 % of the expected reads were logged. Exit 0 in both cases, 2 on a missing or headerless file.
   analyze.py selftest
-      Checks median() and the exact Mann-Whitney p-value; prints `selftest ok`.
+      Checks median(), the exact Mann-Whitney p-value, pos_eval(), and that tp, ca, top and verdict refuse missing data; prints `selftest ok`.
 
 Marks in drv.txt: `t0 <epoch>` / `t1 <epoch>`, or `t0 <label> <epoch>` / `t1 <label> <epoch>`.
 Exit: 0 ok, 2 bad input / missing file.
 """
 import collections
+import contextlib
+import io
 import itertools
 import os
 import re
+import shutil
 import statistics
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
@@ -38,6 +48,7 @@ from datetime import datetime
 POS_CONTACT_PT = 3.0        # a position read within this many points of an end of the range is an end contact
 POS_LIMIT_PCT = 5.0         # a window with more than this share of its reads at an end is invalid
 POS_MIN_READ_SHARE = 0.5    # a window with fewer than this share of the expected reads is invalid
+ADDR_NAME = re.compile(r"^0x[0-9a-fA-F]+$")   # the name xctrace gives a frame it could not symbolicate
 
 
 def die(msg):
@@ -204,6 +215,8 @@ def cmd_tp(argv):
     sub_all = {s: 0 for s in subs}
     nbins = max(1, int(wlen))
     sub_bin = {s: [0] * nbins for s in subs}
+    n_win = 0        # samples inside the window, any thread
+    n_symbolic = 0   # of those, samples with at least one symbolicated frame (counted only with substrings)
     for row in tree.iter("row"):
         t = th = bt = None
         for c in row:
@@ -216,12 +229,15 @@ def cmd_tp(argv):
                 bt = c
         if t is None or bt is None or not (lo <= t < hi):
             continue
+        n_win += 1
         is_main = "Main Thread" in (th or "")
         if is_main:
             main_t.append(t)
         if subs:
             b = bt.find("backtrace")
             names = [get(f).attrib.get("name", "") for f in (b if b is not None else bt).iter("frame")]
+            if any(n and not ADDR_NAME.match(n) for n in names):
+                n_symbolic += 1
             for s in subs:
                 if any(s in n for n in names):
                     sub_all[s] += 1
@@ -231,14 +247,22 @@ def cmd_tp(argv):
                         if j < nbins:
                             sub_bin[s][j] += 1
 
+    # FIX-LEFTOVERS (GPU-RENDER-AUDIT m3): missing data is bad input, never a row of zeros that passes the gate
+    if n_win == 0:
+        die("no time-profile samples in the window [%.2f, %.2f) of %s — empty or broken trace"
+            % (lo, hi, prefix + "-time-profile.xml"))
+    if not main_t:
+        die("%d time-profile samples in the window but none on a 'Main Thread' thread — thread label changed?" % n_win)
+    if subs and n_symbolic == 0:
+        die("none of the %d samples in the window has a symbolicated frame — sub.* counts would be 0 for lack of names"
+            % n_win)
+
     hit = []
-    hpath = prefix + "-hitches.xml"
-    if os.path.exists(hpath):
-        ht, hget = load(hpath)
-        for row in ht.iter("row"):
-            d = ns_children(row, hget)
-            if d.get("start-time") and d.get("duration"):
-                hit.append((int(d["start-time"][0].text) / 1e9, int(d["duration"][0].text) / 1e6))
+    ht, hget = load(prefix + "-hitches.xml")   # a missing export is bad input, not 0 hitches
+    for row in ht.iter("row"):
+        d = ns_children(row, hget)
+        if d.get("start-time") and d.get("duration"):
+            hit.append((int(d["start-time"][0].text) / 1e9, int(d["duration"][0].text) / 1e6))
     hit_w = [(s, d) for s, d in hit if lo <= s < hi]
 
     busy = bins(main_t, lo, hi)
@@ -291,6 +315,8 @@ def cmd_ca(argv):
     epoch0, dur_s = read_toc(prefix)
     commits = interval_rows(prefix + "-coreanimation-commit-interval.xml")
     server = interval_rows(prefix + "-coreanimation-server-interval.xml")
+    if not commits:   # FIX-LEFTOVERS (m3): the app commits on every tick; an empty table is a broken export, not 0
+        die("no Core Animation commit rows in %s — empty or broken trace" % (prefix + "-coreanimation-commit-interval.xml"))
     span = dur_s if dur_s > 0 else max([s for s, _, _ in commits + server] + [1.0])
     k = 20.0 / span
     print("%s: trace %.1f s; commit rows %d, server rows %d" % (os.path.basename(prefix), span, len(commits), len(server)))
@@ -305,7 +331,10 @@ def cmd_ca(argv):
     else:
         wins = labelled_windows(read_marks(prefix))
     for label, a, b in wins:
-        window_metrics(label, commits, server, a - epoch0, b - epoch0)
+        lo, hi = a - epoch0, b - epoch0
+        if hi <= lo or hi <= 0 or lo >= span:   # FIX-LEFTOVERS (m3): a window off the trace would print zeros
+            die("window %s [%.2f, %.2f) is empty or outside the trace (0-%.1f s)" % (label or "-", lo, hi, span))
+        window_metrics(label, commits, server, lo, hi)
 
 
 # ---------------------------------------------------------------- top
@@ -342,8 +371,9 @@ def cmd_top(argv):
     print("app %%: %s" % " ".join("%.1f" % x for x in app))
     print("ws  %%: %s" % " ".join("%.1f" % x for x in ws))
     print("n: app %d, ws %d" % (len(app), len(ws)))
-    if app:
-        metric("app_pct", sum(app) / len(app))
+    if not app:   # FIX-LEFTOVERS (m3): no app sample means the sampler failed, not an idle app
+        die("no sample of pid %s%s in %s" % (pid, (" in the window %.1f..%.1f" % win) if win else "", path))
+    metric("app_pct", sum(app) / len(app))
     if ws:
         metric("ws_pct", sum(ws) / len(ws))
 
@@ -422,6 +452,84 @@ def cmd_pos(argv):
         print("POS-INVALID " + why)
 
 
+ST_TOC = ('<?xml version="1.0"?><trace-toc><run><info><summary><start-date>2026-11-06T10:00:00.000+00:00'
+          '</start-date><duration>30.0</duration></summary></info></run></trace-toc>')
+ST_DRV = "t0 1793959205.0\nt1 1793959215.0\n"   # trace seconds 5 and 15 of ST_TOC
+ST_EMPTY_TABLE = '<?xml version="1.0"?><trace-query-result><node xpath="x"/></trace-query-result>'
+
+
+def _run(fn, argv):
+    """-> (exit code, stdout) of one analyze.py command run in-process (selftest only)."""
+    out = io.StringIO()
+    code = 0
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+        try:
+            fn(argv)
+        except SystemExit as e:
+            code = e.code if isinstance(e.code, int) else 1
+    return code, out.getvalue()
+
+
+def _tp_fixture(root, name, thread, rows, hitches, frame="f"):
+    """Writes <root>/<name>/t-{toc,drv,time-profile[,hitches]}.xml|txt; `rows` samples at 5.1 s, 5.2 s, ..., each with
+    one frame named `frame`; -> prefix."""
+    d = os.path.join(root, name)
+    os.makedirs(d)
+    prefix = os.path.join(d, "t")
+    body = "".join(
+        '<row><sample-time id="s%d" fmt="x">%d</sample-time><thread fmt="%s"/>'
+        '<tagged-backtrace><backtrace><frame name="%s"/></backtrace></tagged-backtrace></row>\n'
+        % (i, (5100 + 100 * i) * 1000000, thread, frame) for i in range(rows))
+    files = {"-toc.xml": ST_TOC, "-drv.txt": ST_DRV,
+             "-time-profile.xml": '<?xml version="1.0"?><trace-query-result><node xpath="x">\n%s</node>'
+                                  '</trace-query-result>\n' % body}
+    if hitches:
+        files["-hitches.xml"] = ST_EMPTY_TABLE
+    for suffix, text in files.items():
+        with open(prefix + suffix, "w") as f:
+            f.write(text)
+    return prefix
+
+
+def _ca_fixture(root, name, commits, marks=""):
+    """Writes <root>/<name>/t-toc.xml, both Core Animation interval tables (`commits` rows at 1 s, 2 s, ... in each)
+    and t-drv.txt holding `marks`; -> prefix."""
+    d = os.path.join(root, name)
+    os.makedirs(d)
+    prefix = os.path.join(d, "t")
+    rows = "".join('<row><start-time>%d</start-time><duration>1000000</duration><uint32>1</uint32></row>\n'
+                   % ((i + 1) * 1000000000) for i in range(commits))
+    table = '<?xml version="1.0"?><trace-query-result><node xpath="x">\n%s</node></trace-query-result>\n' % rows
+    files = {"-toc.xml": ST_TOC, "-drv.txt": marks,
+             "-coreanimation-commit-interval.xml": table, "-coreanimation-server-interval.xml": table}
+    for suffix, text in files.items():
+        with open(prefix + suffix, "w") as f:
+            f.write(text)
+    return prefix
+
+
+def _top_fixture(root, name, app_rows):
+    """Writes <root>/<name>-top.txt: samples at epochs 1000..1005; pid 42 at 2 % in each when `app_rows`,
+    WindowServer at 5 % always; -> the path."""
+    path = os.path.join(root, name + "-top.txt")
+    with open(path, "w") as f:
+        for i in range(6):
+            f.write("S %d\n" % (1000 + i))
+            if app_rows:
+                f.write("P 0 42 MacDashboard 2.0\n")
+            f.write("P 0 99 WindowServer 5.0\n")
+    return path
+
+
+def _verdict_fixture(root, name, lines):
+    """Writes <root>/<name>/runs.tsv from (scenario, arm, run, metric, value) tuples; -> the directory."""
+    d = os.path.join(root, name)
+    os.makedirs(d)
+    with open(os.path.join(d, "runs.tsv"), "w") as f:
+        f.write("".join("\t".join(p) + "\n" for p in lines))
+    return d
+
+
 def cmd_selftest(args):
     cases = [
         ("median odd", median([1, 3, 2]) == 2),
@@ -435,6 +543,65 @@ def cmd_selftest(args):
         ("pos header only invalid", pos_eval(1000.0, 10, 0.0, [])[1] != ""),
         ("pos reads without a completed S/E pair invalid", pos_eval(1000.0, 10, 0.0, [0.5] * 20)[1] != ""),
     ]
+    # FIX-LEFTOVERS (GPU-RENDER-AUDIT m3): tp and verdict refuse missing data (inputs as in the hunter's m3/ set)
+    tmp = tempfile.mkdtemp(prefix="analyze-selftest-")
+    try:
+        main_label = "Main Thread (0x1) (MacDashboard, pid: 1)"
+        ok_code, ok_out = _run(cmd_tp, [_tp_fixture(tmp, "valid", main_label, 10, True)])
+        vm_code, vm_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vmissing", [
+            ("G3", "cand", "1", "window_s", "10"), ("G4", "cand", "1", "window_s", "10"),
+            ("G6-page", "cand", "1", "window_s", "10")])])
+        with open(os.path.join(tmp, "vmissing", "summary.tsv")) as f:
+            vm_summary = f.read()
+        vz_code, vz_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vzero", [
+            ("G3", "cand", "1", "main_busy_median_ms_s", "0"), ("G4", "cand", "1", "main_busy_median_ms_s", "0"),
+            ("G4", "cand", "1", "hitches_per_s", "0"), ("G4", "cand", "1", "hitches_total", "0")])])
+        vb_code, vb_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vbase", [
+            ("G4", "base", "1", "hitches_per_s", "1"), ("G4", "cand", "1", "main_busy_median_ms_s", "10")])])
+        vi_code, vi_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vinfo", [   # the second hunter's verdict-info set
+            ("G4", "cand", "1", "window_s", "20"), ("G4", "cand", "1", "main_busy_total", "0"),
+            ("G3", "cand", "1", "app_pct", "1.0"), ("G1", "cand", "1", "ws_pct", "3.0"),
+            ("G9", "cand", "1", "ws_pct", "3.0")])])
+        vr_code, vr_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vreg", [
+            ("GP-system", "base", "1", "main_busy_total", "900"), ("GP-system", "base", "1", "hitches_total", "2"),
+            ("GP-system", "cand", "1", "hitches_total", "2")])])
+        sym_prefix = _tp_fixture(tmp, "named", main_label, 10, True)
+        sym_code, sym_out = _run(cmd_tp, [sym_prefix, "rgba64_shade_conic"])
+        addr_prefix = _tp_fixture(tmp, "addrs", main_label, 10, True, frame="0x18bbb6d80")
+        ca_code, ca_out = _run(cmd_ca, [_ca_fixture(tmp, "ca-ok", 10,
+                                                    "t0 capsule 1793959202.0\nt1 capsule 1793959206.0\n")])
+        top_ok = _top_fixture(tmp, "top-ok", True)
+        top_code, top_out = _run(cmd_top, [top_ok, "42"])
+        cases += [
+            ("tp substring on a symbolicated trace", sym_code == 0 and "METRIC sub.rgba64_shade_conic.all 0\n" in sym_out),
+            ("tp substring on an unsymbolicated trace dies", _run(cmd_tp, [addr_prefix, "rgba64_shade_conic"])[0] == 2),
+            ("tp unsymbolicated trace without substrings passes", _run(cmd_tp, [addr_prefix])[0] == 0),
+            ("ca valid trace", ca_code == 0 and "METRIC capsule.commits_per_s_mean 1\n" in ca_out),
+            ("ca empty commit table dies", _run(cmd_ca, [_ca_fixture(tmp, "ca-empty", 0)])[0] == 2),
+            ("ca window outside the trace dies", _run(cmd_ca, [_ca_fixture(
+                tmp, "ca-outside", 10, "t0 capsule 1793959300.0\nt1 capsule 1793959304.0\n")])[0] == 2),
+            ("top valid samples", top_code == 0 and "METRIC app_pct 2\n" in top_out),
+            ("top no app samples dies", _run(cmd_top, [_top_fixture(tmp, "top-noapp", False), "42"])[0] == 2),
+            ("top window without samples dies", _run(cmd_top, [top_ok, "42", "2000", "2010"])[0] == 2),
+            ("verdict missing ABS metrics of G1 G3 G4 G9 fail", vi_code == 0 and "COUNTS pass=0 fail=5 noisy=0" in vi_out),
+            ("verdict REG metric with a baseline but no candidate fails",
+             vr_code == 0 and "COUNTS pass=1 fail=1 noisy=0" in vr_out),
+        ]
+        cases += [
+            ("tp valid trace", ok_code == 0 and "METRIC main_busy_total 10\n" in ok_out),
+            ("tp no samples in the window dies",
+             _run(cmd_tp, [_tp_fixture(tmp, "empty", main_label, 0, True)])[0] == 2),
+            ("tp samples but no Main Thread label dies",
+             _run(cmd_tp, [_tp_fixture(tmp, "renamed", "Main Thr3ad 0x1 (MacDashboard)", 10, True)])[0] == 2),
+            ("tp missing hitches export dies",
+             _run(cmd_tp, [_tp_fixture(tmp, "nohitches", main_label, 10, False)])[0] == 2),
+            ("verdict missing ABS metrics fail", vm_code == 0 and "COUNTS pass=0 fail=4 noisy=0" in vm_out
+             and "G3\tcand\tagg\tmain_busy_median_ms_s\t-\t<= 25; missing for the candidate\tFAIL\n" in vm_summary),
+            ("verdict present zeros pass", vz_code == 0 and "COUNTS pass=3 fail=0 noisy=0" in vz_out),
+            ("verdict metric only in the baseline fails", vb_code == 0 and "COUNTS pass=1 fail=1 noisy=0" in vb_out),
+        ]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
     for name, ok in cases:
         if not ok:
             print("selftest FAILED: " + name, file=sys.stderr)
@@ -569,7 +736,9 @@ def cmd_verdict(argv):
         else:
             rep.append("| metric | candidate | threshold | verdict |")
             rep.append("|---|---|---|---|")
-        for name in metric_order[scen]:
+        # FIX-LEFTOVERS (GPU-RENDER-AUDIT m3): a thresholded metric the candidate never emitted is a FAIL, not an INFO row
+        names = metric_order[scen] + [n for (s, n) in rules if s == scen and n not in metric_order[scen]]
+        for name in names:
             for arm in sorted(arms):
                 for run, v in data.get((scen, arm, name), []):
                     tsv.append("%s\t%s\t%s\t%s\t%s\t\trun" % (scen, arm, run, name, fmt(v)))
@@ -578,12 +747,18 @@ def cmd_verdict(argv):
             verdicts = []
             thr_txt = []
             rule = rules.get((scen, name))
-            if cand is not None and rule:
+            if rule and cand is None:
+                verdicts.append("FAIL")
+                thr_txt.append("%s %s; missing for the candidate" % (rule[0], fmt(rule[1])))
+            elif rule:
                 ok = check(rule[0], cand, rule[1])
                 verdicts.append("PASS" if ok else "FAIL")
                 thr_txt.append("%s %s" % (rule[0], fmt(rule[1])))
             reg = REG.get((scen, name)) or (REG.get(("GP", name)) if scen.startswith("GP-") else None)
-            if cand is not None and base is not None and reg and not same_scroll:
+            if reg and cand is None and base is not None:
+                verdicts.append("FAIL")
+                thr_txt.append("regression rule; missing for the candidate")
+            elif cand is not None and base is not None and reg and not same_scroll:
                 thr_txt.append("no regression check: candidate and baseline differ in scrollable")
             elif cand is not None and base is not None and reg:
                 margin = reg[1] if reg[0] == "add" else base * (reg[1] - 1.0)
@@ -601,6 +776,8 @@ def cmd_verdict(argv):
             thr = "; ".join(thr_txt)
             if cand is not None:
                 tsv.append("%s\tcand\tagg\t%s\t%s\t%s\t%s" % (scen, name, fmt(cand), thr, verdict))
+            elif verdicts:
+                tsv.append("%s\tcand\tagg\t%s\t-\t%s\t%s" % (scen, name, thr, verdict))
             if base is not None:
                 tsv.append("%s\tbase\tagg\t%s\t%s\t\tref" % (scen, name, fmt(base)))
             row = [name, cell(scen, "cand", name)]

@@ -15,7 +15,7 @@
 // to a value that changes every sampling tick) — that would put the SwiftUI animation
 // engine back on top of the CA animation and re-create the bug. An animation keyed to a
 // hover-only value on an ancestor view is fine; it can't fire on a sampling tick.
-// Sub-point moves snap (GPU-RENDER-AUDIT C6).
+// An update where no span moves a full point snaps; otherwise every changed span glides — one decision per bar (GPU-RENDER-AUDIT C6, m1).
 
 import AppKit
 import SwiftUI
@@ -136,8 +136,8 @@ final class BarFillLayerView: NSView {
     /// The memory card's hover dim, matching `.easeOut(duration: 0.12)`.
     private static let dimCurve = CAMediaTimingFunction(controlPoints: 0, 0, 0.58, 1)
     private static let dimDuration: CFTimeInterval = 0.12
-    /// GPU-RENDER-AUDIT C6: a geometry change smaller than this (pt, from the presented rect) is applied
-    /// without a glide — invisible at ≤ 2 px, and it spares WindowServer a 0.45 s display-rate burst.
+    /// GPU-RENDER-AUDIT C6 / m1: when no span's x or width is this far (pt, from the presented rect) from its target, the
+    /// whole bar applies without a glide — invisible at ≤ 2 px, and it spares WindowServer a 0.45 s display-rate burst.
     private static let minAnimatedDelta: CGFloat = 1
 
     /// Last values pushed to each layer, for diffing. Deliberately stores the
@@ -212,6 +212,18 @@ final class BarFillLayerView: NSView {
         let appearanceName = effectiveAppearance.name
         var live = Set<String>()
 
+        // FIX-LEFTOVERS (GPU-RENDER-AUDIT m1): ONE snap/glide decision for the whole bar, made before any layer changes.
+        // Decided per span, a segment moving < 1 pt snapped while its neighbour glided, and the 2 pt gap between them
+        // changed for 0.45 s. Each span is compared from what is on screen (its presented rect); a span with no layer
+        // yet starts from the zero rect `sublayer(for:in:)` creates. Colour and dim keep their own `animated` path.
+        let glide = animated && spans.indices.contains { i in
+            let shown = sublayers[spans[i].key].map { $0.presentation() ?? $0 }
+            let shownX = shown?.position.x ?? 0
+            let shownWidth = shown?.bounds.width ?? 0
+            return abs(shownX - rects[i].x) >= Self.minAnimatedDelta
+                || abs(shownWidth - max(0, rects[i].width)) >= Self.minAnimatedDelta
+        }
+
         for (i, span) in spans.enumerated() {
             live.insert(span.key)
             let sub = sublayer(for: span.key, in: host)
@@ -226,11 +238,6 @@ final class BarFillLayerView: NSView {
             )
             let prev = applied[span.key]
             applied[span.key] = target
-            let shownOrigin = sub.presentation()?.position ?? sub.position
-            let shownWidth = (sub.presentation()?.bounds ?? sub.bounds).width
-            let visibleMove = abs(shownOrigin.x - target.rect.minX) >= Self.minAnimatedDelta
-                || abs(shownWidth - target.rect.width) >= Self.minAnimatedDelta
-            let animateGeometry = animated && visibleMove
 
             if prev?.rect != target.rect {
                 let fromBounds = sub.presentation()?.bounds ?? sub.bounds
@@ -239,16 +246,16 @@ final class BarFillLayerView: NSView {
                 sub.position = CGPoint(x: target.rect.minX, y: target.rect.minY)
                 animate(sub, "bounds", from: NSValue(rect: fromBounds),
                         to: NSValue(rect: sub.bounds), curve: Self.barCurve,
-                        duration: Self.barDuration, animated: animateGeometry)
+                        duration: Self.barDuration, animated: glide)
                 animate(sub, "position", from: NSValue(point: fromPosition),
                         to: NSValue(point: sub.position), curve: Self.barCurve,
-                        duration: Self.barDuration, animated: animateGeometry)
+                        duration: Self.barDuration, animated: glide)
             }
             if prev?.radius != target.radius {
                 let from = sub.presentation()?.cornerRadius ?? sub.cornerRadius
                 sub.cornerRadius = target.radius
                 animate(sub, "cornerRadius", from: from, to: target.radius,
-                        curve: Self.barCurve, duration: Self.barDuration, animated: animateGeometry)
+                        curve: Self.barCurve, duration: Self.barDuration, animated: glide)
             }
             if prev?.color != target.color || prev?.alpha != target.alpha || prev?.appearance != target.appearance {
                 let from = sub.presentation()?.backgroundColor ?? sub.backgroundColor

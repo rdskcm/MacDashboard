@@ -66,7 +66,7 @@ struct IPhoneImportCard: View {
             .sheet(isPresented: Binding(get: { question != nil }, set: { shown in
                 // Escape dismisses the sheet without running a button action: that is Cancel. A button click
                 // runs its action first (the question is then already nil); a page switch runs onDisappear
-                // first, so it leaves the question pending.
+                // first, whose `setRequestPanelShown(…, false)` answers Cancel (the question is then already nil).
                 if !shown, onScreen, question != nil {
                     model.answerImportQuestion(deviceKey: deviceKey, proceed: false)
                 }

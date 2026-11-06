@@ -175,7 +175,10 @@ struct IPhoneBatteryCard: View {
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, minHeight: 80, alignment: .topLeading)
         .ds3RowPanel(cornerRadius: 20)
-        if let help { content.help(help) } else { content }
+        // The app's own tooltip, as on the SoC tiles (`SocCoresCard`: `.hoverTip(frequency.help ?? "")`); empty text shows none.
+        // `.help` also gave VoiceOver the text and `hoverTip` does not, so the hint carries it (as `BackupsPage`).
+        content.hoverTip(help ?? "")
+            .accessibilityHint(help ?? "")
     }
 
     private var liveReadingsBox: some View {
