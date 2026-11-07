@@ -131,7 +131,7 @@ extension SerialTests {
                 let deadline = Date().addingTimeInterval(3)
                 while Date() < deadline {
                     if kill(pid, 0) == -1 && errno == ESRCH { reaped = true; break }
-                    Thread.sleep(forTimeInterval: 0.05)
+                    try? await Task.sleep(for: .milliseconds(50))
                 }
                 #expect(reaped, "post-exit sweep: the leftover background child was killed")
             }

@@ -15,7 +15,7 @@ extension SerialTests {
                 let collector = LiveCollector()
                 _ = collector.collectFast()   // primes the CPU tick baseline: the first call returns cpu == nil
                 _ = await collector.sampleProcesses(limit: LiveCollector.topProcessCount)
-                Thread.sleep(forTimeInterval: 1.3)
+                try? await Task.sleep(for: .milliseconds(1300))
                 var snap2 = collector.collectFast()
                 let p = await collector.sampleProcesses(limit: LiveCollector.topProcessCount)
                 snap2.topCPU = p.topCPU

@@ -643,13 +643,13 @@ Structure:
 ## 9. Packaging (build_app.sh)
 
 ```
-swift build -c release --build-system native --triple arm64-apple-macosx26.0 \
+swift build -c release --triple arm64-apple-macosx26.0 \
   -Xswiftc -sdk -Xswiftc <SDK path> -Xlinker -platform_version -Xlinker macos -Xlinker 26.0 -Xlinker <SDK version>
 dist.noindex/MacDashboard.app/Contents/{MacOS/MacDashboard, Info.plist, Resources/AppIcon.icns, Resources/{en,ru}.lproj/InfoPlist.strings}
 ```
 Apple Silicon only (arm64) from v2.2 on; Intel Macs stay on v2.1, the last universal release.
-The SDK is whatever `xcrun --sdk macosx` resolves; the explicit `-sdk`,
-`-platform_version` and `--build-system native` make the binary's LC_BUILD_VERSION
+The SDK is whatever `xcrun --sdk macosx` resolves; the explicit `-sdk` and
+`-platform_version` make the binary's LC_BUILD_VERSION
 `sdk` record that SDK (it decides the app's appearance). The script ends by checking
 with `lipo`/`vtool` that the binary is exactly arm64 and records that `sdk` and
 `minos 26.0`, and fails on any mismatch.

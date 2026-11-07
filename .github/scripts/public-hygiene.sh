@@ -14,7 +14,7 @@ base="$1" head="$2"
 
 # Tracked top-level entries and tools/ entries (git ls-tree --name-only HEAD [tools/]).
 TOP_ALLOW=".github .gitignore CHANGELOG.md CONTRIBUTING.md LICENSE MacDashboard.entitlements Package.swift README.md README.ru.md SECURITY.md SPEC.md Sources Tests build_app.sh docs tools"
-TOOLS_ALLOW="bench-app.sh harness ls-prune.sh make_icon.swift perf signing visual"
+TOOLS_ALLOW="bench-app.sh check-warnings.sh harness ls-prune.sh make_icon.swift perf signing visual"
 # Fixture home-folder names used by tests (git grep -ohE over Sources/ Tests/ tools/).
 USERS_ALLOW="Shared a fixture me test u user x"
 

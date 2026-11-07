@@ -171,9 +171,8 @@ extension SerialTests {
             let first = await sampler.sample()   // primes: two `ps` runs, 0.6 s apart
             // `ps` itself only takes ~10-20 ms, well under cpuPercent's 0.05 s degenerate-window
             // guard — without this gap, `second`'s elapsed since `first`'s post-priming snapshot
-            // can land under the guard and every row reads back nil. Runs on the check thread,
-            // not in the runner.
-            Thread.sleep(forTimeInterval: 0.1)
+            // can land under the guard and every row reads back nil. The test task suspends for the gap; no thread is blocked.
+            try? await Task.sleep(for: .milliseconds(100))
             let second = await sampler.sample()
 
             #expect(!first.isEmpty, "ProcessSampler smoke: first sample() non-empty")

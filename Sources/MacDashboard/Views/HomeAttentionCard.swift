@@ -327,6 +327,14 @@ private struct HomeTaskRow: View {
         task.wakeHolderKeys.isEmpty ? task.help : "\(task.help) \(L.attnWakeIgnoreHint)"
     }
 
+    /// Object, then the state in the tone's ink, as one Text so both truncate as one line.
+    private var objectAndState: Text {
+        let font = Font.system(size: 14.5, weight: .semibold)
+        let object = Text(task.object).font(font)
+        let state = Text(" " + task.state).font(font).foregroundStyle(task.tone.ink)
+        return Text("\(object)\(state)")
+    }
+
     private func runVerb() {
         guard !busy else { return }
         if let a = task.legacyAction { dispatch.handle(a, id: task.id) } else { onOpen() }
@@ -336,8 +344,7 @@ private struct HomeTaskRow: View {
         HStack(spacing: 12) {
             HomeToneDot(tone: task.tone)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                (Text(task.object).font(.system(size: 14.5, weight: .semibold))
-                    + Text(" " + task.state).font(.system(size: 14.5, weight: .semibold)).foregroundStyle(task.tone.ink))
+                objectAndState
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help("\(task.object) \(task.state)")

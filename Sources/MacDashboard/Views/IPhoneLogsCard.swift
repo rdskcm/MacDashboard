@@ -354,8 +354,9 @@ private struct IPhoneLogDetails: View {
     }
 
     private func field(_ label: String, _ value: String) -> some View {
-        (Text(label).foregroundStyle(DS3.inkSoft) + Text(" ")
-            + Text(value).fontWeight(.semibold).foregroundStyle(DS3.ink))
+        let name = Text(label).foregroundStyle(DS3.inkSoft)
+        let shown = Text(value).fontWeight(.semibold).foregroundStyle(DS3.ink)
+        return Text("\(name) \(shown)")
             .font(.system(size: 13))
             .lineLimit(1)
     }

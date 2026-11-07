@@ -319,7 +319,7 @@ extension SerialTests {
             print("liveCanary toolsState=\(c.toolsState) onDisk=\(onDisk)")
             #expect(c.toolsState == ReportCollector.smartToolsAvailability(smartctl: smartctl, brew: brew))
             let (disks, tmDest) = await live.collect()
-            print("liveCanary disks=\(disks.map { "\($0.device)|\($0.title)|\($0.status)|\($0.severity)" }) tmDest=\(String(describing: tmDest))")
+            print("liveCanary disks=\(disks.map { "\($0.device)|\($0.title ?? "-")|\($0.status)|\($0.severity)" }) tmDest=\(String(describing: tmDest))")
             let internalDisk = disks.first { $0.device == "internal" }
             #expect(internalDisk != nil)                               // diskutil info disk0 answers on every Mac
             #expect(tmDest != nil)                                     // destinationinfo answered (.some(nil) = none configured)
