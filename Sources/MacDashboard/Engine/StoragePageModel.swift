@@ -69,7 +69,6 @@ enum FolderRowAction: Equatable { case show(path: String), emptyTrash }
 struct FolderRow: Equatable {
     var id: String
     var label: String
-    var bytes: Int64
     var value: String
     var fraction: Double
     var action: FolderRowAction?
@@ -196,7 +195,7 @@ enum StoragePageModel {
 
     private static func finish(_ raw: [(id: String, label: String, bytes: Int64, action: FolderRowAction?)]) -> [FolderRow] {
         let top = raw.map(\.bytes).max() ?? 0
-        return raw.map { FolderRow(id: $0.id, label: $0.label, bytes: $0.bytes, value: fmtCapacity($0.bytes),
+        return raw.map { FolderRow(id: $0.id, label: $0.label, value: fmtCapacity($0.bytes),
                                    fraction: top > 0 ? Double($0.bytes) / Double(top) : 0, action: $0.action) }
     }
 

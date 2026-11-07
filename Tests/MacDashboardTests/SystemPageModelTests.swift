@@ -157,8 +157,7 @@ extension SerialTests {
                 #expect(justNow.staleRows[0].folder == "~/Library/LaunchAgents" && justNow.staleRows[1].folder == "/Library/LaunchDaemons")
                 #expect(justNow.showDeleteAll && justNow.startupNote == nil)
                 #expect(justNow.groups.map(\.staleCount) == [0, 1, 0, 1, 0])
-                #expect(justNow.groups[1].pills[0].stale && justNow.groups[1].openByDefault && justNow.groups[0].openByDefault)
-                #expect(!justNow.groups[2].openByDefault && !justNow.groups[4].openByDefault)
+                #expect(justNow.groups[1].pills[0].stale)
                 #expect(justNow.staleRows[0].a11yDelete == "Delete z-old.plist")
 
                 let earlier = make(input(autostart: a, checkedAt: at(1, 15, 9, 5)))

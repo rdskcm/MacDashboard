@@ -21,22 +21,6 @@ struct ParsersTests {
         #expect(Parsers.parseSize("") == nil, "parseSize: empty ⇒ nil")
     }
 
-    @Test func swapUsage() async {
-        // =====================================================================
-        // MARK: - Parsers.swapUsage
-        // =====================================================================
-
-        do {
-            let line = "vm.swapusage: total = 2048.00M  used = 430.44M  free = 1617.56M  (encrypted)"
-            let swap = Parsers.swapUsage(line: line)
-            let mib = 1024.0 * 1024.0
-            #expect(swap?.total == Int64(2048.00 * mib), "swapUsage: total bytes")
-            #expect(swap?.used == Int64(430.44 * mib), "swapUsage: used bytes")
-            #expect(swap?.free == Int64(1617.56 * mib), "swapUsage: free bytes")
-            #expect(Parsers.swapUsage(line: "vm.swapusage: nothing relevant here") == nil, "swapUsage: line without fields ⇒ nil")
-        }
-    }
-
     @Test func batteryPmset() async {
         // =====================================================================
         // MARK: - Parsers.batteryPmset

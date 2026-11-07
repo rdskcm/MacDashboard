@@ -259,11 +259,9 @@ private struct IPhoneLogFileRow: View {
 private struct IPhoneLogDetailsAppear: ViewModifier {
     let onPlayed: () -> Void
     @State private var shown: Bool
-    private let play: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(play: Bool, onPlayed: @escaping () -> Void) {
-        self.play = play
         self.onPlayed = onPlayed
         _shown = State(initialValue: !play)
     }

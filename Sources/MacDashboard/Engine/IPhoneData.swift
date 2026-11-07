@@ -309,7 +309,6 @@ enum IPhoneData {
     struct HealthChartScale: Equatable {
         let lower: Int
         let upper: Int
-        let step: Int
         let gridValues: [Int]
     }
 
@@ -321,7 +320,7 @@ enum IPhoneData {
         let span = hi - lo
         let step = span > 8 ? 4 : (span > 4 ? 2 : 1)
         let first = Int((Double(lo) / Double(step)).rounded(.up)) * step
-        return HealthChartScale(lower: lo, upper: hi, step: step,
+        return HealthChartScale(lower: lo, upper: hi,
                                 gridValues: Array(stride(from: first, through: hi, by: step)))
     }
 
@@ -394,17 +393,6 @@ enum IPhoneData {
         let line = data[data.startIndex..<nl]
         guard let obj = try? JSONSerialization.jsonObject(with: Data(line)) else { return nil }
         return obj as? [String: Any]
-    }
-
-    /// True when the header's first line is a JSON object (it may still lack `bug_type`).
-    static func hasJSONHeader(_ data: Data) -> Bool {
-        headerObject(data) != nil
-    }
-
-    /// `bug_type` of the header's first-line JSON object, as a string (a String or a
-    /// number is accepted). nil: no newline, not JSON, not an object, or no `bug_type`.
-    static func bugType(fromHeader data: Data) -> String? {
-        headerObject(data).flatMap(bugType(in:))
     }
 
     /// The `bug_type` value of a parsed header object (IPHONE-CRASHLOG-ACTIONS: shared with `IPhoneCrashLog.logHeader`,

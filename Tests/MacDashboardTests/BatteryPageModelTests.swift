@@ -61,8 +61,6 @@ extension SerialTests {
         @Test func liveCharging() {
             withLanguage(.en) {
                 let m = BatteryPageModel.make(batInput())
-                #expect(m.phase == .live)
-                #expect(m.health == .worn)
                 #expect(m.tag == .worn)
                 #expect(m.tagText == "capacity 76%")
                 #expect(m.sub == "internal · 412 cycles")
@@ -139,7 +137,6 @@ extension SerialTests {
             let input = batInput(detail: d, condition: "Service Recommended")
             withLanguage(.en) {
                 let m = BatteryPageModel.make(input)
-                #expect(m.health == .service)
                 #expect(m.tag == .service)
                 #expect(m.tagText == L.commonServiceRecommended)
                 #expect(m.healthHero.tone == .hot)
@@ -161,7 +158,6 @@ extension SerialTests {
             withLanguage(.en) {
                 let d = batDetail { $0.maxCapacityMAh = 4491; $0.healthPercent = 88 }
                 let m = BatteryPageModel.make(batInput(detail: d))
-                #expect(m.health == .normal)
                 #expect(m.tag == .healthy)
                 #expect(m.tagText == L.homeTagHealthy)
                 #expect(m.healthHero.tone == .green)
@@ -172,7 +168,6 @@ extension SerialTests {
         @Test func reading() {
             withLanguage(.en) {
                 let m = BatteryPageModel.make(batInput(detail: nil, block: .loading(since: t0)))
-                #expect(m.phase == .reading)
                 #expect(m.showsWait)
                 #expect(!m.showsDetailCards)
                 #expect(m.nowHero == nil)
@@ -188,7 +183,6 @@ extension SerialTests {
             withLanguage(.en) {
                 let m = BatteryPageModel.make(batInput(block: .failed(.timedOut, lastGoodAt: t0)))
                 let hh = CPUPageModel.hhmmss(t0)
-                #expect(m.phase == .failed(.timedOut, lastGoodAt: t0))
                 #expect(m.nowCaption == L.commonLastData(hh))
                 #expect(m.failureNote == L.batFailTimedOut + " " + L.batFailShowingSaved + " " + L.readRetriesAutomatically)
                 #expect(m.nowHero == nil)

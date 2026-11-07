@@ -49,21 +49,8 @@ extension SerialTests {
                 #expect(ru.attnDetailCrashes(2) == "2 отчёта",   "StringsRU.attnDetailCrashes(2) ⇒ 2 отчёта")
                 #expect(ru.attnDetailCrashes(5) == "5 отчётов",  "StringsRU.attnDetailCrashes(5) ⇒ 5 отчётов")
                 #expect(ru.attnDetailCrashes(11) == "11 отчётов", "StringsRU.attnDetailCrashes(11) ⇒ 11 отчётов")
-                #expect(ru.headerLoadChip("1,00", 1) == "load 1,00 · 1 ядро",  "StringsRU.headerLoadChip ncpu=1 ⇒ 1 ядро")
-                #expect(ru.headerLoadChip("1,00", 2) == "load 1,00 · 2 ядра",  "StringsRU.headerLoadChip ncpu=2 ⇒ 2 ядра")
-                #expect(ru.headerLoadChip("1,00", 8) == "load 1,00 · 8 ядер",  "StringsRU.headerLoadChip ncpu=8 ⇒ 8 ядер")
-                // Amendment 1: the history chart's cycles tooltip renders exactly this string.
-                // HistoryCard.valueParts is a private method on a SwiftUI View and is not
-                // reachable from this target, so this asserts the composed string, not the
-                // call site.
-                #expect(ru.kpiBatteryCycles(1) == "1 цикл",       "StringsRU.kpiBatteryCycles(1) ⇒ 1 цикл")
-                #expect(ru.kpiBatteryCycles(2) == "2 цикла",      "StringsRU.kpiBatteryCycles(2) ⇒ 2 цикла")
-                #expect(ru.kpiBatteryCycles(11) == "11 циклов",   "StringsRU.kpiBatteryCycles(11) ⇒ 11 циклов")
-                #expect(ru.kpiBatteryCycles(357) == "357 циклов", "StringsRU.kpiBatteryCycles(357) ⇒ 357 циклов")
             }
 
-            #expect(!L.kpiCpuLabel.isEmpty, "L.kpiCpuLabel: non-empty")
-            #expect(!L.securityTitle.isEmpty, "L.securityTitle: non-empty")
             #expect(!AppInfo.name.isEmpty, "AppInfo.name: non-empty")
         }
 
@@ -74,15 +61,9 @@ extension SerialTests {
 
             do {
                 L10nStore.shared.language = .en
-                #expect(L.kpiBatteryLabel == "Battery", "L10nStore: switch .en, kpiBatteryLabel == Battery")
-                #expect(L.kpiBatteryCycles(1) == "1 cycle", "L10nStore: switch .en, kpiBatteryCycles(1) == 1 cycle")
-                #expect(L.kpiBatteryCycles(3) == "3 cycles", "L10nStore: switch .en, kpiBatteryCycles(3) == 3 cycles")
                 #expect(ReportWriter.fmtBytes(1_073_741_824, language: .en).contains("GB"), "L10nStore: switch .en, fmtBytes(1GiB) contains GB")
-                #expect(!L.recommendationsAllGood.isEmpty && L.recommendationsAllGood != StringsRU().recommendationsAllGood,
-                      "L10nStore: switch .en, recommendationsAllGood non-empty and differs from RU")
 
                 L10nStore.shared.language = .ru
-                #expect(L.kpiBatteryLabel == "Батарея", "L10nStore: switch back .ru, kpiBatteryLabel == Батарея")
                 #expect(ReportWriter.fmtBytes(1_073_741_824, language: .ru).contains("ГБ"), "L10nStore: switch back .ru, fmtBytes(1GiB) contains ГБ")
 
                 // launchLanguage is a lazily-initialized static: since it's touched here for

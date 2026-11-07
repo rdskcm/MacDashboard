@@ -50,8 +50,6 @@ struct BatteryPageModel: Equatable {
     }
     static let refreshSeconds = 3
 
-    var phase: BatteryPagePhase
-    var health: BatteryHealthClass
     var symbol: String
     var sub: String
     var subIsFailure: Bool
@@ -199,7 +197,7 @@ struct BatteryPageModel: Equatable {
 
         let (rows, caption) = capacityHistory(i.history)
         return BatteryPageModel(
-            phase: phase, health: health, symbol: symbol, sub: sub, subIsFailure: isFailed && lastGood != nil, tag: tag, tagText: tagText,
+            symbol: symbol, sub: sub, subIsFailure: isFailed && lastGood != nil, tag: tag, tagText: tagText,
             nowCaption: nowCaption, showsWait: phase == .reading, failureNote: failureNote, nowHero: nowHero,
             nowTiles: nowTiles, nowColumns: isFailed ? 4 : 2, showsDetailCards: isLive || (isFailed && d != nil),
             healthHero: healthHero, healthTiles: healthTiles, healthNote: healthNote,

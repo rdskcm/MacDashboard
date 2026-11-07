@@ -51,7 +51,6 @@ extension SerialTests {
         @Test func loadingBlock() {
             withLanguage(.en) {
                 let m = CPUPageModel.make(cpuInput(block: .loading(since: t0)))
-                #expect(m.phase == .loading)
                 #expect(m.tag == .loading)
                 #expect(m.tagText == "Collecting data…")
                 #expect(m.sub.contains("collecting data…"))
@@ -63,14 +62,13 @@ extension SerialTests {
             }
             withLanguage(.en) {
                 let m = CPUPageModel.make(cpuInput(cpu: nil))
-                #expect(m.phase == .loading, "cpu == nil in an ok block reads as loading")
+                #expect(m.tag == .loading, "cpu == nil in an ok block reads as loading")
             }
         }
 
         @Test func liveReading() {
             withLanguage(.en) {
                 let m = CPUPageModel.make(cpuInput())
-                #expect(m.phase == .live)
                 #expect(m.tag == .ok && m.tagText == "OK")
                 #expect(m.hero.value == "25.7%")
                 #expect(abs(m.hero.fraction - 0.257) < 1e-9)
@@ -96,20 +94,20 @@ extension SerialTests {
             withLanguage(.en) {
                 let cpu = CPUUsage(user: 71, sys: 20, idle: 9)
                 var m = CPUPageModel.make(cpuInput(cpu: cpu, highSince: t0.addingTimeInterval(-4 * 60)))
-                #expect(m.phase == .high && m.tag == .high && m.tagText == "High load")
+                #expect(m.tag == .high && m.tagText == "High load")
                 #expect(m.hero.high)
                 #expect(m.hero.note == "High load for 4 min")
                 m = CPUPageModel.make(cpuInput(cpu: cpu, highSince: t0.addingTimeInterval(-30)))
-                #expect(m.phase == .live, "D4: under 60 s is not high yet")
+                #expect(m.tag == .ok, "D4: under 60 s is not high yet")
                 #expect(m.hero.note == "8 cores", "below 60 s keeps the core count")
                 m = CPUPageModel.make(cpuInput(cpu: CPUUsage(user: 80, sys: 5, idle: 15), highSince: t0.addingTimeInterval(-4 * 60)))
-                #expect(m.phase == .high, "exactly 85 is high")
+                #expect(m.tag == .high, "exactly 85 is high")
                 m = CPUPageModel.make(cpuInput(cpu: CPUUsage(user: 80, sys: 5, idle: 15)))
-                #expect(m.phase == .live, "85 with no run start is live")
+                #expect(m.tag == .ok, "85 with no run start is live")
                 m = CPUPageModel.make(cpuInput(cpu: CPUUsage(user: 80, sys: 5, idle: 15), highSince: t0.addingTimeInterval(-60)))
-                #expect(m.phase == .high, "exactly 60 s is high")
+                #expect(m.tag == .high, "exactly 60 s is high")
                 m = CPUPageModel.make(cpuInput(cpu: CPUUsage(user: 80, sys: 4.9, idle: 15.1)))
-                #expect(m.phase == .live, "84.9 is live")
+                #expect(m.tag == .ok, "84.9 is live")
             }
             withLanguage(.ru) {
                 let m = CPUPageModel.make(cpuInput(cpu: CPUUsage(user: 71, sys: 20, idle: 9), highSince: t0.addingTimeInterval(-4 * 60)))
@@ -189,7 +187,6 @@ extension SerialTests {
                 let good = Date(timeIntervalSinceReferenceDate: 800_000_000 - 3600)
                 let hms = CPUPageModel.hhmmss(good)
                 let m = CPUPageModel.make(cpuInput(block: .failed(.timedOut, lastGoodAt: good)))
-                #expect(m.phase == .failed(.timedOut, lastGoodAt: good))
                 #expect(m.tag == .failed && m.tagText == "Read error" && m.subIsFailure)
                 #expect(m.caption == "last data — \(hms)")
                 #expect(m.sub == "Apple M3 · last data — \(hms)")
@@ -215,7 +212,6 @@ extension SerialTests {
         @Test func failedNeverGood() {
             withLanguage(.en) {
                 let m = CPUPageModel.make(cpuInput(cpu: nil, block: .failed(.noReading, lastGoodAt: nil)))
-                #expect(m.phase == .failed(.noReading, lastGoodAt: nil))
                 #expect(m.sub == "Apple M3 · 8 cores")
                 #expect(m.caption == "live snapshot")
                 #expect(m.failureNote == "Couldn’t read CPU counters: the system returned no data. The app keeps trying automatically.")

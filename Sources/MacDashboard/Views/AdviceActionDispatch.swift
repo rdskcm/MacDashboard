@@ -33,7 +33,7 @@ final class AdviceActionDispatch {
     /// isPresented binding. When it lost that race the Trash was emptied but the done
     /// state never appeared. Correctness must not rest on that ordering.
     var showTrashConfirm = false
-    /// Advice id (AttentionItem/TipCapsule `.id`) the pending empty-trash applies to,
+    /// Advice id (advice `.id`) the pending empty-trash applies to,
     /// captured when the action is dispatched and cleared only when it completes.
     private var trashTargetID: String? = nil
     var showFirewallConfirm = false
@@ -58,10 +58,10 @@ final class AdviceActionDispatch {
     private(set) var trashCounting = false
     private(set) var trashItemCount: Int?
 
-    /// `TipCapsule.id` embeds the formatted value (`"Корзина|1,4 ГБ"`), which changes when a
+    /// An advice id can embed the formatted value (`"Корзина|1,4 ГБ"`), which changes when a
     /// report refresh lands while Finder is still working — the captured id would then match
-    /// no capsule and the ✓ would never appear. The object part is stable and unique per
-    /// capsule, so completion is tracked by that.
+    /// no row and the ✓ would never appear. The object part is stable and unique per
+    /// advice item, so completion is tracked by that.
     private static func adviceKey(_ id: String) -> String { String(id.prefix { $0 != "|" }) }
 
     var trashConfirmBinding: Binding<Bool> {

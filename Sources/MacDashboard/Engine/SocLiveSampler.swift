@@ -64,7 +64,7 @@ final class SocCoreGroupSlot: Identifiable {
         self.frequency = frequency
     }
 
-    /// Ids and cell ids exactly as `SocCoresCardModel.make`.
+    /// Cell ids from `SocCoresCardModel.cellID`.
     static func make(_ cores: [CoreGroupLoad]) -> [SocCoreGroupSlot] {
         cores.enumerated().map { index, item in
             let cells = item.group.coreIndices.indices.map { n in
@@ -80,10 +80,8 @@ final class SocCoreGroupSlot: Identifiable {
 @MainActor
 @Observable
 final class SocGPURowSlot {
-    let pid: Int32
     fileprivate(set) var row: GPUProcessRow
     init(row: GPUProcessRow) {
-        self.pid = row.id
         self.row = row
     }
 }

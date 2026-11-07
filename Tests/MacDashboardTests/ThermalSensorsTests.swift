@@ -51,19 +51,6 @@ extension SerialTests {
             ]
             #expect(ThermalSensors.socTemperature(from: mixed) == 40.9,
                   "socTemperature: mixed fixture ⇒ max of valid tdie (40.9)")
-
-            #expect(ThermalSensors.smartTemperatureCelsius(attrs: [("Temperature", "32 Celsius")]) == 32,
-                  "smartTemperatureCelsius: \"32 Celsius\" ⇒ 32")
-            #expect(ThermalSensors.smartTemperatureCelsius(attrs: [("Critical Warning", "0x00")]) == nil,
-                  "smartTemperatureCelsius: no Temperature attr ⇒ nil")
-            #expect(ThermalSensors.smartTemperatureCelsius(attrs: []) == nil,
-                  "smartTemperatureCelsius: empty attrs ⇒ nil")
-            #expect(ThermalSensors.smartTemperatureCelsius(attrs: [("Temperature", "N/A")]) == nil,
-                  "smartTemperatureCelsius: unparseable value ⇒ nil")
-
-            let disk0Fixture = Data(#"{"nvme_smart_health_information_log":{"critical_warning":0,"temperature":32,"available_spare":100,"percentage_used":1}}"#.utf8)
-            #expect(ThermalSensors.smartTemperatureCelsius(attrs: Parsers.smartctlAttrs(json: disk0Fixture)) == 32,
-                  "smartTemperatureCelsius: smartctl -A disk0 fixture end-to-end ⇒ 32")
         }
     }
 }

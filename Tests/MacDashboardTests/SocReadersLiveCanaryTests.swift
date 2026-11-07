@@ -133,7 +133,7 @@ extension SerialTests {
             let dt = Date().timeIntervalSince(t0)
             print("liveCanary gpuClients samples a=\(a.count) b=\(b.count) dt=\(String(format: "%.2f", dt)) s")
             let rows = GPUClientRanking.rows(prev: a, cur: b, dtSeconds: dt, names: { GPUClientRanking.executableName(pid: $0) })
-            for r in rows { print("liveCanary gpuRow pid=\(r.id) name=\(r.name) share=\(r.sharePct.map { String(format: "%.1f%%", $0) } ?? "— (above 101)") lifetimeNs=\(r.lifetimeNs)") }
+            for r in rows { print("liveCanary gpuRow pid=\(r.id) name=\(r.name) share=\(r.sharePct.map { String(format: "%.1f%%", $0) } ?? "— (above 101)")") }
             #expect(rows.count >= 1)
             for r in rows {
                 #expect(r.id > 0)

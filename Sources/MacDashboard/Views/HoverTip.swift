@@ -30,33 +30,6 @@ private struct AnchorFinder: NSViewRepresentable {
     }
 }
 
-// MARK: - Attention-style variant (Block V2-SUMMARY, additive)
-//
-// `.hoverTip(_:)` / `show(text:anchor:)` / `position(_:near:in:)` above are the
-// shared path — its positioning (centred under the anchor, flipping above when
-// it would fall off screen) is untouched, but its bubble content now renders
-// `AttentionTipBubble` too (V2-UI-POLISH), the same look `.attentionTip(_:)`
-// below uses. `.attentionTip(_:)` is a sibling entry point (recommendation-
-// capsule explanations) with its own positioning math (left-aligned to the
-// anchor, above by default, clamps instead of flipping); it happens to reuse
-// `TipPanelController`'s single lazily-created `panel` for lifecycle economy,
-// but a given controller instance only ever serves one style (style is a
-// `let` on the owning `HoverTipModifier`), so the two paths never collide.
-
-/// Where the bubble appears relative to its anchor. Threaded through
-/// `HoverTipModifier` with `.below` as the default so every existing
-/// `.hoverTip(_:)` call keeps running the untouched `show()`/`position()` path
-/// above verbatim; `.above` is new, consumed only by `.attentionTip(_:)`.
-enum TipPlacement { case below, above }
-
-/// `.standard` (default) means centred below the anchor, flips when it would
-/// go off screen. `.attention` means left-aligned to the anchor, above by
-/// default, clamps instead of flipping. Both now render the same
-/// `AttentionTipBubble` look via the shared `showAttention()`/`show()` paths
-/// below — different positioning, same fill/border/shadow/corner-radius/padding
-/// and fade+rise entrance.
-enum TipStyle { case standard, attention }
-
 private let attnTipHorizontalPadding: CGFloat = 11
 private let attnTipVerticalPadding: CGFloat = 9
 private let attnTipContentMaxWidth: CGFloat = 340
@@ -70,18 +43,13 @@ private let attnTipCornerRadius: CGFloat = 9
 /// room; `position(_:near:in:)` subtracts it back out so the *visible*
 /// rounded-rect still sits `gap` points from the anchor.
 private let attnTipBubbleMargin: CGFloat = 26
-private let attnTipGap: CGFloat = 9
-/// Rise distance for the fade+rise entrance (spec: "3 pt rise"). Deliberately
-/// its own constant, not `DSMotion.tooltipRiseY` (-7 pt) — that constant is
-/// unused elsewhere and tuned for a different, not-yet-built tooltip; reusing
-/// it here would silently change this bubble's motion if it's ever wired up
-/// for that other purpose later.
+/// Rise distance for the fade+rise entrance (spec: "3 pt rise").
 private let attnTipRiseY: CGFloat = 3
 /// Entrance duration (spec: "0.14 s ease"); Reduce Motion falls back to the
 /// shared `DSMotion.reduceMotionFallback` (0.12 s), fade-only (no rise).
 private let attnTipEnterDuration: Double = 0.14
 
-/// The recommendation-capsule tooltip bubble: 12 pt text at a ~1.4 line-height
+/// The `.hoverTip` tooltip bubble: 12 pt text at a ~1.4 line-height
 /// (`lineSpacing` approximates CSS `line-height: 1.4` as `fontSize * 0.4` extra
 /// leading — SwiftUI has no direct line-height multiplier), `DS.inkSoft`,
 /// `DS.ground2` fill, `DS.lineStrong` border, a fade+rise entrance that drops
@@ -162,7 +130,6 @@ func attnTipContentWidth(for text: String) -> CGFloat {
 /// down (onDisappear) rather than left to accumulate hidden panels.
 private final class TipPanelController: NSObject {
     private var panel: NSPanel?
-    private weak var anchorView: NSView?
     private var moveObserver: NSObjectProtocol?
     private var boundsObserver: NSObjectProtocol?
 
@@ -180,7 +147,6 @@ private final class TipPanelController: NSObject {
 
     func show(text: String, anchor: NSView) {
         guard !text.isEmpty, let window = anchor.window else { return }
-        anchorView = anchor
 
         let contentWidth = attnTipContentWidth(for: text)
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -241,7 +207,6 @@ private final class TipPanelController: NSObject {
         boundsObserver = nil
         panel?.close()
         panel = nil
-        anchorView = nil
     }
 
     private func position(_ panel: NSPanel, near anchor: NSView, in window: NSWindow) {
@@ -254,9 +219,7 @@ private final class TipPanelController: NSObject {
         // Clamp the VISIBLE bubble to the screen, not the panel frame: `panel.frame`
         // carries `attnTipBubbleMargin` of transparent shadow room per side, so a bare
         // panel clamp left the bubble visually inset by that margin instead of the 10 pt
-        // it used to be (V2-RELEASE re-review [N5]). Same correction the vertical math
-        // below and BOTH of `positionAttention`'s clamps apply — its horizontal one only
-        // since re-review 2 [M3], which caught it still using the old panel-frame form.
+        // it used to be (V2-RELEASE re-review [N5]).
         x = max(visible.minX - attnTipBubbleMargin,
                 min(x, visible.maxX + attnTipBubbleMargin - bubbleSize.width))
 
@@ -272,97 +235,6 @@ private final class TipPanelController: NSObject {
         if y + bubbleSize.height > visible.maxY + attnTipBubbleMargin {
             y = anchorScreenRect.minY - gap + attnTipBubbleMargin - bubbleSize.height // flip below
         }
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
-    }
-
-    /// Attention-style sibling of `show(text:anchor:)` above — same panel
-    /// lifecycle (create-once, reposition-and-reshow on every call), different
-    /// content view and positioning. Left separate rather than parameterizing
-    /// `show()` itself so that method, and every existing `.hoverTip(_:)` call
-    /// site it serves, stays byte-identical.
-    func showAttention(text: String, anchor: NSView, placement: TipPlacement) {
-        guard !text.isEmpty, let window = anchor.window else { return }
-        anchorView = anchor
-
-        let contentWidth = attnTipContentWidth(for: text)
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let hosting = NSHostingView(rootView: AttentionTipBubble(text: text, contentWidth: contentWidth, reduceMotion: reduceMotion))
-        let fitting = hosting.fittingSize
-        hosting.frame = NSRect(origin: .zero, size: fitting)
-
-        let panel: NSPanel
-        if let existing = self.panel {
-            panel = existing
-        } else {
-            panel = NSPanel(contentRect: NSRect(origin: .zero, size: fitting),
-                             styleMask: [.borderless, .nonactivatingPanel],
-                             backing: .buffered, defer: true)
-            panel.isOpaque = false
-            panel.backgroundColor = .clear
-            panel.hasShadow = false // the bubble draws its own soft shadow via SwiftUI
-            panel.level = .floating
-            panel.ignoresMouseEvents = true
-            panel.hidesOnDeactivate = false
-            panel.isReleasedWhenClosed = false
-            panel.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
-            self.panel = panel
-            observeGeometryChanges(of: window)
-        }
-
-        panel.appearance = anchor.effectiveAppearance
-        panel.contentView = hosting
-        panel.setContentSize(fitting)
-        positionAttention(panel, near: anchor, in: window, placement: placement)
-
-        if panel.parent !== window {
-            window.addChildWindow(panel, ordered: .above)
-        }
-        panel.orderFront(nil)
-        isVisible = true
-    }
-
-    /// Left-aligned to `anchor`'s leading edge, `attnTipGap` above (or below)
-    /// it per `placement`. It does not flip, but it does clamp both axes to the
-    /// screen's visible frame (V2-POLISH B3) — a tip too tall for the space above
-    /// its anchor slides down over the card rather than being clipped by the menu bar.
-    private func positionAttention(_ panel: NSPanel, near anchor: NSView, in window: NSWindow, placement: TipPlacement) {
-        let anchorFrameInWindow = anchor.convert(anchor.bounds, to: nil)
-        let anchorScreenRect = window.convertToScreen(anchorFrameInWindow)
-        let bubbleSize = panel.frame.size
-        let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-
-        // Left-aligned: the *visible* bubble's leading edge lines up with the
-        // anchor's leading edge (the panel origin sits `attnTipBubbleMargin`
-        // further left, inside the transparent shadow margin — same idea as
-        // the horizontal centering in `position(_:near:in:)`, just left- not
-        // center-aligned).
-        var x = anchorScreenRect.minX - attnTipBubbleMargin
-        // Clamp the VISIBLE bubble, not the panel frame: `panel.frame` carries
-        // `attnTipBubbleMargin` of transparent shadow room per side, so a bare panel
-        // clamp left the bubble visually inset by that margin (V2-RELEASE re-review
-        // [N5] fixed this in `position(_:near:in:)`; re-review 2 [M3] found this
-        // second positioner still had the old form). Same expression as :254-255.
-        x = max(visible.minX - attnTipBubbleMargin,
-                min(x, visible.maxX + attnTipBubbleMargin - bubbleSize.width))
-
-        var y: CGFloat
-        switch placement {
-        case .above:
-            y = anchorScreenRect.maxY + attnTipGap - attnTipBubbleMargin
-        case .below:
-            y = anchorScreenRect.minY - attnTipGap + attnTipBubbleMargin - bubbleSize.height
-        }
-        // Vertical clamp, the counterpart of the horizontal one above (V2-POLISH B3):
-        // this positioner never flips, and attention cards sit at the very top of the
-        // window, so a long `.above` tip used to run under the menu bar and get its top
-        // clipped. `visibleFrame` already excludes the menu bar and the Dock. The
-        // ±attnTipBubbleMargin terms are there because `panel.frame` carries that much
-        // transparent shadow room on every side, so it is the VISIBLE bubble that ends
-        // up inside `visible` — same margin bookkeeping as `position(_:near:in:)`'s flip
-        // test. Clamped low-then-high on purpose: for a bubble taller than the visible
-        // frame the top, where the text starts, is what must stay on screen.
-        y = min(visible.maxY + attnTipBubbleMargin - bubbleSize.height,
-                max(visible.minY - attnTipBubbleMargin, y))
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
@@ -391,11 +263,6 @@ private final class TipPanelController: NSObject {
 
 struct HoverTipModifier: ViewModifier {
     let text: String
-    /// Both default to the values every existing `.hoverTip(_:)` call site
-    /// gets, so those call sites are unaffected by this initializer growing
-    /// two new parameters (Block V2-SUMMARY, additive).
-    var style: TipStyle = .standard
-    var placement: TipPlacement = .below
     @State private var pending: DispatchWorkItem?
     @State private var anchorView: NSView?
     @State private var controller = TipPanelController()
@@ -415,7 +282,7 @@ struct HoverTipModifier: ViewModifier {
                         // during the 1s delay, `.onChange` below keeps latestText
                         // current, so the bubble appears with the current value
                         // instead of whatever was hovered a second ago.
-                        if let anchorView { show(text: controller.latestText, anchor: anchorView) }
+                        if let anchorView { controller.show(text: controller.latestText, anchor: anchorView) }
                     }
                     pending = item
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: item)
@@ -433,7 +300,7 @@ struct HoverTipModifier: ViewModifier {
                 if newValue.isEmpty {
                     controller.hide()
                 } else if let anchorView {
-                    show(text: newValue, anchor: anchorView)
+                    controller.show(text: newValue, anchor: anchorView)
                 }
             }
             .onDisappear {
@@ -441,23 +308,7 @@ struct HoverTipModifier: ViewModifier {
                 controller.teardown()
             }
     }
-
-    /// The only place `style` is consulted: dispatches to the standard
-    /// (centred below, flips near a screen edge) path or the attention
-    /// (left-aligned above, clamps) path — both render `AttentionTipBubble`.
-    private func show(text: String, anchor: NSView) {
-        switch style {
-        case .standard: controller.show(text: text, anchor: anchor)
-        case .attention: controller.showAttention(text: text, anchor: anchor, placement: placement)
-        }
-    }
 }
 extension View {
     func hoverTip(_ text: String) -> some View { modifier(HoverTipModifier(text: text)) }
-
-    /// Above-anchor, left-aligned attention-style tooltip (Block V2-SUMMARY) —
-    /// recommendation-capsule explanations, see `AttentionTipBubble`.
-    func attentionTip(_ text: String) -> some View {
-        modifier(HoverTipModifier(text: text, style: .attention, placement: .above))
-    }
 }

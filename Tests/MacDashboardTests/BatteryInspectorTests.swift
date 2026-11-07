@@ -4,6 +4,12 @@ import Foundation
 import Testing
 @testable import MacDashboard
 
+/// The detail from the live `read()`, nil on any other result (the live probes below).
+private func liveBatteryDetail() async -> BatteryDetail? {
+    if case .detail(let d) = await BatteryInspector.read() { return d }
+    return nil
+}
+
 // Trimmed sample fixture (on battery, no adapter connected).
 private let batteryOnBatteryFixture = """
 <?xml version="1.0" encoding="UTF-8"?>
@@ -379,7 +385,7 @@ extension SerialTests {
             }
 
             do {
-                let collected = hasBattery ? await BatteryInspector.collect() : nil
+                let collected = hasBattery ? await liveBatteryDetail() : nil
                 #expect(!hasBattery || collected != nil,
                       "smoke BatteryInspector: collect() != nil (or no battery on this machine)")
             }
@@ -431,7 +437,7 @@ extension SerialTests {
             do {
                 // Live: on a Mac with a battery, the real ioreg output must yield the fields macOS 27
                 // moved into child entries. Skipped on battery-less machines (CI runners).
-                let live = hasBattery ? await BatteryInspector.collect() : nil
+                let live = hasBattery ? await liveBatteryDetail() : nil
                 #expect(!hasBattery || (live?.maxCapacityMAh != nil && live?.designCapacityMAh != nil
                                       && live?.temperatureC != nil && live?.lifetime != nil
                                       && live?.cellVoltagesMV.isEmpty == false),

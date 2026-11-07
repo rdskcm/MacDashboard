@@ -5,14 +5,10 @@ import Foundation
 
 protocol StorageStrings {
     // MARK: Storage — shared folder labels
-    var storageColShare: String { get }
     var storageTrashLabel: String { get }
-    var storageAppsLabel: String { get }
 
     // MARK: Storage — folders that could not be read (V2-FDA-DEGRADE)
     func storageFoldersNoFDA(_ folders: String) -> String
-    var storageFoldersNoFDAButton: String { get }
-    var storageFoldersNoFDAButtonA11y: String { get }
 
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String
@@ -128,14 +124,10 @@ protocol StorageStrings {
 
 extension StringsEN: StorageStrings {
     // MARK: Storage — shared folder labels
-    var storageColShare: String { "Share" }
     var storageTrashLabel: String { "Trash" }
-    var storageAppsLabel: String { "Applications" }
 
     // MARK: Storage — folders that could not be read (V2-FDA-DEGRADE)
     func storageFoldersNoFDA(_ folders: String) -> String { "Not shown here: \(folders) — the app doesn't have Full Disk Access." }
-    var storageFoldersNoFDAButton: String { "Open Settings" }
-    var storageFoldersNoFDAButtonA11y: String { "Open Full Disk Access settings" }
 
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String { "Not measured in time: \(folders)." }
@@ -250,14 +242,10 @@ extension StringsEN: StorageStrings {
 
 extension StringsRU: StorageStrings {
     // MARK: Storage — shared folder labels
-    var storageColShare: String { "Доля" }
     var storageTrashLabel: String { "Корзина" }
-    var storageAppsLabel: String { "Программы" }
 
     // MARK: Storage — folders that could not be read (V2-FDA-DEGRADE)
     func storageFoldersNoFDA(_ folders: String) -> String { "Здесь не показаны: \(folders) — у приложения нет полного доступа к диску." }
-    var storageFoldersNoFDAButton: String { "Открыть настройки" }
-    var storageFoldersNoFDAButtonA11y: String { "Открыть настройки полного доступа к диску" }
 
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String { "Не успели измерить: \(folders)." }

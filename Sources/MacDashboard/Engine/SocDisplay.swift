@@ -33,7 +33,7 @@ enum SocDisplay {
         return a == b
     }
 
-    /// pid, name and the shown share; `lifetimeNs` is not drawn.
+    /// pid, name and the shown share.
     static func sameOnScreen(_ a: GPUProcessRow, _ b: GPUProcessRow) -> Bool {
         a.id == b.id && a.name == b.name && sameOnScreen(a.sharePct, b.sharePct, decimals: shareDecimals)
     }

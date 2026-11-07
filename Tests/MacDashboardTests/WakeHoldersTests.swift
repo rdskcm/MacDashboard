@@ -33,9 +33,8 @@ struct WakeHoldersTests {
                   "WakeHolders: pid 94316 caffeinate 92s, onBehalfOfPID nil")
         } else { Issue.record( "WakeHolders: pid 94316 caffeinate present") }
         if let longCaffeinate = assertions.first(where: { $0.pid == 67867 }) {
-            #expect(longCaffeinate.ageSeconds == 4902 && longCaffeinate.onBehalfOfPID == 67807 &&
-                  longCaffeinate.name == "caffeinate command-line tool",
-                  "WakeHolders: pid 67867 caffeinate 4902s, onBehalfOfPID 67807, name matches")
+            #expect(longCaffeinate.ageSeconds == 4902 && longCaffeinate.onBehalfOfPID == 67807,
+                  "WakeHolders: pid 67867 caffeinate 4902s, onBehalfOfPID 67807")
         } else { Issue.record( "WakeHolders: pid 67867 caffeinate present") }
         if let windowServer = assertions.first(where: { $0.pid == 405 }) {
             #expect(windowServer.type == "UserIsActive" && windowServer.ageSeconds == 31,
@@ -78,27 +77,27 @@ struct WakeHoldersTests {
         }
 
         // --- R3: default floor on the capture ---
-        let defaultHolders = WakeHolders.holders(from: assertions, lookup: lookup())
+        let defaultHolders = WakeHolders.classified(from: assertions, lookup: lookup()).user
         #expect(defaultHolders == [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)],
               "WakeHolders: default floor on capture -> exactly caffeinate(claude) 4902s (got \(defaultHolders))")
 
         // --- R3/R5: minimumAge 0 merges the two caffeinate/claude entries ---
-        let allHolders = WakeHolders.holders(from: assertions, lookup: lookup(), minimumAge: 0)
+        let allHolders = WakeHolders.classified(from: assertions, lookup: lookup(), minimumAge: 0).user
         #expect(allHolders.count == 1 && allHolders.first == WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902),
               "WakeHolders: minimumAge 0 -> merged caffeinate(claude) 4902s only (got \(allHolders))")
 
         // --- R4: parent walk without on-behalf ---
         let synthNoBehalf = PowerAssertion(pid: 94316, processName: "caffeinate", ageSeconds: 600,
-                                            type: "PreventUserIdleSystemSleep", name: "x")
-        let noBehalfHolders = WakeHolders.holders(from: [synthNoBehalf], lookup: lookup(), minimumAge: 0)
+                                            type: "PreventUserIdleSystemSleep")
+        let noBehalfHolders = WakeHolders.classified(from: [synthNoBehalf], lookup: lookup(), minimumAge: 0).user
         #expect(noBehalfHolders.first?.requester == "claude",
               "WakeHolders: parent walk without on-behalf -> requester claude (got \(String(describing: noBehalfHolders.first)))")
 
         // --- R4: Terminal walk (caffeinate -> zsh -> login -> Terminal) ---
         let terminalExtra: [Int32: ProcRecord] = [7000: ProcRecord(path: "/usr/bin/caffeinate", ppid: 5000)]
         let synthTerminal = PowerAssertion(pid: 7000, processName: "caffeinate", ageSeconds: 600,
-                                            type: "PreventUserIdleSystemSleep", name: "x")
-        let terminalHolders = WakeHolders.holders(from: [synthTerminal], lookup: lookup(terminalExtra), minimumAge: 0)
+                                            type: "PreventUserIdleSystemSleep")
+        let terminalHolders = WakeHolders.classified(from: [synthTerminal], lookup: lookup(terminalExtra), minimumAge: 0).user
         #expect(terminalHolders.first?.requester == "Terminal",
               "WakeHolders: Terminal walk -> requester Terminal (got \(String(describing: terminalHolders.first)))")
 
@@ -108,8 +107,8 @@ struct WakeHoldersTests {
             9401: ProcRecord(path: "/Users/u/.local/share/claude/versions/2.1.283", ppid: 1, name: "claude"),
         ]
         let synthClaudeVersion = PowerAssertion(pid: 9400, processName: "caffeinate", ageSeconds: 900,
-                                                 type: "PreventUserIdleSystemSleep", name: "x")
-        let claudeVersionHolders = WakeHolders.holders(from: [synthClaudeVersion], lookup: lookup(claudeVersionExtra), minimumAge: 0)
+                                                 type: "PreventUserIdleSystemSleep")
+        let claudeVersionHolders = WakeHolders.classified(from: [synthClaudeVersion], lookup: lookup(claudeVersionExtra), minimumAge: 0).user
         #expect(claudeVersionHolders == [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 900)],
               "WakeHolders: A1 versioned path -> requester claude, not 2.1.283 (got \(claudeVersionHolders))")
 
@@ -119,8 +118,8 @@ struct WakeHoldersTests {
             9501: ProcRecord(path: "/Users/u/.local/share/claude/versions/2.1.283", ppid: 1, name: nil),
         ]
         let synthNilName = PowerAssertion(pid: 9500, processName: "caffeinate", ageSeconds: 900,
-                                           type: "PreventUserIdleSystemSleep", name: "x")
-        let nilNameHolders = WakeHolders.holders(from: [synthNilName], lookup: lookup(nilNameExtra), minimumAge: 0)
+                                           type: "PreventUserIdleSystemSleep")
+        let nilNameHolders = WakeHolders.classified(from: [synthNilName], lookup: lookup(nilNameExtra), minimumAge: 0).user
         #expect(nilNameHolders == [WakeHolder(owner: "caffeinate", requester: "2.1.283", ageSeconds: 900)],
               "WakeHolders: A1 nil name -> requester falls back to path's last component (got \(nilNameHolders))")
 
@@ -163,15 +162,15 @@ struct WakeHoldersTests {
         // --- R4/R5: ordinary owner, no delegation ---
         let zoomExtra: [Int32: ProcRecord] = [8000: ProcRecord(path: "/Applications/zoom.us.app/Contents/MacOS/zoom.us", ppid: 1)]
         let synthZoom = PowerAssertion(pid: 8000, processName: "zoom.us", ageSeconds: 900,
-                                        type: "PreventUserIdleDisplaySleep", name: "x")
-        let zoomHolders = WakeHolders.holders(from: [synthZoom], lookup: lookup(zoomExtra), minimumAge: 0)
+                                        type: "PreventUserIdleDisplaySleep")
+        let zoomHolders = WakeHolders.classified(from: [synthZoom], lookup: lookup(zoomExtra), minimumAge: 0).user
         #expect(zoomHolders == [WakeHolder(owner: "zoom.us", requester: nil, ageSeconds: 900)],
               "WakeHolders: ordinary owner, no delegation -> zoom.us, nil requester (got \(zoomHolders))")
 
         // --- MUTATION-SURVIVORS M13: age exactly AT the default floor is shown (>=, not >) ---
         let synthAtFloor = PowerAssertion(pid: 8000, processName: "zoom.us", ageSeconds: WakeHolders.minimumAgeSeconds,
-                                          type: "PreventUserIdleDisplaySleep", name: "x")
-        let atFloorHolders = WakeHolders.holders(from: [synthAtFloor], lookup: lookup(zoomExtra))
+                                          type: "PreventUserIdleDisplaySleep")
+        let atFloorHolders = WakeHolders.classified(from: [synthAtFloor], lookup: lookup(zoomExtra)).user
         #expect(atFloorHolders == [WakeHolder(owner: "zoom.us", requester: nil, ageSeconds: WakeHolders.minimumAgeSeconds)],
               "WakeHolders: age == minimumAgeSeconds under default floor -> shown (got \(atFloorHolders))")
 
@@ -181,8 +180,8 @@ struct WakeHoldersTests {
             8101: ProcRecord(path: "/Applications/Foo.app/Contents/MacOS/Foo", ppid: 1),
         ]
         let synthFoo = PowerAssertion(pid: 8100, processName: "Foo Helper", ageSeconds: 900,
-                                       type: "PreventUserIdleSystemSleep", name: "x", onBehalfOfPID: 8101)
-        let fooHolders = WakeHolders.holders(from: [synthFoo], lookup: lookup(fooExtra), minimumAge: 0)
+                                       type: "PreventUserIdleSystemSleep", onBehalfOfPID: 8101)
+        let fooHolders = WakeHolders.classified(from: [synthFoo], lookup: lookup(fooExtra), minimumAge: 0).user
         #expect(fooHolders == [WakeHolder(owner: "Foo", requester: nil, ageSeconds: 900)],
               "WakeHolders: on-behalf into owner's own app -> Foo, nil requester (got \(fooHolders))")
 
@@ -191,22 +190,22 @@ struct WakeHoldersTests {
             8200: ProcRecord(path: "/usr/local/bin/mytool", ppid: 1),
             8300: ProcRecord(path: "/opt/homebrew/bin/x", ppid: 1),
         ]
-        let synthUsrLocal = PowerAssertion(pid: 8200, processName: "mytool", ageSeconds: 900, type: "PreventUserIdleSystemSleep", name: "x")
-        let synthHomebrew = PowerAssertion(pid: 8300, processName: "x", ageSeconds: 900, type: "PreventUserIdleSystemSleep", name: "x")
-        #expect(!WakeHolders.holders(from: [synthUsrLocal], lookup: lookup(brewExtra), minimumAge: 0).isEmpty,
+        let synthUsrLocal = PowerAssertion(pid: 8200, processName: "mytool", ageSeconds: 900, type: "PreventUserIdleSystemSleep")
+        let synthHomebrew = PowerAssertion(pid: 8300, processName: "x", ageSeconds: 900, type: "PreventUserIdleSystemSleep")
+        #expect(!WakeHolders.classified(from: [synthUsrLocal], lookup: lookup(brewExtra), minimumAge: 0).user.isEmpty,
               "WakeHolders: /usr/local holder shown")
-        #expect(!WakeHolders.holders(from: [synthHomebrew], lookup: lookup(brewExtra), minimumAge: 0).isEmpty,
+        #expect(!WakeHolders.classified(from: [synthHomebrew], lookup: lookup(brewExtra), minimumAge: 0).user.isEmpty,
               "WakeHolders: /opt/homebrew holder shown")
 
         // --- R4: orphan system tool (ppid 1, no on-behalf) not shown ---
         let orphanExtra: [Int32: ProcRecord] = [8400: ProcRecord(path: "/usr/bin/caffeinate", ppid: 1)]
-        let synthOrphan = PowerAssertion(pid: 8400, processName: "caffeinate", ageSeconds: 900, type: "PreventUserIdleSystemSleep", name: "x")
-        #expect(WakeHolders.holders(from: [synthOrphan], lookup: lookup(orphanExtra), minimumAge: 0).isEmpty,
+        let synthOrphan = PowerAssertion(pid: 8400, processName: "caffeinate", ageSeconds: 900, type: "PreventUserIdleSystemSleep")
+        #expect(WakeHolders.classified(from: [synthOrphan], lookup: lookup(orphanExtra), minimumAge: 0).user.isEmpty,
               "WakeHolders: orphan system tool not shown")
 
         // --- R4: unknown pid (lookup nil) not shown ---
-        let synthUnknown = PowerAssertion(pid: 9999, processName: "ghost", ageSeconds: 900, type: "PreventUserIdleSystemSleep", name: "x")
-        #expect(WakeHolders.holders(from: [synthUnknown], lookup: lookup(), minimumAge: 0).isEmpty,
+        let synthUnknown = PowerAssertion(pid: 9999, processName: "ghost", ageSeconds: 900, type: "PreventUserIdleSystemSleep")
+        #expect(WakeHolders.classified(from: [synthUnknown], lookup: lookup(), minimumAge: 0).user.isEmpty,
               "WakeHolders: unknown pid not shown")
 
         // --- R4: isOSExecutable table ---
@@ -224,11 +223,11 @@ struct WakeHoldersTests {
             9300: ProcRecord(path: "/Applications/c.app/Contents/MacOS/c", ppid: 1),
         ]
         let sortAssertions = [
-            PowerAssertion(pid: 9200, processName: "b", ageSeconds: 900, type: "PreventUserIdleSystemSleep", name: "x"),
-            PowerAssertion(pid: 9100, processName: "a", ageSeconds: 900, type: "PreventUserIdleSystemSleep", name: "x"),
-            PowerAssertion(pid: 9300, processName: "c", ageSeconds: 1200, type: "PreventUserIdleSystemSleep", name: "x"),
+            PowerAssertion(pid: 9200, processName: "b", ageSeconds: 900, type: "PreventUserIdleSystemSleep"),
+            PowerAssertion(pid: 9100, processName: "a", ageSeconds: 900, type: "PreventUserIdleSystemSleep"),
+            PowerAssertion(pid: 9300, processName: "c", ageSeconds: 1200, type: "PreventUserIdleSystemSleep"),
         ]
-        let sorted = WakeHolders.holders(from: sortAssertions, lookup: lookup(sortExtra), minimumAge: 0)
+        let sorted = WakeHolders.classified(from: sortAssertions, lookup: lookup(sortExtra), minimumAge: 0).user
         #expect(sorted.map(\.owner) == ["c", "a", "b"], "WakeHolders: sort order c, a, b (got \(sorted.map(\.owner)))")
 
         // --- R7: ageText, RU/EN ---
@@ -251,9 +250,8 @@ struct WakeHoldersTests {
             #expect(item.fullText == "1 программа не даёт Mac уснуть: caffeinate (от claude) — 1 ч 21 мин.",
                   "WakeHolders: Assess RU, fullText matches (got \(item.fullText))")
             #expect(item.action == .openApp(AdviceApps.activityMonitor), "WakeHolders: Assess RU, action opens Activity Monitor")
-            #expect(!item.verb.isEmpty, "WakeHolders: Assess RU, verb non-empty")
         }
-        #expect(assessOne.problems.count == 1, "WakeHolders: Assess RU, 1 holder -> problems.count == 1")
+        #expect(assessOne.items.count == 1, "WakeHolders: Assess RU, 1 holder -> items.count == 1")
 
         func holdersOfCount(_ n: Int) -> [WakeHolder] {
             (0..<n).map { WakeHolder(owner: "app\($0)", requester: nil, ageSeconds: 900 - $0) }
@@ -338,7 +336,7 @@ struct WakeHoldersTests {
                 4998: ProcRecord(path: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", ppid: 1),
             ]
             func a(_ pid: Int32, _ name: String, _ age: Int = 600) -> PowerAssertion {
-                PowerAssertion(pid: pid, processName: name, ageSeconds: age, type: "PreventUserIdleSystemSleep", name: "x")
+                PowerAssertion(pid: pid, processName: name, ageSeconds: age, type: "PreventUserIdleSystemSleep")
             }
             let c = WakeHolders.classified(from: [a(350, "backupd"), a(349, "powerd", 900), a(7000, "caffeinate"), a(9999, "ghost")],
                                            lookup: { sysTable[$0] }, minimumAge: 0)
@@ -349,13 +347,13 @@ struct WakeHoldersTests {
                   "WakeHolders: classified system = OS services, oldest first (got \(c.system))")
             #expect(!(c.user + c.system).contains { $0.owner == "ghost" },
                   "WakeHolders: unreadable owner path is in neither list")
-            #expect(WakeHolders.holders(from: [a(350, "backupd")], lookup: { sysTable[$0] }, minimumAge: 0).isEmpty,
-                  "WakeHolders: holders(from:) stays user-only")
+            #expect(WakeHolders.classified(from: [a(350, "backupd")], lookup: { sysTable[$0] }, minimumAge: 0).user.isEmpty,
+                  "WakeHolders: classified(from:).user stays user-only")
         }
 
         let allIgnored = Assess.assess(report: FullReport(), live: LiveSnapshot(), language: .ru,
                                        wakeHolders: [claudeCaf], ignoredWakeHolders: [claudeCaf.key])
-        #expect(!allIgnored.items.contains { $0.kind == .wakeHolders } && allIgnored.problems.isEmpty,
+        #expect(!allIgnored.items.contains { $0.kind == .wakeHolders },
               "SleepIgnore: every holder ignored -> no item, no problem")
         let oneOfTwo = Assess.assess(report: FullReport(), live: LiveSnapshot(), language: .ru,
                                      wakeHolders: [claudeCaf, termCaf], ignoredWakeHolders: [claudeCaf.key])
@@ -382,11 +380,11 @@ struct WakeHoldersTests {
             9500: ProcRecord(path: "/Applications/b.app/Contents/MacOS/b", ppid: 1),
         ]
         func assertion(_ pid: Int32, _ name: String) -> PowerAssertion {
-            PowerAssertion(pid: pid, processName: name, ageSeconds: 900, type: "PreventUserIdleSystemSleep", name: "x")
+            PowerAssertion(pid: pid, processName: name, ageSeconds: 900, type: "PreventUserIdleSystemSleep")
         }
         // Input order is deliberately not the expected order.
         let input = [assertion(9300, "a-x"), assertion(9400, "a"), assertion(9100, "a")]
-        let holders = WakeHolders.holders(from: input, lookup: { table[$0] }, minimumAge: 0)
+        let holders = WakeHolders.classified(from: input, lookup: { table[$0] }, minimumAge: 0).user
 
         #expect(holders.map(\.key) == [WakeHolderKey(owner: "a", requester: nil),
                                        WakeHolderKey(owner: "a", requester: "b"),

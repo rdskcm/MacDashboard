@@ -181,24 +181,6 @@ enum Parsers {
         return results
     }
 
-    // MARK: - swap ("vm.swapusage: total = 2048.00M  used = 430.44M  free = 1617.56M  (encrypted)")
-
-    static func swapUsage(line: String) -> SwapInfo? {
-        guard let total = doubleAfter("total = ", in: line),
-              let used = doubleAfter("used = ", in: line),
-              let free = doubleAfter("free = ", in: line) else { return nil }
-        let mib = 1024.0 * 1024.0
-        return SwapInfo(total: Int64(total * mib), used: Int64(used * mib), free: Int64(free * mib))
-    }
-
-    private static func doubleAfter(_ label: String, in text: String) -> Double? {
-        guard let range = text.range(of: label) else { return nil }
-        let rest = text[range.upperBound...].drop { $0 == " " }
-        let numChars = rest.prefix { $0.isNumber || $0 == "." }
-        guard !numChars.isEmpty else { return nil }
-        return Double(numChars)
-    }
-
     // MARK: - battery (`pmset -g batt`)
 
     private static let pmsetBatteryStates: [String: BatteryChargeState] = [

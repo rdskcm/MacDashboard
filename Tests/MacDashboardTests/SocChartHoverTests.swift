@@ -6,7 +6,6 @@ import CoreGraphics
 import Testing
 @testable import MacDashboard
 
-private let box = SocChartHoverPlacement.boxSize           // 168 x 80
 private let plot = CGRect(x: 0, y: 0, width: 1000, height: 160)
 
 struct SocChartHoverTests {

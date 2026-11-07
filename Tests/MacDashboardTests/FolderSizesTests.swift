@@ -137,15 +137,6 @@ extension SerialTests {
             #expect(!ReportCollector.shouldStartSizeCount(trigger: .button, countedAt: nil, failedAt: failedRecently, inFlight: true, now: now),
                   "shouldStartSizeCount: (.button, failed recently, inFlight: true) -> false")
 
-            // MARK: - folderSizesAgeString
-
-            #expect(folderSizesAgeString(countedAt: now.addingTimeInterval(-30), now: now) == L.foldersCountedJustNow,
-                  "folderSizesAgeString: 30 s -> just-now string")
-            #expect(folderSizesAgeString(countedAt: now.addingTimeInterval(-5 * 60), now: now).contains("5"),
-                  "folderSizesAgeString: 5 min -> contains '5'")
-            #expect(folderSizesAgeString(countedAt: now.addingTimeInterval(120), now: now) == L.foldersCountedJustNow,
-                  "folderSizesAgeString: future -> just-now string")
-
             // MARK: - SERVICE-DIRS-TIMEOUT
 
             do {

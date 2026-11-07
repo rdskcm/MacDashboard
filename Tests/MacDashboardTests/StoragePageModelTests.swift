@@ -132,7 +132,7 @@ extension SerialTests {
                 let caches = DirSize(path: home + "/Library/Caches", bytes: 5 * GB)
                 let rows = StoragePageModel.homeRows(homeDirs: dirs, homeCaches: caches, home: home, trashHidden: false)
                 #expect(rows.count == 8 + 2, "top 8 + caches + trash")
-                #expect(rows.map(\.bytes) == rows.map(\.bytes).sorted(by: >), "sorted desc")
+                #expect(rows.map(\.fraction) == rows.map(\.fraction).sorted(by: >), "sorted desc")
                 #expect(rows.first?.label == "Downloads" && rows.first?.action == .show(path: home + "/Downloads"))
                 #expect(rows.first?.fraction == 1.0)
                 #expect(rows.first { $0.label == "~/Library/Caches" }?.action == .show(path: home + "/Library/Caches"))

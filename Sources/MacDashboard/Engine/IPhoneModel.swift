@@ -529,12 +529,12 @@ final class IPhoneModel {
                                             }) { [weak self] p in
                 self?.importing[deviceKey] = p
             }
-            self?.finishImport(deviceKey: deviceKey, keep: keep, source: source, deletesFromPhone: deletesFromPhone,
+            self?.finishImport(deviceKey: deviceKey, source: source, deletesFromPhone: deletesFromPhone,
                               result: result)
         }
     }
 
-    private func finishImport(deviceKey: String, keep: Bool, source: SysdiagnoseImporter.Source,
+    private func finishImport(deviceKey: String, source: SysdiagnoseImporter.Source,
                               deletesFromPhone: Bool, result: Result<ImportOutput, ImportError>) {
         importing[deviceKey] = nil
         updatePolling(deviceKey)   // the list watch returns after the import

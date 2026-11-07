@@ -5,10 +5,8 @@ import Foundation
 
 protocol SecurityStrings {
     // MARK: Security card
-    var securityTitle: String { get }
     var securityFileVault: String { get }
     var securitySip: String { get }
-    var securityFirewall: String { get }
     var securityGatekeeper: String { get }
     var securityFileVaultTip: String { get }
     var securitySipTip: String { get }
@@ -77,10 +75,8 @@ protocol SecurityStrings {
 
 extension StringsEN: SecurityStrings {
     // MARK: Security card
-    var securityTitle: String { "Security" }
     var securityFileVault: String { "FileVault" }
     var securitySip: String { "SIP" }
-    var securityFirewall: String { "Firewall" }
     var securityGatekeeper: String { "Gatekeeper" }
     var securityFileVaultTip: String { "Full-disk encryption — without your password the data on the drive cannot be read." }
     var securitySipTip: String { "System Integrity Protection — even an administrator cannot modify system files." }
@@ -157,10 +153,8 @@ extension StringsEN: SecurityStrings {
 
 extension StringsRU: SecurityStrings {
     // MARK: Security card
-    var securityTitle: String { "Безопасность" }
     var securityFileVault: String { "FileVault" }
     var securitySip: String { "SIP" }
-    var securityFirewall: String { "Файрвол" }
     var securityGatekeeper: String { "Gatekeeper" }
     var securityFileVaultTip: String { "Шифрование диска — без вашего пароля данные на диске прочитать нельзя." }
     var securitySipTip: String { "Защита целостности системы — даже администратор не может менять системные файлы." }

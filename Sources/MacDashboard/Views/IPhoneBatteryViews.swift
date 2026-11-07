@@ -392,8 +392,8 @@ private struct IPhoneHealthChart: View {
 
     @ViewBuilder private func plot(_ s: Series) -> some View {
         Chart {
-            ForEach(Array(s.pts.enumerated()), id: \.offset) { i, p in
-                marks(i, p, count: s.pts.count, floor: s.scale.lower)
+            ForEach(Array(s.pts.enumerated()), id: \.offset) { _, p in
+                marks(p, count: s.pts.count, floor: s.scale.lower)
             }
         }
         .chartXScale(domain: s.xDomain)
@@ -422,7 +422,7 @@ private struct IPhoneHealthChart: View {
         .frame(height: 220)
     }
 
-    @ChartContentBuilder private func marks(_ i: Int, _ p: P, count: Int, floor: Int) -> some ChartContent {
+    @ChartContentBuilder private func marks(_ p: P, count: Int, floor: Int) -> some ChartContent {
         if count > 1 {
             // The area ends at the domain floor, never 0 (`chart-tooltip-facts`).
             AreaMark(x: .value("day", p.date), yStart: .value("health", floor), yEnd: .value("health", p.health))
@@ -518,7 +518,7 @@ private struct IPhoneHealthChart: View {
                     let plot = geo[a]
                     let o = ChartGeometry.tooltipOrigin(point: CGPoint(x: px, y: py), plot: plot.size)
                     tooltip(pts[i])
-                        // Same mechanism as HOVER-TEXT-JITTER (`DSHoverLift`): the day, percent and cycles Texts change
+                        // Same mechanism as HOVER-TEXT-JITTER (a geometry group before an animated offset): the day, percent and cycles Texts change
                         // in the same transaction as the animated offset, so without a geometry group they cross-fade
                         // at the in-flight position and leave ghost glyphs outside the box. Must stay BEFORE `.offset`.
                         .geometryGroup()

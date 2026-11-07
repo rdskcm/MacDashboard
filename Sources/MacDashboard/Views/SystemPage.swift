@@ -463,7 +463,6 @@ struct SystemStartupCard: View {
 struct SystemBrewCard: View {
     let model: AppModel
     @State private var showConfirm = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let m = SystemPageModel.make(systemInput(model, now: model.now()))

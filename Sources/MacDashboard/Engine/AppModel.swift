@@ -94,7 +94,7 @@ final class AppModel {
     /// properties above instead.)
     private var live: LiveSnapshot {
         var s = LiveSnapshot()
-        s.t = lastSampleAt; s.load = load; s.ncpu = ncpu; s.cpu = cpu
+        s.t = lastSampleAt; s.load = load; s.cpu = cpu
         s.topCPU = topCPU; s.topMem = topMem; s.mem = mem; s.swap = swap
         s.disk = disk; s.battery = battery
         s.parseFailures = procParseFailures + wakeParseFailures
@@ -902,7 +902,7 @@ final class AppModel {
 
     /// Suppresses redundant @Observable notifications when the new assessment
     /// is value-equal to the current one (e.g. repeated live ticks with no
-    /// change in severity/tips/problems).
+    /// change in the attention items).
     private func setAssessment(_ n: Assessment) {
         if assessment != n { assessment = n }
         guard hasCompletedPass else { return }

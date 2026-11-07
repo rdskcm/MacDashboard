@@ -15,7 +15,6 @@ struct GPUClientRankingTests {
         let rows = GPUClientRanking.rows(prev: [c(1, "A", 1_000)], cur: [c(1, "A", 1_000 + 200_000_000)], dtSeconds: 2, names: noNames)
         #expect(rows.count == 1)
         #expect(abs((rows[0].sharePct ?? 0) - 10) < 1e-9)
-        #expect(rows[0].lifetimeNs == 200_001_000)
     }
 
     @Test func clientsOfOnePidAreSummed() {

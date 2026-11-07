@@ -26,9 +26,9 @@ extension SerialTests {
             let (m, s, cleanup) = makeModel(); defer { cleanup() }
             m.disk = DiskInfo(size: 100 * GIB, avail: 12 * GIB)
             s.lowSpacePercent = 15
-            #expect(m.assessment.diskSev == .warn)
+            #expect(m.assessment.items.contains { $0.kind == .diskFullSoon })
             Bindable(s).lowSpacePercent.wrappedValue = 10
-            #expect(m.assessment.diskSev != .warn)
+            #expect(!m.assessment.items.contains { $0.kind == .diskFullSoon })
         }
 
         @Test func backupStaleDaysReassesses() {

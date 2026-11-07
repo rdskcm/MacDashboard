@@ -197,7 +197,7 @@ extension SerialTests {
             // [M1] one top snapshot must cover EVERY process, not just our own uid: the
             // proc_pid_rusage path this replaced refused 285 of 384 pids (WindowServer among them),
             // leaving two different metrics in one column and in one ranking.
-            let footprints = await ProcessSampler.memoryFootprints()
+            let footprints = await ProcessSampler.memoryFootprintsReporting().footprints
             #expect(footprints.count > 50,
                   "memoryFootprints: one top snapshot yields the whole process table (got \(footprints.count))")
             #expect((footprints[myPid] ?? 0) > 1_000_000,

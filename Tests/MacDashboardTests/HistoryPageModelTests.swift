@@ -139,14 +139,14 @@ extension SerialTests {
             func close(_ a: [Double], _ b: [Double]) -> Bool { a.count == b.count && zip(a, b).allSatisfy { abs($0 - $1) < 1e-9 } }
             withLanguage(.en) {
                 let a = HistoryPageModel.yScale(values: [96, 140], integer: false)
-                #expect(a.step == 20 && a.lower == 80 && a.upper == 160 && a.decimals == 0)
+                #expect((a.gridValues[1] - a.gridValues[0]) == 20 && a.lower == 80 && a.upper == 160 && a.decimals == 0)
                 #expect(a.gridValues == [80, 100, 120, 140, 160])
                 let b = HistoryPageModel.yScale(values: [1.2, 1.3], integer: false)
-                #expect(abs(b.step - 0.05) < 1e-9 && b.decimals == 2 && abs(b.lower - 1.15) < 1e-9 && abs(b.upper - 1.35) < 1e-9)
+                #expect(abs((b.gridValues[1] - b.gridValues[0]) - 0.05) < 1e-9 && b.decimals == 2 && abs(b.lower - 1.15) < 1e-9 && abs(b.upper - 1.35) < 1e-9)
                 let c = HistoryPageModel.yScale(values: [76, 76], integer: true)
-                #expect(c.step == 1 && c.lower == 75 && c.upper == 77 && c.gridValues == [75, 76, 77])
+                #expect((c.gridValues[1] - c.gridValues[0]) == 1 && c.lower == 75 && c.upper == 77 && c.gridValues == [75, 76, 77])
                 let d = HistoryPageModel.yScale(values: [76, 76], integer: false)
-                #expect(d.step == 0.5 && d.decimals == 1)
+                #expect((d.gridValues[1] - d.gridValues[0]) == 0.5 && d.decimals == 1)
                 #expect(close(d.gridValues, [75, 75.5, 76, 76.5, 77]))
                 #expect(HistoryPageModel.axisLabel(76, metric: .battery, decimals: 0) == "76%")
                 #expect(HistoryPageModel.axisLabel(1200, metric: .disk, decimals: 0) == "1,200 GB")
@@ -181,10 +181,6 @@ extension SerialTests {
                     let w = HistoryPageModel.window(es, range: r, calendar: cal)!
                     return HistoryPageModel.xTicks(window: w, range: r, narrow: narrow, calendar: cal)
                 }
-                // window agrees with HistorySeries.dateRange
-                let es = entries(400)
-                #expect(HistoryPageModel.window(es, range: .year, calendar: cal) == HistorySeries.dateRange(es, .year))
-
                 let m = ticks(400, .month)
                 let weeks = m.filter { if case .weekLabel = $0 { return true } else { return false } }
                 #expect(weeks.count == 4)
@@ -245,7 +241,7 @@ extension SerialTests {
                 let now = day("2026-10-21")
                 let es = entries(12) { i, e in if i == 5 { e.disk_used_gb = nil }; if i == 11 { e.swap = "1280MB/2048MB" } }
                 let t = HistoryPageModel.table(es, window: nil, narrow: false, showAll: false, now: now, calendar: cal)
-                #expect(t.rows.count == 10 && t.hasMore && t.totalRows == 12 && t.moreLabel == "Show all (12)")
+                #expect(t.rows.count == 10 && t.hasMore && t.moreLabel == "Show all (12)")
                 #expect(t.rows[0][0] == "Oct 21")                       // newest first
                 #expect(t.rows[0][5] == "1.25 / 2 GB" && t.rows[0][6] == "26.1 (25B78)")
                 #expect(t.rows[0][1] == "300 GB" && t.rows[0][2] == "200 GB" && t.rows[0][3] == "90%" && t.rows[0][4] == "100")
@@ -262,7 +258,7 @@ extension SerialTests {
                 let long = entries(60)
                 let cut = HistoryPageModel.table(long, window: HistoryPageModel.window(long, range: .month, calendar: cal),
                                                  narrow: false, showAll: true, now: now, calendar: cal)
-                #expect(cut.totalRows == 30 && w != nil)
+                #expect(cut.rows.count == 30 && w != nil)
 
                 let old = HistoryPageModel.table([entry("2025-09-02")], window: nil, narrow: false, showAll: false, now: now, calendar: cal)
                 #expect(old.rows[0][0] == "Sep 2, 2025")
@@ -422,7 +418,7 @@ extension SerialTests {
                 let e = entries(60, end: "2026-10-30").filter { !gone.contains($0.date) }
                 let m = make(input(e, range: .month, view: .table, showAll: true))
                 #expect(m.sinceNote == nil && m.caption == "30 days" && m.deltaCaption == nil)
-                if case .table(let t) = m.block { #expect(t.totalRows == 27) } else { Issue.record("not a table") }
+                if case .table(let t) = m.block { #expect(t.rows.count == 27) } else { Issue.record("not a table") }
             }
         }
 

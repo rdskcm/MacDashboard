@@ -41,12 +41,6 @@ struct WidthTierTests {
         #expect(seen == [.mid, .narrow, .narrow, .narrow, .mid, .mid, .narrow])
     }
 
-    @Test func titleBlockWidths() {
-        #expect(WidthTier.narrow.titleBlockWidth == 280)
-        #expect(WidthTier.mid.titleBlockWidth == 400)
-        #expect(WidthTier.wide.titleBlockWidth == 460)
-    }
-
     /// RESIZE-WIDTH-STATE: page breakpoints are exact (no tier hysteresis) and equal between breakpoints.
     @Test func pageBreakpointsAreExact() {
         #expect(PageBreakpoints(width: 999).narrow && !PageBreakpoints(width: 1000).narrow)

@@ -26,8 +26,6 @@ enum WidthTier: Equatable, Sendable {
 
     var isNarrow: Bool { self == .narrow }
     var isMid: Bool { self == .mid }
-    /// 01-window-chrome width table: title block 280 / 400 / 460.
-    var titleBlockWidth: CGFloat { switch self { case .narrow: 280; case .mid: 400; case .wide: 460 } }
 }
 
 /// RESIZE-WIDTH-STATE: the exact window-width breakpoints the section pages read. No hysteresis: the pages never had

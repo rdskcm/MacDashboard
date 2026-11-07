@@ -42,7 +42,7 @@ extension SerialTests {
         @Test func readoutWideShowsFullThermalAndPrefix() {
             withEnglish {
                 let r = SocReadout.make(socTempC: 58, thermal: .nominal, powerW: 6.8, narrow: false, tagVisible: false)
-                #expect(r.temperature?.value == "58 °C" && r.temperature?.zone == 0 && r.temperature?.word == nil && r.temperature?.attention == false)
+                #expect(r.temperature?.value == "58 °C" && r.temperature?.zone == 0 && r.temperature?.word == nil)
                 #expect(r.thermal?.text == "thermal: normal" && r.thermal?.word == "normal" && r.thermal?.step == 0 && r.thermal?.tone == .green)
                 #expect(r.power.prefix == "Mac" && r.power.value == "6.8 W" && r.power.help == "Power, whole Mac" && r.power.available)
             }
@@ -66,8 +66,8 @@ extension SerialTests {
         @Test func readoutTemperatureZonesAndMarker() {
             withEnglish {
                 func temp(_ t: Int) -> SocReadout.Temperature? { SocReadout.make(socTempC: t, thermal: nil, powerW: nil, narrow: false, tagVisible: false).temperature }
-                #expect(temp(84)?.zone == 0 && temp(84)?.attention == false)
-                #expect(temp(85)?.zone == 1 && temp(85)?.word == "warm" && temp(85)?.attention == true)
+                #expect(temp(84)?.zone == 0)
+                #expect(temp(85)?.zone == 1 && temp(85)?.word == "warm")
                 #expect(temp(94)?.zone == 1)
                 #expect(temp(95)?.zone == 2 && temp(95)?.word == "hot")
                 #expect(SocReadout.markerX(celsius: 30) == 0)
@@ -124,64 +124,73 @@ extension SerialTests {
             CoreGroupLoad(group: g, loads: loads, frequency: f)
         }
 
+        /// The cells of one group through the live per-cell helpers, as the cores card builds them.
+        private func cells(_ item: CoreGroupLoad, loadFailed: Bool = false, hasReading: Bool = true) -> [SocCoresCardModel.Cell] {
+            item.group.coreIndices.indices.map { n in
+                let load: Int? = n < item.loads.count ? item.loads[n] : nil
+                return SocCoresCardModel.cell(id: SocCoresCardModel.cellID(groupName: item.group.name, index: n), load: load,
+                                              loadFailed: loadFailed, hasReading: hasReading)
+            }
+        }
+
         @Test func coresCardHeadingsCellsAndFrequency() {
             withEnglish {
-                let card = SocCoresCardModel.make(cores: [load(perf, [13, 1, 2, 100], .mhz(3953)), load(eff, [14, 14, 9, nil], .idle)], loadFailed: false, hasReading: true)
-                #expect(card.caption == "load per core")
-                #expect(card.groups.map(\.heading) == ["Performance · 4", "Efficiency · 4"])
-                #expect(card.groups.map(\.hue) == [0, 1])
-                #expect(card.groups[0].cells.map(\.id) == ["P1", "P2", "P3", "P4"])
-                #expect(card.groups[0].cells.map(\.valueText) == ["13%", "1%", "2%", "100%"])
-                #expect(card.groups[0].cells[3].fraction == 1)
-                #expect(card.groups[1].cells[3].valueText == "—" && card.groups[1].cells[3].fraction == 0)
-                #expect(card.groups[0].frequencyText == "3.95 GHz" && card.groups[0].frequencyHelp == "Average speed while the cores were active.")
-                #expect(card.groups[1].frequencyText == "idle")
+                let p = load(perf, [13, 1, 2, 100], .mhz(3953)), e = load(eff, [14, 14, 9, nil], .idle)
+                #expect(SocCoresCardModel.caption(loadFailed: false) == "load per core")
+                #expect([perf, eff].map(SocCoresCardModel.heading) == ["Performance · 4", "Efficiency · 4"])
+                #expect([perf, eff].map { SocCoresCardModel.hue(forName: $0.name) } == [0, 1])
+                #expect(cells(p).map(\.id) == ["P1", "P2", "P3", "P4"])
+                #expect(cells(p).map(\.valueText) == ["13%", "1%", "2%", "100%"])
+                #expect(cells(p)[3].fraction == 1)
+                #expect(cells(e)[3].valueText == "—" && cells(e)[3].fraction == 0)
+                let f0 = SocCoresCardModel.frequency(p.frequency)
+                #expect(f0.text == "3.95 GHz" && f0.help == "Average speed while the cores were active.")
+                #expect(SocCoresCardModel.frequency(e.frequency).text == "idle")
             }
         }
 
         @Test func coresCardReadingWithAllNilLoadsShowsDash() {
             withEnglish {
-                let card = SocCoresCardModel.make(cores: [load(perf, [nil, nil, nil, nil])], loadFailed: false, hasReading: true)
-                #expect(card.groups.flatMap(\.cells).allSatisfy { $0.valueText == "—" && $0.fraction == 0 })
+                #expect(cells(load(perf, [nil, nil, nil, nil])).allSatisfy { $0.valueText == "—" && $0.fraction == 0 })
             }
         }
 
         @Test func coresCardNotYetKeepsHeadingsWithEmptyCells() {
             withEnglish {
-                let card = SocCoresCardModel.make(cores: [load(perf, [nil, nil, nil, nil]), load(eff, [nil, nil, nil, nil])], loadFailed: false, hasReading: false)
-                #expect(card.groups.map(\.heading) == ["Performance · 4", "Efficiency · 4"])
-                #expect(card.groups.flatMap(\.cells).allSatisfy { $0.valueText == "" && $0.fraction == 0 })
-                #expect(card.groups[0].frequencyText == "—" && card.groups[0].frequencyHelp == nil)
+                let p = load(perf, [nil, nil, nil, nil]), e = load(eff, [nil, nil, nil, nil])
+                #expect([perf, eff].map(SocCoresCardModel.heading) == ["Performance · 4", "Efficiency · 4"])
+                #expect((cells(p, hasReading: false) + cells(e, hasReading: false)).allSatisfy { $0.valueText == "" && $0.fraction == 0 })
+                let f = SocCoresCardModel.frequency(p.frequency)
+                #expect(f.text == "—" && f.help == nil)
             }
         }
 
         @Test func coresCardFailedCallKeepsGroupsAndChangesTheCaption() {
             withEnglish {
-                let card = SocCoresCardModel.make(cores: [load(perf, [nil, nil, nil, nil], .unavailable)], loadFailed: true, hasReading: true)
-                #expect(card.caption == "Not available on this Mac")
-                #expect(card.groups.count == 1 && card.groups[0].cells.allSatisfy { $0.valueText == "" })
-                #expect(card.groups[0].frequencyText == "—" && card.groups[0].frequencyHelp == "Not available on this Mac")
-                #expect(SocCoresCardModel.make(cores: nil, loadFailed: false, hasReading: true).groups.isEmpty)
+                let p = load(perf, [nil, nil, nil, nil], .unavailable)
+                #expect(SocCoresCardModel.caption(loadFailed: true) == "Not available on this Mac")
+                #expect(cells(p, loadFailed: true).allSatisfy { $0.valueText == "" })
+                let f = SocCoresCardModel.frequency(p.frequency)
+                #expect(f.text == "—" && f.help == "Not available on this Mac")
             }
         }
 
         @Test func coresCardUnknownTypeIsOneGroupCoresN() {
             withEnglish {
                 let g = CoreGroup(name: nil, count: 8, coreIndices: Array(0..<8))
-                let card = SocCoresCardModel.make(cores: [load(g, Array(repeating: 5, count: 8), .unavailable)], loadFailed: false, hasReading: true)
-                #expect(card.groups.map(\.heading) == ["Cores · 8"] && card.groups[0].hue == 0)
-                #expect(card.groups[0].cells.map(\.id) == ["1", "2", "3", "4", "5", "6", "7", "8"])
-                #expect(card.groups[0].frequencyText == "—")
+                let item = load(g, Array(repeating: 5, count: 8), .unavailable)
+                #expect(SocCoresCardModel.heading(g) == "Cores · 8" && SocCoresCardModel.hue(forName: g.name) == 0)
+                #expect(cells(item).map(\.id) == ["1", "2", "3", "4", "5", "6", "7", "8"])
+                #expect(SocCoresCardModel.frequency(item.frequency).text == "—")
             }
         }
 
         @Test func coresCardThirdTypeAndUnfamiliarName() {
             withEnglish {
                 let sup = CoreGroup(name: "Super", count: 2, coreIndices: [8, 9])
-                let card = SocCoresCardModel.make(cores: [load(sup, [1, 2]), load(perf, [1, 2, 3, 4]), load(eff, [1, 2, 3, 4])], loadFailed: false, hasReading: true)
-                #expect(card.groups.map(\.heading) == ["Super · 2", "Performance · 4", "Efficiency · 4"])
-                #expect(card.groups.map(\.hue) == [2, 0, 1])
-                #expect(card.groups[0].cells.map(\.id) == ["S1", "S2"])
+                #expect([sup, perf, eff].map(SocCoresCardModel.heading) == ["Super · 2", "Performance · 4", "Efficiency · 4"])
+                #expect([sup, perf, eff].map { SocCoresCardModel.hue(forName: $0.name) } == [2, 0, 1])
+                #expect(cells(load(sup, [1, 2])).map(\.id) == ["S1", "S2"])
             }
         }
 
@@ -189,24 +198,22 @@ extension SerialTests {
 
         @Test func gpuListCaption() {
             withEnglish {
-                #expect(SocGPUListModel.make(state: .notYet, coreCount: 8).caption == "8 GPU cores · top by GPU")
-                #expect(SocGPUListModel.make(state: .notYet, coreCount: nil).caption == "top by GPU")
-                #expect(SocGPUListModel.make(state: .notYet, coreCount: 128).caption == "128 GPU cores · top by GPU")
+                #expect(SocGPUListModel.caption(coreCount: 8) == "8 GPU cores · top by GPU")
+                #expect(SocGPUListModel.caption(coreCount: nil) == "top by GPU")
+                #expect(SocGPUListModel.caption(coreCount: 128) == "128 GPU cores · top by GPU")
             }
         }
 
         @Test func gpuListRows() {
             withEnglish {
-                let rows = [GPUProcessRow(id: 108, name: "Terminal", sharePct: 12.34, lifetimeNs: 5),
-                            GPUProcessRow(id: 101, name: "WindowServer", sharePct: 0, lifetimeNs: 4),
-                            GPUProcessRow(id: 5, name: "Odd", sharePct: nil, lifetimeNs: 3)]
-                let list = SocGPUListModel.make(state: .rows(rows), coreCount: 8)
-                #expect(list.rows.map(\.id) == [108, 101, 5])
-                #expect(list.rows.map(\.valueText) == ["12.3%", "0.0%", "—"])
-                #expect(list.rows.map(\.muted) == [false, true, true])
-                #expect(abs(list.rows[0].fraction - 0.1234) < 1e-9 && list.rows[2].fraction == 0)
-                #expect(SocGPUListModel.make(state: .empty, coreCount: 8).rows.isEmpty)
-                #expect(SocGPUListModel.make(state: .unavailable, coreCount: 8).rows.isEmpty)
+                let rows = [GPUProcessRow(id: 108, name: "Terminal", sharePct: 12.34),
+                            GPUProcessRow(id: 101, name: "WindowServer", sharePct: 0),
+                            GPUProcessRow(id: 5, name: "Odd", sharePct: nil)]
+                let list = rows.map(SocGPUListModel.row)
+                #expect(list.map(\.id) == [108, 101, 5])
+                #expect(list.map(\.valueText) == ["12.3%", "0.0%", "—"])
+                #expect(list.map(\.muted) == [false, true, true])
+                #expect(abs(list[0].fraction - 0.1234) < 1e-9 && list[2].fraction == 0)
             }
         }
 

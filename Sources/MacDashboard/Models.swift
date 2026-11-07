@@ -48,7 +48,6 @@ struct DiskInfo: Equatable {
 enum BatteryPowerSource: Equatable, Sendable {
     case ac, battery
     func text(_ s: AppStrings) -> String { self == .ac ? s.battSourceAC : s.battSourceBattery }
-    var localizedText: String { text(L) }
 }
 /// `pmset -g batt` first clause / IOKit charging flags. `.other` keeps an unrecognised clause verbatim (as before).
 enum BatteryChargeState: Equatable, Sendable {
@@ -75,7 +74,6 @@ enum SpotlightState: Equatable, Sendable {
         case .other(let raw): return raw
         }
     }
-    var localizedText: String { text(L) }
 }
 struct BatteryInfo: Equatable {
     var source: BatteryPowerSource?
@@ -104,7 +102,6 @@ struct BatteryInfo: Equatable {
 struct LiveSnapshot {
     var t: Date = .init()
     var load: [Double]?         // getloadavg 1/5/15
-    var ncpu: Int = ProcessInfo.processInfo.activeProcessorCount
     var cpu: CPUUsage?
     var topCPU: [ProcEntry] = []
     var topMem: [ProcEntry] = []
@@ -123,7 +120,6 @@ struct SystemInfo: Equatable {
     var cores: String?          // "8 (4 Performance and 4 Efficiency)" | "6" (Intel, or a proc shape whose tiers can't be named)
     var memBytes: Int64?
     var uptimeSeconds: Int?     // from uptime(1); formatted by fmtUptime at the edge
-    var hostName: String?
 }
 struct DirSize: Identifiable, Equatable, Codable { var id: String { path }; var path: String; var bytes: Int64 }
 struct SecurityState: Equatable {
@@ -231,7 +227,6 @@ enum SmartStatus: Equatable, Sendable {
         case .noAccessNoTools: return s.reportCollectorSmartUnavailableNoTools
         }
     }
-    var localizedText: String { text(L) }
 }
 struct SmartDisk: Identifiable, Equatable {
     var id: String { device }
@@ -349,23 +344,8 @@ struct FullReport {
     var parseFailures: [ParseFailure] = []   // report-time command output the parser rejected (R3-FIXTURES)
 }
 
-struct Problem: Identifiable, Equatable {
-    var id: String { text }; var sev: Severity; var text: String
-    var action: AdviceAction? = nil     // advice block AR: clickable follow-up
-}
-struct Tip: Identifiable, Equatable {
-    var id: String { text }; var text: String
-    var action: AdviceAction? = nil     // advice block AR: clickable follow-up
-}
 struct Assessment: Equatable {
-    var problems: [Problem] = []        // sorted crit > serious > warn
-    var tips: [Tip] = []
-    var items: [AttentionItem] = []       // v2 attention model — mirrors `problems`
-    var capsules: [TipCapsule] = []       // v2 attention model — mirrors `tips`
-    var summarySev: Severity = .good
-    var summaryText: String = ""
-    var diskSev: Severity = .good; var swapSev: Severity = .good
-    var battSev: Severity = .good; var smartSev: Severity = .good
+    var items: [AttentionItem] = []   // sorted crit > serious > warn
 }
 
 // ---- History (schema-compatible with legacy mac_check_state.json) ----

@@ -17,7 +17,6 @@ enum AdviceAction: Equatable {
 enum AdvicePanes {
     static let storage        = "x-apple.systempreferences:com.apple.settings.Storage"
     static let battery        = "x-apple.systempreferences:com.apple.Battery-Settings.extension"
-    static let privacySecurity = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension"
     static let fileVault      = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?FileVault"
     static let softwareUpdate = "x-apple.systempreferences:com.apple.Software-Update-Settings.extension"
     static let timeMachine    = "x-apple.systempreferences:com.apple.Time-Machine-Settings.extension"

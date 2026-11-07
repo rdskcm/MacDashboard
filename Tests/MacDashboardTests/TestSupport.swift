@@ -100,7 +100,7 @@ let systemCrashDir = "/Library/Logs/DiagnosticReports"
 // normal, fully-supported state (see StringsEN.reportNoBattery), not an error. Smoke
 // checks below use this to stay meaningful on battery-equipped machines while not
 // spuriously failing on desktop Macs or CI runners.
-// `collect(limit:)` takes the process-table length explicitly rather than reading
+// `sampleProcesses(limit:)` takes the process-table length explicitly rather than reading
 // AppSettings.shared — checks must not depend on the user's saved preferences.
 // Battery comes from `collectFast()`, which avoids spawning processes.
 let hasBattery = LiveCollector().collectFast().battery != nil

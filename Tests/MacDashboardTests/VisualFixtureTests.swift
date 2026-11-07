@@ -29,8 +29,6 @@ extension SerialTests {
             #expect(kinds == [.firewallOff, .timeMachine, .wakeHolders, .batteryCapacity],
                   "VisualFixture: attention item kinds == {firewallOff, timeMachine, wakeHolders, batteryCapacity} (got \(kinds))")
             #expect(d1.assessment.items.count == 4, "VisualFixture: 4 attention items (got \(d1.assessment.items.count))")
-            // D8: the fixture disk (256 GB, 76.8 GB free) is not short of space, so Downloads and Caches capsules stay hidden.
-            #expect(d1.assessment.capsules.count == 2, "VisualFixture: 2 tip capsules (got \(d1.assessment.capsules.count))")
 
             // --- REDESIGN-SYSTEM: the System page fixture facts (no new attention kind: system holders raise none) ---
             #expect(d1.report.autostart != nil, "VisualFixture: autostart info present")
@@ -62,7 +60,7 @@ extension SerialTests {
             dayFormatter.dateFormat = "yyyy-MM-dd"
 
             func pointsInRange(_ range: HistoryRange) -> Int {
-                guard let bounds = HistorySeries.dateRange(d1.history.mac_history, range) else { return series.count }
+                guard let bounds = HistoryPageModel.window(d1.history.mac_history, range: range, calendar: .current) else { return series.count }
                 return series.filter { point in
                     guard let date = dayFormatter.date(from: point.date) else { return false }
                     return bounds.contains(date)

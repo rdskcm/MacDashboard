@@ -294,8 +294,8 @@ extension SerialTests {
                     let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
                     #expect(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
                           "assess crashes: the target comes from the first RAISING group, not the first group")
-                    #expect(a.problems.first { $0.text == L.assessKernelPanicsRecent(2) }?.action == .revealPath(systemCrashDir),
-                          "assess crashes: the Problem carries the same reveal target as the AttentionItem")
+                    #expect(a.items.first { $0.fullText == L.assessKernelPanicsRecent(2) }?.action == .revealPath(systemCrashDir),
+                          "assess crashes: the item carries the first raising group's reveal target")
                 }
                 do {
                     // Two raising groups from two directories: the leading one wins, deterministically.
@@ -305,17 +305,6 @@ extension SerialTests {
                     let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
                     #expect(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
                           "assess crashes: raising groups from two directories -> the leading group's directory")
-                }
-
-                // --- item 2: the row's accessibility string exists in every language ---
-                let originalLang = L10nStore.shared.language
-                defer { L10nStore.shared.language = originalLang }
-                for lang in AppLanguage.allCases {
-                    L10nStore.shared.language = lang
-                    #expect(L.maintenanceCrashRevealA11y("diffscore").contains("diffscore"),
-                          "maintenanceCrashRevealA11y (\(lang)): names the process")
-                    #expect(L.maintenanceCrashRevealA11y("diffscore").count > "diffscore".count + 5,
-                          "maintenanceCrashRevealA11y (\(lang)): is a real sentence, not just the process name")
                 }
             }
         }

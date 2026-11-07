@@ -190,12 +190,6 @@ enum BatteryInspector {
         return .detail(detail)
     }
 
-    /// `read()` as an optional, for callers that only need a detail (BatteryInspectorTests' live probes).
-    static func collect() async -> BatteryDetail? {
-        if case .detail(let d) = await read() { return d }
-        return nil
-    }
-
     /// Decodes the length-prefixed ASCII segments of the 32-byte ManufacturerData blob
     /// (12-byte header, then [len][bytes]... while len ∈ 1...16 and bytes are printable
     /// ASCII 0x20...0x7E). Returns (yyww date code, manufacturer code); each nil when

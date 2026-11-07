@@ -58,12 +58,11 @@ enum OrbProfile {
     }
 }
 
-/// Radial premultiplied bitmap for the orbs and the rim light spot, 8-bit `sidePx × sidePx`, ±1 LSB triangular dither (spec §3.3). The pixels live in a
+/// Radial premultiplied bitmap for the orbs and the rim light spot, 8-bit square, ±1 LSB triangular dither (spec §3.3). The pixels live in a
 /// single IOSurface (BGRA, tagged sRGB) that goes straight into `layer.contents`: no `[UInt8]`, `Data` or `CGImage`
 /// copy, and no colour-converted copy made by Core Animation (step M, memory findings F1).
 struct OrbBitmap {
     enum Mode { case dark(ground: SIMD3<Double>), light }
-    let sidePx: Int
     let surface: IOSurfaceRef
 
     static let pixelFormatBGRA: UInt32 = 0x4247_5241     // 'BGRA'
@@ -149,6 +148,6 @@ struct OrbBitmap {
         }
         IOSurfaceUnlock(surface, [], nil)
         IOSurfaceSetValue(surface, kIOSurfaceColorSpace, tag)    // sRGB, the tag the Stage 1 `ImageRenderer` output carried
-        return OrbBitmap(sidePx: side, surface: surface)
+        return OrbBitmap(surface: surface)
     }
 }

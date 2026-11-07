@@ -13,16 +13,19 @@ extension SerialTests {
 
             do {
                 let collector = LiveCollector()
-                _ = await collector.collect(limit: LiveCollector.topProcessCount)
+                _ = collector.collectFast()   // primes the CPU tick baseline: the first call returns cpu == nil
+                _ = await collector.sampleProcesses(limit: LiveCollector.topProcessCount)
                 Thread.sleep(forTimeInterval: 1.3)
-                let snap2 = await collector.collect(limit: LiveCollector.topProcessCount)
+                var snap2 = collector.collectFast()
+                let p = await collector.sampleProcesses(limit: LiveCollector.topProcessCount)
+                snap2.topCPU = p.topCPU
+                snap2.topMem = p.topMem
                 #expect(snap2.cpu != nil, "smoke LiveCollector: 2nd sample cpu != nil")
                 #expect((snap2.mem?.total ?? 0) > 4 * GIB, "smoke LiveCollector: mem.total > 4 GiB")
                 #expect((snap2.disk?.size ?? 0) > 0, "smoke LiveCollector: disk.size > 0")
                 #expect(snap2.disk?.purgeable.map { $0 > 0 } ?? true, "smoke LiveCollector: purgeable, when known, is > 0")
                 #expect(snap2.disk.map { d in (d.purgeable ?? 0) < d.size } ?? false, "smoke LiveCollector: purgeable < volume size")
                 #expect(snap2.load != nil, "smoke LiveCollector: load != nil")
-                #expect(snap2.ncpu >= 1, "smoke LiveCollector: ncpu >= 1 (got \(snap2.ncpu))")
                 // Exercises the REAL `/bin/ps -axww -o pid=,rss=,time=,comm=` output on this
                 // machine end-to-end through the ProcessSampler ps-snapshot path (a synthetic
                 // fixture only proves the parser handles an assumed format, not that the real

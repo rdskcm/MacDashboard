@@ -413,7 +413,6 @@ final class ReportCollector {
             info.uptimeSeconds = Parsers.uptimeSeconds(up)
             if info.uptimeSeconds == nil, let f = ParseFailure(.uptime, stdout: up) { failures.append(f) }
         }
-        info.hostName = ProcessInfo.processInfo.hostName
         let has = info.osName != nil || info.modelName != nil || info.chip != nil
         return Outcome(section: .system) { $0.system = has ? info : nil; $0.parseFailures += failures }
     }
@@ -761,7 +760,7 @@ final class ReportCollector {
                 failures.append(f)
             }
             var disk = makeDiskutilDisk(device: "internal",
-                                        media: media, status: status, external: false)
+                                        media: media, status: status)
             // Block N7: NVMe SMART/Health attrs for the internal disk (temperature,
             // wear, etc.). MUST be -A (attributes-only): -a returns a benign nonzero
             // exit on this controller (Error Information Log fetch fails) — and exit
@@ -843,7 +842,7 @@ final class ReportCollector {
     }
 
     private func makeDiskutilDisk(device: String,
-                                  media: String?, status: String?, external: Bool) -> SmartDisk {
+                                  media: String?, status: String?) -> SmartDisk {
         let title = (media?.isEmpty == false) ? media : nil
         let s = (status ?? "").lowercased()
         let display: SmartStatus

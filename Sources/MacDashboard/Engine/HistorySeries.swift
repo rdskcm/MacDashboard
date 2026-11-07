@@ -114,31 +114,6 @@ enum HistorySeries {
         return "\(fmtFixed(used, decimals: 2)) / \(fmtGrouped(Int(total))) \(L.byteUnitGB)"
     }
 
-    /// Same locale/timeZone/format as HistoryStore's `dayFormatter` and
-    /// HistoryCard's `dateFormatter` — local timeZone, not UTC, so the range
-    /// this returns lines up with how the view parses each point's date string
-    /// (a UTC parse would disagree by up to a day for anyone west of UTC).
-    private static var dayFormatter: DateFormatter = {
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.timeZone = .current
-        df.dateFormat = "yyyy-MM-dd"
-        return df
-    }()
-
-    /// `range.days` consecutive calendar days ending on the last entry's date
-    /// (entries are chronological — `entries.last` is the most recent).
-    /// nil for `.all` (no window: plot everything), for empty `entries`, or if
-    /// the last entry's date string fails to parse.
-    static func dateRange(_ entries: [MacHistoryEntry], _ range: HistoryRange) -> ClosedRange<Date>? {
-        guard let days = range.days,
-              let last = entries.last,
-              let endDate = dayFormatter.date(from: last.date),
-              let startDate = Calendar.current.date(byAdding: .day, value: -(days - 1), to: endDate)
-        else { return nil }
-        return startDate...endDate
-    }
-
     /// Most points the chart plots. ≥ the most a Год window can hold (one entry
     /// per day, 365 days), so only Всё is ever thinned.
     static let maxChartPoints = 365

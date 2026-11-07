@@ -63,8 +63,8 @@ extension SerialTests {
             let t = GlassTint.fill(tintAmount: 1, reduceTransparency: false)
             #expect(near(t.barDarkAlpha, 0.85) && near(t.barLightAlpha, 0.85), "GlassTint: Tinted bar is 0.85 / 0.85")
             let rt = GlassTint.fill(tintAmount: 0.5, reduceTransparency: true)
-            #expect(near(rt.barDarkAlpha, 1) && near(rt.barLightAlpha, 1) && rt == .solid,
-                    "GlassTint: Reduce Transparency bar is opaque and the fill equals .solid")
+            #expect(near(rt.barDarkAlpha, 1) && near(rt.barLightAlpha, 1) && !rt.usesMaterial,
+                    "GlassTint: Reduce Transparency bar is opaque and uses no material")
         }
 
         @Test func parse() {

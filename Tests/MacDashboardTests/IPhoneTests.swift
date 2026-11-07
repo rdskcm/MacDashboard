@@ -26,18 +26,6 @@ extension SerialTests {
             #expect(!key.contains(udid) && !udid.lowercased().contains(key), "iPhone: deviceKey does not contain the input")
             #expect(key != IPhoneData.deviceKey(udid: udid + "0"), "iPhone: different inputs give different keys")
 
-            // --- bugType / hasJSONHeader ---
-            func d(_ s: String) -> Data { Data(s.utf8) }
-            #expect(IPhoneData.bugType(fromHeader: d("{\"bug_type\":\"309\",\"x\":1}\nbody")) == "309", "iPhone: bugType string 309")
-            #expect(IPhoneData.bugType(fromHeader: d("{\"bug_type\":298}\n")) == "298", "iPhone: bugType numeric 298")
-            #expect(IPhoneData.bugType(fromHeader: d("{\"bug_type\":\"309\"}")) == nil, "iPhone: bugType without newline -> nil")
-            #expect(IPhoneData.bugType(fromHeader: d("garbage\n")) == nil, "iPhone: bugType non-JSON -> nil")
-            #expect(IPhoneData.bugType(fromHeader: d("[1,2]\n")) == nil, "iPhone: bugType JSON array -> nil")
-            #expect(IPhoneData.bugType(fromHeader: d("{\"a\":1}\n")) == nil && IPhoneData.hasJSONHeader(d("{\"a\":1}\n")),
-                  "iPhone: JSON without bug_type -> nil, hasJSONHeader true")
-            #expect(!IPhoneData.hasJSONHeader(d("garbage\n")) && !IPhoneData.hasJSONHeader(d("{\"a\":1}")),
-                  "iPhone: hasJSONHeader false for non-JSON and for no newline")
-
             // --- category ---
             let table: [(String, LogCategory)] = [
                 ("309", .appCrash), ("308", .exceptionFault), ("298", .jetsam), ("145", .diskWrites),
@@ -383,11 +371,11 @@ extension SerialTests {
             // --- battery history chart helpers (IPHONE-DESIGN) ---
             func utcDay(_ y: Int, _ m: Int, _ d: Int) -> Date { utc.date(from: DateComponents(year: y, month: m, day: d))! }
             #expect(IPhoneData.healthChartScale([98, 99, 100, 101])
-                  == IPhoneData.HealthChartScale(lower: 96, upper: 102, step: 2, gridValues: [96, 98, 100, 102]), "iPhone chart: scale 98-101")
+                  == IPhoneData.HealthChartScale(lower: 96, upper: 102, gridValues: [96, 98, 100, 102]), "iPhone chart: scale 98-101")
             #expect(IPhoneData.healthChartScale([91, 92, 93, 94, 96, 98, 99, 100])
-                  == IPhoneData.HealthChartScale(lower: 87, upper: 101, step: 4, gridValues: [88, 92, 96, 100]), "iPhone chart: scale 91-100")
+                  == IPhoneData.HealthChartScale(lower: 87, upper: 101, gridValues: [88, 92, 96, 100]), "iPhone chart: scale 91-100")
             #expect(IPhoneData.healthChartScale([98])
-                  == IPhoneData.HealthChartScale(lower: 97, upper: 99, step: 1, gridValues: [97, 98, 99]), "iPhone chart: single value")
+                  == IPhoneData.HealthChartScale(lower: 97, upper: 99, gridValues: [97, 98, 99]), "iPhone chart: single value")
             #expect(IPhoneData.healthChartScale([]) == nil, "iPhone chart: empty scale is nil")
             let near = [utcDay(2026, 1, 10), utcDay(2026, 1, 12)]
             #expect(IPhoneData.nearestIndex(near, to: utcDay(2026, 1, 11)) == 0, "iPhone chart: nearest tie goes to the earlier sample")

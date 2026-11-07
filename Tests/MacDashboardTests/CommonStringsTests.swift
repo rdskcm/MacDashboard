@@ -32,7 +32,6 @@ struct CommonStringsTests {
             (en.commonFullDiskAccessNeeded, "Full Disk Access needed", ru.commonFullDiskAccessNeeded, "Нужен полный доступ к диску"),
             (en.commonCompressed, "Compressed", ru.commonCompressed, "Сжатая"),
             (en.commonOK, "OK", ru.commonOK, "в норме"),
-            (en.commonCycles, "Cycles", ru.commonCycles, "Циклы"),
             (en.commonProtection, "Protection", ru.commonProtection, "Защита"),
             (en.commonUpdates, "Updates", ru.commonUpdates, "Обновления"),
             (en.commonCollectingData, "Collecting data…", ru.commonCollectingData, "Сбор данных…"),
@@ -45,23 +44,17 @@ struct CommonStringsTests {
             (en.commonNow, "Now", ru.commonNow, "Сейчас"),
             (en.commonTryAgain, "Try again", ru.commonTryAgain, "Повторить"),
             (en.commonShowLess, "Show less", ru.commonShowLess, "Свернуть"),
-            (en.commonSetting, "Setting", ru.commonSetting, "Параметр"),
-            (en.commonOnBattery, "Battery", ru.commonOnBattery, "От батареи"),
-            (en.commonACPower, "AC power", ru.commonACPower, "От сети"),
-            (en.commonNormal, "normal", ru.commonNormal, "норма"),
-            (en.commonFree, "Free", ru.commonFree, "Свободно"),
             (en.commonChart, "Chart", ru.commonChart, "График"),
             (en.commonTable, "Table", ru.commonTable, "Таблица"),
             (en.commonRefreshing, "Refreshing…", ru.commonRefreshing, "Обновление…"),
             (en.commonInProgress, "In progress", ru.commonInProgress, "Выполняется"),
             (en.commonCancel, "Cancel", ru.commonCancel, "Отмена"),
             (en.commonOpenPrivacySettings, "Open Privacy settings…", ru.commonOpenPrivacySettings, "Открыть «Конфиденциальность»…"),
-            (en.commonUpdated("14:02"), "updated 14:02", ru.commonUpdated("14:02"), "обновлено 14:02"),
             (en.commonChecking, "Checking…", ru.commonChecking, "Проверка…"),
             (en.commonCritical, "Critical", ru.commonCritical, "Критично"),
             (en.commonLastData("10:29:52"), "last data — 10:29:52", ru.commonLastData("10:29:52"), "последние данные — 10:29:52"),
         ]
-        #expect(rows.count == 52, "52 common rows")
+        #expect(rows.count == 45, "45 common rows")
         for r in rows {
             #expect(r.gotEN == r.wantEN, "\(r.wantEN)")
             #expect(r.gotRU == r.wantRU, "\(r.wantEN)")
