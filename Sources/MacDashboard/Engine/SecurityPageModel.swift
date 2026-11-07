@@ -204,7 +204,7 @@ struct SecurityPageModel: Equatable {
             m.updateRows = ups.map {
                 SecurityUpdateRow(id: $0.label, name: $0.title,
                                   sub: $0.restartRequired ? L.secRestartRequired : "",
-                                  value: $0.sizeBytes.map { ReportWriter.fmtBytes($0) } ?? dash)
+                                  value: $0.sizeBytes.map { ReportWriter.fmtBytes($0, language: L10nStore.shared.language) } ?? dash)
             }
         } else if i.checkingUpdates {
             m.updatesWait = true

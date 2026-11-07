@@ -191,8 +191,8 @@ content-history-table-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-history-narrow-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-history-states-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-history-bars-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
-content-report-sheet-dark	2026-11-04	27.2	Xcode 27.2	ab64412-dirty
-content-report-sheet-light	2026-11-04	27.2	Xcode 27.2	ab64412-dirty
+content-report-sheet-dark	2026-11-07	27.2	Xcode 27.2	c97afe3-dirty
+content-report-sheet-light	2026-11-07	27.2	Xcode 27.2	c97afe3-dirty
 content-settings-general-dark	2026-11-05	27.2	Xcode 27.2	0965167-dirty
 content-settings-general-relaunch-dark	2026-11-05	27.2	Xcode 27.2	0965167-dirty
 content-settings-backup-missing-dark	2026-11-05	27.2	Xcode 27.2	0965167-dirty

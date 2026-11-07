@@ -54,7 +54,7 @@ extension SerialTests {
         private let sa = "/Library/LaunchAgents/com.test.agent.plist"
         private let sd = "/Library/LaunchDaemons/com.test.daemon.plist"
         private func orphan(_ path: String) -> LaunchdPlistInfo {
-            LaunchdPlistInfo(path: path, label: nil, executablePath: nil, isOrphan: true, description: nil)
+            LaunchdPlistInfo(path: path, label: nil, executablePath: nil, isOrphan: true)
         }
         private func make() -> (StartupItemsController, FakeHost, FakeStartup, VirtualClock) {
             let host = FakeHost(), fake = FakeStartup(), clock = VirtualClock()

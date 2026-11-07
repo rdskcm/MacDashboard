@@ -22,10 +22,53 @@ private func swiftFiles(_ subdir: String) throws -> [URL] {
 /// Engine sources: `Engine/` plus its `Strings/` subfolder (ARCH-STRINGS-SPLIT: the per-feature string tables).
 private func engineFiles() throws -> [URL] { try swiftFiles("Engine") + swiftFiles("Engine/Strings") }
 
-/// One source line with its `//` comment and simple one-line string literals removed.
+/// One source line with its `//` comment and the text of simple one-line string literals removed. Code inside a
+/// `\( … )` interpolation is kept (it is code); a `//` inside a string literal is not a comment.
 private func codeOnly(_ line: Substring) -> String {
-    let noComment = line.range(of: "//").map { line[..<$0.lowerBound] } ?? line
-    return noComment.replacingOccurrences(of: #""(?:[^"\\]|\\.)*""#, with: "", options: .regularExpression)
+    let chars = Array(line)
+    var i = 0
+    return scanCode(chars, &i, interpolation: false)
+}
+
+/// Code outside string literals; stops at a `//` comment, or (interpolation) at the `)` closing the `\(`.
+private func scanCode(_ c: [Character], _ i: inout Int, interpolation: Bool) -> String {
+    var out = ""
+    var depth = 0
+    while i < c.count {
+        let ch = c[i]
+        if ch == "/", i + 1 < c.count, c[i + 1] == "/" { i = c.count; break }
+        if ch == "\"" { i += 1; out += scanString(c, &i); continue }
+        if interpolation {
+            if ch == "(" { depth += 1 }
+            else if ch == ")" {
+                if depth == 0 { i += 1; return out }
+                depth -= 1
+            }
+        }
+        out.append(ch)
+        i += 1
+    }
+    return out
+}
+
+/// Consumes a string literal after its opening quote; returns only the code of its interpolations.
+private func scanString(_ c: [Character], _ i: inout Int) -> String {
+    var out = ""
+    while i < c.count {
+        let ch = c[i]
+        if ch == "\\" {
+            if i + 1 < c.count, c[i + 1] == "(" {
+                i += 2
+                out += " " + scanCode(c, &i, interpolation: true) + " "
+            } else {
+                i += 2
+            }
+            continue
+        }
+        i += 1
+        if ch == "\"" { return out }
+    }
+    return out
 }
 
 private func regex(_ pattern: String) -> NSRegularExpression { try! NSRegularExpression(pattern: pattern) }
@@ -214,5 +257,45 @@ struct EngineBoundaryTests {
         let allowed = Set(Self.viewsSharedSettingsExceptions.keys)
         #expect(users.subtracting(allowed).isEmpty, "R6: views read settings through model.settings; AppSettings.shared found in \(users.subtracting(allowed).sorted())")
         #expect(allowed.subtracting(users).isEmpty, "R6: stale viewsSharedSettingsExceptions entries: \(allowed.subtracting(users).sorted())")
+    }
+
+    // MARK: - ARCH-TEXT-EDGE
+
+    /// `codeOnly` keeps code inside string interpolations and does not treat `//` inside a literal as a comment.
+    @Test func codeOnlyKeepsInterpolationsAndLiteralSlashes() {
+        let a = codeOnly(#"let s = "x \(L.foo) y""#)
+        #expect(a.contains("L.foo"), "interpolated code must survive: \(a)")
+        #expect(!a.contains("x ") && !a.contains(" y"), "literal text must be removed: \(a)")
+        let nested = codeOnly(#"let s = "\(f(L.bar, (1)))" + L10nStore.x"#)
+        #expect(nested.contains("L.bar") && nested.contains("L10nStore"), "nested parentheses: \(nested)")
+        let b = codeOnly(#"let u = "http://a"; let v = L.baz // note L.gone"#)
+        #expect(b.contains("L.baz"), "code after a literal containing // must survive: \(b)")
+        #expect(!b.contains("L.gone") && !b.contains("http"), "comment and literal text removed: \(b)")
+    }
+
+    /// R2: probes, parsers and the assessment take the language as a value; only the view edge reads `L`.
+    /// `ReportWriter.swift` is checked above its staleness-caption marker (the helpers below it are card captions).
+    @Test func engineProbesReadNoUILanguage() throws {
+        let probeFiles = ["Parsers.swift", "LiveCollector.swift", "ReportCollector.swift", "WakeHolders.swift",
+                          "BackupLog.swift", "Assessment.swift", "LaunchdPlistInspector.swift", "ReportWriter.swift"]
+        let marker = "// MARK: - Report staleness caption time"
+        let globalL = regex(#"(?<![A-Za-z0-9_])L\."#)
+        let store = regex(#"L10nStore"#)
+        var offenders: [String] = []
+        for name in probeFiles {
+            let file = try #require(try swiftFiles("Engine").first { $0.lastPathComponent == name }, "\(name) not found")
+            var scanned = 0
+            for (i, line) in try lines(of: file).enumerated() {
+                if name == "ReportWriter.swift", line.contains(marker) { break }
+                scanned += 1
+                let code = codeOnly(line)
+                let range = NSRange(code.startIndex..., in: code)
+                if globalL.firstMatch(in: code, range: range) != nil || store.firstMatch(in: code, range: range) != nil {
+                    offenders.append("\(name):\(i + 1)")
+                }
+            }
+            #expect(scanned > 20, "\(name): only \(scanned) lines scanned; the marker or the scan is broken")
+        }
+        #expect(offenders.isEmpty, "R2 (ARCH-TEXT-EDGE): these files read the UI language global; pass `language:` instead: \(offenders)")
     }
 }

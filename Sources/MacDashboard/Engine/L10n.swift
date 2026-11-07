@@ -52,8 +52,9 @@ func ruPlural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String 
 }
 
 /// Current-language holder. @Observable so any SwiftUI body that reads `L`
-/// re-renders instantly on language change; Engine code reads the same global at
-/// collection time (its output refreshes on the next tick — accepted design).
+/// re-renders instantly on language change. Engine code never reads it (ARCH-TEXT-EDGE):
+/// parsers and collectors store values, text is made at the view / page-model edge or by
+/// functions that take `language:`.
 @Observable
 final class L10nStore {
     static let shared = L10nStore()
@@ -111,4 +112,9 @@ extension AppStrings {
     }
 }
 
-var L: AppStrings { L10nStore.shared.language == .en ? StringsEN() : StringsRU() }
+extension AppLanguage {
+    /// The strings table of this language. The single place that maps a language to a table.
+    var strings: AppStrings { self == .en ? StringsEN() : StringsRU() }
+}
+
+var L: AppStrings { L10nStore.shared.language.strings }

@@ -131,12 +131,13 @@ enum BackupLog {
         }
     }
 
-    static func durationText(seconds: Int) -> String {
+    static func durationText(seconds: Int, language: AppLanguage) -> String {
+        let S = language.strings
         let s = max(0, seconds)
-        if s < 3600 { return "\(s / 60) \(L.uptimeUnitMinute)" }
-        if s < 86_400 { return "\(s / 3600) \(L.uptimeUnitHour)" }
+        if s < 3600 { return "\(s / 60) \(S.uptimeUnitMinute)" }
+        if s < 86_400 { return "\(s / 3600) \(S.uptimeUnitHour)" }
         let d = s / 86_400, h = (s % 86_400) / 3600
-        return h > 0 ? "\(d) \(L.uptimeUnitDay) \(h) \(L.uptimeUnitHour)" : "\(d) \(L.uptimeUnitDay)"
+        return h > 0 ? "\(d) \(S.uptimeUnitDay) \(h) \(S.uptimeUnitHour)" : "\(d) \(S.uptimeUnitDay)"
     }
 }
 
@@ -301,14 +302,15 @@ extension BackupLog {
     /// Stat off the main actor (D7).
     static func pathExists(_ path: String) async -> Bool { FileManager.default.fileExists(atPath: path) }
 
-    static func reasonText(_ r: ClaudeBackupAttempt.Reason, exit: Int) -> String {
+    static func reasonText(_ r: ClaudeBackupAttempt.Reason, exit: Int, language: AppLanguage) -> String {
+        let S = language.strings
         switch r {
-        case .diskDisconnected: return L.bkClaudeReasonDiskGone
-        case .diskError: return L.bkClaudeReasonDiskError
-        case .noSpace: return L.bkClaudeReasonNoSpace
-        case .noPermission: return L.bkClaudeReasonNoPermission
-        case .filesChanged: return L.bkClaudeReasonFilesChanged
-        case .other: return L.bkClaudeReasonOther(exit)
+        case .diskDisconnected: return S.bkClaudeReasonDiskGone
+        case .diskError: return S.bkClaudeReasonDiskError
+        case .noSpace: return S.bkClaudeReasonNoSpace
+        case .noPermission: return S.bkClaudeReasonNoPermission
+        case .filesChanged: return S.bkClaudeReasonFilesChanged
+        case .other: return S.bkClaudeReasonOther(exit)
         }
     }
 }

@@ -13,7 +13,7 @@ extension SerialTests {
 
             do {
                 func orphan(_ path: String) -> LaunchdPlistInfo {
-                    LaunchdPlistInfo(path: path, label: nil, executablePath: nil, isOrphan: true, description: nil)
+                    LaunchdPlistInfo(path: path, label: nil, executablePath: nil, isOrphan: true)
                 }
                 let a = orphan("/Users/x/Library/LaunchAgents/a.plist")
                 let b = orphan("/Library/LaunchAgents/b.plist")

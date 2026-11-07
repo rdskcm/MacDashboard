@@ -120,7 +120,7 @@ struct SystemPageModel: Equatable {
             m.sleepRows = warnable.map { sleepRow($0, warnable: true) } + i.systemWakeHolders.map { sleepRow($0, warnable: false) }
         }
         m.hiddenRows = i.ignored.map { e in
-            let name = WakeHolders.label(for: e.key)
+            let name = WakeHolders.label(for: e.key, language: L10nStore.shared.language)
             return HiddenRow(id: rowID(e.key), name: name,
                              sub: e.since.map { L.sysHiddenSince(L.shortDate($0)) } ?? L.sysHiddenNoDate,
                              key: e.key, a11y: L.sysWarnAgainA11y(name))
@@ -234,8 +234,8 @@ struct SystemPageModel: Equatable {
     static func rowID(_ key: WakeHolderKey) -> String { "\(key.owner)|\(key.requester ?? "")" }
 
     private static func sleepRow(_ h: WakeHolder, warnable: Bool) -> SleepRow {
-        SleepRow(id: rowID(h.key), name: WakeHolders.label(for: h),
-                 age: WakeHolders.ageText(h.ageSeconds), warnable: warnable, key: h.key)
+        SleepRow(id: rowID(h.key), name: WakeHolders.label(for: h, language: L10nStore.shared.language),
+                 age: WakeHolders.ageText(h.ageSeconds, language: L10nStore.shared.language), warnable: warnable, key: h.key)
     }
 
     // MARK: startup
@@ -263,7 +263,7 @@ struct SystemPageModel: Equatable {
 
     private static func plistHelp(_ info: LaunchdPlistInfo, stale: Bool) -> String {
         var parts: [String] = []
-        if let d = info.description, !d.isEmpty { parts.append(d) }
+        if let d = LaunchdPlistInspector.description(forLabel: info.label, language: L10nStore.shared.language), !d.isEmpty { parts.append(d) }
         if let e = info.executablePath { parts.append(e) }
         if stale { parts.append(L.sysStaleHelp) }
         return parts.joined(separator: "\n")

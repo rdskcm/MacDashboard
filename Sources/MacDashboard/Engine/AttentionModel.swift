@@ -103,7 +103,7 @@ enum AttentionModel {
     /// one (the algorithmic helpers below take `lang` explicitly rather than
     /// reading the global `L`, since they may be evaluated for a language the UI
     /// isn't currently showing, e.g. Checks exercising both).
-    private static func S(_ lang: AppLanguage) -> AppStrings { lang == .en ? StringsEN() : StringsRU() }
+    private static func S(_ lang: AppLanguage) -> AppStrings { lang.strings }
 
     /// RU word forms for 1...20, lowercase, agreeing with the feminine noun
     /// "задача" (index 0 unused; 1 and 2 are "одна"/"две", not the raw cardinal).

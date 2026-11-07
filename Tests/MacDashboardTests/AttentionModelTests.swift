@@ -13,9 +13,9 @@ private func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
     report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
     report.tmDest = .some(.none)
     report.smart = [
-        SmartDisk(device: "internal", title: "Boot SSD", status: "SMART: ошибки носителя",
+        SmartDisk(device: "internal", title: "Boot SSD", status: .mediaErrors,
                   attrs: [("Media and Data Integrity Errors", "3")], severity: .crit),
-        SmartDisk(device: "/dev/disk4", title: "External SSD", status: "SMART: износ на исходе",
+        SmartDisk(device: "/dev/disk4", title: "External SSD", status: .wearHigh,
                   attrs: [("Percentage Used", "85")], severity: .warn),
     ]
     report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: nil, condition: "Replace Now", maxCapacity: 60)
@@ -35,7 +35,7 @@ private func attnFullBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
 private func attnMegaBadFixture() -> (FullReport, LiveSnapshot) {
     var (report, live) = attnFullBadFixture(diskPct: 0.94)
     report.brewOutdated = ["pkg1", "pkg2", "pkg3"]
-    report.smart?.append(SmartDisk(device: "/dev/disk5", title: "External HDD", status: "SMART недоступен",
+    report.smart?.append(SmartDisk(device: "/dev/disk5", title: "External HDD", status: .noAccess,
                                     attrs: [], severity: .warn))
     report.homeDirs = [
         DirSize(path: "/Users/x/Downloads", bytes: 11 * GIB),
@@ -146,8 +146,8 @@ extension SerialTests {
                     var dest = TMDestination(name: "Backup", kind: "Local", mountPoint: "/Volumes/B", quotaBytes: nil, lastBackup: nil)
                     dest.lastBackupDate = Date().addingTimeInterval(-10 * 86_400)
                     reportSoon.tmDest = .some(.some(dest))
-                    let itemsFull = Assess.assess(report: reportFull, live: liveFull, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
-                    let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
+                    let itemsFull = Assess.assess(report: reportFull, live: liveFull, language: L10nStore.shared.language, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
+                    let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon, language: L10nStore.shared.language, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
                     let allItems = itemsFull + itemsSoon
                     let kinds = Set(allItems.map(\.kind))
                     #expect(kinds.count == AttentionKind.allCases.count, "AttentionModel coverage (\(lang)): all \(AttentionKind.allCases.count) AttentionKind cases produced (got \(kinds.count))")
@@ -166,7 +166,7 @@ extension SerialTests {
                 L10nStore.shared.language = .ru
 
                 let (report, live) = attnMegaBadFixture()
-                let a = Assess.assess(report: report, live: live, memPressure: .critical)
+                let a = Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: .critical)
 
                 // 6. Verb rule.
                 for item in a.items {

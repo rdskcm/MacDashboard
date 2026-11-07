@@ -201,28 +201,26 @@ enum Parsers {
 
     // MARK: - battery (`pmset -g batt`)
 
-    private static var pmsetBatteryStates: [String: String] {
-        [
-            "charging": L.battStateCharging,
-            "discharging": L.battStateDischarging,
-            "charged": L.battStateCharged,
-            "finishing charge": L.battStateFinishingCharge
-        ]
-    }
+    private static let pmsetBatteryStates: [String: BatteryChargeState] = [
+        "charging": .charging,
+        "discharging": .discharging,
+        "charged": .charged,
+        "finishing charge": .finishingCharge
+    ]
 
     /// Parses `pmset -g batt` output. Returns nil if no battery-related field was
     /// found at all (desktop Mac, or garbage input).
     static func batteryPmset(_ text: String) -> BatteryInfo? {
-        var source: String?
+        var source: BatteryPowerSource?
         var charge: Int?
-        var state: String?
+        var state: BatteryChargeState?
 
         for line in text.components(separatedBy: "\n") {
             if let openRange = line.range(of: "Now drawing from '") {
                 let afterOpen = line[openRange.upperBound...]
                 if let closeIdx = afterOpen.firstIndex(of: "'") {
                     let src = String(afterOpen[afterOpen.startIndex..<closeIdx])
-                    source = src.contains("AC") ? L.battSourceAC : L.battSourceBattery
+                    source = src.contains("AC") ? .ac : .battery
                 }
             }
             guard line.contains("InternalBattery"), let pctSemi = line.range(of: "%;") else { continue }
@@ -241,9 +239,9 @@ enum Parsers {
                 // ("...; AC attached; not charging; ...") — legacy's single-clause
                 // regex can't reach its own "не заряжается" dict entry for this
                 // exact reason; special-cased here so it actually triggers.
-                state = L.battStateNotCharging
+                state = .notCharging
             } else if !firstClause.isEmpty {
-                state = pmsetBatteryStates[firstClause] ?? firstClause
+                state = pmsetBatteryStates[firstClause] ?? .other(firstClause)
             }
         }
 
@@ -369,40 +367,33 @@ enum Parsers {
         return gb * (1 << 30)
     }
 
-    /// `uptime` output → human duration in the app's current language ("2 дн 3 мин" /
-    /// "10 дн 22 ч 32 мин" under RU, "2 d 3 min" / "10 d 22 h 32 min" under EN). Units come
-    /// from `L.uptimeUnitDay/Hour/Minute/Second` + `L.uptimeHourMinuteCombo`, not from
-    /// literals. The RU abbreviations port legacy `_ru_uptime` (mac_dashboard.py lines
-    /// 163-178) verbatim in their choice — дн/ч/мин/с are grammatically number-agnostic,
-    /// unlike a spelled-out "дня/дней" which legacy deliberately avoids.
-    static func uptimeHuman(_ text: String) -> String? {
+    /// `uptime` output → seconds since boot, from the "up …" segment ("10 days, 22:32", "2 days, 3 mins", "1 day, 1 hr",
+    /// "5 mins", "30 secs"). Strict: a segment with any unrecognised part is nil, which `ParsedCommand.uptime` reports as a
+    /// parse failure. Text is made later by `fmtUptime(seconds:language:)`.
+    static func uptimeSeconds(_ text: String) -> Int? {
         for line in text.components(separatedBy: "\n") {
             guard line.contains(" up "), line.contains("load average") else { continue }
-            guard let uptimeSegment = firstRegexGroup(
-                in: line,
-                pattern: #"\bup\s+(.*?),\s*\d+\s+users?"#
-            ) else { continue }
-            return ruUptime(uptimeSegment)
+            guard let segment = firstRegexGroup(in: line, pattern: #"\bup\s+(.*?),\s*\d+\s+users?"#) else { continue }
+            var total = 0, parsed = 0
+            for rawPart in segment.components(separatedBy: ",") {
+                let part = rawPart.trimmingCharacters(in: .whitespaces)
+                guard !part.isEmpty else { continue }
+                if let (num, unit) = matchDayUnit(part), let n = Int(num) {
+                    switch unit {
+                    case "day": total += n * 86_400
+                    case "hr", "hour": total += n * 3600
+                    case "min": total += n * 60
+                    case "sec": total += n
+                    default: return nil
+                    }
+                } else if let (h, mm) = matchHourMinute(part) {
+                    total += h * 3600 + mm * 60
+                } else { return nil }
+                parsed += 1
+            }
+            return parsed > 0 ? total : nil
         }
         return nil
-    }
-
-    private static func ruUptime(_ s: String) -> String {
-        let unitMap = ["day": L.uptimeUnitDay, "hr": L.uptimeUnitHour, "hour": L.uptimeUnitHour,
-                       "min": L.uptimeUnitMinute, "sec": L.uptimeUnitSecond]
-        var parts: [String] = []
-        for rawPart in s.components(separatedBy: ",") {
-            let part = rawPart.trimmingCharacters(in: .whitespaces)
-            guard !part.isEmpty else { continue }
-            if let (num, unit) = matchDayUnit(part), let ru = unitMap[unit] {
-                parts.append("\(num) \(ru)")
-            } else if let (h, mm) = matchHourMinute(part) {
-                parts.append(L.uptimeHourMinuteCombo(h, mm))
-            } else {
-                parts.append(part)
-            }
-        }
-        return parts.isEmpty ? s : parts.joined(separator: " ")
     }
 
     private static func matchDayUnit(_ part: String) -> (String, String)? {

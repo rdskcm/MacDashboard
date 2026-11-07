@@ -11,7 +11,7 @@ import Testing
         CommandOutcome(termination: t, stdout: "", stdoutTruncated: false, stderrHead: "")
     }
 
-    var disks = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED")]
+    var disks = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: .verified)]
     var tmDest: TMDestination?? = .some(nil)
     var smartctl: String? = nil
     var brew: String? = "/opt/homebrew/bin/brew"

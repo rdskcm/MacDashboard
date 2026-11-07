@@ -9,32 +9,39 @@ import Foundation
 
 /// Comma-decimal Russian number formatting, trims trailing zeros
 /// ("12,0" -> "12", "12,34" @ decimals:1 -> "12,3").
-func fmtNum(_ v: Double, decimals: Int = 1) -> String {
+func fmtNum(_ v: Double, decimals: Int = 1) -> String { fmtNum(v, decimals: decimals, language: L10nStore.shared.language) }
+func fmtNum(_ v: Double, decimals: Int = 1, language: AppLanguage) -> String {
     var s = String(format: "%.\(decimals)f", v)
     if s.contains(".") {
         while s.hasSuffix("0") { s.removeLast() }
         if s.hasSuffix(".") { s.removeLast() }
     }
-    return s.replacingOccurrences(of: ".", with: L.decimalSeparator)
+    return s.replacingOccurrences(of: ".", with: language.strings.decimalSeparator)
 }
 
 /// Fixed decimals, never trimmed ("2.10", "25.0"): load averages and the CPU percentage.
-func fmtFixed(_ v: Double, decimals: Int) -> String { String(format: "%.\(decimals)f", v).replacingOccurrences(of: ".", with: L.decimalSeparator) }
+func fmtFixed(_ v: Double, decimals: Int) -> String { fmtFixed(v, decimals: decimals, language: L10nStore.shared.language) }
+func fmtFixed(_ v: Double, decimals: Int, language: AppLanguage) -> String {
+    String(format: "%.\(decimals)f", v).replacingOccurrences(of: ".", with: language.strings.decimalSeparator)
+}
 
 /// Integers grouped by 3 with the language's separator (EN "1,204", RU "1\u{2009}204"); negatives keep the sign.
-func fmtGrouped<T: BinaryInteger>(_ v: T) -> String {
+func fmtGrouped<T: BinaryInteger>(_ v: T) -> String { fmtGrouped(v, language: L10nStore.shared.language) }
+func fmtGrouped<T: BinaryInteger>(_ v: T, language: AppLanguage) -> String {
+    let separator = language.strings.groupingSeparator
     let digits = String(v.magnitude)
     var out = ""
     for (i, ch) in digits.reversed().enumerated() {
-        if i > 0 && i % 3 == 0 { out.append(contentsOf: L.groupingSeparator.reversed()) }
+        if i > 0 && i % 3 == 0 { out.append(contentsOf: separator.reversed()) }
         out.append(ch)
     }
     return (v < 0 ? "-" : "") + String(out.reversed())
 }
 
 /// NVMe data units (1 unit = 1000 x 512 bytes) as TB with one decimal.
-func fmtTB(dataUnits: UInt64) -> String {
-    fmtFixed(Double(dataUnits) * 512_000 / 1e12, decimals: 1) + " " + L.byteUnitTB
+func fmtTB(dataUnits: UInt64) -> String { fmtTB(dataUnits: dataUnits, language: L10nStore.shared.language) }
+func fmtTB(dataUnits: UInt64, language: AppLanguage) -> String {
+    fmtFixed(Double(dataUnits) * 512_000 / 1e12, decimals: 1, language: language) + " " + language.strings.byteUnitTB
 }
 
 /// Deterministic decimal capacity formatter: ГБ/ТБ (GB/TB), matching how macOS
@@ -43,15 +50,18 @@ func fmtTB(dataUnits: UInt64) -> String {
 /// 1 TB up to (not including) 10 TB, one decimal at/above 10 TB; trailing zeros
 /// trimmed, comma as decimal separator. Used by the disk tile value, «из N»
 /// slot, and footer sizes ("2,24 ТБ из 4 ТБ").
-func fmtCapacity(_ bytes: Int64) -> String {
-    let p = fmtCapacityParts(bytes)
+func fmtCapacity(_ bytes: Int64) -> String { fmtCapacity(bytes, language: L10nStore.shared.language) }
+func fmtCapacity(_ bytes: Int64, language: AppLanguage) -> String {
+    let p = fmtCapacityParts(bytes, language: language)
     return "\(p.value) \(p.unit)"
 }
 
 /// Same value/unit split `fmtCapacity` produces, returned separately so a caller rendering in a
 /// monospaced face can control the gap itself (a U+0020 in a monospaced font carries a full
 /// glyph advance — ~15 pt at 27 pt).
-func fmtCapacityParts(_ bytes: Int64) -> (value: String, unit: String) {
+func fmtCapacityParts(_ bytes: Int64) -> (value: String, unit: String) { fmtCapacityParts(bytes, language: L10nStore.shared.language) }
+func fmtCapacityParts(_ bytes: Int64, language: AppLanguage) -> (value: String, unit: String) {
+    let S = language.strings
     let gb = Double(bytes) / 1_000_000_000
     // Decide the unit using the value AFTER rounding to the digits it will be
     // displayed with, so e.g. 999.95 GB (which rounds to "1000.0") reports as
@@ -59,9 +69,9 @@ func fmtCapacityParts(_ bytes: Int64) -> (value: String, unit: String) {
     if (gb * 10).rounded() / 10 >= 1000 {
         let tb = Double(bytes) / 1_000_000_000_000
         let decimals = (tb * 100).rounded() / 100 >= 10 ? 1 : 2
-        return (fmtNum(tb, decimals: decimals), L.byteUnitTB)
+        return (fmtNum(tb, decimals: decimals, language: language), S.byteUnitTB)
     }
-    return (fmtNum(gb, decimals: 1), L.byteUnitGB)
+    return (fmtNum(gb, decimals: 1, language: language), S.byteUnitGB)
 }
 
 /// Backup progress amounts (DISK-MOUNT-LIVE): decimal MB under 1 GB so early progress does not read as zero, then exactly
@@ -75,8 +85,9 @@ func fmtBackupBytesParts(_ bytes: Int64) -> (value: String, unit: String) {
 /// Deterministic Russian byte formatter: КБ/МБ/ГБ/ТБ, one decimal place
 /// (trimmed), comma as decimal separator. Intentionally NOT ByteCountFormatter,
 /// which is locale-dependent and uses Latin unit abbreviations.
-func fmtBytes(_ n: Int64?) -> String {
-    let p = fmtBytesParts(n)
+func fmtBytes(_ n: Int64?) -> String { fmtBytes(n, language: L10nStore.shared.language) }
+func fmtBytes(_ n: Int64?, language: AppLanguage) -> String {
+    let p = fmtBytesParts(n, language: language)
     guard let unit = p.unit else { return p.value }
     return "\(p.value) \(unit)"
 }
@@ -84,18 +95,36 @@ func fmtBytes(_ n: Int64?) -> String {
 /// Same value/unit split `fmtBytes` produces, returned separately so a caller rendering in a
 /// monospaced face can control the gap itself (a U+0020 in a monospaced font carries a full
 /// glyph advance — ~15 pt at 27 pt).
-func fmtBytesParts(_ n: Int64?) -> (value: String, unit: String?) {
+func fmtBytesParts(_ n: Int64?) -> (value: String, unit: String?) { fmtBytesParts(n, language: L10nStore.shared.language) }
+func fmtBytesParts(_ n: Int64?, language: AppLanguage) -> (value: String, unit: String?) {
     guard let n else { return ("—", nil) }
+    let S = language.strings
     let units: [(String, Double)] = [
-        (L.byteUnitTB, 1_099_511_627_776), (L.byteUnitGB, 1_073_741_824),
-        (L.byteUnitMB, 1_048_576), (L.byteUnitKB, 1024), (L.byteUnitB, 1)
+        (S.byteUnitTB, 1_099_511_627_776), (S.byteUnitGB, 1_073_741_824),
+        (S.byteUnitMB, 1_048_576), (S.byteUnitKB, 1024), (S.byteUnitB, 1)
     ]
     let dn = Double(n)
-    for (unit, mul) in units where dn >= mul || unit == L.byteUnitB {
-        return (fmtNum(dn / mul, decimals: 1), unit)
+    for (unit, mul) in units where dn >= mul || unit == S.byteUnitB {
+        return (fmtNum(dn / mul, decimals: 1, language: language), unit)
     }
     return ("—", nil)
 }
+
+/// Uptime in seconds → the header/report form, mirroring `uptime(1)`'s own print rules so the text equals what
+/// `Parsers.uptimeSeconds` was parsed from: "10 d 22 h 32 min", "2 d 3 min", "1 d 1 h", "5 min", "30 s".
+func fmtUptime(seconds: Int, language: AppLanguage) -> String {
+    let S = language.strings
+    let s = max(0, seconds)
+    let d = s / 86_400, h = (s % 86_400) / 3600, m = (s % 3600) / 60, sec = s % 60
+    var parts: [String] = []
+    if d > 0 { parts.append("\(d) \(S.uptimeUnitDay)") }
+    if h > 0 && m > 0 { parts.append(S.uptimeHourMinuteCombo(h, m)) }
+    else if h > 0 { parts.append("\(h) \(S.uptimeUnitHour)") }
+    else if m > 0 { parts.append("\(m) \(S.uptimeUnitMinute)") }
+    else { parts.append("\(sec) \(S.uptimeUnitSecond)") }
+    return parts.joined(separator: " ")
+}
+func fmtUptime(seconds: Int) -> String { fmtUptime(seconds: seconds, language: L10nStore.shared.language) }
 
 /// V2-FIX-UNITS follow-up: joins `fmtBytesParts`/`fmtCapacityParts` output with
 /// U+2009 THIN SPACE instead of a plain U+0020, for call sites embedding the

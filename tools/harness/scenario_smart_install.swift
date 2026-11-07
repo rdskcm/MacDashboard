@@ -15,8 +15,8 @@ MainActor.assumeIsolated {
     installable.smart.applyFixture(updatedAt: nil, tools: .installable, installing: false, failure: nil)
     installable.report.smartctlPresent = false
     installable.report.smart = [
-        SmartDisk(device: "internal", title: "Внутренний SSD", status: "SMART: подтверждён", attrs: [], severity: .good),
-        SmartDisk(device: "/dev/disk4", title: "External HDD", status: "SMART недоступен", attrs: [], severity: .warn)
+        SmartDisk(device: "internal", title: "Внутренний SSD", status: .verified, attrs: [], severity: .good),
+        SmartDisk(device: "/dev/disk4", title: "External HDD", status: .noAccess, attrs: [], severity: .warn)
     ]
 
     // B: Homebrew present, smartctl missing, previous install attempt failed -> button + error line.
@@ -24,7 +24,7 @@ MainActor.assumeIsolated {
     installableWithError.smart.applyFixture(updatedAt: nil, tools: .installable, installing: false, failure: .exitCode(1))
     installableWithError.report.smartctlPresent = false
     installableWithError.report.smart = [
-        SmartDisk(device: "internal", title: "Внутренний SSD", status: "SMART: подтверждён", attrs: [], severity: .good)
+        SmartDisk(device: "internal", title: "Внутренний SSD", status: .verified, attrs: [], severity: .good)
     ]
 
     // C: Homebrew itself missing -> hint text only, no button.
@@ -32,7 +32,7 @@ MainActor.assumeIsolated {
     needsHomebrew.smart.applyFixture(updatedAt: nil, tools: .needsHomebrew, installing: false, failure: nil)
     needsHomebrew.report.smartctlPresent = false
     needsHomebrew.report.smart = [
-        SmartDisk(device: "internal", title: "Внутренний SSD", status: "SMART: подтверждён", attrs: [], severity: .good)
+        SmartDisk(device: "internal", title: "Внутренний SSD", status: .verified, attrs: [], severity: .good)
     ]
 
     harnessRender(width: 1094) {

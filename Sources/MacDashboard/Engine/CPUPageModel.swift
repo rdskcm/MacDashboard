@@ -227,13 +227,14 @@ struct CPUPageModel: Equatable {
 }
 
 extension CPUPageModel {
-    /// Note text, tone and tooltip for one state (THERMAL-STATE §4), in the current UI language.
-    static func thermalNote(_ l: ThermalLevel) -> (text: String, tone: CPUNoteTone, help: String) {
+    /// Note text, tone and tooltip for one state (THERMAL-STATE §4), in `language`.
+    static func thermalNote(_ l: ThermalLevel, language: AppLanguage) -> (text: String, tone: CPUNoteTone, help: String) {
+        let S = language.strings
         switch l {
-        case .nominal: return (L.cpuThermalNominal, .green, L.cpuThermalHelpNominal)
-        case .fair: return (L.cpuThermalFair, .neutral, L.cpuThermalHelpFair)
-        case .serious: return (L.cpuThermalSerious, .amber, L.cpuThermalHelpSerious)
-        case .critical: return (L.cpuThermalCritical, .hot, L.cpuThermalHelpCritical)
+        case .nominal: return (S.cpuThermalNominal, .green, S.cpuThermalHelpNominal)
+        case .fair: return (S.cpuThermalFair, .neutral, S.cpuThermalHelpFair)
+        case .serious: return (S.cpuThermalSerious, .amber, S.cpuThermalHelpSerious)
+        case .critical: return (S.cpuThermalCritical, .hot, S.cpuThermalHelpCritical)
         }
     }
 }

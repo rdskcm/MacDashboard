@@ -69,7 +69,7 @@ private func renderDetails(_ r: FullReport, _ l: LiveSnapshot) -> String {
     var i = emptyInput()
     i.parseFailures = r.parseFailures + l.parseFailures
     i.details = ReportDetails(report: r, live: l)
-    return ReportWriter.render(i)
+    return ReportWriter.render(i, language: L10nStore.shared.language)
 }
 
 private func upd(_ label: String) -> SoftwareUpdate {
@@ -94,20 +94,20 @@ private func rwTasks() -> [HomeTask] {
     return HomeModel.tasks(a, report: FullReport(), disk: nil, battery: nil)
 }
 
-private func fullInput() -> ReportSummaryInput {
+func fullInput() -> ReportSummaryInput {
     let at = rwDate()
     let tasks = rwTasks()
     return ReportSummaryInput(
         generatedAt: at,
         system: SystemInfo(osName: "macOS", osVersion: "26.1", osBuild: "25B78", modelName: "MacBook Air",
-                           modelId: "Mac15,12", chip: "Apple M3", cores: nil, memBytes: nil, uptime: "3 d 4 h", hostName: nil),
+                           modelId: "Mac15,12", chip: "Apple M3", cores: nil, memBytes: nil, uptimeSeconds: 3 * 86_400 + 4 * 3600, hostName: nil),
         status: .critical, tasks: tasks,
         cpu: CPUUsage(user: 18.5, sys: 7.2, idle: 74.3), load: [2.10, 1.85, 1.60], ncpu: 8, socTempC: 48,
         mem: MemSnapshot(total: 16 * rwGiB, pageSize: 16384, free: 0, active: 7 * rwGiB, inactive: 0, speculative: 0,
                          wired: 2 * rwGiB, compressor: rwGiB / 2, purgeable: 0, fileBacked: 0),
         memPressure: .normal, swap: SwapInfo(total: 2 * rwGiB, used: 512 << 20, free: 0),
         disk: DiskInfo(size: 494_400_000_000, avail: 187_600_000_000, purgeable: 19_700_000_000),
-        hasBattery: true, battery: BatteryInfo(source: nil, charge: 82, state: "charging", cycles: 412, condition: nil, maxCapacity: 88),
+        hasBattery: true, battery: BatteryInfo(source: nil, charge: 82, state: .charging, cycles: 412, condition: nil, maxCapacity: 88),
         security: SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false),
         claudeBackup: .lastSuccess(at.addingTimeInterval(-5 * 3600)), snapshotCount: 3, now: at, parseFailures: [])
 }
@@ -145,7 +145,7 @@ extension SerialTests {
                 k("UPTIME") + "3 d 4 h",
             ]
             let want = lines.joined(separator: "\n") + "\n"
-            let got = ReportWriter.render(fullInput())
+            let got = ReportWriter.render(fullInput(), language: L10nStore.shared.language)
             #expect(got == want, "renderEN: \(got)")
             #expect(tasks[0].tone == .hot && tasks[1].tone == .amber, "renderEN: task tones")
         }
@@ -155,20 +155,20 @@ extension SerialTests {
             defer { L10nStore.shared.language = originalLang }
             var i = fullInput()
             L10nStore.shared.language = .en
-            let base = ReportWriter.render(i)
+            let base = ReportWriter.render(i, language: L10nStore.shared.language)
             i.thermal = .nominal
-            #expect(ReportWriter.render(i) == base, "nominal leaves the CPU line unchanged")
+            #expect(ReportWriter.render(i, language: L10nStore.shared.language) == base, "nominal leaves the CPU line unchanged")
             i.thermal = .serious
-            #expect(ReportWriter.render(i).contains("SoC 48 °C · thermal: high\n"))
+            #expect(ReportWriter.render(i, language: L10nStore.shared.language).contains("SoC 48 °C · thermal: high\n"))
             L10nStore.shared.language = .ru
-            #expect(ReportWriter.render(i).contains("SoC 48 °C · нагрев: высокий\n"))
+            #expect(ReportWriter.render(i, language: L10nStore.shared.language).contains("SoC 48 °C · нагрев: высокий\n"))
         }
 
         @Test func renderRU() {
             let originalLang = L10nStore.shared.language
             defer { L10nStore.shared.language = originalLang }
             L10nStore.shared.language = .ru
-            let out = ReportWriter.render(fullInput())
+            let out = ReportWriter.render(fullInput(), language: L10nStore.shared.language)
             let rows = out.components(separatedBy: "\n")
             let k = { (s: String) in pad(s, 16) }
             #expect(rows[0] == "Отчёт MacDashboard — MacBook Air (Apple M3)", "renderRU title (got \(rows[0]))")
@@ -181,7 +181,7 @@ extension SerialTests {
             #expect(rows.contains(k("ПРОЦЕССОР") + "25,7 % · нагрузка 2,10 · 8 ядер · SoC 48 °C"), "renderRU CPU")
             #expect(rows.contains(k("ПАМЯТЬ") + "9,5 из 16 ГБ · давление низкое · swap 512 МБ"), "renderRU MEMORY")
             #expect(rows.contains(k("ХРАНИЛИЩЕ") + "свободно 187,6 из 494,4 ГБ · очищаемое 19,7 ГБ"), "renderRU STORAGE")
-            #expect(rows.contains(k("БАТАРЕЯ") + "82 %, charging · ёмкость 88 % · 412 циклов"), "renderRU BATTERY")
+            #expect(rows.contains(k("БАТАРЕЯ") + "82 %, заряжается · ёмкость 88 % · 412 циклов"), "renderRU BATTERY")
             #expect(rows.contains(k("ЗАЩИТА") + "FileVault · Gatekeeper · SIP · брандмауэр выкл."), "renderRU SECURITY")
             #expect(rows.contains(k("КОПИИ") + "Бэкап Claude 5 ч назад · 3 локальных снимка"), "renderRU BACKUPS")
         }
@@ -193,10 +193,10 @@ extension SerialTests {
             input.security = SecurityState(fileVault: false, gatekeeper: true, sip: nil, firewall: true)
             let k = { (s: String) in pad(s, 16) }
             L10nStore.shared.language = .en
-            #expect(ReportWriter.render(input).components(separatedBy: "\n")
+            #expect(ReportWriter.render(input, language: L10nStore.shared.language).components(separatedBy: "\n")
                 .contains(k("SECURITY") + "FileVault off · Gatekeeper · SIP ? · Firewall"), "security EN off/unknown")
             L10nStore.shared.language = .ru
-            #expect(ReportWriter.render(input).components(separatedBy: "\n")
+            #expect(ReportWriter.render(input, language: L10nStore.shared.language).components(separatedBy: "\n")
                 .contains(k("ЗАЩИТА") + "FileVault выкл. · Gatekeeper · SIP ? · брандмауэр"), "security RU off/unknown")
         }
 
@@ -204,7 +204,7 @@ extension SerialTests {
             let originalLang = L10nStore.shared.language
             defer { L10nStore.shared.language = originalLang }
             L10nStore.shared.language = .en
-            let out = ReportWriter.render(emptyInput())
+            let out = ReportWriter.render(emptyInput(), language: L10nStore.shared.language)
             let rows = out.components(separatedBy: "\n")
             let k = { (s: String) in pad(s, 16) }
             #expect(rows[0] == "MacDashboard report — Mac", "renderMissing title")
@@ -224,7 +224,7 @@ extension SerialTests {
             let originalLang = L10nStore.shared.language
             defer { L10nStore.shared.language = originalLang }
             L10nStore.shared.language = .en
-            #expect(ReportWriter.render(i).contains(pad("BATTERY", 16) + "—\n"), "renderNoBatteryValues: all-nil battery is a dash")
+            #expect(ReportWriter.render(i, language: L10nStore.shared.language).contains(pad("BATTERY", 16) + "—\n"), "renderNoBatteryValues: all-nil battery is a dash")
         }
 
         @Test func renderLongObject() {
@@ -234,7 +234,7 @@ extension SerialTests {
                             destination: task.destination, verb: nil, help: "", tileTag: "", legacyAction: nil, wakeHolderKeys: [])
             i.tasks = [task]
             i.status = .critical
-            #expect(ReportWriter.render(i).contains("  !! 0123456789abcdef bad\n"), "renderLongObject: exactly one space before the state")
+            #expect(ReportWriter.render(i, language: L10nStore.shared.language).contains("  !! 0123456789abcdef bad\n"), "renderLongObject: exactly one space before the state")
         }
 
         @Test func renderParseFailures() {
@@ -243,12 +243,12 @@ extension SerialTests {
             L10nStore.shared.language = .en
             var i = emptyInput()
             i.parseFailures = [ParseFailure(.spHardware, stdout: "{\n\"SPHardwareDataType\" : 5\n}")!]
-            let out = ReportWriter.render(i)
+            let out = ReportWriter.render(i, language: L10nStore.shared.language)
             let tail = "UPTIME          —\n\n===== \(L.reportSectionUnparsed) =====\n"
             #expect(out.contains(tail), "renderParseFailures: tail after the UPTIME row")
             #expect(out.contains("$ system_profiler -json SPHardwareDataType"), "renderParseFailures: command line")
             i.parseFailures = []
-            #expect(!ReportWriter.render(i).contains(L.reportSectionUnparsed), "renderParseFailures: absent without failures")
+            #expect(!ReportWriter.render(i, language: L10nStore.shared.language).contains(L.reportSectionUnparsed), "renderParseFailures: absent without failures")
         }
 
         @Test func detailsAppended() async {
@@ -267,7 +267,7 @@ extension SerialTests {
                 var r = FullReport()
                 var live = LiveSnapshot()
                 r.createdAt = t
-                r.system = SystemInfo(osName: "macOS", osVersion: "26.0", osBuild: "25A354", modelName: "MacBook Air", modelId: "Mac15,12", chip: "Apple M3", cores: "8 (4 performance and 4 efficiency)", memBytes: 16 * gib, uptime: "2 дня 3 мин")
+                r.system = SystemInfo(osName: "macOS", osVersion: "26.0", osBuild: "25A354", modelName: "MacBook Air", modelId: "Mac15,12", chip: "Apple M3", cores: "8 (4 performance and 4 efficiency)", memBytes: 16 * gib, uptimeSeconds: 2 * 86_400 + 3 * 60)
                 live.disk = DiskInfo(size: 500 * gib, avail: 100 * gib, dataUsed: 350 * gib, sysUsed: 12 * gib)
                 r.snapshots = ["com.apple.TimeMachine.2026-07-03-183000.local"]
                 r.homeDirs = (1...25).map { DirSize(path: "/Users/u/d" + String(format: "%02d", $0), bytes: Int64($0) * 1024) }
@@ -282,12 +282,12 @@ extension SerialTests {
                 live.topMem = procs
                 live.topCPU = procs
                 r.autostart = AutostartInfo(loginItems: ["Dropbox", "Rectangle"], userAgents: [LaunchdPlistInfo(path: "/Users/u/Library/LaunchAgents/com.a.plist", isOrphan: false), LaunchdPlistInfo(path: "/Users/u/Library/LaunchAgents/com.b.plist", isOrphan: true)], systemAgents: [LaunchdPlistInfo(path: "/Library/LaunchAgents/com.c.plist", isOrphan: false)], systemDaemons: [LaunchdPlistInfo(path: "/Library/LaunchDaemons/com.d.plist", isOrphan: false)], background: [(pid: "123", label: "com.x.helper"), (pid: "-", label: "com.y.agent")])
-                r.battery = BatteryInfo(source: "AC Power", charge: 80, state: "charging", cycles: 123, condition: "Normal", maxCapacity: 91)
+                r.battery = BatteryInfo(source: .ac, charge: 80, state: .charging, cycles: 123, condition: "Normal", maxCapacity: 91)
                 live.battery = BatteryInfo(charge: 10)
                 r.energy = EnergySettings(battery: [("displaysleep", "2"), ("sleep", "1")], ac: [("displaysleep", "10")])
                 r.security = SecurityState(fileVault: true, gatekeeper: false, sip: nil, firewall: true)
                 r.tmDest = TMDestination(name: "Backup", kind: "Local", mountPoint: "/Volumes/Backup", quotaBytes: 2 * tib, lastBackup: "2026-07-03-120000")
-                r.spotlight = "Indexing enabled."
+                r.spotlight = .enabled
                 r.crashes = [CrashGroup(process: "diffscore", count: 3, directory: "/x"), CrashGroup(process: "Finder", count: 1, directory: "/x")]
                 r.brewStatus = .installed(version: "Homebrew 4.6.0")
                 r.brewOutdated = ["git", "node"]
@@ -296,7 +296,7 @@ extension SerialTests {
                 r.updatesCheckDuration = 30
                 r.sectionDurations = ["system": 0.2, "disk": 1.5, "brew": 1.5]
                 r.passDuration = 7
-                r.smart = [SmartDisk(device: "/dev/disk0", title: "APPLE SSD", status: "SMART: OK", attrs: [("Temperature", "35 C"), ("Critical Warning", "0x00"), ("Custom Attr", "7")]), SmartDisk(device: "/dev/disk4", title: "Ext", status: "NO ACCESS")]
+                r.smart = [SmartDisk(device: "/dev/disk0", title: "APPLE SSD", status: .ok, attrs: [("Temperature", "35 C"), ("Critical Warning", "0x00"), ("Custom Attr", "7")]), SmartDisk(device: "/dev/disk4", title: "Ext", status: .noAccess)]
                 r.parseFailures = [ParseFailure(.spHardware, stdout: (1...10).map { "l\($0)" }.joined(separator: "\n"))!]
                 live.parseFailures = [ParseFailure(.ps, stdout: "garbage")!]
                 return (r, live)
@@ -319,7 +319,7 @@ extension SerialTests {
                     let ok = got == body
                     #expect(ok, Comment(rawValue: "ReportWriter: \(label) populated body" + (ok ? "" : " (got \(String(describing: got)))")))
                 }
-                sec(L.reportSectionSystem, ["ProductName:\tmacOS", "ProductVersion:\t26.0", "BuildVersion:\t25A354", "      Model Name: MacBook Air", "      Model Identifier: Mac15,12", "      Chip: Apple M3", "      Total Number of Cores: 8 (4 performance and 4 efficiency)", "      Memory: 16,0 ГБ", L.reportUptime("2 дня 3 мин")], "SYSTEM")
+                sec(L.reportSectionSystem, ["ProductName:\tmacOS", "ProductVersion:\t26.0", "BuildVersion:\t25A354", "      Model Name: MacBook Air", "      Model Identifier: Mac15,12", "      Chip: Apple M3", "      Total Number of Cores: 8 (4 performance and 4 efficiency)", "      Memory: 16,0 ГБ", L.reportUptime("2 дн 3 мин")], "SYSTEM")
                 sec(L.reportSectionDisk, [diskHeader(),
                                           diskRow("/", "500,0 ГБ", "12,0 ГБ", "100,0 ГБ", "2%", "/"),
                                           diskRow("/System/Volumes/Data", "500,0 ГБ", "350,0 ГБ", "100,0 ГБ", "70%", "/System/Volumes/Data")], "DISK")
@@ -342,11 +342,11 @@ extension SerialTests {
                 sec(L.reportSectionLoginItems, ["Dropbox", "Rectangle"], "LOGINITEMS")
                 sec(L.reportSectionAgents, [L.reportAgentsUserHeader, "com.a.plist", "com.b.plist [ORPHAN]", L.reportAgentsSystemHeader, "com.c.plist", "com.d.plist"], "AGENTS")
                 sec(L.reportSectionBackground, [rwCol("PID", 7) + "Label", rwCol("123", 7) + "com.x.helper", rwCol("-", 7) + "com.y.agent"], "BACKGROUND")
-                sec(L.reportSectionBattery, [L.reportBatterySource("AC Power"), L.reportBatteryCharge("80%"), L.reportBatteryState("charging"), "Cycle Count: 123", "Condition: Normal", "Maximum Capacity: 91%"], "BATTERY")
+                sec(L.reportSectionBattery, [L.reportBatterySource(L.battSourceAC), L.reportBatteryCharge("80%"), L.reportBatteryState(L.battStateCharging), "Cycle Count: 123", "Condition: Normal", "Maximum Capacity: 91%"], "BATTERY")
                 sec(L.reportSectionEnergy, ["Battery Power:", " displaysleep 2", " sleep 1", "AC Power:", " displaysleep 10"], "ENERGY")
                 sec(L.reportSectionSecurity, ["FileVault: On", "Gatekeeper: Off", "SIP: ?", "Firewall: On"], "SECURITY")
                 sec(L.reportSectionTMDest, ["Name          : Backup", "Kind          : Local", "Mount Point   : /Volumes/Backup", "Quota         : 2,0 ТБ", L.reportTMLastBackup("2026-07-03-120000")], "TMDEST")
-                sec("SPOTLIGHT", ["Indexing enabled."], "SPOTLIGHT")
+                sec("SPOTLIGHT", [L.reportCollectorSpotlightEnabled], "SPOTLIGHT")
                 sec(L.reportSectionCrashes, [L.maintenanceCrashRow("diffscore", 3), L.maintenanceCrashRow("Finder", 1)], "CRASHES")
                 sec("HOMEBREW", ["Homebrew 4.6.0", L.reportBrewOutdatedHeader, "git", "node"], "HOMEBREW")
                 sec(L.reportSectionUpdates, ["macOS Tahoe 26.0.1", L.reportUpdatesCheckedAt(u)], "UPDATES")
@@ -355,7 +355,7 @@ extension SerialTests {
                                            "  " + rwCol("Температура:", w) + "35 C",
                                            "  " + rwCol("Критическое предупреждение:", w) + L.reportSmartWarningNone,
                                            "  " + rwCol("Custom Attr:", w) + "7",
-                                           L.reportSmartDiskLine("Ext", "/dev/disk4", "NO ACCESS")], "SMART")
+                                           L.reportSmartDiskLine("Ext", "/dev/disk4", L.reportCollectorSmartUnavailable)], "SMART")
                 sec(L.reportSectionTimings, [L.reportTimingsNote, L.reportTimingsPass("7,0 с"), "  Homebrew: 1,5 с", "  disk:     1,5 с", "  Система:  0,2 с", L.reportTimingsUpdates("30,0 с", u), L.reportTimingsFolderSizes("6,4 с", u)], "TIMINGS")
                 sec(L.reportSectionUnparsed, [L.reportUnparsedHint, "$ ps -axww -o pid=,rss=,time=,comm=", "  garbage", "$ system_profiler -json SPHardwareDataType", "  l1", "  l2", "  l3", "  l4", "  l5", "  l6", "  l7", "  l8", "  " + L.reportUnparsedMoreLines(2)], "UNPARSED")
 
@@ -464,7 +464,7 @@ extension SerialTests {
                 let fb: [(Int64, String)] = [(0, "0 Б"), (1023, "1023 Б"), (1024, "1,0 КБ"), (1536, "1,5 КБ"), (-2048, "-2,0 КБ"),
                                              (5 * tib, "5,0 ТБ"), (1024 * tib, "1024,0 ТБ"), (Int64.min, "-8388608,0 ТБ")]
                 for (n, want) in fb {
-                    let got = ReportWriter.fmtBytes(n)
+                    let got = ReportWriter.fmtBytes(n, language: .ru)
                     #expect(got == want, "ReportWriter: fmtBytes(\(n)) == \(want) (got \(got))")
                 }
                 #expect(ReportWriter.padRight("abc", 5) == "abc  ", "ReportWriter: padRight pads")
@@ -491,7 +491,7 @@ extension SerialTests {
                     ("zz", "zz"), ("0x", "0x"), ("", ""),
                 ]
                 for (raw, want) in sw {
-                    let got = smartCriticalWarningRU(raw)
+                    let got = smartCriticalWarningRU(raw, language: .ru)
                     #expect(got == want, "ReportWriter: smartCriticalWarningRU(\(raw.debugDescription)) (got \(got.debugDescription))")
                 }
 
@@ -531,7 +531,7 @@ extension SerialTests {
                 let originalLang = L10nStore.shared.language
                 defer { L10nStore.shared.language = originalLang }
                 L10nStore.shared.language = .ru
-                let text = ReportWriter.render(fullInput())
+                let text = ReportWriter.render(fullInput(), language: L10nStore.shared.language)
                 do { try ReportWriter.write(text: text, to: file) } catch { Issue.record("ReportWriter: E3 round-trip threw \(error)") }
                 #expect((try? Data(contentsOf: file)) == Data(text.utf8), "ReportWriter: E3 short Cyrillic report round-trips byte-exact")
 

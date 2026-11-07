@@ -267,14 +267,14 @@ final class LiveCollector {
             // Named sourceLabel, not `source`: the enclosing `for source in list` loop
             // variable is the IOKit power-source object, and shadowing it here read as
             // if this were the same thing.
-            let sourceLabel = psState.map { _ in onAC ? L.battSourceAC : L.battSourceBattery }
+            let sourceLabel: BatteryPowerSource? = psState.map { _ in onAC ? .ac : .battery }
 
             let isCharging = desc[kIOPSIsChargingKey as String] as? Bool ?? false
-            var state: String?
-            if let c = charge, c >= 100 { state = L.battStateCharged }
-            else if isCharging { state = L.battStateCharging }
-            else if onAC { state = L.battStateNotCharging }
-            else { state = L.battStateDischarging }
+            var state: BatteryChargeState?
+            if let c = charge, c >= 100 { state = .charged }
+            else if isCharging { state = .charging }
+            else if onAC { state = .notCharging }
+            else { state = .discharging }
 
             return BatteryInfo(source: sourceLabel, charge: charge, state: state,
                                cycles: nil, condition: nil, maxCapacity: nil)

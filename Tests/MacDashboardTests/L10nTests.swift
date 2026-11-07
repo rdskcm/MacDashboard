@@ -77,13 +77,13 @@ extension SerialTests {
                 #expect(L.kpiBatteryLabel == "Battery", "L10nStore: switch .en, kpiBatteryLabel == Battery")
                 #expect(L.kpiBatteryCycles(1) == "1 cycle", "L10nStore: switch .en, kpiBatteryCycles(1) == 1 cycle")
                 #expect(L.kpiBatteryCycles(3) == "3 cycles", "L10nStore: switch .en, kpiBatteryCycles(3) == 3 cycles")
-                #expect(ReportWriter.fmtBytes(1_073_741_824).contains("GB"), "L10nStore: switch .en, fmtBytes(1GiB) contains GB")
+                #expect(ReportWriter.fmtBytes(1_073_741_824, language: .en).contains("GB"), "L10nStore: switch .en, fmtBytes(1GiB) contains GB")
                 #expect(!L.recommendationsAllGood.isEmpty && L.recommendationsAllGood != StringsRU().recommendationsAllGood,
                       "L10nStore: switch .en, recommendationsAllGood non-empty and differs from RU")
 
                 L10nStore.shared.language = .ru
                 #expect(L.kpiBatteryLabel == "Батарея", "L10nStore: switch back .ru, kpiBatteryLabel == Батарея")
-                #expect(ReportWriter.fmtBytes(1_073_741_824).contains("ГБ"), "L10nStore: switch back .ru, fmtBytes(1GiB) contains ГБ")
+                #expect(ReportWriter.fmtBytes(1_073_741_824, language: .ru).contains("ГБ"), "L10nStore: switch back .ru, fmtBytes(1GiB) contains ГБ")
 
                 // launchLanguage is a lazily-initialized static: since it's touched here for
                 // the first time (after the .ru pin at file top), it captures .ru — matching
@@ -105,47 +105,45 @@ extension SerialTests {
             // harness, rather than inside the symlinked engine source.
 
             do {
-                // Pinned .ru at file top: known attribute names and the hardcoded "SMART: OK"
+                // Pinned .ru at file top: known attribute names (the "SMART: OK" row moved to SmartStatus.ok)
                 // status word both translate.
-                #expect(smartLocalizedLabel("Temperature") == "Температура", "smartLocalizedLabel: RU Temperature -> Температура")
-                #expect(smartLocalizedLabel("Percentage Used") == "Процент износа", "smartLocalizedLabel: RU Percentage Used -> Процент износа")
-                #expect(smartLocalizedLabel("Power Cycles") == "Циклов включения", "smartLocalizedLabel: RU Power Cycles -> Циклов включения")
-                #expect(smartLocalizedLabel("Critical Warning") == "Критическое предупреждение", "smartLocalizedLabel: RU Critical Warning -> Критическое предупреждение")
-                #expect(smartLocalizedLabel("Available Spare") == "Резервная ёмкость", "smartLocalizedLabel: RU Available Spare -> Резервная ёмкость")
-                #expect(smartLocalizedLabel("Power On Hours") == "Часов наработки", "smartLocalizedLabel: RU Power On Hours -> Часов наработки")
-                #expect(smartLocalizedLabel("Unsafe Shutdowns") == "Некорректных выключений", "smartLocalizedLabel: RU Unsafe Shutdowns -> Некорректных выключений")
-                #expect(smartLocalizedLabel("Media and Data Integrity Errors") == "Ошибок целостности данных", "smartLocalizedLabel: RU Media and Data Integrity Errors -> Ошибок целостности данных")
-                #expect(smartLocalizedLabel("Error Information Log Entries") == "Записей в журнале ошибок", "smartLocalizedLabel: RU Error Information Log Entries -> Записей в журнале ошибок")
-                #expect(smartLocalizedLabel("SMART: OK") == "SMART: в норме", "smartLocalizedLabel: RU SMART: OK -> SMART: в норме")
+                #expect(smartLocalizedLabel("Temperature", language: .ru) == "Температура", "smartLocalizedLabel: RU Temperature -> Температура")
+                #expect(smartLocalizedLabel("Percentage Used", language: .ru) == "Процент износа", "smartLocalizedLabel: RU Percentage Used -> Процент износа")
+                #expect(smartLocalizedLabel("Power Cycles", language: .ru) == "Циклов включения", "smartLocalizedLabel: RU Power Cycles -> Циклов включения")
+                #expect(smartLocalizedLabel("Critical Warning", language: .ru) == "Критическое предупреждение", "smartLocalizedLabel: RU Critical Warning -> Критическое предупреждение")
+                #expect(smartLocalizedLabel("Available Spare", language: .ru) == "Резервная ёмкость", "smartLocalizedLabel: RU Available Spare -> Резервная ёмкость")
+                #expect(smartLocalizedLabel("Power On Hours", language: .ru) == "Часов наработки", "smartLocalizedLabel: RU Power On Hours -> Часов наработки")
+                #expect(smartLocalizedLabel("Unsafe Shutdowns", language: .ru) == "Некорректных выключений", "smartLocalizedLabel: RU Unsafe Shutdowns -> Некорректных выключений")
+                #expect(smartLocalizedLabel("Media and Data Integrity Errors", language: .ru) == "Ошибок целостности данных", "smartLocalizedLabel: RU Media and Data Integrity Errors -> Ошибок целостности данных")
+                #expect(smartLocalizedLabel("Error Information Log Entries", language: .ru) == "Записей в журнале ошибок", "smartLocalizedLabel: RU Error Information Log Entries -> Записей в журнале ошибок")
+                #expect(SmartStatus.ok.text(StringsRU()) == "SMART: в норме", "SmartStatus.ok: RU -> SMART: в норме")
 
                 // Unknown/unrecognized input passes through unchanged — no crash, no blank output.
-                #expect(smartLocalizedLabel("Some Unknown Attr") == "Some Unknown Attr", "smartLocalizedLabel: RU unknown attr passes through unchanged")
-                #expect(smartLocalizedLabel("") == "", "smartLocalizedLabel: RU empty string passes through unchanged")
+                #expect(smartLocalizedLabel("Some Unknown Attr", language: .ru) == "Some Unknown Attr", "smartLocalizedLabel: RU unknown attr passes through unchanged")
+                #expect(smartLocalizedLabel("", language: .ru) == "", "smartLocalizedLabel: RU empty string passes through unchanged")
 
                 // Already-localized status strings (baked at collection time by ReportCollector,
                 // e.g. "SMART: в норме (проверено)") are not in the lookup table and pass through too.
-                #expect(smartLocalizedLabel(L.reportCollectorSmartOkVerified) == L.reportCollectorSmartOkVerified,
+                #expect(smartLocalizedLabel(L.reportCollectorSmartOkVerified, language: .ru) == L.reportCollectorSmartOkVerified,
                       "smartLocalizedLabel: RU already-localized status word passes through unchanged")
             }
 
             do {
                 L10nStore.shared.language = .en
-                #expect(smartLocalizedLabel("Temperature") == "Temperature", "smartLocalizedLabel: EN Temperature -> Temperature")
-                #expect(smartLocalizedLabel("Percentage Used") == "Percentage Used", "smartLocalizedLabel: EN Percentage Used -> Percentage Used")
-                #expect(smartLocalizedLabel("Power Cycles") == "Power Cycles", "smartLocalizedLabel: EN Power Cycles -> Power Cycles")
-                #expect(smartLocalizedLabel("Critical Warning") == "Critical Warning", "smartLocalizedLabel: EN Critical Warning -> Critical Warning")
-                #expect(smartLocalizedLabel("SMART: OK") == "SMART: OK", "smartLocalizedLabel: EN SMART: OK -> SMART: OK")
+                #expect(smartLocalizedLabel("Temperature", language: .en) == "Temperature", "smartLocalizedLabel: EN Temperature -> Temperature")
+                #expect(smartLocalizedLabel("Percentage Used", language: .en) == "Percentage Used", "smartLocalizedLabel: EN Percentage Used -> Percentage Used")
+                #expect(smartLocalizedLabel("Power Cycles", language: .en) == "Power Cycles", "smartLocalizedLabel: EN Power Cycles -> Power Cycles")
+                #expect(smartLocalizedLabel("Critical Warning", language: .en) == "Critical Warning", "smartLocalizedLabel: EN Critical Warning -> Critical Warning")
+                #expect(SmartStatus.ok.text(StringsEN()) == "SMART: OK", "SmartStatus.ok: EN -> SMART: OK")
 
                 // Cross-language sanity: a label that differs meaningfully between RU/EN really
                 // does differ (guards against the dict silently falling back to raw/no-op).
-                L10nStore.shared.language = .ru
-                let ru = smartLocalizedLabel("Temperature")
-                L10nStore.shared.language = .en
-                let en = smartLocalizedLabel("Temperature")
+                let ru = smartLocalizedLabel("Temperature", language: .ru)
+                let en = smartLocalizedLabel("Temperature", language: .en)
                 #expect(ru != en, "smartLocalizedLabel: Temperature differs between RU and EN")
 
                 // Pass-through for unknown input holds in EN too.
-                #expect(smartLocalizedLabel("Some Unknown Attr") == "Some Unknown Attr", "smartLocalizedLabel: EN unknown attr passes through unchanged")
+                #expect(smartLocalizedLabel("Some Unknown Attr", language: .en) == "Some Unknown Attr", "smartLocalizedLabel: EN unknown attr passes through unchanged")
 
                 L10nStore.shared.language = .ru
             }

@@ -275,14 +275,14 @@ extension SerialTests {
                 do {
                     var report = FullReport()
                     report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: systemCrashDir)]
-                    let a = Assess.assess(report: report, live: LiveSnapshot())
+                    let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
                     #expect(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
                           "assess crashes: an own-app crash found in the SYSTEM directory reveals the system directory")
                 }
                 do {
                     var report = FullReport()
                     report.crashes = [CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
-                    let a = Assess.assess(report: report, live: LiveSnapshot())
+                    let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
                     #expect(a.items.first { $0.kind == .crashes }?.action == .revealPath(userCrashDir),
                           "assess crashes: an own-app crash found in the PER-USER directory reveals the per-user directory")
                 }
@@ -291,7 +291,7 @@ extension SerialTests {
                     var report = FullReport()
                     report.crashes = [CrashGroup(process: "diffscore", count: 6, directory: userCrashDir),
                                       CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir)]
-                    let a = Assess.assess(report: report, live: LiveSnapshot())
+                    let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
                     #expect(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
                           "assess crashes: the target comes from the first RAISING group, not the first group")
                     #expect(a.problems.first { $0.text == L.assessKernelPanicsRecent(2) }?.action == .revealPath(systemCrashDir),
@@ -302,7 +302,7 @@ extension SerialTests {
                     var report = FullReport()
                     report.crashes = [CrashGroup(process: "Kernel", count: 2, isPanic: true, directory: systemCrashDir),
                                       CrashGroup(process: AppInfo.name, count: 1, directory: userCrashDir)]
-                    let a = Assess.assess(report: report, live: LiveSnapshot())
+                    let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
                     #expect(a.items.first { $0.kind == .crashes }?.action == .revealPath(systemCrashDir),
                           "assess crashes: raising groups from two directories -> the leading group's directory")
                 }

@@ -1,8 +1,8 @@
 // Engine/LaunchdPlistInspector.swift
 // Pure parsing/inspection of launchd .plist files (LaunchAgents/LaunchDaemons):
 // resolves the executable a plist points at, decides whether that executable is
-// orphaned (its backing app/binary was removed), and attaches a short human-readable
-// description of the agent (curated dictionary, falling back to a reverse-DNS
+// orphaned (its backing app/binary was removed), and offers a short human-readable
+// description of the agent by label (curated dictionary, falling back to a reverse-DNS
 // heuristic). Foundation-only — also covered by Tests/MacDashboardTests.
 import Foundation
 
@@ -12,7 +12,6 @@ struct LaunchdPlistInfo: Equatable {
     var label: String?
     var executablePath: String?
     var isOrphan: Bool
-    var description: String?
 }
 
 /// Outcome of one plist delete attempt. Hoisted out of `AppModel` (where
@@ -148,9 +147,10 @@ enum LaunchdPlistInspector {
 
     // MARK: - E. Public entry point
 
-    /// Parses `plistData`, resolves its executable, checks orphan status and attaches
-    /// a description, tying A–D together into one `LaunchdPlistInfo`.
-    static func inspect(plistPath: String, plistData: Data, language: AppLanguage) -> LaunchdPlistInfo {
+    /// Parses `plistData`, resolves its executable and checks orphan status, tying A–D
+    /// together into one `LaunchdPlistInfo`. The description is not stored: the view edge
+    /// looks it up from `label` with `description(forLabel:language:)` (ARCH-TEXT-EDGE).
+    static func inspect(plistPath: String, plistData: Data) -> LaunchdPlistInfo {
         let dict = decode(plistData: plistData) ?? [:]
         let plistLabel = label(from: dict)
         let execPath = executablePath(from: dict)
@@ -158,8 +158,7 @@ enum LaunchdPlistInspector {
             path: plistPath,
             label: plistLabel,
             executablePath: execPath,
-            isOrphan: isOrphan(executablePath: execPath),
-            description: description(forLabel: plistLabel, language: language))
+            isOrphan: isOrphan(executablePath: execPath))
     }
 
     // MARK: - F. Deletion-target validation
