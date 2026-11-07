@@ -11,7 +11,7 @@ exists because per-frame animation work cannot be seen by the offscreen harness 
 
 ```
 tools/perf/gate.sh [--app PATH] [--baseline PATH] [--scenarios LIST] [--runs N] [--out DIR]
-                   [--keep-traces] [--g1-max PCT]
+                   [--keep-traces] [--g1-max PCT] [--g9-max PCT]
 tools/perf/gate.sh -h
 ```
 
@@ -29,6 +29,7 @@ cd MacDashboard && ./build_app.sh && tools/perf/gate.sh --baseline tools/perf/ou
 - `--out` must be inside `tools/perf/out/` (gitignored); default `tools/perf/out/<stamp>`. A reused `--out` keeps the previous `summary`/`report`/`runs` files under a time-stamped name.
 - `--keep-traces` keeps the `.trace` bundles and exported XML (10-60 MB each). `*-analysis.txt` is always kept.
 - `--g1-max` is the absolute G1 app CPU limit: 5.6 (the level before C7), 2.5 after the process-list fix.
+- `--g9-max` is the absolute G9 (CPU page idle) app CPU limit: 6.5, the accepted CPU-page idle cost after SOC-DETAILS (#180); G9 shared `--g1-max` until 2026-11-08.
 
 Outputs in the run directory: `summary.tsv` (`scenario arm run metric value threshold verdict`),
 `report.md` (one table per scenario, power log, ERROR scenarios, defaults verdict), `power.log`, `*-analysis.txt`,
@@ -70,7 +71,7 @@ All run on the synthetic bench home with the window pinned to 1000x733 pt at (0,
 | G10 | Home, window width 1060 ↔ 940 pt twice at 60 Hz via AX (`drv resize`), four crossings of the 1000 pt tier | Time Profiler, Hitches | hitches, ms, main busy total; report-only `sweep_wall_s`, `app_cpu_s`, `ws_cpu_s` (the sweep call only; approximate: CPU-s = `top` mean % × wall with `top` at 1 Hz; `n/a` when no sample of that process fell inside the window) |
 Retired: G8 (System page breathing Outdated capsule) — PERF-GATE-RETARGET, after REDESIGN-SYSTEM removed the capsule.
 
-Limits: G1 and G9 app % <= `--g1-max`; G3 median <= 25 ms/s; G4 hitches/s <= 3, median <= 400 ms/s; G5 `capsule` commits/s median <= 60 and
+Limits: G1 app % <= `--g1-max`; G9 app % <= `--g9-max`; G3 median <= 25 ms/s; G4 hitches/s <= 3, median <= 400 ms/s; G5 `capsule` commits/s median <= 60 and
 `capsule` app % <= control + 3; G6 `shade_conic` = 0. Every metric is the median over the runs of an arm. Regression rule against `--baseline`:
 the candidate median must not exceed the baseline median by more than the margin (hitches + 3 for G3 G4 G6 G7 GP; main busy total x 1.15 for
 G4 G6 G7 GP; app % + 0.5 for G1 G3 G9). A row over its margin is FAIL only when the exact one-sided Mann-Whitney test gives p <= 0.05

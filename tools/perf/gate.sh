@@ -4,7 +4,7 @@
 # the Mac while it runs. See tools/perf/README.md.
 #
 # Usage: gate.sh [--app PATH] [--baseline PATH] [--scenarios G1,G2,...] [--runs N] [--out DIR]
-#                [--keep-traces] [--g1-max PCT]
+#                [--keep-traces] [--g1-max PCT] [--g9-max PCT]
 #   --app        bundle under test (default dist.noindex/MacDashboard.app)
 #   --baseline   pre-block bundle, built from the PERF-GATE-RETARGET merge or later (README §2); candidate and baseline runs alternate A,B,A,B,...
 #   --scenarios  G1..G7, G9, G10, GP:<page> (pages: cpu memory storage battery security backups system history), or
@@ -13,7 +13,8 @@
 #   --runs       runs per scenario and arm, 1-7 (default 3)
 #   --out        run directory, must be inside tools/perf/out/ (default tools/perf/out/<stamp>)
 #   --keep-traces  keep .trace bundles and exported XML (10-60 MB each)
-#   --g1-max     absolute G1 app CPU limit in % (default 5.6, the level before C7; 2.5 after Step 7)
+#   --g1-max     absolute G1 (Home idle) app CPU limit in % (default 5.6, the level before C7; 2.5 after Step 7)
+#   --g9-max     absolute G9 (CPU page idle) app CPU limit in % (default 6.5: the accepted CPU-page idle cost after SOC-DETAILS #180, median ~5.6 with runs up to 6.2)
 #   -h, --help   this text
 # Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed
 #       during the run | 5 ERROR: at least one scenario not measured (an AX element was still missing after one
@@ -40,6 +41,7 @@ RUNS=""
 OUT=""
 KEEP=0
 G1_MAX="5.6"
+G9_MAX="6.5"
 
 NPASS=0; NFAIL=0; NNOISY=0; INVALID=0; NERROR=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0; VERDICT_DONE=0
 PIDS=""; HOMEDIR=""; BIN=""; PID=""; CAND_APP=""; BASE_APP=""; CUR_PREFIX=""; POS_CHECK=0
@@ -108,6 +110,7 @@ while [ $# -gt 0 ]; do
     --runs)       need "$@"; RUNS="$2"; shift 2 ;;
     --out)        need "$@"; OUT="$2"; shift 2 ;;
     --g1-max)     need "$@"; G1_MAX="$2"; shift 2 ;;
+    --g9-max)     need "$@"; G9_MAX="$2"; shift 2 ;;
     --keep-traces) KEEP=1; shift ;;
     -h|--help)    QUIET_EXIT=1; usage; exit 0 ;;
     *)            usage >&2; fatal 64 "unknown argument: $1" ;;
@@ -126,6 +129,7 @@ if [ -n "$BASELINE" ]; then
 fi
 case "$RUNS" in ""|[1-7]) ;; *) fatal 64 "--runs must be 1-7" ;; esac
 case "$G1_MAX" in *[!0-9.]*|"") fatal 64 "--g1-max must be a number" ;; esac
+case "$G9_MAX" in *[!0-9.]*|"") fatal 64 "--g9-max must be a number" ;; esac
 
 # scenario list -> work items
 [ -n "$SCENARIOS" ] || SCENARIOS="G1,G2,G3,G4,G5,G6,G7,G9"
@@ -724,7 +728,7 @@ if ! cmp -s "$OUT/defaults-before.plist" "$OUT/defaults-after.plist"; then
 fi
 
 if [ -s "$OUT/runs.tsv" ]; then
-  COUNTS="$(python3 -I "$PERF/analyze.py" verdict "$OUT" --g1-max "$G1_MAX" | sed -n 's/^COUNTS //p')" || fatal 70 "analyze.py verdict failed"
+  COUNTS="$(python3 -I "$PERF/analyze.py" verdict "$OUT" --g1-max "$G1_MAX" --g9-max "$G9_MAX" | sed -n 's/^COUNTS //p')" || fatal 70 "analyze.py verdict failed"
   NPASS="$(sed -n 's/.*pass=\([0-9]*\).*/\1/p' <<< "$COUNTS")"
   NFAIL="$(sed -n 's/.*fail=\([0-9]*\).*/\1/p' <<< "$COUNTS")"
   NNOISY="$(sed -n 's/.*noisy=\([0-9]*\).*/\1/p' <<< "$COUNTS")"

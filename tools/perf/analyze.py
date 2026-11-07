@@ -16,7 +16,7 @@
       Mean app % and WindowServer % from the sampler output of gate.sh (first sample dropped), optionally
       restricted to the samples whose interval centre lies in [t0, t1).
       Exits 2 when no sample of <pid> falls in the window (ws_pct is printed only when WindowServer was sampled).
-  analyze.py verdict <out-dir> [--g1-max PCT]
+  analyze.py verdict <out-dir> [--g1-max PCT] [--g9-max PCT]
       Reads <out-dir>/runs.tsv, writes summary.tsv, appends the per-scenario tables to report.md, prints
       `COUNTS pass=<k> fail=<m> noisy=<j>`.
       A scenario in runs.tsv whose candidate lacks a metric that has an absolute rule, or a regression rule with a
@@ -608,7 +608,8 @@ def cmd_selftest(args):
             sys.exit(1)
     print("selftest ok")
 
-# (scenario, metric) -> (op, limit). Candidate arm only. `G1_MAX` is filled from --g1-max.
+# (scenario, metric) -> (op, limit). Candidate arm only. `G1_MAX` is filled from --g1-max,
+# `G9_MAX` (G9 app_pct) from --g9-max.
 ABS = {
     ("G3", "main_busy_median_ms_s"): ("<=", 25.0),
     ("G4", "hitches_per_s"): ("<=", 3.0),
@@ -652,14 +653,17 @@ def check(op, value, limit):
 
 def cmd_verdict(argv):
     if not argv:
-        die("usage: analyze.py verdict <out-dir> [--g1-max PCT]")
+        die("usage: analyze.py verdict <out-dir> [--g1-max PCT] [--g9-max PCT]")
     out = argv[0]
     g1max = 5.6
     if "--g1-max" in argv:
         g1max = float(argv[argv.index("--g1-max") + 1])
+    g9max = 6.5
+    if "--g9-max" in argv:
+        g9max = float(argv[argv.index("--g9-max") + 1])
     rules = dict(ABS)
     rules[("G1", "app_pct")] = ("<=", g1max)
-    rules[("G9", "app_pct")] = ("<=", g1max)
+    rules[("G9", "app_pct")] = ("<=", g9max)
 
     runs_path = os.path.join(out, "runs.tsv")
     if not os.path.exists(runs_path):
