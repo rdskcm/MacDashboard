@@ -94,12 +94,17 @@ struct SocReadoutChip: View {
             .animation(tintAnimation, value: tone)
     }
 
+    /// The value, then the word raised so its x-height middle is level with the digits' middle, as one Text.
+    private func temperatureText(_ t: SocReadout.Temperature) -> Text {
+        guard let word = t.word else { return Text(t.value) }
+        return Text("\(Text(t.value))\(Text(" \(word)").baselineOffset(Self.segmentWordLift))")
+    }
+
     private func temperature(_ t: SocReadout.Temperature?, tone: CPUNoteTone) -> some View {
         HStack(spacing: 7) {
             if let t {
                 SocTemperatureGauge(zone: t.zone, markerX: t.markerX, width: 30)
-                // The word is raised so its x-height middle is level with the digits' middle.
-                (Text(t.value) + (t.word.map { Text(" \($0)").baselineOffset(Self.segmentWordLift) } ?? Text("")))
+                temperatureText(t)
                     .foregroundStyle(tone.ink)
             } else {
                 Text("—").foregroundStyle(DS3.muted)

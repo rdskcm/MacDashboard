@@ -291,7 +291,7 @@ extension SerialTests {
                     let until = Date().addingTimeInterval(3)
                     while Date() < until {
                         if kill(pid, 0) == -1 && errno == ESRCH { gone = true; break }
-                        Thread.sleep(forTimeInterval: 0.05)
+                        try? await Task.sleep(for: .milliseconds(50))
                     }
                     #expect(gone, Comment(rawValue: T + "stub sleep pid \(pid) was killed with its group"))
                 }
@@ -306,7 +306,7 @@ extension SerialTests {
                 try sleeper.run()
                 let pid = sleeper.processIdentifier
                 // Give proc_listpids a moment to see the freshly spawned child.
-                Thread.sleep(forTimeInterval: 0.2)
+                try? await Task.sleep(for: .milliseconds(200))
                 let descendants = ProcessSampler.descendantPIDs(of: getpid())
                 #expect(descendants.contains(pid), "descendantPIDs: freshly spawned child is a descendant of our pid")
                 #expect(!descendants.contains(getpid()), "descendantPIDs: our own pid is excluded")

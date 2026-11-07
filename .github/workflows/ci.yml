@@ -53,10 +53,13 @@ jobs:
       - name: Select the newest Xcode (>= 26)
         uses: ./.github/actions/select-xcode
 
-      - name: swift build (all targets, including tests)
-        # CI-SPEED: the only compile in this run. --build-tests builds MacDashboard and
-        # MacDashboardTests; the test step below reuses it via --skip-build and never compiles.
-        run: swift build --build-tests
+      - name: Build all targets, failing on any warning
+        # CI-SPEED: the only compile in this run. BUILD-WARNINGS: tools/check-warnings.sh builds
+        # MacDashboard and MacDashboardTests (debug) from an empty scratch directory with Swift
+        # warnings as errors and linker warnings fatal, and fails on any other warning line. The
+        # same command reproduces this step on a Mac: `tools/check-warnings.sh`.
+        # The test step below reuses this build via --skip-build and never compiles.
+        run: tools/check-warnings.sh "$RUNNER_TEMP/build"
 
       - name: Run swift-testing suite (MacDashboardTests)
         # The only test gate (CHECKS-SWIFT-TESTING). Needs the Testing module that ships with
@@ -66,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           log="${RUNNER_TEMP}/swift-test.log"
-          swift test --skip-build 2>&1 | tee "$log"
+          swift test --skip-build --scratch-path "$RUNNER_TEMP/build" 2>&1 | tee "$log"
           n="$(grep -Eo 'Test run with [0-9]+ test' "$log" | grep -Eo '[0-9]+' | tail -1 || true)"
           echo "swift-testing tests run: ${n:-none}"
           [ "${n:-0}" -gt 0 ] || { echo "::error::swift test ran no swift-testing tests"; exit 1; }

@@ -30,9 +30,9 @@ fi
 echo "== toolchain =="
 # The LC_BUILD_VERSION `sdk` field of the binary decides which appearance macOS
 # gives the app (an old sdk => old compatibility look), so it must record the SDK
-# this script really compiled against. Three flags make that hold (V27-TOOLCHAIN):
-#   --build-system native  the default `swiftbuild` system injects its own -sdk next
-#                          to ours (duplicate -sdk => mixed-SDK link failures)
+# this script really compiled against. Two flags make that hold (V27-TOOLCHAIN):
+#   (default build system) BUILD-WARNINGS (2026-11): no duplicate-SDK failure any more;
+#                          --build-system native, deprecated by SwiftPM, was dropped.
 #   -Xswiftc -sdk          compile against exactly $SDK_PATH
 #   -platform_version      with --triple alone, ld records sdk == minos ($MIN_MACOS)
 # The check under "== result ==" fails the build if the recorded value drifts.
@@ -51,12 +51,12 @@ echo "== swift build (Apple Silicon, arm64) =="
 # Apple Silicon only: Intel Macs stay on v2.1. --triple pins the architecture and
 # the deployment target independently of the host this script runs on.
 EXPECTED_ARCH="arm64"
-BIN=".build/$EXPECTED_ARCH-apple-macosx/release/MacDashboard"
-
-swift build -c release --product MacDashboard --build-system native \
-  --triple "$EXPECTED_ARCH-apple-macosx$MIN_MACOS" \
-  -Xswiftc -sdk -Xswiftc "$SDK_PATH" \
-  -Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_MACOS" -Xlinker "$SDK_VERSION"
+SWIFT_BUILD_ARGS=(-c release --product MacDashboard
+  --triple "$EXPECTED_ARCH-apple-macosx$MIN_MACOS"
+  -Xswiftc -sdk -Xswiftc "$SDK_PATH"
+  -Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_MACOS" -Xlinker "$SDK_VERSION")
+swift build "${SWIFT_BUILD_ARGS[@]}"
+BIN="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)/MacDashboard"
 [ -x "$BIN" ] || { echo "binary not found: $BIN" >&2; exit 1; }
 
 echo "== LaunchServices: drop stale registrations =="

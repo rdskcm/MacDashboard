@@ -94,7 +94,7 @@ final class BrewController {
 
         let before = host.read().brewOutdated ?? []
         let upgrade = deps.upgrade
-        let onProgress: @Sendable (BrewProgress) -> Void = { p in
+        let onProgress: @Sendable (BrewProgress) -> Void = { [weak self] p in
             Task { @MainActor [weak self] in self?.receive(p) }
         }
         let run = Task { await upgrade(before.count, onProgress) }

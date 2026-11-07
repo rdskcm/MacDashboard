@@ -32,6 +32,9 @@ swift test
 This must stay green before you open a PR. It needs Xcode (the `Testing` module ships
 with it, not with bare Command Line Tools).
 
+CI also fails on any build warning in the app or the tests. `tools/check-warnings.sh`
+runs the same check on your Mac: a clean debug build of both, with warnings as errors.
+
 Tests live in `Tests/MacDashboardTests/` and reach the app's code through
 `@testable import MacDashboard`, so anything `internal` is testable; `private` and
 `fileprivate` helpers are not, so put a helper you want covered in a non-private
