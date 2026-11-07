@@ -712,12 +712,3 @@ func updatesAgeString(checkedAt: Date, now: Date = Date()) -> String {
     if age < 86_400 { return L.updatesCheckedAgo("\(Int(age / 3600)) \(L.uptimeUnitHour)") }
     return L.updatesCheckedAgo("\(Int(age / 86_400)) \(L.uptimeUnitDay)")
 }
-
-/// Age of the cached folder sizes for the Folders card. Future or < 60 s => "just now".
-func folderSizesAgeString(countedAt: Date, now: Date = Date()) -> String {
-    let age = now.timeIntervalSince(countedAt)
-    if age < 60 { return L.foldersCountedJustNow }
-    if age < 3600 { return L.foldersCountedAgo("\(Int(age / 60)) \(L.uptimeUnitMinute)") }
-    if age < 86_400 { return L.foldersCountedAgo("\(Int(age / 3600)) \(L.uptimeUnitHour)") }
-    return L.foldersCountedAgo("\(Int(age / 86_400)) \(L.uptimeUnitDay)")
-}

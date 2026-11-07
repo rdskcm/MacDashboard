@@ -6,7 +6,7 @@ import Testing
 
 struct NotificationEngineTests {
     private func item(_ k: AttentionKind, detail: String = "") -> AttentionItem {
-        AttentionItem(kind: k, sev: .warn, label: k.rawValue, detail: detail, fullText: "t", verb: "")
+        AttentionItem(kind: k, sev: .warn, label: k.rawValue, detail: detail, fullText: "t")
     }
     private let all = Set(NotifyCategory.allCases)
     private let t0 = Date(timeIntervalSinceReferenceDate: 800_000_000)

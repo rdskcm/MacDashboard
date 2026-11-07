@@ -192,7 +192,7 @@ struct ProcessListCard: View {
                         // its own `openAmount`/`.onGeometryChange`/single
                         // `withAnimation` disclosure replaces the old
                         // `.transition` + this container's `.animation(value:
-                        // expandedPID)`, matching `QuietStripRow`.
+                        // expandedPID)`, matching the former QuietStripRow (removed in DEAD-CODE-SWEEP, see 66ce72b).
                         if !memoryPage {
                             ProcessDetailView(
                                 model: model, row: row, isOpen: isOpen,
@@ -419,7 +419,7 @@ private struct ProcessDetailView: View {
         _quitting = State(initialValue: fixture?.phase == .quitting)
         // Seeds `openAmount` from the CURRENT `isOpen` (never true on first
         // mount here — a row is only ever mounted collapsed — but mirrors the
-        // seeding idiom of `QuietStripRow` so this stays
+        // seeding idiom of the former QuietStripRow so this stays
         // correct if that assumption ever changes) instead of defaulting to 0
         // and animating in on the next tick.
         _openAmount = State(initialValue: isOpen ? 1 : 0)
@@ -453,7 +453,7 @@ private struct ProcessDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Single source of truth for the disclosure's progress, 0 = fully
-    /// closed, 1 = fully open — same recipe as `QuietStripRow.openAmount`:
+    /// closed, 1 = fully open — same recipe as the former QuietStripRow.openAmount:
     /// permanently mounted, height/opacity/offset are pure functions of this
     /// one value, committed by a single explicit `withAnimation` in
     /// `.onChange(of: isOpen)` below — replaces the old `if expandedPID ==
@@ -461,7 +461,7 @@ private struct ProcessDetailView: View {
     /// `.animation(value: expandedPID)` (V2-FIX-PROCESS-ROWS).
     @State private var openAmount: Double
     /// Natural (fully-expanded) height of the panel, captured via
-    /// `.onGeometryChange` — see `QuietStripRow.measuredHeight` for the full
+    /// `.onGeometryChange` — see the former QuietStripRow.measuredHeight for the full
     /// root-cause writeup.
     @State private var measuredHeight: CGFloat?
 
@@ -645,7 +645,7 @@ private struct ProcessDetailView: View {
         .clipShape(BleedRect(top: 8, leading: 8, trailing: 8))
         .opacity(openAmount)
         .offset(y: reduceMotion ? 0 : DSMotion.discloseRiseY * (1 - openAmount))
-        // Outer backstop clip — same rationale as `QuietStripRow`'s (see its
+        // Outer backstop clip — same rationale as the former QuietStripRow's (see its
         // comment above its own second `.clipShape(BleedRect(leading:trailing:))`):
         // the inner clip above is itself offset upward by up to
         // `DSMotion.discloseRiseY` while collapsing/collapsed, so an

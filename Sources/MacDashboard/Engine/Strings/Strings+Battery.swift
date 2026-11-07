@@ -7,7 +7,6 @@ protocol BatteryStrings {
     // MARK: Energy card
     var energyValueOn: String { get }
     var energyValueOff: String { get }
-    func energyApply(_ n: Int) -> String
 
     // MARK: Battery page (REDESIGN-BATTERY; strings.json › Battery + 06-battery.md)
     var batteryLoadingText: String { get }
@@ -44,7 +43,6 @@ protocol BatteryStrings {
     var batteryChargeCurrentLabel: String { get }
     var batteryChargeStatus: String { get }
     func batteryAdapterUsbC(_ watts: Int) -> String
-    func batteryAdapterWattsSuffix(_ watts: Int) -> String
     var batteryAdapterWireless: String { get }
     func batteryUsbPdLine(_ v: String, _ a: String) -> String
     var batteryStatusFullyCharged: String { get }
@@ -97,7 +95,6 @@ extension StringsEN: BatteryStrings {
     // MARK: Energy card
     var energyValueOn: String { "on" }
     var energyValueOff: String { "off" }
-    func energyApply(_ n: Int) -> String { "Apply (\(n))" }
 
     // MARK: Battery page (REDESIGN-BATTERY; strings.json › Battery + 06-battery.md)
     var batteryLoadingText: String { "Reading battery data…" }
@@ -134,7 +131,6 @@ extension StringsEN: BatteryStrings {
     var batteryChargeCurrentLabel: String { "Charging current" }
     var batteryChargeStatus: String { "Status" }
     func batteryAdapterUsbC(_ watts: Int) -> String { "USB-C · \(watts) W" }
-    func batteryAdapterWattsSuffix(_ watts: Int) -> String { " (\(watts) W)" }
     var batteryAdapterWireless: String { ", wireless" }
     func batteryUsbPdLine(_ v: String, _ a: String) -> String { "USB PD · \(v) V × \(a) A" }
     var batteryStatusFullyCharged: String { "Charged" }
@@ -187,7 +183,6 @@ extension StringsRU: BatteryStrings {
     // MARK: Energy card
     var energyValueOn: String { "вкл" }
     var energyValueOff: String { "выкл" }
-    func energyApply(_ n: Int) -> String { "Применить (\(n))" }
 
     // MARK: Battery page (REDESIGN-BATTERY; strings.json › Battery + 06-battery.md)
     var batteryLoadingText: String { "Читаем данные батареи…" }
@@ -224,7 +219,6 @@ extension StringsRU: BatteryStrings {
     var batteryChargeCurrentLabel: String { "Ток зарядки" }
     var batteryChargeStatus: String { "Статус" }
     func batteryAdapterUsbC(_ watts: Int) -> String { "USB-C · \(watts) Вт" }
-    func batteryAdapterWattsSuffix(_ watts: Int) -> String { " (\(watts) Вт)" }
     var batteryAdapterWireless: String { ", беспроводной" }
     func batteryUsbPdLine(_ v: String, _ a: String) -> String { "USB PD · \(v) В × \(a) А" }
     var batteryStatusFullyCharged: String { "Заряжена" }

@@ -11,7 +11,6 @@ struct GPUProcessRow: Identifiable, Equatable {
     let name: String
     /// Share of the elapsed time, 0...100 with 1 decimal shown by the view; nil → "—" (implausible, above 101).
     let sharePct: Double?
-    let lifetimeNs: UInt64
 }
 
 enum GPUClientRanking {
@@ -55,7 +54,7 @@ enum GPUClientRanking {
         }
         return candidates.prefix(rowCount).map {
             GPUProcessRow(id: $0.pid, name: $0.name,
-                          sharePct: $0.share > implausibleAbovePct ? nil : $0.share, lifetimeNs: $0.lifetime)
+                          sharePct: $0.share > implausibleAbovePct ? nil : $0.share)
         }
     }
 

@@ -10,7 +10,7 @@ struct RimLightTests {
     static let g = SIMD3<Double>(34, 33, 31) / 255
 
     private func rgba(_ b: OrbBitmap, width: Int? = nil, height: Int? = nil) -> [UInt8] {
-        let w = width ?? b.sidePx, h = height ?? b.sidePx
+        let w = width ?? IOSurfaceGetWidth(b.surface), h = height ?? IOSurfaceGetHeight(b.surface)
         IOSurfaceLock(b.surface, .readOnly, nil)
         defer { IOSurfaceUnlock(b.surface, .readOnly, nil) }
         let base = IOSurfaceGetBaseAddress(b.surface).assumingMemoryBound(to: UInt8.self)
@@ -77,7 +77,6 @@ struct RimLightTests {
 
     @Test func spriteBitmap() throws {
         let b = try #require(RimLight.render(h: 40, scale: 1, ground: Self.g))
-        #expect(b.sidePx == 400)
         #expect(IOSurfaceGetWidth(b.surface) == 400 && IOSurfaceGetHeight(b.surface) == 400)
         #expect(IOSurfaceGetPixelFormat(b.surface) == OrbBitmap.pixelFormatBGRA)
         let bytes = rgba(b)

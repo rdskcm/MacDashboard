@@ -61,8 +61,4 @@ enum DS3SliceGeometry {
     static func fixedAxis(_ extent: CGFloat, _ n: NineSlice, scale: CGFloat) -> Int? {
         extent >= 2 * n.core + 2 ? nil : Int((extent * scale).rounded())
     }
-
-    static func ringMask(cornerRadius: CGFloat) -> NineSlice {
-        NineSlice(core: ceil(1.6 * cornerRadius) + 2, bleed: 0)
-    }
 }

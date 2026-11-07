@@ -1,7 +1,7 @@
 // Views/BrewUpgradeConfirm.swift
 // Confirmation gate for `brew upgrade` (SPEC §1.6 row 5, block V2-ACTION-GATES).
 // The action has TWO entry points — the Обслуживание системы card button and the
-// attention card's Homebrew capsule — so the dialog and its message builder live
+// Homebrew attention item on the Home attention card — so the dialog and its message builder live
 // here once and both sites attach the modifier. Shaped like `AdviceActionDialogs`
 // in AdviceActionDispatch.swift: private ViewModifier + an `extension View` verb.
 

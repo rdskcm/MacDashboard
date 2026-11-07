@@ -124,18 +124,18 @@ extension SerialTests {
             // Part 1: reassess runs at all (no automatic reassess on a plain field write).
             s.lowSpacePercent = 15                     // reassesses now, with no disk reading: no warning
             m.disk = DiskInfo(size: 100 * GIB, avail: 12 * GIB)
-            #expect(m.assessment.diskSev != .warn)
+            #expect(!m.assessment.items.contains { $0.kind == .diskFullSoon })
             m.reportHost.reassess()
-            #expect(m.assessment.diskSev == .warn)
+            #expect(m.assessment.items.contains { $0.kind == .diskFullSoon })
             // Part 2 (M4): while a pass is in flight it assesses the committed report, not the partial.
-            func downloadsTip() -> Bool { m.assessment.tips.contains { $0.text.contains("Загрузки") } }   // AssessmentTests:337
+            func firewallItem() -> Bool { m.assessment.items.contains { $0.kind == .firewallOff } }
             m.isCollectingReport = true
-            m.report.homeDirs = [DirSize(path: "/Users/x/Downloads", bytes: 11 * GIB)]
+            m.report.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
             m.reportHost.reassess()
-            #expect(!downloadsTip())                   // lastCommittedReport is still blank
+            #expect(!firewallItem())                   // lastCommittedReport is still blank
             m.isCollectingReport = false
             m.reportHost.reassess()
-            #expect(downloadsTip())
+            #expect(firewallItem())
         }
 
         /// PASS-WAIT-PARTIAL R1, R10 (findings C3, P1): an updater's read that lands while a pass is in flight survives

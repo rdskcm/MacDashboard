@@ -1,14 +1,13 @@
 // Views/DesignSystem.swift
-// Block V2-FOUND: v2.0 design-system surfaces/controls/motion, all values inlined
-// from the design handoff Spec §2–§4 so no later block re-derives layer geometry.
+// Block V2-FOUND: v2.0 design-system motion constants, disclosure transition, in-place swap and bleed clip.
 // Pure SwiftUI Views code (not Foundation-only) — deliberately app-only, not
 // covered by Tests/MacDashboardTests (see PLAN.md block spec: the tested Engine code stays Foundation-only).
 //
 // Reduce Motion contract (project-wide, wired here as a deliverable of this block):
 // keyframe-style/transform animations play once at ~0 ms (i.e. no animation) under
 // `@Environment(\.accessibilityReduceMotion)`; only 0.12 s color/opacity/border/
-// shadow transitions remain. Every control below reads the environment value and
-// degrades accordingly.
+// shadow transitions remain. Every modifier below reads the environment value
+// where it matters and degrades accordingly.
 
 import SwiftUI
 
@@ -18,12 +17,6 @@ import SwiftUI
 /// timing. `reduceMotionFallback` is a plain duration (seconds) — callers pick
 /// their own curve for it; the rest are ready-to-use `Animation`s.
 enum DSMotion {
-    static let barRelayout = Animation.spring(response: 0.34, dampingFraction: 0.86)
-    static let cardHover = Animation.easeOut(duration: 0.16)
-    static let fillHover = Animation.easeOut(duration: 0.12)
-    static let tooltip = Animation.easeInOut(duration: 0.15)
-    /// Paired with `tooltip`: the tooltip rises by this many points while it fades in.
-    static let tooltipRiseY: CGFloat = -7
     static let expand = Animation.easeInOut(duration: 0.18)
     /// Paired with `.dsDisclosure(reduceMotion:)`: the disclosed content rises by
     /// this many points while it fades in/out.
@@ -35,7 +28,7 @@ enum DSMotion {
 // MARK: - Disclosure transition
 
 /// Fade + slight rise, shared by every collapse/expand disclosure in the v2.0 UI
-/// (QuietStrip rows, the process-row panels, SectionRows) so appearing/disappearing content reads as one
+/// (the process-row panels, SectionRows) so appearing/disappearing content reads as one
 /// consistent motion instead of each call site inventing its own combination.
 private struct DSFadeSlide: ViewModifier {
     let progress: Double            // 1 = hidden, 0 = shown
@@ -48,185 +41,6 @@ extension AnyTransition {
         reduceMotion ? .opacity
                      : .modifier(active: DSFadeSlide(progress: 1), identity: DSFadeSlide(progress: 0))
     }
-}
-
-// MARK: - Shadow color helper
-
-/// Navy-tinted black (rgba(20,30,50,·)) used for every light-appearance
-/// elevation/inset shadow layer below — plain black reads flat/muddy against
-/// the light ground, spec calls for this cool tint instead. Dark-appearance
-/// shadow layers stay plain `Color.black`.
-private func dsShadowNavy(_ opacity: Double) -> Color {
-    Color(red: 20 / 255, green: 30 / 255, blue: 50 / 255, opacity: opacity)
-}
-
-// MARK: - Card surface
-
-/// `.dsCardSurface()` — the load-bearing visual surface for every card in the
-/// app (delegated to by `CardBackgroundModifier` in SharedUI.swift). Rounded
-/// rect, native `.regularMaterial`, a 1 pt hairline border, a three-layer
-/// elevation shadow stack, and a top-edge highlight (the only hard edge).
-/// Under Reduce Transparency the fill is the solid card colour, not the material (CARD-GLASS-LEFTOVERS).
-private enum DSCardSurfaceTokens {
-    // Elevation shadows (color = black; radius values are already the
-    // blur/2 SwiftUI translation — SwiftUI shadows have no CSS-style spread).
-    static let contact = Color(light: dsShadowNavy(0.10), dark: Color.black.opacity(0.45))
-    static let mid = Color(light: dsShadowNavy(0.13), dark: Color.black.opacity(0.50))
-    static let ambient = Color(light: dsShadowNavy(0.24), dark: Color.black.opacity(0.72))
-    // Top-edge highlight: bright in light appearance (white 85%), subtle in dark (white 10%).
-    static let highlight = Color(light: Color.white.opacity(0.85), dark: Color.white.opacity(0.10))
-}
-
-struct DSCardSurface: ViewModifier {
-    /// CARD-GLASS-LEFTOVERS: nil in offscreen renders (no injection) → material, the reference look. Only the
-    /// Reduce Transparency branch is read (`usesMaterial`), so the Liquid Glass slider never re-runs this body.
-    @Environment(GlassSettings.self) private var glass: GlassSettings?
-
-    func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
-        return content
-            .background {
-                // Under Reduce Transparency the material becomes the OS grey stand-in; draw the app's solid card
-                // colour instead (the same one the DS3 glass cards use, D5).
-                if glass?.usesMaterial ?? true { shape.fill(.regularMaterial) } else { shape.fill(DS3.glassTint(.solid)) }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(DS.line, lineWidth: 1)
-            )
-            .overlay(
-                // Top-edge-only highlight: a full-perimeter stroke whose gradient
-                // fades from `highlight` to `.clear` over the first ~15% of the
-                // shape's height, so only the top arc reads as a crisp edge.
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            gradient: Gradient(stops: [
-                                .init(color: DSCardSurfaceTokens.highlight, location: 0),
-                                .init(color: .clear, location: 0.15),
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-            )
-            // Flattens the card into a single composited layer before the shadow
-            // stack below, so each of the three shadows rasterizes the already-
-            // composited result once instead of the full material+content subtree
-            // three times per frame. Confirmed empirically (not `.drawingGroup()`,
-            // which would also flatten the `.regularMaterial` backdrop sample and
-            // silently change the visual result — `.compositingGroup()` does not).
-            .compositingGroup()
-            .dsCardElevation()
-    }
-}
-
-extension View {
-    func dsCardSurface() -> some View { modifier(DSCardSurface()) }
-
-    /// The card elevation alone: the three appearance-adaptive shadow layers of
-    /// `DSCardSurfaceTokens`. Used by `DSCardSurface` and by Settings'
-    /// `SolidCardSurface`, which needs the same elevation without the material
-    /// fill. Apply it after `.compositingGroup()`, as `DSCardSurface` does.
-    func dsCardElevation() -> some View {
-        self
-            .shadow(color: DSCardSurfaceTokens.contact, radius: 0.75, x: 0, y: 1)
-            .shadow(color: DSCardSurfaceTokens.mid, radius: 5, x: 0, y: 4)
-            .shadow(color: DSCardSurfaceTokens.ambient, radius: 17, x: 0, y: 16)
-    }
-}
-
-// MARK: - Hover lift
-
-/// `.dsHoverLift()` — the shared card-hover affordance: a 2 pt upward offset
-/// plus a border step up to `DS.lineStrong`, `DSMotion.cardHover` (0.16 s
-/// ease-out). Under Reduce Motion the offset is dropped entirely and only the
-/// border/color change remains, at the 0.12 s Reduce Motion fallback duration.
-struct DSHoverLift: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
-
-    private var lift: CGFloat { (hovering && !reduceMotion) ? -2 : 0 }
-
-    func body(content: Content) -> some View {
-        // Hover/tap hit-testing is attached to this OUTER wrapper, not to a
-        // same-level sibling probe (both prior attempts — `.overlay` probe,
-        // then `.background` probe — failed in live testing: `.overlay` won
-        // front-to-back tap resolution over buttons in `content`; `.background`
-        // was itself occluded by `content`'s own opaque surface and never saw
-        // hover events at all). `.offset()` is a render-time transform applied
-        // after layout — it does not change what size/frame `content` reports
-        // to its parent — so this ZStack's own layout frame, and therefore its
-        // own `.contentShape`/`.onHover` hit region, stays pinned at the card's
-        // RESTING position even while the inner content visually shifts by
-        // `lift`. That keeps the hit area stable (no bottom-edge oscillation).
-        // `content` (with the real buttons) remains a distinct child node with
-        // its own hit-testing at its actual rendered position, so a plain
-        // `.onHover` + `.contentShape` on the parent — with no `.onTapGesture`
-        // attached here — never intercepts the child Buttons' own gesture
-        // recognizers; clicks still resolve normally on the controls.
-        ZStack {
-            content
-                // Resolve the lifted subtree's geometry as one unit BEFORE the
-                // animated offset (HOVER-TEXT-JITTER). Without it, a Text whose
-                // own paint animates in the same transaction as the lift (a hover
-                // colour fade on a capsule label, the Memory legend emphasis) is
-                // re-rendered and positioned independently of its siblings: it
-                // reaches the lifted position on the first frame, overshoots on
-                // exit and snaps back. Must stay BEFORE `.offset` — placed after
-                // it the group has no effect (measured). Not a rasterisation: no
-                // offscreen pass, glyph rendering unchanged. Do not replace with
-                // `.drawingGroup()` (1 px lag, re-rasterises text, flattens the
-                // card material) or `.compositingGroup()` (no effect here).
-                .geometryGroup()
-                .offset(y: lift)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(hovering ? DS.lineStrong : .clear, lineWidth: 1)
-                        .offset(y: lift)
-                )
-        }
-        .animation(
-            reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
-            value: hovering
-        )
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-    }
-}
-
-extension View {
-    func dsHoverLift() -> some View { modifier(DSHoverLift()) }
-}
-
-/// `.dsBorderHover()` — a border-only hover treatment: transitions the card
-/// border from `DS.line` to `DS.lineStrong` on hover, with NO offset/lift
-/// (unlike `dsHoverLift`). Same `DSMotion.cardHover` duration as `dsHoverLift`
-/// normally; since this is purely a color/border transition (not a transform),
-/// it keeps running under Reduce Motion per this file's Reduce Motion contract
-/// — only the duration drops to `DSMotion.reduceMotionFallback`, mirroring how
-/// `dsHoverLift` degrades its own border/color half.
-struct DSBorderHover: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
-
-    func body(content: Content) -> some View {
-        content
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(hovering ? DS.lineStrong : DS.line, lineWidth: 1)
-            )
-            .animation(
-                reduceMotion ? .easeOut(duration: DSMotion.reduceMotionFallback) : DSMotion.cardHover,
-                value: hovering
-            )
-            .onHover { hovering = $0 }
-    }
-}
-
-extension View {
-    func dsBorderHover() -> some View { modifier(DSBorderHover()) }
 }
 
 // MARK: - In-place state swap
@@ -255,39 +69,6 @@ extension View {
     func dsSwapInPlace<R: View>(_ isActive: Bool, @ViewBuilder replacement: @escaping () -> R) -> some View {
         modifier(DSSwapInPlace(isActive: isActive, replacement: replacement))
     }
-}
-
-// MARK: - Recessed track
-
-/// `dsRecessedTrack(in:)` — the shared smooth-recess background reused by
-/// `DSSlidingSegmented`'s track and by 6 pt progress bars. FORBIDDEN shape
-/// (rejected in design review): a single short-blur inset + a hard 1 pt inner
-/// ring — that reads as a visible banding ring. Instead this chains three
-/// growing-radius inner shadows closed by a soft bottom "bounce" highlight, so
-/// the result reads as one smooth recess, plus the ordinary 1 pt `DS.line`
-/// border. Returns a ready-to-place `View` (fill + inner-shadow stack + border)
-/// rather than a bare `ShapeStyle`, since the border can't be expressed as one.
-private enum DSRecessedTrackTokens {
-    // Three growing inner shadows (dark opacity > light — black has less
-    // contrast against a dark ground, so it needs more alpha to read there).
-    static let inner1 = Color(light: dsShadowNavy(0.09), dark: Color.black.opacity(0.30))
-    static let inner2 = Color(light: dsShadowNavy(0.085), dark: Color.black.opacity(0.26))
-    static let inner3 = Color(light: dsShadowNavy(0.07), dark: Color.black.opacity(0.20))
-    // Bottom "bounce" highlight (white opposite skew — light needs more alpha
-    // to read a white highlight against an already-light ground).
-    static let bounce = Color(light: Color.white.opacity(0.55), dark: Color.white.opacity(0.06))
-}
-
-func dsRecessedTrack<S: InsettableShape>(in shape: S) -> some View {
-    shape
-        .fill(
-            DS.track
-                .shadow(.inner(color: DSRecessedTrackTokens.inner1, radius: 1, y: 1))
-                .shadow(.inner(color: DSRecessedTrackTokens.inner2, radius: 3.5, y: 3))
-                .shadow(.inner(color: DSRecessedTrackTokens.inner3, radius: 9, y: 9))
-                .shadow(.inner(color: DSRecessedTrackTokens.bounce, radius: 4, y: -3))
-        )
-        .overlay(shape.strokeBorder(DS.line, lineWidth: 1))
 }
 
 // MARK: - Sliding segmented control
@@ -578,92 +359,5 @@ struct BleedRect: Shape {
             width: rect.width + leading + trailing,
             height: rect.height + top + bottom
         ))
-    }
-}
-
-// MARK: - Disclosure chevron
-
-/// `DSDisclosureBars(expanded:)` — the prototype's two-bar disclosure indicator
-/// (`Overview Screen.dc.html`: 13×13 container, 13×2 track, two 7×1.7 pt bars).
-/// Collapsed, the container is rotated −90° and the bars sit at ±45° around their
-/// inner ends, reading as a right-pointing chevron. Expanded, everything returns
-/// to 0° and the two bars — pinned to opposite edges of the 13 pt track, so they
-/// overlap by 1 pt — merge into one seamless horizontal bar. Uses `DSMotion.expand`,
-/// the same curve as the disclosed content's own fade/slide, so the chevron and
-/// the section body move on one shared timing instead of two out-of-step curves.
-/// Reduce Motion: the transforms jump, since this is a transform rather than a
-/// color/opacity/border/shadow transition.
-struct DSDisclosureBars: View {
-    let expanded: Bool
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let barSize = CGSize(width: 7, height: 1.7)
-    private let boxSize: CGFloat = 13
-
-    var body: some View {
-        ZStack {
-            HStack(spacing: 0) {
-                bar.rotationEffect(.degrees(expanded ? 0 : 45), anchor: .trailing)
-                Spacer(minLength: 0)
-            }
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                bar.rotationEffect(.degrees(expanded ? 0 : -45), anchor: .leading)
-            }
-        }
-        .frame(width: boxSize, height: boxSize)
-        .rotationEffect(.degrees(expanded ? 0 : -90))
-        .animation(reduceMotion ? nil : DSMotion.expand, value: expanded)
-    }
-
-    private var bar: some View {
-        RoundedRectangle(cornerRadius: barSize.height / 2)
-            .fill(DS.muted)
-            .frame(width: barSize.width, height: barSize.height)
-    }
-}
-
-// MARK: - Kicker text style
-
-/// `.dsKicker()` — section-header eyebrow/kicker: a 22×2 pt `DS.accent` bar
-/// followed by an uppercase label (spec §2.8, source OS:116-119). Label color
-/// is `DS.accentInk` — deliberate, per §2.8's component-level table, not the
-/// more ambiguous general token-role table.
-extension Text {
-    func dsKicker() -> some View {
-        HStack(spacing: 9) {
-            dsKickerBar
-            dsKickerLabel
-        }
-        .padding(.top, 4)
-    }
-
-    /// `.dsKickerCentered()` — the СИСТЕМА section's variant: bar - label - bar,
-    /// horizontally centered in its container, instead of the standard
-    /// left-aligned single-bar-then-label layout every other kicker uses.
-    /// Reuses the same bar/label styling as `.dsKicker()` — only the layout differs.
-    func dsKickerCentered() -> some View {
-        HStack(spacing: 9) {
-            dsKickerBar
-            dsKickerLabel
-            dsKickerBar
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.top, 4)
-    }
-
-    private var dsKickerBar: some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(DS.accent)
-            .frame(width: 22, height: 2)
-    }
-
-    private var dsKickerLabel: some View {
-        self
-            .font(.system(size: 11.5, weight: .semibold))
-            .kerning(11.5 * 0.14) // 0.14em tracking
-            .textCase(.uppercase)
-            .foregroundStyle(DS.accentInk)
     }
 }

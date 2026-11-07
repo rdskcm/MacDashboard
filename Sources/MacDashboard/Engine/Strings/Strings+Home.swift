@@ -27,7 +27,6 @@ protocol HomeStrings {
     var homeStateOff: String { get }
     var homeDiskHealth: String { get }
     var homeStateFailing: String { get }
-    var homeStateFailingShort: String { get }
     func homeStateDiskFull(_ pct: Int) -> String
     var homeStateNotSetUp: String { get }
     var homeStateKeepsAwake: String { get }
@@ -72,10 +71,8 @@ protocol HomeStrings {
     var homeBackupsSub: String { get }
     var homeSystemSub: String { get }
     var homeHistorySub: String { get }
-    var homeKVLoad: String { get }
     var homeKVLoad15: String { get }
     var homeKVProcesses: String { get }
-    var homeKVPurgeable: String { get }
     var homeKVFailing: String { get }
     func homeKVWorn(_ pct: Int) -> String
     var homeKVCapacity: String { get }
@@ -139,7 +136,6 @@ extension StringsEN: HomeStrings {
     var homeStateOff: String { "off" }
     var homeDiskHealth: String { "Disk health" }
     var homeStateFailing: String { "failing" }
-    var homeStateFailingShort: String { "failing" }
     func homeStateDiskFull(_ pct: Int) -> String { "\(pct)% full" }
     var homeStateNotSetUp: String { "not set up" }
     var homeStateKeepsAwake: String { "keeps the Mac awake" }
@@ -184,10 +180,8 @@ extension StringsEN: HomeStrings {
     var homeBackupsSub: String { "Time Machine, Claude" }
     var homeSystemSub: String { "sleep, login items, Homebrew" }
     var homeHistorySub: String { "daily samples" }
-    var homeKVLoad: String { "Load" }
     var homeKVLoad15: String { "Load 15 min" }
     var homeKVProcesses: String { "Processes" }
-    var homeKVPurgeable: String { "Purgeable" }
     var homeKVFailing: String { "failing" }
     func homeKVWorn(_ pct: Int) -> String { "\(pct)% worn" }
     var homeKVCapacity: String { "Capacity" }
@@ -258,7 +252,6 @@ extension StringsRU: HomeStrings {
     var homeStateOff: String { "выключен" }
     var homeDiskHealth: String { "Здоровье диска" }
     var homeStateFailing: String { "сбой диска" }
-    var homeStateFailingShort: String { "сбой" }
     func homeStateDiskFull(_ pct: Int) -> String { "заполнен на \(pct) %" }
     var homeStateNotSetUp: String { "не настроена" }
     var homeStateKeepsAwake: String { "не даёт уснуть" }
@@ -303,10 +296,8 @@ extension StringsRU: HomeStrings {
     var homeBackupsSub: String { "Time Machine, Claude" }
     var homeSystemSub: String { "сон, автозагрузка, Homebrew" }
     var homeHistorySub: String { "ежедневные замеры" }
-    var homeKVLoad: String { "Нагрузка" }
     var homeKVLoad15: String { "Нагрузка 15 мин" }
     var homeKVProcesses: String { "Процессов" }
-    var homeKVPurgeable: String { "Очищаемое" }
     var homeKVFailing: String { "сбой диска" }
     func homeKVWorn(_ pct: Int) -> String { "износ \(pct) %" }
     var homeKVCapacity: String { "Ёмкость" }

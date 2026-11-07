@@ -70,12 +70,4 @@ struct SliceSpriteTests {
         #expect(G.fixedAxis(188, card, scale: 2) == 376)
         #expect(G.fixedAxis(300, card, scale: 2) == nil)
     }
-
-    @Test func ringMaskSlice() {
-        let m = G.ringMask(cornerRadius: 30)
-        #expect(m.core == 50)
-        #expect(m.side == 102)
-        #expect(m.contentsCenter(fixedWidth: false, fixedHeight: false)
-            == CGRect(x: 50.0 / 102, y: 50.0 / 102, width: 2.0 / 102, height: 2.0 / 102))
-    }
 }

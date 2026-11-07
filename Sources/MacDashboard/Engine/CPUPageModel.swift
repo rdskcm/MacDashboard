@@ -85,7 +85,6 @@ struct CPUPageModel: Equatable {
         var compactSub: Bool = false
     }
 
-    var phase: CPUPagePhase
     var tag: CPUTagKind
     var tagText: String
     var sub: String
@@ -172,7 +171,7 @@ struct CPUPageModel: Equatable {
 
         var isFailed = false
         if case .failed = phase { isFailed = true }
-        return CPUPageModel(phase: phase, tag: tag, tagText: tagText, sub: sub, subIsFailure: isFailed,
+        return CPUPageModel(tag: tag, tagText: tagText, sub: sub, subIsFailure: isFailed,
                             caption: caption, failureNote: failureNote, hero: hero, split: split, gpu: gpu)
     }
 

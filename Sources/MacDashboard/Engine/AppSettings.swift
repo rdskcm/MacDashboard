@@ -170,8 +170,6 @@ final class AppSettings {
         get { assessmentSettings.ignoredWakeHolderEntries }
         set { assessmentSettings.ignoredWakeHolderEntries = newValue }
     }
-    /// Read-only keys of the entries, for the assessment and Home.
-    var ignoredWakeHolders: [WakeHolderKey] { assessmentSettings.ignoredWakeHolders }
 
     /// Adds (`ignored: true`, dated `now`) or removes a holder; a no-op when it is already in that state.
     func setWakeHolderIgnored(_ key: WakeHolderKey, ignored: Bool, now: Date = Date()) {

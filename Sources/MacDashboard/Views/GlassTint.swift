@@ -43,8 +43,6 @@ enum GlassTint {
 
         /// The default look (absent key, Reduce Transparency off) — what `DS3.glassStrong` draws.
         static let standard = GlassTint.fill(tintAmount: nil, reduceTransparency: false)
-        /// Reduce Transparency: no material, every alpha 1. `DSCardSurface` draws this colour under RT (D5).
-        static let solid = GlassTint.fill(tintAmount: nil, reduceTransparency: true)
     }
 
     /// A stored value as a slider position: numbers and numeric strings, clamped to 0…1; anything else (or NaN) is nil.
@@ -80,7 +78,7 @@ enum GlassTint {
 final class GlassSettings {
     private(set) var fill: GlassTint.Fill
     /// `fill.usesMaterial` as its own observed property: surfaces that only care about Reduce Transparency
-    /// (`DSCardSurface`, Settings' `SolidCardSurface`) read this and are not re-run by slider drags (D4).
+    /// (the DS3 glass cards) read this and are not re-run by slider drags (D4).
     private(set) var usesMaterial: Bool
 
     @ObservationIgnored private let fixture: Bool

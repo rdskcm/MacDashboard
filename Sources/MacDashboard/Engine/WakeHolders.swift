@@ -13,7 +13,6 @@ struct PowerAssertion: Equatable {
     var processName: String      // as pmset prints it: "pid 349(powerd)" -> "powerd"
     var ageSeconds: Int          // pmset's hh:mm:ss column
     var type: String             // "PreventUserIdleSystemSleep"
-    var name: String             // the quoted `named:` value
     var onBehalfOfPID: Int32? = nil   // "Created for PID: N"
 }
 
@@ -89,7 +88,7 @@ enum WakeHolders {
                 func g(_ i: Int) -> String { String(line[Range(m.range(at: i), in: line)!]) }
                 guard let pid = Int32(g(1)), let h = Int(g(3)), let mi = Int(g(4)), let s = Int(g(5)) else { continue }
                 out.append(PowerAssertion(pid: pid, processName: g(2), ageSeconds: h * 3600 + mi * 60 + s,
-                                          type: g(6), name: g(7)))
+                                          type: g(6)))
             } else if !out.isEmpty, let m = createdFor.firstMatch(in: line, range: range),
                       let r = Range(m.range(at: 1), in: line), let pid = Int32(line[r]) {
                 out[out.count - 1].onBehalfOfPID = pid
@@ -115,12 +114,6 @@ enum WakeHolders {
         if let bundle = Parsers.appBundleName(fromCommandPath: path) { return bundle }
         guard let name, !name.isEmpty else { return (path as NSString).lastPathComponent }
         return name
-    }
-
-    static func holders(from assertions: [PowerAssertion],
-                        lookup: (Int32) -> ProcRecord?,
-                        minimumAge: Int = minimumAgeSeconds) -> [WakeHolder] {
-        classified(from: assertions, lookup: lookup, minimumAge: minimumAge).user
     }
 
     /// `user`: programs the app warns about. `system`: OS services holding an assertion (never warned,

@@ -88,8 +88,8 @@ private func rwDate() -> Date {
 private func rwTasks() -> [HomeTask] {
     var a = Assessment()
     a.items = [
-        AttentionItem(kind: .smartErrors, sev: .crit, label: "", detail: "", fullText: "", verb: ""),
-        AttentionItem(kind: .firewallOff, sev: .warn, label: "", detail: "", fullText: "", verb: ""),
+        AttentionItem(kind: .smartErrors, sev: .crit, label: "", detail: "", fullText: ""),
+        AttentionItem(kind: .firewallOff, sev: .warn, label: "", detail: "", fullText: ""),
     ]
     return HomeModel.tasks(a, report: FullReport(), disk: nil, battery: nil)
 }
@@ -100,7 +100,7 @@ func fullInput() -> ReportSummaryInput {
     return ReportSummaryInput(
         generatedAt: at,
         system: SystemInfo(osName: "macOS", osVersion: "26.1", osBuild: "25B78", modelName: "MacBook Air",
-                           modelId: "Mac15,12", chip: "Apple M3", cores: nil, memBytes: nil, uptimeSeconds: 3 * 86_400 + 4 * 3600, hostName: nil),
+                           modelId: "Mac15,12", chip: "Apple M3", cores: nil, memBytes: nil, uptimeSeconds: 3 * 86_400 + 4 * 3600),
         status: .critical, tasks: tasks,
         cpu: CPUUsage(user: 18.5, sys: 7.2, idle: 74.3), load: [2.10, 1.85, 1.60], ncpu: 8, socTempC: 48,
         mem: MemSnapshot(total: 16 * rwGiB, pageSize: 16384, free: 0, active: 7 * rwGiB, inactive: 0, speculative: 0,
@@ -494,11 +494,6 @@ extension SerialTests {
                     let got = smartCriticalWarningRU(raw, language: .ru)
                     #expect(got == want, "ReportWriter: smartCriticalWarningRU(\(raw.debugDescription)) (got \(got.debugDescription))")
                 }
-
-                let now = Date(timeIntervalSince1970: 1_760_000_000)
-                #expect(folderSizesAgeString(countedAt: now.addingTimeInterval(-60), now: now) == L.foldersCountedAgo("1 \(L.uptimeUnitMinute)"), "ReportWriter: folderSizesAgeString 1 minute")
-                #expect(folderSizesAgeString(countedAt: now.addingTimeInterval(-2 * 3600), now: now) == L.foldersCountedAgo("2 \(L.uptimeUnitHour)"), "ReportWriter: folderSizesAgeString 2 hours")
-                #expect(folderSizesAgeString(countedAt: now.addingTimeInterval(-3 * 86_400), now: now) == L.foldersCountedAgo("3 \(L.uptimeUnitDay)"), "ReportWriter: folderSizesAgeString 3 days")
             }
         }
 

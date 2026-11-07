@@ -8,7 +8,7 @@ Used to verify UI states that are hard to reach live (busy/error/progress states
 
 1. Write a scenario file (anywhere, e.g. the session scratchpad — most scenarios are
    throwaway; a few worth re-running are kept in the repo next to the kit, e.g.
-   `scenario_ds_specimen.swift` and `scenario_smart_install.swift`):
+   `scenario_smart_install.swift`):
 
 ```swift
 // scenario.swift
@@ -63,7 +63,7 @@ same command checks a different theme on a different day. Pin it:
 - Never call model methods that spawn work (`start()`, `brew.upgradeNow()`,
   `refreshReport()`, …) — inject fields instead.
 - Do not link `-framework Observation` (render.sh already knows).
-- Injected `Assessment`/`Tip` etc. work fine: build the value, assign to
+- Injected `Assessment` values (`Assessment.items`, `AttentionItem`) work fine: build the value, assign to
   `model.assessment`.
 - Sections render at 2x on Retina; PNG height grows with content — keep a
   scenario to ~4 sections so the image stays readable.

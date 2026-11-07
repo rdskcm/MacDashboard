@@ -14,7 +14,6 @@ struct SocReadout: Equatable {
         let zone: Int              // 0 normal, 1 warm, 2 hot
         let markerX: Double        // 0...1 on the gauge track
         let word: String?          // "warm" / "hot", nil in the normal zone
-        let attention: Bool        // warm or hot
     }
     struct Thermal: Equatable {
         let word: String           // "normal"
@@ -47,7 +46,7 @@ struct SocReadout: Equatable {
             let level = CPULoad.socLevel(t)
             let zone = level == .hot ? 2 : (level == .warm ? 1 : 0)
             temperature = Temperature(value: "\(t) °C", zone: zone, markerX: markerX(celsius: t),
-                                      word: zone == 2 ? L.cpuSocHot : (zone == 1 ? L.cpuSocWarm : nil), attention: zone > 0)
+                                      word: zone == 2 ? L.cpuSocHot : (zone == 1 ? L.cpuSocWarm : nil))
         }
         var thermalSegment: Thermal? = nil
         if let th = thermal {
@@ -118,39 +117,8 @@ struct SocCoresCardModel: Equatable {
         let valueText: String      // "63 %", "—" (a core with no elapsed ticks), "" (not yet, or the call failed)
         let fraction: Double       // 0...1, 0 without a value
     }
-    struct Group: Equatable, Identifiable {
-        let id: Int                // index in perflevel order
-        let heading: String        // "Performance · 4"
-        let hue: Int               // by system name: Performance 0, Efficiency 1, any other name 2, unknown type 0
-        let frequencyText: String  // "3.95 GHz", "idle", "—"
-        let frequencyIsValue: Bool // true only for a number: "idle" and "—" are drawn muted
-        let frequencyHelp: String? // tip for the frequency value
-        let cells: [Cell]
-    }
 
-    let caption: String
-    let groups: [Group]
-
-    /// `cores` nil = the setup has not run yet: no groups. `loadFailed` = the tick call failed: the groups stay,
-    /// the tracks are empty and the caption says "Not available on this Mac". `hasReading` = a reading has been
-    /// published: before it cells are "", after it a core with no elapsed ticks is "—" (3.1).
-    static func make(cores: [CoreGroupLoad]?, loadFailed: Bool, hasReading: Bool) -> SocCoresCardModel {
-        let caption = caption(loadFailed: loadFailed)
-        guard let cores else { return SocCoresCardModel(caption: caption, groups: []) }
-        let groups = cores.enumerated().map { index, item -> Group in
-            let cells = item.group.coreIndices.indices.map { n -> Cell in
-                let load: Int? = n < item.loads.count ? item.loads[n] : nil
-                return cell(id: cellID(groupName: item.group.name, index: n), load: load, loadFailed: loadFailed,
-                            hasReading: hasReading)
-            }
-            let f = frequency(item.frequency)
-            return Group(id: index, heading: heading(item.group), hue: hue(forName: item.group.name),
-                         frequencyText: f.text, frequencyIsValue: f.isValue, frequencyHelp: f.help, cells: cells)
-        }
-        return SocCoresCardModel(caption: caption, groups: groups)
-    }
-
-    // Pure pieces of `make`, shared with the per-cell views of Stage 5a (each view computes only its own text).
+    // Pure pieces used by the per-cell views (each view computes only its own text).
 
     static func caption(loadFailed: Bool) -> String { loadFailed ? L.gpuNotAvailable : L.socLoadPerCore }
 
@@ -223,18 +191,9 @@ struct SocGPUListModel: Equatable {
         let fraction: Double       // share / 100, 0 for "—"
     }
 
-    let caption: String
-    let rows: [Row]
-
     /// "8 GPU cores · top by GPU", or "top by GPU" when the core count is unknown.
     static func caption(coreCount: Int?) -> String {
         coreCount.map { "\(L.socGPUCores($0)) · \(L.socTopByGPU)" } ?? L.socTopByGPU
-    }
-
-    static func make(state: GPURowsState, coreCount: Int?) -> SocGPUListModel {
-        let caption = caption(coreCount: coreCount)
-        guard case .rows(let rows) = state else { return SocGPUListModel(caption: caption, rows: []) }
-        return SocGPUListModel(caption: caption, rows: rows.map(row))
     }
 
     static func row(_ r: GPUProcessRow) -> Row {

@@ -137,14 +137,9 @@ func tight(_ parts: (value: String, unit: String?)) -> String {
     return "\(parts.value)\u{2009}\(unit)"
 }
 
-/// Overload for `fmtCapacityParts`, whose `unit` is non-optional.
-func tight(_ parts: (value: String, unit: String)) -> String {
-    "\(parts.value)\u{2009}\(parts.unit)"
-}
-
 /// Display-only day formatter for already-parsed dates: the history file's
 /// "yyyy-MM-dd" ids are parsed with fixed `en_US_POSIX` formatters
-/// (`HistoryCard.dateFormatter`, `HistorySeries.dayFormatter`, `HistoryStore.dayFormatter`)
+/// (`HistoryCard.dateFormatter`, `HistoryStore.dayFormatter`)
 /// because day-boundary math must not depend on any locale — those stay. This one is the
 /// opposite job: render a `Date` for a human using the Mac's system Region setting
 /// (day/month/year order, separators) — independent of the app's own UI language toggle,

@@ -26,8 +26,7 @@ enum IPhoneCrashLog {
     /// A copy whose progress line is shown under the buttons (smaller copies finish in well under a second).
     static let progressLineMinBytes: Int64 = 8 << 20
 
-    /// Header fields from the first-line JSON object (F5, F7), ONE JSON parse per file (the batch read calls this
-    /// instead of `IPhoneData.bugType(fromHeader:)`). `process`: `name`, else `app_name` (trimmed, non-empty).
+    /// Header fields from the first-line JSON object (F5, F7), ONE JSON parse per file. `process`: `name`, else `app_name` (trimmed, non-empty).
     /// `timestamp`: `ipsTimestamp`. No other key is read (identifier-mask: `incident_id`, `slice_uuid` and any
     /// device field never leave this function). No JSON first line → `IPhoneLogHeader()` (all nil).
     static func logHeader(fromHeader data: Data) -> IPhoneLogHeader {

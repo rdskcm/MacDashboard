@@ -8,10 +8,7 @@ protocol MaintenanceStrings {
     var maintenanceBrewNotInstalled: String { get }
     var maintenanceBrewVersionUnknown: String { get }
     var maintenanceBrewOutdatedCheckFailed: String { get }
-    var maintenanceUpdatesTip: String { get }
-    var maintenanceCrashesTip: String { get }
     func maintenanceCrashRow(_ process: String, _ count: Int) -> String
-    func maintenanceCrashRevealA11y(_ process: String) -> String
     func maintenanceAndMore(_ n: Int) -> String
     func maintenanceBrewConfirmTitle(_ n: Int) -> String
     var maintenanceBrewConfirmButton: String { get }
@@ -44,10 +41,7 @@ extension StringsEN: MaintenanceStrings {
     var maintenanceBrewNotInstalled: String { "not installed" }
     var maintenanceBrewVersionUnknown: String { "Homebrew is installed, but its version couldn't be determined" }
     var maintenanceBrewOutdatedCheckFailed: String { "Couldn't check for outdated packages — run brew outdated in Terminal" }
-    var maintenanceUpdatesTip: String { "Pending macOS and App Store updates." }
-    var maintenanceCrashesTip: String { "Crash reports macOS recorded in the last 7 days." }
     func maintenanceCrashRow(_ process: String, _ count: Int) -> String { count > 1 ? "\(process) \u{00D7}\(count)" : process }
-    func maintenanceCrashRevealA11y(_ process: String) -> String { "Show \(process) crash reports in Finder" }
     func maintenanceAndMore(_ n: Int) -> String { "and \(n) more" }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String { "Upgrade \(n) \(n == 1 ? "package" : "packages")?" }
     var maintenanceBrewConfirmButton: String { "Upgrade" }
@@ -83,10 +77,7 @@ extension StringsRU: MaintenanceStrings {
     var maintenanceBrewNotInstalled: String { "не установлен" }
     var maintenanceBrewVersionUnknown: String { "Homebrew установлен, но версию определить не удалось" }
     var maintenanceBrewOutdatedCheckFailed: String { "Не удалось проверить устаревшие пакеты — запустите brew outdated в Терминале" }
-    var maintenanceUpdatesTip: String { "Ожидающие обновления macOS и App Store." }
-    var maintenanceCrashesTip: String { "Отчёты о падениях приложений за последние 7 дней." }
     func maintenanceCrashRow(_ process: String, _ count: Int) -> String { count > 1 ? "\(process) \u{00D7}\(count)" : process }
-    func maintenanceCrashRevealA11y(_ process: String) -> String { "Показать отчёты о падениях «\(process)» в Finder" }
     func maintenanceAndMore(_ n: Int) -> String { "и ещё \(n)" }
     func maintenanceBrewConfirmTitle(_ n: Int) -> String {
         "Обновить \(n) \(ruPlural(n, "пакет", "пакета", "пакетов"))?"

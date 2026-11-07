@@ -5,28 +5,11 @@ import Foundation
 
 protocol BackupsStrings {
     // MARK: Time Machine card
-    var timeMachineNotConfigured: String { get }
     var timeMachineDestination: String { get }
     var timeMachineType: String { get }
-    var timeMachineTypeLocal: String { get }
     var timeMachineQuota: String { get }
-    var timeMachineLastBackup: String { get }
-    /// V2-TM-CONNSTATE: label + value of the row shown only while the destination has no
-    /// mount point (disk unplugged, or network share not mounted).
-    var timeMachineConnection: String { get }
-    var timeMachineConnectionNone: String { get }
-    var timeMachineSnapshots: String { get }
-    var timeMachineSnapshotsNone: String { get }
-    func timeMachineSnapshotsCount(_ n: Int) -> String
-    func timeMachineSnapshotsLast(_ date: String) -> String
-    var timeMachinePurgeable: String { get }
-    /// Records the constraint the tip text encodes: the number is a VOLUME total that also
-    /// covers caches, and a per-snapshot size is not a real number because snapshots share
-    /// disk blocks (BACKLOG F1).
-    var timeMachinePurgeableTip: String { get }
 
     // MARK: Claude backup card (BACKUP-AGE)
-    var claudeBackupCardTitle: String { get }
     var claudeBackupAgeLabel: String { get }
     var claudeBackupLastLabel: String { get }
     var claudeBackupLimitLabel: String { get }
@@ -158,23 +141,11 @@ protocol BackupsStrings {
 
 extension StringsEN: BackupsStrings {
     // MARK: Time Machine card
-    var timeMachineNotConfigured: String { "Time Machine is not configured" }
     var timeMachineDestination: String { "Destination" }
     var timeMachineType: String { "Type" }
-    var timeMachineTypeLocal: String { "local disk" }
     var timeMachineQuota: String { "Quota" }
-    var timeMachineLastBackup: String { "Last backup" }
-    var timeMachineConnection: String { "Connection" }
-    var timeMachineConnectionNone: String { "not connected right now" }
-    var timeMachineSnapshots: String { "Local snapshots" }
-    var timeMachineSnapshotsNone: String { "none" }
-    func timeMachineSnapshotsCount(_ n: Int) -> String { "\(n)" }
-    func timeMachineSnapshotsLast(_ date: String) -> String { ", last \(date)" }
-    var timeMachinePurgeable: String { "Purgeable space" }
-    var timeMachinePurgeableTip: String { "Space macOS frees on its own when it is needed: Time Machine local snapshots and caches. A per-snapshot size cannot be computed — snapshots share disk blocks." }
 
     // MARK: Claude backup card (BACKUP-AGE)
-    var claudeBackupCardTitle: String { "Claude backup" }
     var claudeBackupAgeLabel: String { "Age" }
     var claudeBackupLastLabel: String { "Last snapshot" }
     var claudeBackupLimitLabel: String { "Warn after" }
@@ -306,23 +277,11 @@ extension StringsEN: BackupsStrings {
 
 extension StringsRU: BackupsStrings {
     // MARK: Time Machine card
-    var timeMachineNotConfigured: String { "Time Machine не настроен" }
     var timeMachineDestination: String { "Назначение" }
     var timeMachineType: String { "Тип" }
-    var timeMachineTypeLocal: String { "локальный диск" }
     var timeMachineQuota: String { "Квота" }
-    var timeMachineLastBackup: String { "Последний бэкап" }
-    var timeMachineConnection: String { "Подключение" }
-    var timeMachineConnectionNone: String { "сейчас нет подключения" }
-    var timeMachineSnapshots: String { "Локальные снапшоты" }
-    var timeMachineSnapshotsNone: String { "нет" }
-    func timeMachineSnapshotsCount(_ n: Int) -> String { "\(n) шт." }
-    func timeMachineSnapshotsLast(_ date: String) -> String { ", последний \(date)" }
-    var timeMachinePurgeable: String { "Очищаемое место" }
-    var timeMachinePurgeableTip: String { "Место, которое macOS освободит сама, когда оно понадобится: локальные снапшоты Time Machine и кэши. Размер отдельного снапшота посчитать нельзя — снапшоты делят общие блоки диска." }
 
     // MARK: Claude backup card (BACKUP-AGE)
-    var claudeBackupCardTitle: String { "Бэкап Claude" }
     var claudeBackupAgeLabel: String { "Возраст" }
     var claudeBackupLastLabel: String { "Последний снимок" }
     var claudeBackupLimitLabel: String { "Предупреждать после" }

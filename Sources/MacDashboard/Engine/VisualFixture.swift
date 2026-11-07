@@ -207,7 +207,6 @@ enum VisualFixture {
         /// SOC-DETAILS: the reference page-tick state (logic 3.1, 3.5, 3.6, 3.8, 3.4); `socLive(options:)` derives variants.
         var socLive: SocLiveFixture
         var report: FullReport
-        var wakeHolders: [WakeHolder]
         var assessment: Assessment
         var history: HistoryState
         var reportText: String
@@ -274,7 +273,7 @@ enum VisualFixture {
             osName: "macOS", osVersion: "26.1", osBuild: "25B78",
             modelName: "MacBook Air", modelId: "Mac15,12", chip: "Apple M3",
             cores: "8 (4 performance and 4 efficiency)", memBytes: 16 * GiB,
-            uptimeSeconds: 3 * 86_400 + 4 * 3600, hostName: "fixture-mac"
+            uptimeSeconds: 3 * 86_400 + 4 * 3600
         )
         let counted = folderSizes()
         report.homeDirs = counted.homeDirs
@@ -367,7 +366,7 @@ enum VisualFixture {
             load: load, cpu: cpu, mem: mem, swap: swap, disk: disk, battery: battery,
             socTempC: socTempC, gpuUtil: gpuUtil, topCPU: topCPU, topMem: topMem, cpuHistory: cpuHistory,
             gpuHistory: gpuHistory, socLive: referenceSocLive(),
-            report: report, wakeHolders: wakeHolders, assessment: assessment,
+            report: report, assessment: assessment,
             history: history, reportText: reportText, claudeBackup: claudeBackup,
             claudeAttempt: claudeAttempt, claudeSize: claudeSize, claudeJob: claudeJob
         )
@@ -390,12 +389,11 @@ extension VisualFixture {
     }
 
     /// Rows with pids 108, 101, 105, 109, 110 for the reference five (any other name gets 200...). A nil share is the
-    /// "above 101 %" row, shown as "—". Lifetime counters step down so ties keep the given order.
+    /// "above 101 %" row, shown as "—".
     private static func gpuRows(_ rows: [(String, Double?)]) -> [GPUProcessRow] {
         let pids: [Int32] = [108, 101, 105, 109, 110]
         return rows.enumerated().map { i, r in
-            GPUProcessRow(id: i < pids.count ? pids[i] : Int32(200 + i), name: r.0, sharePct: r.1,
-                          lifetimeNs: UInt64(5_000_000 - i * 1_000_000))
+            GPUProcessRow(id: i < pids.count ? pids[i] : Int32(200 + i), name: r.0, sharePct: r.1)
         }
     }
 

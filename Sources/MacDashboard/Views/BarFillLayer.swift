@@ -98,8 +98,7 @@ private func barCornerRadius(_ layout: BarFillLayout, width: CGFloat, height: CG
 struct BarFillLayer: NSViewRepresentable {
     var spans: [BarSpan]
     var layout: BarFillLayout
-    /// `false` ⇒ every change applies instantly (Reduce Motion, or a `MeterBar`
-    /// call site that never opted into the animation).
+    /// `false` ⇒ every change applies instantly (Reduce Motion).
     var animated: Bool
 
     func makeNSView(context: Context) -> BarFillLayerView {

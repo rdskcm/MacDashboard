@@ -59,17 +59,6 @@ final class LiveCollector {
         return (topCPU, topMem, procSampler.lastTopApps, procSampler.lastParseFailures, procs.count)
     }
 
-    // Full snapshot: composed from the two halves above so existing callers (and the
-    // tests) keep working unchanged.
-    func collect(limit: Int) async -> LiveSnapshot {
-        var s = collectFast()
-        let p = await sampleProcesses(limit: limit)
-        s.topCPU = p.topCPU
-        s.topMem = p.topMem
-        s.parseFailures = p.parseFailures
-        return s
-    }
-
     // MARK: - load average
 
     private func readLoad() -> [Double]? {

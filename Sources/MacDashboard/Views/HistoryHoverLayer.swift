@@ -251,7 +251,6 @@ final class HistoryHoverView: NSView {
     private var surfaceLayer: CALayer?
     private var textLayer: HistoryHoverTextLayer?
 
-    private var palette: HistoryHoverArt.Palette?
     private var surfaceImage: CGImage?
     private var markerImage: CGImage?
     private var renderedName: NSAppearance.Name?
@@ -346,7 +345,6 @@ final class HistoryHoverView: NSView {
         renderedScale = s
         renderedWidth = boxWidth
         let pal = HistoryHoverArt.palette(for: effectiveAppearance)
-        palette = pal
         surfaceImage = HistoryHoverArt.render(HistoryHoverArt.surface(p: pal, appearance: effectiveAppearance, width: boxWidth), scale: s)
         markerImage = HistoryHoverArt.render(HistoryHoverArt.marker(p: pal), scale: s)
         textColors = (ds3Resolve(DS3.muted, in: effectiveAppearance), ds3Resolve(DS3.ink, in: effectiveAppearance))

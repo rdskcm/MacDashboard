@@ -44,14 +44,4 @@ enum ThermalSensors {
                 .map(\.value)
                 .max()
     }
-
-    /// Extracts °C from smartctl attrs already parsed by Parsers.smartctlAttrs(json:):
-    /// ("Temperature", "32 Celsius") -> 32.0. First whitespace-separated token of
-    /// the value must parse as a finite Double; otherwise nil (honest-empty).
-    static func smartTemperatureCelsius(attrs: [(String, String)]) -> Double? {
-        guard let raw = attrs.first(where: { $0.0 == "Temperature" })?.1 else { return nil }
-        let token = raw.split(separator: " ").first.map(String.init) ?? raw
-        guard let v = Double(token), v.isFinite else { return nil }
-        return v
-    }
 }

@@ -81,8 +81,6 @@ protocol ReportStrings {
     /// Short name of a report section for the COLLECTION TIMES list.
     func reportTimingsSectionName(_ s: ReportSection) -> String
     func reportFoldersCountedAt(_ at: String) -> String
-    func foldersCountedAgo(_ age: String) -> String
-    var foldersCountedJustNow: String { get }
     var reportBrewOutdatedHeader: String { get }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String
     var reportSmartWarningNone: String { get }
@@ -204,8 +202,6 @@ extension StringsEN: ReportStrings {
         }
     }
     func reportFoldersCountedAt(_ at: String) -> String { "(counted \(at))" }
-    func foldersCountedAgo(_ age: String) -> String { "counted \(age) ago" }
-    var foldersCountedJustNow: String { "counted just now" }
     var reportBrewOutdatedHeader: String { "Outdated packages:" }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
         "\(title) (\(device)) — status: \(status)"
@@ -329,8 +325,6 @@ extension StringsRU: ReportStrings {
         }
     }
     func reportFoldersCountedAt(_ at: String) -> String { "(подсчитано \(at))" }
-    func foldersCountedAgo(_ age: String) -> String { "подсчитано \(age) назад" }
-    var foldersCountedJustNow: String { "подсчитано только что" }
     var reportBrewOutdatedHeader: String { "Устаревшие пакеты:" }
     func reportSmartDiskLine(_ title: String, _ device: String, _ status: String) -> String {
         "\(title) (\(device)) — статус: \(status)"

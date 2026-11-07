@@ -8,37 +8,11 @@ protocol OverviewStrings {
     var mainCollectingInfo: String { get }
 
     // MARK: Overview page section kickers
-    var overviewKickerMetrics: String { get }
-    var overviewKickerMemory: String { get }
-    var overviewKickerProcesses: String { get }
-    var overviewKickerFolders: String { get }
-    var overviewKickerSystem: String { get }
-    func headerLoadChip(_ load: String, _ ncpu: Int) -> String
     func headerUptimeChip(_ uptime: String) -> String
-    /// Status chip label when `assessment.problems` is non-empty (pairs with `recommendationsAllGood`).
-    var headerStatusNeedsAttention: String { get }
 
     // MARK: KPI tiles
-    var kpiCpuLabel: String { get }
-    /// V2-TILES footer: all three load averages, e.g. "нагрузка 1,73 · 2,05 · 2,20".
-    /// The core count is NOT repeated here — it already lives in the header's load chip.
-    var kpiSwapLabel: String { get }
-    func kpiSwapUnit(_ total: String) -> String
-    func kpiSwapSub(_ free: String) -> String
-    /// V2-DISK-TILE-LABEL: the Disk tile leads with FREE space, so its header label
-    /// names the quantity («Диск · свободно» / "Disk · free") — do not shorten to the
-    /// bare noun; the tile has no other slot that can say what the big number is.
-    var kpiDiskLabel: String { get }
-    func kpiDiskUnit(_ size: String) -> String
-    func kpiDiskUsedPct(_ pct: Int) -> String
-    func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String
-    func kpiDiskPurgeableDetail(_ base: String, _ purgeable: String) -> String
-    var kpiBatteryLabel: String { get }
-    func kpiBatteryCycles(_ n: Int) -> String
 
     // MARK: Recommendations card
-    var recommendationsTitle: String { get }
-    var recommendationsAllGood: String { get }
 
     // MARK: Advice actions
     var adviceTrashConfirmTitle: String { get }
@@ -58,33 +32,11 @@ extension StringsEN: OverviewStrings {
     var mainCollectingInfo: String { "Collecting system information…" }
 
     // MARK: Overview page section kickers
-    var overviewKickerMetrics: String { "Metrics" }
-    var overviewKickerMemory: String { "Memory" }
-    var overviewKickerProcesses: String { "Processes" }
-    var overviewKickerFolders: String { "Folders" }
-    var overviewKickerSystem: String { "System" }
-    func headerLoadChip(_ load: String, _ ncpu: Int) -> String { "load \(load) · \(ncpu) cores" }
     func headerUptimeChip(_ uptime: String) -> String { "uptime \(uptime)" }
-    var headerStatusNeedsAttention: String { "Needs attention" }
 
     // MARK: KPI tiles
-    var kpiCpuLabel: String { "CPU" }
-    var kpiSwapLabel: String { "Swap" }
-    func kpiSwapUnit(_ total: String) -> String { "of \(total)" }
-    func kpiSwapSub(_ free: String) -> String { "free \(free)" }
-    var kpiDiskLabel: String { "Disk · free" }
-    func kpiDiskUnit(_ size: String) -> String { "of \(size)" }
-    func kpiDiskUsedPct(_ pct: Int) -> String { "used \(pct)%" }
-    func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
-        base + " · data \(dataUsed), system \(sysUsed)"
-    }
-    func kpiDiskPurgeableDetail(_ base: String, _ purgeable: String) -> String { base + " · purgeable \(purgeable)" }
-    var kpiBatteryLabel: String { "Battery" }
-    func kpiBatteryCycles(_ n: Int) -> String { "\(n) " + (n == 1 ? "cycle" : "cycles") }
 
     // MARK: Recommendations card
-    var recommendationsTitle: String { "Recommendations" }
-    var recommendationsAllGood: String { "All good" }
 
     // MARK: Advice actions
     var adviceTrashConfirmTitle: String { "Empty the Trash?" }
@@ -104,35 +56,11 @@ extension StringsRU: OverviewStrings {
     var mainCollectingInfo: String { "Собираем сведения о системе…" }
 
     // MARK: Overview page section kickers
-    var overviewKickerMetrics: String { "Метрики" }
-    var overviewKickerMemory: String { "Память" }
-    var overviewKickerProcesses: String { "Процессы" }
-    var overviewKickerFolders: String { "Папки" }
-    var overviewKickerSystem: String { "Система" }
-    func headerLoadChip(_ load: String, _ ncpu: Int) -> String {
-        "load \(load) · \(ncpu) \(ruPlural(ncpu, "ядро", "ядра", "ядер"))"
-    }
     func headerUptimeChip(_ uptime: String) -> String { "аптайм \(uptime)" }
-    var headerStatusNeedsAttention: String { "Требует внимания" }
 
     // MARK: KPI tiles
-    var kpiCpuLabel: String { "CPU" }
-    var kpiSwapLabel: String { "Подкачка (swap)" }
-    func kpiSwapUnit(_ total: String) -> String { "из \(total)" }
-    func kpiSwapSub(_ free: String) -> String { "свободно \(free)" }
-    var kpiDiskLabel: String { "Диск · свободно" }
-    func kpiDiskUnit(_ size: String) -> String { "из \(size)" }
-    func kpiDiskUsedPct(_ pct: Int) -> String { "занято \(pct)%" }
-    func kpiDiskUsedDetail(_ base: String, _ dataUsed: String, _ sysUsed: String) -> String {
-        base + " · данные \(dataUsed), система \(sysUsed)"
-    }
-    func kpiDiskPurgeableDetail(_ base: String, _ purgeable: String) -> String { base + " · очищаемое \(purgeable)" }
-    var kpiBatteryLabel: String { "Батарея" }
-    func kpiBatteryCycles(_ n: Int) -> String { "\(n) " + ruPlural(n, "цикл", "цикла", "циклов") }
 
     // MARK: Recommendations card
-    var recommendationsTitle: String { "Рекомендации" }
-    var recommendationsAllGood: String { "Всё в порядке" }
 
     // MARK: Advice actions
     var adviceTrashConfirmTitle: String { "Очистить Корзину?" }

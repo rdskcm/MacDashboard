@@ -112,10 +112,11 @@ struct BackdropMathTests {
         defer { IOSurfaceUnlock(b.surface, .readOnly, nil) }
         let base = IOSurfaceGetBaseAddress(b.surface).assumingMemoryBound(to: UInt8.self)
         let stride = IOSurfaceGetBytesPerRow(b.surface)
-        var out = [UInt8](repeating: 0, count: b.sidePx * b.sidePx * 4)
-        for y in 0..<b.sidePx {
-            for x in 0..<b.sidePx {
-                let s = y * stride + x * 4, o = (y * b.sidePx + x) * 4
+        let side = IOSurfaceGetWidth(b.surface)
+        var out = [UInt8](repeating: 0, count: side * side * 4)
+        for y in 0..<side {
+            for x in 0..<side {
+                let s = y * stride + x * 4, o = (y * side + x) * 4
                 out[o] = base[s + 2]; out[o + 1] = base[s + 1]; out[o + 2] = base[s]; out[o + 3] = base[s + 3]
             }
         }
@@ -134,7 +135,6 @@ struct BackdropMathTests {
     @Test func darkBitmap() throws {
         let mode = OrbBitmap.Mode.dark(ground: Self.darkGround)
         let b = try render(d: 420, scale: 1, colour: Self.darkColour, alpha: 0.45, mode: mode, orb: 0)
-        #expect(b.sidePx == 588)
         #expect(IOSurfaceGetWidth(b.surface) == 588 && IOSurfaceGetHeight(b.surface) == 588)
         #expect(IOSurfaceGetPixelFormat(b.surface) == OrbBitmap.pixelFormatBGRA)
         #expect(IOSurfaceGetBytesPerRow(b.surface) >= 588 * 4)

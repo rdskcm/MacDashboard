@@ -13,7 +13,7 @@ struct HistoryChartPoint: Equatable, Identifiable {
 }
 
 struct HistoryYScale: Equatable {
-    let lower: Double; let upper: Double; let step: Double
+    let lower: Double; let upper: Double
     let gridValues: [Double]   // lower, lower+step, … upper
     let decimals: Int          // label decimals: step < 1 → (step < 0.1 ? 2 : 1), else 0
 }
@@ -47,9 +47,8 @@ struct HistoryTableData: Equatable {
     let headers: [String]          // after narrow filtering
     let batteryColumn: Int?        // index of the Battery header (for `.help`)
     let rows: [[String?]]          // nil cell → "—" muted; newest first; already cut to 10 unless showAll
-    let totalRows: Int
-    let hasMore: Bool              // totalRows > 10
-    let moreLabel: String          // L.homeShowAll(totalRows) / L.commonShowLess
+    let hasMore: Bool              // more than 10 rows
+    let moreLabel: String          // L.homeShowAll(all.count) / L.commonShowLess
 }
 
 struct HistoryPageModel: Equatable {
@@ -91,7 +90,7 @@ struct HistoryPageModel: Equatable {
 
     // MARK: dates
 
-    /// Same locale/timeZone/format as `HistorySeries.dayFormatter` (local midnight, not UTC).
+    /// Same locale/timeZone/format as `HistoryStore.dayFormatter` (local midnight, not UTC).
     private static let dayFormatter: DateFormatter = {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
@@ -126,8 +125,7 @@ struct HistoryPageModel: Equatable {
     /// Calendar days in the window: `range.days`, or first…last inclusive for All.
     static func windowDays(range: HistoryRange, spanDays: Int) -> Int { range.days ?? (spanDays + 1) }
 
-    /// `range.days` consecutive calendar days ending on the last sample's day (as `HistorySeries.dateRange`,
-    /// but with the caller's calendar); All = first…last day. nil for no entries / unparseable dates.
+    /// `range.days` consecutive calendar days ending on the last sample's day (with the caller's calendar); All = first…last day. nil for no entries / unparseable dates.
     static func window(_ entries: [MacHistoryEntry], range: HistoryRange, calendar: Calendar) -> ClosedRange<Date>? {
         guard let first = entries.first.flatMap({ parseDay($0.date) }),
               let last = entries.last.flatMap({ parseDay($0.date) }) else { return nil }
@@ -208,7 +206,7 @@ struct HistoryPageModel: Equatable {
         let upper = ceil(mx / step) * step
         let count = Int(((upper - lower) / step).rounded()) + 1
         let grid = (0..<count).map { lower + Double($0) * step }
-        return HistoryYScale(lower: lower, upper: upper, step: step, gridValues: grid,
+        return HistoryYScale(lower: lower, upper: upper, gridValues: grid,
                              decimals: step < 1 ? (step < 0.1 ? 2 : 1) : 0)
     }
 
@@ -318,7 +316,7 @@ struct HistoryPageModel: Equatable {
         let rows = (showAll ? all : Array(all.prefix(collapsedRows))).map { keep($0) }
         return HistoryTableData(headers: shownHeaders,
                                 batteryColumn: shownHeaders.firstIndex(of: L.commonBattery),
-                                rows: rows, totalRows: all.count, hasMore: all.count > collapsedRows,
+                                rows: rows, hasMore: all.count > collapsedRows,
                                 moreLabel: showAll ? L.commonShowLess : L.homeShowAll(all.count))
     }
 

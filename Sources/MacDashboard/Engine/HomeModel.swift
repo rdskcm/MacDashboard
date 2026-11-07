@@ -328,7 +328,7 @@ enum HomeModel {
         let report = input.report
         var out: [HomeChip] = []
 
-        // Free up space: the folders that raise today's Downloads / Trash / Caches capsules.
+        // Free up space: the folders that raise today's Downloads / Trash / Caches attention items.
         // Downloads and Caches only when space is short (StorageSpace is the one low-space rule); Trash always.
         let space = input.disk.flatMap { StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: input.lowSpacePercent) }
         let short = StorageSpace.suggestsFreeing(space)
@@ -384,7 +384,7 @@ enum HomeModel {
     /// quarter window (D14); nil with fewer than two such entries or less than 14 days between them.
     static func monthlyRate(_ entries: [MacHistoryEntry], _ value: (MacHistoryEntry) -> Int?) -> Double? {
         // Calendar days as integers: this runs on every Home refresh over up to ~500 entries, where
-        // DateFormatter parsing cost tens of milliseconds per pass. Same window as `HistorySeries.dateRange(.quarter)`.
+        // DateFormatter parsing cost tens of milliseconds per pass. Same window as `HistoryPageModel.window(.quarter)`.
         guard let last = entries.last, let endDay = dayNumber(last.date),
               let windowDays = HistoryRange.quarter.days else { return nil }
         let startDay = endDay - (windowDays - 1)

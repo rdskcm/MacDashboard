@@ -13,9 +13,6 @@ protocol CommonStrings {
     // MARK: Shared (cross-card)
     var sharedUnavailable: String { get }
     var sharedCollectingData: String { get }
-    var sharedEmpty: String { get }
-    func sharedMoreN(_ n: Int) -> String
-    var sharedCollapse: String { get }
 
     // MARK: Parsers / live status
     var battStateCharging: String { get }
@@ -68,7 +65,6 @@ protocol CommonStrings {
     var commonFullDiskAccessNeeded: String { get }
     var commonCompressed: String { get }
     var commonOK: String { get }
-    var commonCycles: String { get }
     var commonProtection: String { get }
     var commonUpdates: String { get }
     var commonCollectingData: String { get }
@@ -81,18 +77,12 @@ protocol CommonStrings {
     var commonNow: String { get }
     var commonTryAgain: String { get }
     var commonShowLess: String { get }
-    var commonSetting: String { get }
-    var commonOnBattery: String { get }
-    var commonACPower: String { get }
-    var commonNormal: String { get }
-    var commonFree: String { get }
     var commonChart: String { get }
     var commonTable: String { get }
     var commonRefreshing: String { get }
     var commonInProgress: String { get }
     var commonCancel: String { get }
     var commonOpenPrivacySettings: String { get }
-    func commonUpdated(_ time: String) -> String
     var commonChecking: String { get }
     var commonCritical: String { get }
     func commonLastData(_ time: String) -> String
@@ -105,9 +95,6 @@ extension StringsEN: CommonStrings {
     // MARK: Shared (cross-card)
     var sharedUnavailable: String { "(unavailable)" }
     var sharedCollectingData: String { "Collecting data…" }
-    var sharedEmpty: String { "empty" }
-    func sharedMoreN(_ n: Int) -> String { "\(n) more" }
-    var sharedCollapse: String { "Collapse" }
 
     // MARK: Parsers / live status
     var battStateCharging: String { "charging" }
@@ -160,7 +147,6 @@ extension StringsEN: CommonStrings {
     var commonFullDiskAccessNeeded: String { "Full Disk Access needed" }
     var commonCompressed: String { "Compressed" }
     var commonOK: String { "OK" }
-    var commonCycles: String { "Cycles" }
     var commonProtection: String { "Protection" }
     var commonUpdates: String { "Updates" }
     var commonCollectingData: String { "Collecting data…" }
@@ -173,18 +159,12 @@ extension StringsEN: CommonStrings {
     var commonNow: String { "Now" }
     var commonTryAgain: String { "Try again" }
     var commonShowLess: String { "Show less" }
-    var commonSetting: String { "Setting" }
-    var commonOnBattery: String { "Battery" }
-    var commonACPower: String { "AC power" }
-    var commonNormal: String { "normal" }
-    var commonFree: String { "Free" }
     var commonChart: String { "Chart" }
     var commonTable: String { "Table" }
     var commonRefreshing: String { "Refreshing…" }
     var commonInProgress: String { "In progress" }
     var commonCancel: String { "Cancel" }
     var commonOpenPrivacySettings: String { "Open Privacy settings…" }
-    func commonUpdated(_ time: String) -> String { "updated \(time)" }
     var commonChecking: String { "Checking…" }
     var commonCritical: String { "Critical" }
     func commonLastData(_ time: String) -> String { "last data — \(time)" }
@@ -197,9 +177,6 @@ extension StringsRU: CommonStrings {
     // MARK: Shared (cross-card)
     var sharedUnavailable: String { "(недоступно)" }
     var sharedCollectingData: String { "Собираем данные…" }
-    var sharedEmpty: String { "пусто" }
-    func sharedMoreN(_ n: Int) -> String { "Ещё \(n)" }
-    var sharedCollapse: String { "Свернуть" }
 
     // MARK: Parsers / live status
     var battStateCharging: String { "заряжается" }
@@ -252,7 +229,6 @@ extension StringsRU: CommonStrings {
     var commonFullDiskAccessNeeded: String { "Нужен полный доступ к диску" }
     var commonCompressed: String { "Сжатая" }
     var commonOK: String { "в норме" }
-    var commonCycles: String { "Циклы" }
     var commonProtection: String { "Защита" }
     var commonUpdates: String { "Обновления" }
     var commonCollectingData: String { "Сбор данных…" }
@@ -265,18 +241,12 @@ extension StringsRU: CommonStrings {
     var commonNow: String { "Сейчас" }
     var commonTryAgain: String { "Повторить" }
     var commonShowLess: String { "Свернуть" }
-    var commonSetting: String { "Параметр" }
-    var commonOnBattery: String { "От батареи" }
-    var commonACPower: String { "От сети" }
-    var commonNormal: String { "норма" }
-    var commonFree: String { "Свободно" }
     var commonChart: String { "График" }
     var commonTable: String { "Таблица" }
     var commonRefreshing: String { "Обновление…" }
     var commonInProgress: String { "Выполняется" }
     var commonCancel: String { "Отмена" }
     var commonOpenPrivacySettings: String { "Открыть «Конфиденциальность»…" }
-    func commonUpdated(_ time: String) -> String { "обновлено \(time)" }
     var commonChecking: String { "Проверка…" }
     var commonCritical: String { "Критично" }
     func commonLastData(_ time: String) -> String { "последние данные — \(time)" }

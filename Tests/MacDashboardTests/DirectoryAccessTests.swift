@@ -60,42 +60,12 @@ extension SerialTests {
                 var report = FullReport()
                 report.homeDirsUnreadable = ["/Users/x/.Trash"]
                 let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
-                #expect(a.tips.filter { $0.text == L.assessNoFDATip }.count == 1,
-                      "assess no-FDA: unreadable home folders ⇒ exactly one tip")
-                let caps = a.capsules.filter { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) }
-                #expect(caps.count == 1, "assess no-FDA: exactly one capsule")
-                #expect(caps.first?.object == L.attnCapFolders && caps.first?.value == L.attnCapFoldersNoAccess,
-                      "assess no-FDA: capsule carries the folders object/value")
-                #expect(caps.first?.verb == L.attnVerbSettings,
-                      "assess no-FDA: capsule verb is the settings verb")
-                #expect(a.problems.isEmpty && a.items.isEmpty,
-                      "assess no-FDA: never produces a problem / «Требует внимания» item")
-            }
-            do {
-                var report = FullReport()
-                report.homeDirsUnreadable = ["/Users/x/.Trash"]
-                report.serviceDirsUnreadable = ["/Users/x/Library/Containers"]
-                let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
-                #expect(a.tips.filter { $0.text == L.assessNoFDATip }.count == 1,
-                      "assess no-FDA: both sections unreadable ⇒ still exactly one tip")
-                #expect(a.capsules.filter { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) }.count == 1,
-                      "assess no-FDA: both sections unreadable ⇒ still exactly one capsule")
-            }
-            do {
-                let a = Assess.assess(report: FullReport(), live: LiveSnapshot(), language: L10nStore.shared.language)
-                #expect(!a.tips.contains { $0.text == L.assessNoFDATip },
-                      "assess no-FDA: nothing hidden ⇒ no tip")
-                #expect(!a.capsules.contains { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) },
-                      "assess no-FDA: nothing hidden ⇒ no capsule")
+                #expect(a.items.isEmpty, "assess no-FDA: never produces a «Требует внимания» item")
             }
             do {
                 #expect(AdvicePanes.fullDiskAccess == "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
                       "AdvicePanes.fullDiskAccess: exact pane URL")
                 for (name, s) in [("EN", StringsEN() as AppStrings), ("RU", StringsRU() as AppStrings)] {
-                    #expect(!s.assessNoFDATip.isEmpty && !s.storageFoldersNoFDAButton.isEmpty &&
-                          !s.storageFoldersNoFDAButtonA11y.isEmpty && !s.attnCapFolders.isEmpty &&
-                          !s.attnCapFoldersNoAccess.isEmpty && !s.attnExplainNoFDA.isEmpty,
-                          "L10n no-FDA strings: non-empty in \(name)")
                     #expect(s.storageFoldersNoFDA("Корзина").contains("Корзина"),
                           "L10n storageFoldersNoFDA: interpolates the folder list in \(name)")
                 }

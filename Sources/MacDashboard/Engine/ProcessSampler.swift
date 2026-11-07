@@ -3,7 +3,7 @@
 // it alone can — one non-sleeping `/bin/ps` snapshot for pids, names and cumulative CPU
 // time (turned into per-process CPU% by a measured delta against the previous snapshot,
 // Block V2-PROC-NATIVE), and one `/usr/bin/top` snapshot for the memory footprint of
-// every process (re-review 2 [M1]; see `memoryFootprints()` for why it takes both).
+// every process (re-review 2 [M1]; see `memoryFootprintsReporting()` for why it takes both).
 // NOT thread-safe — keeps mutable per-instance state (the previous snapshot and its
 // timestamp), so use one instance per background context, the same contract
 // `LiveCollector` itself follows. `sample()` is async; one instance must not be
@@ -27,7 +27,7 @@ final class ProcessSampler {
 
     /// One `/bin/ps` invocation, parsed. No sleep, and no per-pid work of any kind: the
     /// memory footprints come from ONE separate `/usr/bin/top` snapshot per tick
-    /// (`memoryFootprints()`), never from a call per process.
+    /// (`memoryFootprintsReporting()`), never from a call per process.
     private func snapshot() async -> [Parsers.PSRow] {
         guard let out = await ParsedCommand.ps.run().text else { return [] }
         let rows = Parsers.psProcesses(out)
@@ -48,6 +48,8 @@ final class ProcessSampler {
         return (currentSeconds - previous) / elapsed * 100
     }
 
+    /// Footprints by pid from `top`, plus the parse failure (if any) for the caller to record.
+    ///
     /// pid -> physical memory footprint in bytes for EVERY process on the machine, from ONE
     /// `/usr/bin/top` snapshot. This is the metric Activity Monitor's "Memory" column shows.
     /// `ps -o rss` (what `Parsers.PSRow.memBytes` carries) is a different quantity: it counts
@@ -72,11 +74,6 @@ final class ProcessSampler {
     /// Total: `[:]` when top cannot be launched or times out, and a pid is simply absent when
     /// its row did not parse. Either way the caller keeps that row's RSS — a failure here must
     /// never drop a row or fail a sample.
-    static func memoryFootprints() async -> [Int32: Int64] {
-        await memoryFootprintsReporting().footprints
-    }
-
-    /// Same as `memoryFootprints()`, plus the parse failure (if any) for the caller to record.
     static func memoryFootprintsReporting() async -> (footprints: [Int32: Int64], failure: ParseFailure?) {
         guard let out = await ParsedCommand.top.run().text else { return ([:], nil) }
         let footprints = Parsers.topMemoryFootprints(out)

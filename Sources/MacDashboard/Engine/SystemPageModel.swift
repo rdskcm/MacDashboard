@@ -17,7 +17,7 @@ enum StartupGroupID: String, CaseIterable { case login, userAgents, systemAgents
 struct StartupPill: Equatable { var id: String; var text: String; var stale: Bool; var help: String }
 struct StartupGroup: Equatable, Identifiable {
     var id: StartupGroupID; var title: String; var count: Int?; var staleCount: Int
-    var pills: [StartupPill]; var noPermission: Bool; var openByDefault: Bool
+    var pills: [StartupPill]; var noPermission: Bool
 }
 struct StaleRow: Equatable, Identifiable {
     var id: String /* path */; var fileName: String; var folder: String
@@ -277,7 +277,7 @@ struct SystemPageModel: Equatable {
             }
             let staleCount = pills.filter(\.stale).count
             return StartupGroup(id: id, title: title, count: items.count, staleCount: staleCount, pills: pills,
-                                noPermission: false, openByDefault: staleCount > 0)
+                                noPermission: false)
         }
         let login = auto.loginItems
         let loginPills = (login ?? []).enumerated().map { idx, name in
@@ -288,12 +288,12 @@ struct SystemPageModel: Equatable {
         }
         return [
             StartupGroup(id: .login, title: L.sysGroupLogin, count: login?.count, staleCount: 0, pills: loginPills,
-                         noPermission: login == nil, openByDefault: true),
+                         noPermission: login == nil),
             plistGroup(.userAgents, L.sysGroupUserAgents, auto.userAgents),
             plistGroup(.systemAgents, L.sysGroupSystemAgents, auto.systemAgents),
             plistGroup(.systemDaemons, L.sysGroupSystemDaemons, auto.systemDaemons),
             StartupGroup(id: .background, title: L.sysGroupBackground, count: auto.background.count, staleCount: 0,
-                         pills: background, noPermission: false, openByDefault: false),
+                         pills: background, noPermission: false),
         ]
     }
 

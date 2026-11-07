@@ -24,22 +24,14 @@ protocol AttentionStrings {
     var assessClaudeBackupNone: String { get }
     func assessSmartDiskErrors(_ title: String) -> String
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String
-    func assessSmartDiskUnavailableTip(_ title: String) -> String
-    func assessDownloadsTip(_ sizeStr: String, _ shareSuffix: String) -> String
-    func assessDownloadsShareSuffix(_ pct: String) -> String
-    func assessTrashTip(_ sizeStr: String) -> String
-    func assessCachesTip(_ sizeStr: String) -> String
-    var assessNoFDATip: String { get }
-    func assessSummaryCount(_ n: Int) -> String
 
     // MARK: v2 attention
-    // Chip labels + details (one pair per AttentionKind; see Engine/AttentionModel.swift).
+    // Chip labels + details (one pair per AttentionKind; see Engine/AttentionItem.swift).
     var attnLabelDiskFull: String { get }
     func attnDetailDiskFull(_ pct: String) -> String
     var attnLabelDiskFullSoon: String { get }
     func attnDetailDiskFullSoon(_ pct: String) -> String
     var attnLabelSwapHigh: String { get }
-    var attnDetailMemPressureWarn: String { get }
     var attnDetailMemPressureCritical: String { get }
     var attnLabelBatteryCapacity: String { get }
     func attnDetailBatteryCapacity(_ cap: Int) -> String
@@ -73,44 +65,6 @@ protocol AttentionStrings {
     func attnLabelSmartWear(_ title: String) -> String
     func attnDetailSmartWear(_ pu: Int) -> String
 
-    // Verbs (single source of truth — see AttentionModel.verb(for:lang:)).
-    var attnVerbSettings: String { get }
-    var attnVerbActivityMonitor: String { get }
-    var attnVerbDiskUtility: String { get }
-    var attnVerbShow: String { get }
-    var attnVerbEmpty: String { get }
-    var attnVerbEnable: String { get }
-    var attnVerbOpen: String { get }
-
-    // Capsule objects + values + explanations.
-    var attnCapBattery: String { get }
-    func attnCapBatteryValue(_ p: Int) -> String
-    var attnCapSmartNoData: String { get }
-    var attnCapDownloads: String { get }
-    var attnCapTrash: String { get }
-    var attnCapCaches: String { get }
-    var attnExplainBattery: String { get }
-    var attnExplainBrew: String { get }
-    var attnExplainSmart: String { get }
-    var attnExplainDownloads: String { get }
-    var attnExplainTrash: String { get }
-    var attnExplainCaches: String { get }
-    var attnCapFolders: String { get }
-    var attnCapFoldersNoAccess: String { get }
-    var attnExplainNoFDA: String { get }
-
-    // Attention summary card overflow toggles (Block V2-SUMMARY).
-    func attnMore(_ n: Int) -> String
-    var attnCollapse: String { get }
-
-    // Quiet-strip strings.
-    var quietUpdatesTitle: String { get }
-    var quietNeedsAttention: String { get }
-    var quietStatusAllEnabled: String { get }
-    var quietStatusAllClear: String { get }
-    var quietMarkOff: String { get }
-    var quietMarkUnknown: String { get }
-    func quietCountItems(_ n: Int) -> String
     // BACKUP-CARD-FAILURE
     func assessClaudeBackupStaleFailed(_ age: String, _ reason: String) -> String
     func assessClaudeBackupNoneFailed(_ reason: String) -> String
@@ -171,13 +125,6 @@ extension StringsEN: AttentionStrings {
     var assessClaudeBackupNone: String { "The Claude backup log has no successful snapshot — check the disk." }
     func assessSmartDiskErrors(_ title: String) -> String { "Disk “\(title)”: SMART reports media errors — check the disk and your backups." }
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String { "Disk “\(title)”: wear is \(pct)% — nearing end of life." }
-    func assessSmartDiskUnavailableTip(_ title: String) -> String { "Disk “\(title)”: SMART unavailable — reconnect the cable or install smartmontools (brew install smartmontools)." }
-    func assessDownloadsTip(_ sizeStr: String, _ shareSuffix: String) -> String { "Downloads folder takes up \(sizeStr)\(shareSuffix) — worth sorting through." }
-    func assessDownloadsShareSuffix(_ pct: String) -> String { " (\(pct)% of total disk)" }
-    func assessTrashTip(_ sizeStr: String) -> String { "Trash: \(sizeStr) — safe to empty." }
-    func assessCachesTip(_ sizeStr: String) -> String { "~/Library/Caches: \(sizeStr) — safe to clear." }
-    var assessNoFDATip: String { "Some folders are missing from the report: the app doesn't have Full Disk Access." }
-    func assessSummaryCount(_ n: Int) -> String { "Findings: \(n)" }
 
     // MARK: v2 attention
     var attnLabelDiskFull: String { "Disk" }
@@ -185,7 +132,6 @@ extension StringsEN: AttentionStrings {
     var attnLabelDiskFullSoon: String { "Disk" }
     func attnDetailDiskFullSoon(_ pct: String) -> String { "\(pct) % full" }
     var attnLabelSwapHigh: String { "Memory" }
-    var attnDetailMemPressureWarn: String { "running low" }
     var attnDetailMemPressureCritical: String { "running out" }
     var attnLabelBatteryCapacity: String { "Battery" }
     func attnDetailBatteryCapacity(_ cap: Int) -> String { "capacity \(cap) %" }
@@ -217,37 +163,6 @@ extension StringsEN: AttentionStrings {
     var attnDetailSmartErrors: String { "SMART errors" }
     func attnLabelSmartWear(_ title: String) -> String { title }
     func attnDetailSmartWear(_ pu: Int) -> String { "wear \(pu) %" }
-    var attnVerbSettings: String { "Settings" }
-    var attnVerbActivityMonitor: String { "Activity Monitor" }
-    var attnVerbDiskUtility: String { "Disk Utility" }
-    var attnVerbShow: String { "Show" }
-    var attnVerbEmpty: String { "Empty" }
-    var attnVerbEnable: String { "Enable" }
-    var attnVerbOpen: String { "Open" }
-    var attnCapBattery: String { "Battery" }
-    func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
-    var attnCapSmartNoData: String { "no SMART data" }
-    var attnCapDownloads: String { "Downloads" }
-    var attnCapTrash: String { "Trash" }
-    var attnCapCaches: String { "Caches" }
-    var attnExplainBattery: String { "Capacity drops naturally over time. Opens the system Battery settings; nothing changes without your confirmation." }
-    var attnExplainBrew: String { "Runs `brew upgrade` in the background — progress shows in the Homebrew card. Installed packages are replaced with newer versions." }
-    var attnExplainSmart: String { "Opens Disk Utility. External drives often can't expose SMART attributes over USB — that is not a sign of failure." }
-    var attnExplainDownloads: String { "Opens the folder in Finder. Nothing is deleted — you decide what to remove." }
-    var attnExplainTrash: String { "Asks for confirmation, then empties the Trash via Finder. Files cannot be recovered afterwards." }
-    var attnExplainCaches: String { "Opens ~/Library/Caches in Finder. Apps rebuild their caches on next launch." }
-    var attnCapFolders: String { "Folders" }
-    var attnCapFoldersNoAccess: String { "some are hidden" }
-    var attnExplainNoFDA: String { "Opens System Settings → Privacy & Security → Full Disk Access. Without it the app can't see the Trash and some Library folders, so their size is missing from the report." }
-    func attnMore(_ n: Int) -> String { "More \(n)" }
-    var attnCollapse: String { "Less" }
-    var quietUpdatesTitle: String { "Updates & crashes" }
-    var quietNeedsAttention: String { "needs attention" }
-    var quietStatusAllEnabled: String { "all enabled" }
-    var quietStatusAllClear: String { "all clear" }
-    var quietMarkOff: String { "off" }
-    var quietMarkUnknown: String { "unknown" }
-    func quietCountItems(_ n: Int) -> String { "\(n)" }
     // BACKUP-CARD-FAILURE
     func assessClaudeBackupStaleFailed(_ age: String, _ reason: String) -> String { "No Claude backup for \(age) — the last attempt failed: \(reason). Older snapshots were not touched." }
     func assessClaudeBackupNoneFailed(_ reason: String) -> String { "The Claude backup log has no successful snapshot — the last attempt failed: \(reason)." }
@@ -309,13 +224,6 @@ extension StringsRU: AttentionStrings {
     var assessClaudeBackupNone: String { "В журнале бэкапа Claude нет ни одного успешного снимка — проверьте диск." }
     func assessSmartDiskErrors(_ title: String) -> String { "Диск «\(title)»: SMART сообщает об ошибках носителя — проверьте диск и бэкапы." }
     func assessSmartDiskWearHigh(_ title: String, _ pct: Int) -> String { "Диск «\(title)»: износ \(pct)% — ресурс на исходе." }
-    func assessSmartDiskUnavailableTip(_ title: String) -> String { "Диск «\(title)»: SMART недоступен — переподключите кабель или установите smartmontools (brew install smartmontools)." }
-    func assessDownloadsTip(_ sizeStr: String, _ shareSuffix: String) -> String { "«Загрузки» занимают \(sizeStr)\(shareSuffix) — стоит разобрать." }
-    func assessDownloadsShareSuffix(_ pct: String) -> String { " (\(pct)% всего диска)" }
-    func assessTrashTip(_ sizeStr: String) -> String { "Корзина: \(sizeStr) — можно очистить." }
-    func assessCachesTip(_ sizeStr: String) -> String { "Кэши ~/Library/Caches: \(sizeStr) — чистить безопасно." }
-    var assessNoFDATip: String { "Часть папок не попала в отчёт: у приложения нет полного доступа к диску." }
-    func assessSummaryCount(_ n: Int) -> String { "Замечаний: \(n)" }
 
     // MARK: v2 attention
     var attnLabelDiskFull: String { "Диск" }
@@ -323,7 +231,6 @@ extension StringsRU: AttentionStrings {
     var attnLabelDiskFullSoon: String { "Диск" }
     func attnDetailDiskFullSoon(_ pct: String) -> String { "заполнен на \(pct) %" }
     var attnLabelSwapHigh: String { "Память" }
-    var attnDetailMemPressureWarn: String { "памяти мало" }
     var attnDetailMemPressureCritical: String { "памяти не хватает" }
     var attnLabelBatteryCapacity: String { "Батарея" }
     func attnDetailBatteryCapacity(_ cap: Int) -> String { "ёмкость \(cap) %" }
@@ -355,37 +262,6 @@ extension StringsRU: AttentionStrings {
     var attnDetailSmartErrors: String { "ошибки SMART" }
     func attnLabelSmartWear(_ title: String) -> String { title }
     func attnDetailSmartWear(_ pu: Int) -> String { "износ \(pu) %" }
-    var attnVerbSettings: String { "Настройки" }
-    var attnVerbActivityMonitor: String { "Мониторинг системы" }
-    var attnVerbDiskUtility: String { "Дисковая утилита" }
-    var attnVerbShow: String { "Показать" }
-    var attnVerbEmpty: String { "Очистить" }
-    var attnVerbEnable: String { "Включить" }
-    var attnVerbOpen: String { "Открыть" }
-    var attnCapBattery: String { "Батарея" }
-    func attnCapBatteryValue(_ p: Int) -> String { "\(p) %" }
-    var attnCapSmartNoData: String { "нет данных SMART" }
-    var attnCapDownloads: String { "Загрузки" }
-    var attnCapTrash: String { "Корзина" }
-    var attnCapCaches: String { "Кэши" }
-    var attnExplainBattery: String { "Ёмкость снижается естественным образом со временем. Откроются системные настройки батареи; ничего не изменится без вашего подтверждения." }
-    var attnExplainBrew: String { "Запустит `brew upgrade` в фоне — прогресс виден в карточке Homebrew. Установленные пакеты заменяются на свежие версии." }
-    var attnExplainSmart: String { "Откроет «Дисковую утилиту». У внешних дисков SMART-атрибуты часто недоступны через USB — это не признак поломки." }
-    var attnExplainDownloads: String { "Откроет папку в Finder. Ничего не удаляется — вы сами решаете, что убрать." }
-    var attnExplainTrash: String { "Спросит подтверждение, затем очистит Корзину через Finder. Восстановить файлы после этого нельзя." }
-    var attnExplainCaches: String { "Откроет ~/Library/Caches в Finder. Приложения пересоздадут кэш при следующем запуске." }
-    var attnCapFolders: String { "Папки" }
-    var attnCapFoldersNoAccess: String { "видны не все" }
-    var attnExplainNoFDA: String { "Откроет «Системные настройки» → «Конфиденциальность и безопасность» → «Полный доступ к диску». Без него приложение не видит Корзину и часть служебных папок, поэтому их размер не попадает в отчёт." }
-    func attnMore(_ n: Int) -> String { "Ещё \(n)" }
-    var attnCollapse: String { "Свернуть" }
-    var quietUpdatesTitle: String { "Обновления и краши" }
-    var quietNeedsAttention: String { "требует внимания" }
-    var quietStatusAllEnabled: String { "всё включено" }
-    var quietStatusAllClear: String { "всё в норме" }
-    var quietMarkOff: String { "выключен" }
-    var quietMarkUnknown: String { "неизвестно" }
-    func quietCountItems(_ n: Int) -> String { "\(n) шт." }
     // BACKUP-CARD-FAILURE
     func assessClaudeBackupStaleFailed(_ age: String, _ reason: String) -> String { "Бэкапа Claude не было \(age) — последняя попытка не удалась: \(reason). Старые снимки не затронуты." }
     func assessClaudeBackupNoneFailed(_ reason: String) -> String { "В журнале бэкапа Claude нет ни одного успешного снимка — последняя попытка не удалась: \(reason)." }
