@@ -25,7 +25,7 @@ private func health(_ field: WritableKeyPath<SmartHealth, Int?>? = nil, _ v: Int
 }
 
 private func disk(_ device: String, _ h: SmartHealth?) -> SmartDisk {
-    SmartDisk(device: device, title: device, status: "OK", health: h)
+    SmartDisk(device: device, title: device, status: .ok, health: h)
 }
 
 extension SerialTests {

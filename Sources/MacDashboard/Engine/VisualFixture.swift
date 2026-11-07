@@ -66,7 +66,7 @@ enum VisualFixture {
 
     /// REDESIGN-STORAGE: a failing external drive (the `storage-smart-failing` state).
     static let externalFailingDisk = SmartDisk(
-        device: "/dev/disk4", title: "External SSD", status: "FAILING",
+        device: "/dev/disk4", title: "External SSD", status: .mediaErrors,
         attrs: [("Critical Warning", "0x01"), ("Media and Data Integrity Errors", "27"), ("Percentage Used", "104%")],
         severity: .crit,
         health: SmartHealth(
@@ -77,15 +77,15 @@ enum VisualFixture {
     /// REDESIGN-SECURITY: sample updates for the Security page snapshot states (the fixture report keeps `updates = []`).
     // REDESIGN-SYSTEM: the System page fixtures (Sleep, Startup items, Energy settings).
     static func autostart(home: String) -> AutostartInfo {
-        func info(_ path: String, orphan: Bool = false, description: String? = nil, exe: String? = nil) -> LaunchdPlistInfo {
-            LaunchdPlistInfo(path: path, label: nil, executablePath: exe, isOrphan: orphan, description: description)
+        func info(_ path: String, label: String? = nil, orphan: Bool = false, exe: String? = nil) -> LaunchdPlistInfo {
+            LaunchdPlistInfo(path: path, label: label, executablePath: exe, isOrphan: orphan)
         }
         let user = home + "/Library/LaunchAgents/"
         return AutostartInfo(
             loginItems: ["Claude", "Rectangle", "Dropbox", "iStat Menus"],
             userAgents: [info(user + "com.google.keystone.agent.plist"),
                          info(user + "com.dropbox.DropboxMacUpdate.agent.plist"),
-                         info(user + "homebrew.mxcl.postgresql@14.plist", orphan: true, description: "PostgreSQL 14 server",
+                         info(user + "homebrew.mxcl.postgresql@14.plist", label: "homebrew.mxcl.postgresql@14", orphan: true,
                               exe: "/opt/homebrew/opt/postgresql@14/bin/postgres")],
             systemAgents: [info("/Library/LaunchAgents/com.adobe.ARMDCHelper.plist", orphan: true),
                            info("/Library/LaunchAgents/com.microsoft.update.agent.plist")],
@@ -241,7 +241,7 @@ enum VisualFixture {
         let disk = DiskInfo(size: GB(256), avail: GB(76.8), dataUsed: GB(160), sysUsed: GB(18), purgeable: GB(3.1))
 
         let battery = BatteryInfo(
-            source: "AC Power", charge: 82, state: "charging",
+            source: .ac, charge: 82, state: .charging,
             cycles: 312, condition: "Normal", maxCapacity: 76
         )
 
@@ -274,7 +274,7 @@ enum VisualFixture {
             osName: "macOS", osVersion: "26.1", osBuild: "25B78",
             modelName: "MacBook Air", modelId: "Mac15,12", chip: "Apple M3",
             cores: "8 (4 performance and 4 efficiency)", memBytes: 16 * GiB,
-            uptime: "3 days 4 hours", hostName: "fixture-mac"
+            uptimeSeconds: 3 * 86_400 + 4 * 3600, hostName: "fixture-mac"
         )
         let counted = folderSizes()
         report.homeDirs = counted.homeDirs
@@ -305,7 +305,7 @@ enum VisualFixture {
                             "com.apple.TimeMachine.2026-01-15-080000.local",
                             "com.apple.TimeMachine.2026-01-15-070000.local"]
         report.homeDirsUnreadable = [home + "/Library/Mail"]
-        report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED", health: internalHealth)]
+        report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: .verified, health: internalHealth)]
         report.progress = ["homeDirs": true, "serviceDirs": true]
         report.battery = battery
 
@@ -324,7 +324,7 @@ enum VisualFixture {
             t: referenceDate, load: load, cpu: cpu,
             topCPU: topCPU, topMem: topMem, mem: mem, swap: swap, disk: disk, battery: battery
         )
-        let assessment = Assess.assess(report: report, live: live, memPressure: nil, topApps: [], wakeHolders: wakeHolders,
+        let assessment = Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: nil, topApps: [], wakeHolders: wakeHolders,
                                        claudeBackup: claudeBackup, claudeAttempt: claudeAttempt, now: referenceDate)
 
         var history = HistoryState()
@@ -360,7 +360,8 @@ enum VisualFixture {
             hasBattery: true, battery: BatteryInfo.merged(live: battery, report: report.battery),
             security: report.security, claudeBackup: claudeBackup, claudeAttempt: claudeAttempt, snapshotCount: report.snapshots?.count,
             now: referenceDate, parseFailures: [],
-            details: ReportDetails(report: report, live: live)))
+            details: ReportDetails(report: report, live: live)),
+            language: L10nStore.shared.language)
 
         return Dataset(
             load: load, cpu: cpu, mem: mem, swap: swap, disk: disk, battery: battery,

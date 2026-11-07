@@ -282,7 +282,7 @@ enum HomeModel {
             (section, focus) = (.security, .crashes)
             (object, state, verb, tag) = (L.homeCrashes, L.homeStateReports(n), L.commonShow, L.homeCrashes)
         case .smartWear:
-            let disk = (report.smart ?? []).first { item.label.contains($0.title) }
+            let disk = (report.smart ?? []).first { item.label.contains($0.localizedTitle) }
             let pu = disk.flatMap { smartPercentUsed($0) }
             (section, focus) = (.storage, .smart)
             (object, state, verb, tag) = (L.homeDiskWear, pu.map { L.homePercent("\($0)") } ?? item.detail,
@@ -539,7 +539,7 @@ enum HomeModel {
             switch i.claudeBackup {
             case .lastSuccess(let d):
                 let secs = Int(i.now.timeIntervalSince(d))
-                claude = HomeKV(label: L.commonClaudeBackup, value: L.claudeBackupAgo(BackupLog.durationText(seconds: secs)),
+                claude = HomeKV(label: L.commonClaudeBackup, value: L.claudeBackupAgo(BackupLog.durationText(seconds: secs, language: L10nStore.shared.language)),
                                 tone: has(.claudeBackup) ? .amber : nil)
             case .noSuccessFound:
                 claude = HomeKV(label: L.commonClaudeBackup, value: L.attnDetailClaudeBackupNone, tone: .amber)
@@ -779,7 +779,7 @@ extension HomeModel {
                     batteryBar: HomeBatteryBar(fraction: Double(cap) / 100, fill: fill, tick: 0.8, tickLabel: L.homePercent("80"),
                                                spoken: L.homeWearThreshold, help: L.homeWearThresholdHelp),
                     legend: [],
-                    foot: L.homeBatteryFoot(cycles: b.cycles, charge: b.charge, state: b.state, short: short),
+                    foot: L.homeBatteryFoot(cycles: b.cycles, charge: b.charge, state: b.state?.localizedText, short: short),
                     destination: battDest))
             } else {
                 cells.append(loadingCell(.battery, L.commonBattery, battDest))

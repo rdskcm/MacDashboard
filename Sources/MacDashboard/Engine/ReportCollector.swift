@@ -410,8 +410,8 @@ final class ReportCollector {
             if !s.isEmpty { info.chip = s }
         }
         if let up = await ParsedCommand.uptime.run().text {
-            info.uptime = Parsers.uptimeHuman(up)
-            if info.uptime == nil, let f = ParseFailure(.uptime, stdout: up) { failures.append(f) }
+            info.uptimeSeconds = Parsers.uptimeSeconds(up)
+            if info.uptimeSeconds == nil, let f = ParseFailure(.uptime, stdout: up) { failures.append(f) }
         }
         info.hostName = ProcessInfo.processInfo.hostName
         let has = info.osName != nil || info.modelName != nil || info.chip != nil
@@ -654,12 +654,12 @@ final class ReportCollector {
 
     private func collectSpotlight() async -> Outcome {
         let out = await CommandRunner.run("/usr/bin/mdutil", ["-s", "/"], timeout: 10).nonEmptyText
-        let text: String? = out.map { raw in
-            if raw.lowercased().contains("indexing enabled") { return L.reportCollectorSpotlightEnabled }
-            if raw.lowercased().contains("indexing disabled") { return L.reportCollectorSpotlightDisabled }
-            return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let state: SpotlightState? = out.map { raw in
+            if raw.lowercased().contains("indexing enabled") { return .enabled }
+            if raw.lowercased().contains("indexing disabled") { return .disabled }
+            return .other(raw.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        return Outcome(section: .spotlight) { $0.spotlight = text }
+        return Outcome(section: .spotlight) { $0.spotlight = state }
     }
 
     // MARK: - crashes (FileManager, no shell)
@@ -711,10 +711,9 @@ final class ReportCollector {
         } else {
             a.loginItems = nil
         }
-        let lang = L10nStore.shared.language
-        a.userAgents = inspectDir(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents"), language: lang)
-        a.systemAgents = inspectDir(URL(fileURLWithPath: "/Library/LaunchAgents"), language: lang)
-        a.systemDaemons = inspectDir(URL(fileURLWithPath: "/Library/LaunchDaemons"), language: lang)
+        a.userAgents = inspectDir(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents"))
+        a.systemAgents = inspectDir(URL(fileURLWithPath: "/Library/LaunchAgents"))
+        a.systemDaemons = inspectDir(URL(fileURLWithPath: "/Library/LaunchDaemons"))
         if let ll = await CommandRunner.run("/bin/launchctl", ["list"], timeout: 15).text {
             a.background = Parsers.launchctlNonApple(ll)
         }
@@ -722,8 +721,8 @@ final class ReportCollector {
     }
 
     /// Lists `.plist` files in `url` and inspects each one (label, resolved
-    /// executable, orphan status, description) via `LaunchdPlistInspector`.
-    private func inspectDir(_ url: URL, language: AppLanguage) -> [LaunchdPlistInfo] {
+    /// executable, orphan status) via `LaunchdPlistInspector`.
+    private func inspectDir(_ url: URL) -> [LaunchdPlistInfo] {
         let items = (try? FileManager.default.contentsOfDirectory(
             at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
         return items
@@ -731,7 +730,7 @@ final class ReportCollector {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .compactMap { fileURL -> LaunchdPlistInfo? in
                 guard let data = FileManager.default.contents(atPath: fileURL.path) else { return nil }
-                return LaunchdPlistInspector.inspect(plistPath: fileURL.path, plistData: data, language: language)
+                return LaunchdPlistInspector.inspect(plistPath: fileURL.path, plistData: data)
             }
     }
 
@@ -762,7 +761,6 @@ final class ReportCollector {
                 failures.append(f)
             }
             var disk = makeDiskutilDisk(device: "internal",
-                                        fallbackTitle: L.reportCollectorInternalDiskFallbackTitle,
                                         media: media, status: status, external: false)
             // Block N7: NVMe SMART/Health attrs for the internal disk (temperature,
             // wear, etc.). MUST be -A (attributes-only): -a returns a benign nonzero
@@ -792,10 +790,10 @@ final class ReportCollector {
                         switch smartSeverity(attrs: attrs) {
                         case .crit:
                             disk.severity = .crit
-                            disk.status = L.reportCollectorSmartMediaErrors
+                            disk.status = .mediaErrors
                         case .warn:
                             disk.severity = .warn
-                            disk.status = L.reportCollectorSmartWearHigh
+                            disk.status = .wearHigh
                         default:
                             break   // keep the diskutil "verified" status/severity
                         }
@@ -844,16 +842,16 @@ final class ReportCollector {
         return (disks, failures)
     }
 
-    private func makeDiskutilDisk(device: String, fallbackTitle: String,
+    private func makeDiskutilDisk(device: String,
                                   media: String?, status: String?, external: Bool) -> SmartDisk {
-        let title = (media?.isEmpty == false) ? media! : fallbackTitle
+        let title = (media?.isEmpty == false) ? media : nil
         let s = (status ?? "").lowercased()
-        let display: String
+        let display: SmartStatus
         let sev: Severity
-        if s.contains("verified") { display = L.reportCollectorSmartOkVerified; sev = .good }
-        else if s.contains("not supported") { display = L.reportCollectorSmartNotSupported; sev = .info }
-        else if s.isEmpty { display = L.reportCollectorSmartStatusUnavailable; sev = .info }
-        else { display = "SMART: \(status!)"; sev = .info }
+        if s.contains("verified") { display = .verified; sev = .good }
+        else if s.contains("not supported") { display = .notSupported; sev = .info }
+        else if s.isEmpty { display = .statusUnavailable; sev = .info }
+        else { display = .diskutil(status!); sev = .info }
         return SmartDisk(device: device, title: title, status: display, attrs: [], severity: sev)
     }
 
@@ -862,11 +860,11 @@ final class ReportCollector {
                                   smartctlPresent: Bool) -> SmartDisk {
         if !attrs.isEmpty {
             let sev = smartSeverity(attrs: attrs)
-            let word: String
+            let word: SmartStatus
             switch sev {
-            case .crit: word = L.reportCollectorSmartMediaErrors
-            case .warn: word = L.reportCollectorSmartWearHigh
-            default: word = "SMART: OK"
+            case .crit: word = .mediaErrors
+            case .warn: word = .wearHigh
+            default: word = .ok
             }
             var disk = SmartDisk(device: device, title: title, status: word, attrs: attrs, severity: sev)
             disk.health = health
@@ -874,14 +872,14 @@ final class ReportCollector {
         }
         let s = (duStatus ?? "").lowercased()
         if s.contains("verified") {
-            return SmartDisk(device: device, title: title, status: L.reportCollectorSmartOkVerified, attrs: [], severity: .good)
+            return SmartDisk(device: device, title: title, status: .verified, attrs: [], severity: .good)
         }
         if s.contains("not supported") {
-            return SmartDisk(device: device, title: title, status: L.reportCollectorSmartNotSupported, attrs: [], severity: .info)
+            return SmartDisk(device: device, title: title, status: .notSupported, attrs: [], severity: .info)
         }
         // Connected but no SMART attributes and not a plain "verified": treat as no-access
         // (box likely dropped from USB4→USB 3.x, or smartmontools absent).
-        let hint = smartctlPresent ? L.reportCollectorSmartUnavailable : L.reportCollectorSmartUnavailableNoTools
+        let hint: SmartStatus = smartctlPresent ? .noAccess : .noAccessNoTools
         return SmartDisk(device: device, title: title, status: hint, attrs: [], severity: .warn)
     }
 

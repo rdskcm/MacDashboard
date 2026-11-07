@@ -478,7 +478,7 @@ struct StorageSmartCard: View {
         VStack(spacing: 4) {
             ForEach(disks) { d in
                 let state = StoragePageModel.driveState(d, smartctlPresent: present)
-                DriveItem(title: d.title,
+                DriveItem(title: d.localizedTitle,
                           sub: StoragePageModel.driveSub(state, isInternal: d.device == "internal"),
                           dot: dotColor(state), isSelected: d.device == current) { selected = d.device }
             }

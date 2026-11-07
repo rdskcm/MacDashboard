@@ -168,18 +168,18 @@ enum WakeHolders {
         func sorted(_ d: [String: WakeHolder]) -> [WakeHolder] {
             d.values.sorted {
                 $0.ageSeconds != $1.ageSeconds ? $0.ageSeconds > $1.ageSeconds
-                    : label(for: $0) < label(for: $1)
+                    : ($0.key.owner, $0.key.requester ?? "") < ($1.key.owner, $1.key.requester ?? "")
             }
         }
         return (sorted(best), sorted(bestSystem))
     }
 
-    /// "caffeinate (от claude)" / "Zoom" in the current language.
-    static func label(for h: WakeHolder) -> String { label(for: h.key) }
+    /// "caffeinate (от claude)" / "Zoom" in `language`.
+    static func label(for h: WakeHolder, language: AppLanguage) -> String { label(for: h.key, language: language) }
 
     /// Same label for a stored ignore-list key (Settings rows, context-menu entries).
-    static func label(for key: WakeHolderKey) -> String {
-        key.requester.map { L.wakeHolderOnBehalf(key.owner, $0) } ?? key.owner
+    static func label(for key: WakeHolderKey, language: AppLanguage) -> String {
+        key.requester.map { language.strings.wakeHolderOnBehalf(key.owner, $0) } ?? key.owner
     }
 
     /// SLEEP-IGNORE-APP: `holders` minus the ignored keys, order preserved.
@@ -190,10 +190,11 @@ enum WakeHolders {
     }
 
     /// pmset's own age, floored to minutes: "21 мин", "1 ч 21 мин".
-    static func ageText(_ seconds: Int) -> String {
+    static func ageText(_ seconds: Int, language: AppLanguage) -> String {
+        let S = language.strings
         let totalMinutes = max(0, seconds) / 60
-        if totalMinutes < 60 { return "\(totalMinutes) \(L.uptimeUnitMinute)" }
-        return L.uptimeHourMinuteCombo(totalMinutes / 60, totalMinutes % 60)
+        if totalMinutes < 60 { return "\(totalMinutes) \(S.uptimeUnitMinute)" }
+        return S.uptimeHourMinuteCombo(totalMinutes / 60, totalMinutes % 60)
     }
 
     // MARK: - live

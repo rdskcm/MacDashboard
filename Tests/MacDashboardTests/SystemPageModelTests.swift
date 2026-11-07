@@ -11,7 +11,7 @@ private func at(_ month: Int, _ day: Int, _ h: Int, _ min: Int) -> Date {
 private let now = at(1, 15, 12, 0)
 
 private func plist(_ path: String, orphan: Bool = false) -> LaunchdPlistInfo {
-    LaunchdPlistInfo(path: path, label: nil, executablePath: orphan ? "/gone" : nil, isOrphan: orphan, description: nil)
+    LaunchdPlistInfo(path: path, label: nil, executablePath: orphan ? "/gone" : nil, isOrphan: orphan)
 }
 private func auto(login: [String]? = ["Dropbox", "Rectangle"], user: [LaunchdPlistInfo] = [], sysAgents: [LaunchdPlistInfo] = [],
                   daemons: [LaunchdPlistInfo] = [], bg: [(pid: String, label: String)] = []) -> AutostartInfo {
@@ -109,7 +109,7 @@ extension SerialTests {
                 #expect(m.sleepRows.map(\.warnable) == [true, false])
                 #expect(m.sleepRows.map(\.name) == ["caffeinate (for Terminal)", "backupd"])
                 #expect(m.sleepRows.map(\.id) == ["caffeinate|Terminal", "backupd|"])
-                #expect(m.sleepRows[0].age == WakeHolders.ageText(4902) && m.sleepRows[1].age == "11 min")
+                #expect(m.sleepRows[0].age == WakeHolders.ageText(4902, language: L10nStore.shared.language) && m.sleepRows[1].age == "11 min")
                 #expect(m.hiddenCount == 1 && m.hiddenRows[0].name == "zoom.us" && m.hiddenRows[0].id == "zoom.us|")
                 #expect(m.hiddenRows[0].a11y == "Warn again about zoom.us")
                 // only ignored + nothing else -> the green note state, Hidden stays

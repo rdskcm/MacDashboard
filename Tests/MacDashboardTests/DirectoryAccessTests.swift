@@ -59,7 +59,7 @@ extension SerialTests {
             do {
                 var report = FullReport()
                 report.homeDirsUnreadable = ["/Users/x/.Trash"]
-                let a = Assess.assess(report: report, live: LiveSnapshot())
+                let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
                 #expect(a.tips.filter { $0.text == L.assessNoFDATip }.count == 1,
                       "assess no-FDA: unreadable home folders ⇒ exactly one tip")
                 let caps = a.capsules.filter { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) }
@@ -75,14 +75,14 @@ extension SerialTests {
                 var report = FullReport()
                 report.homeDirsUnreadable = ["/Users/x/.Trash"]
                 report.serviceDirsUnreadable = ["/Users/x/Library/Containers"]
-                let a = Assess.assess(report: report, live: LiveSnapshot())
+                let a = Assess.assess(report: report, live: LiveSnapshot(), language: L10nStore.shared.language)
                 #expect(a.tips.filter { $0.text == L.assessNoFDATip }.count == 1,
                       "assess no-FDA: both sections unreadable ⇒ still exactly one tip")
                 #expect(a.capsules.filter { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) }.count == 1,
                       "assess no-FDA: both sections unreadable ⇒ still exactly one capsule")
             }
             do {
-                let a = Assess.assess(report: FullReport(), live: LiveSnapshot())
+                let a = Assess.assess(report: FullReport(), live: LiveSnapshot(), language: L10nStore.shared.language)
                 #expect(!a.tips.contains { $0.text == L.assessNoFDATip },
                       "assess no-FDA: nothing hidden ⇒ no tip")
                 #expect(!a.capsules.contains { $0.action == .settingsPane(AdvicePanes.fullDiskAccess) },

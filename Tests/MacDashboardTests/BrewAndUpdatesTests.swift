@@ -291,8 +291,8 @@ extension SerialTests {
                       "updatesAgeString: 3 h -> hours")
                 #expect(updatesAgeString(checkedAt: now.addingTimeInterval(-2 * 86_400), now: now) == L.updatesCheckedAgo("2 \(L.uptimeUnitDay)"),
                       "updatesAgeString: 2 d -> days")
-                #expect(ReportWriter.fmtSeconds(5.63) == "5\(L.decimalSeparator)6 \(L.uptimeUnitSecond)", "fmtSeconds: 5.63")
-                #expect(ReportWriter.fmtSeconds(-1).hasPrefix("0"), "fmtSeconds: negative clamps to 0")
+                #expect(ReportWriter.fmtSeconds(5.63, language: L10nStore.shared.language) == "5\(L.decimalSeparator)6 \(L.uptimeUnitSecond)", "fmtSeconds: 5.63")
+                #expect(ReportWriter.fmtSeconds(-1, language: L10nStore.shared.language).hasPrefix("0"), "fmtSeconds: negative clamps to 0")
 
                 // The restored sections reach render(_:) through ReportSummaryInput.details.
                 func renderDetails(_ r: FullReport) -> String {
@@ -300,7 +300,7 @@ extension SerialTests {
                         generatedAt: now, system: nil, status: .good, tasks: [], cpu: nil, load: nil, ncpu: 8, socTempC: nil,
                         mem: nil, memPressure: nil, swap: nil, disk: nil, hasBattery: false, battery: nil, security: nil,
                         claudeBackup: nil, snapshotCount: nil, now: now, parseFailures: [],
-                        details: ReportDetails(report: r, live: LiveSnapshot())))
+                        details: ReportDetails(report: r, live: LiveSnapshot())), language: L10nStore.shared.language)
                 }
                 var unchecked = FullReport()
                 unchecked.updates = nil
@@ -318,8 +318,8 @@ extension SerialTests {
                 timed.homeDirs = [DirSize(path: "/Users/u/Documents", bytes: 1024)]
                 let t2 = renderDetails(timed)
                 #expect(t2.contains(L.reportSectionTimings), "ReportWriter: timings header present")
-                #expect(t2.contains(L.reportTimingsPass(ReportWriter.fmtSeconds(7.0))), "ReportWriter: whole-pass line present")
-                #expect(t2.contains(L.reportTimingsFolderSizes(ReportWriter.fmtSeconds(6.4), reportUpdatedTimeString(now))),
+                #expect(t2.contains(L.reportTimingsPass(ReportWriter.fmtSeconds(7.0, language: L10nStore.shared.language))), "ReportWriter: whole-pass line present")
+                #expect(t2.contains(L.reportTimingsFolderSizes(ReportWriter.fmtSeconds(6.4, language: L10nStore.shared.language), reportUpdatedTimeString(now))),
                       "ReportWriter: EN folder-sizes timing line present (SIZES-BACKGROUND)")
                 #expect(t2.contains(L.reportFoldersCountedAt(reportUpdatedTimeString(now))),
                       "ReportWriter: '(counted …)' line present (SIZES-BACKGROUND)")

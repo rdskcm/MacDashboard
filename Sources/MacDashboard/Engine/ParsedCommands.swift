@@ -99,7 +99,7 @@ enum ParsedCommand: String, CaseIterable {
             let p = Parsers.batteryPowerProfile(stdout)
             return p.cycles != nil || p.condition != nil || p.maxCapacity != nil
         case .spHardware: return Parsers.hardwareProfile(json: Data(stdout.utf8)) != nil
-        case .uptime: return Parsers.uptimeHuman(stdout) != nil
+        case .uptime: return Parsers.uptimeSeconds(stdout) != nil
         case .tmutilDestinationInfo: return Parsers.tmDestination(plist: Data(stdout.utf8)) != .undecodable
         case .tmutilStatus: return TimeMachineStatus.parse(text: stdout) != nil
         case .diskutilInfo:

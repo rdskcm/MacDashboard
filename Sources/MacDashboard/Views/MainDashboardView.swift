@@ -66,7 +66,7 @@ struct MainDashboardView: View {
                 }
             }
             .onChange(of: L10nStore.shared.language) {
-                model.refreshReport(trigger: .automatic)
+                model.relocalize()
                 commitWidthState(liveWidth.value, seeding: false, animated: false)
             }
             // REDESIGN-NOTIFY: a notification click navigates through the view-owned router (R5, D15).
@@ -257,7 +257,7 @@ struct MainDashboardView: View {
             return "macOS \(ver)\(build)"
         }
         let osShort: String? = sys.osVersion.map { "macOS \($0)" }
-        let uptime = sys.uptime.map { L.headerUptimeChip($0) }
+        let uptime = sys.uptimeSeconds.map { L.headerUptimeChip(fmtUptime(seconds: $0)) }
 
         func join(_ parts: [String?]) -> String {
             let present = parts.compactMap { $0 }

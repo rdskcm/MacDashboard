@@ -11,9 +11,9 @@ private func homeBadFixture(diskPct: Double) -> (FullReport, LiveSnapshot) {
     report.crashes = [CrashGroup(process: AppInfo.name, count: 2, directory: userCrashDir)]
     report.tmDest = .some(.none)
     report.smart = [
-        SmartDisk(device: "internal", title: "Boot SSD", status: "SMART: ошибки носителя",
+        SmartDisk(device: "internal", title: "Boot SSD", status: .mediaErrors,
                   attrs: [("Media and Data Integrity Errors", "3")], severity: .crit),
-        SmartDisk(device: "/dev/disk4", title: "External SSD", status: "SMART: износ на исходе",
+        SmartDisk(device: "/dev/disk4", title: "External SSD", status: .wearHigh,
                   attrs: [("Percentage Used", "85")], severity: .warn),
     ]
     report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: 400, condition: "Replace Now", maxCapacity: 60)
@@ -33,7 +33,7 @@ private let tmLate: TMDestination = {
 }()
 
 private func homeAssess(_ report: FullReport, _ live: LiveSnapshot, wake: Bool = true) -> Assessment {
-    Assess.assess(report: report, live: live, memPressure: .critical,
+    Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: .critical,
                   wakeHolders: wake ? [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)] : [],
                   claudeBackup: .noSuccessFound)
 }
@@ -132,7 +132,7 @@ extension SerialTests {
             #expect(HomeModel.status(scan: .refreshing(lastGoodAt: now), tasks: amberOnly) == .attention)
             var fwReport = FullReport()
             fwReport.security = SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false)
-            let fwA = Assess.assess(report: fwReport, live: LiveSnapshot())
+            let fwA = Assess.assess(report: fwReport, live: LiveSnapshot(), language: L10nStore.shared.language)
             let fwTasks = HomeModel.tasks(fwA, report: fwReport, disk: nil, battery: nil)
             #expect(fwTasks.map(\.kind) == [.firewallOff] && HomeModel.status(scan: .ok(at: now), tasks: fwTasks) == .attention,
                     "a firewall-only task list is attention, not critical")
@@ -354,7 +354,7 @@ extension SerialTests {
 
         private func nowFixture() -> (FullReport, LiveSnapshot) {
             var report = FullReport()
-            report.battery = BatteryInfo(source: nil, charge: 64, state: "discharging", cycles: 1, condition: "Normal", maxCapacity: 76)
+            report.battery = BatteryInfo(source: nil, charge: 64, state: .discharging, cycles: 1, condition: "Normal", maxCapacity: 76)
             var live = LiveSnapshot()
             live.disk = DiskInfo(size: 256 * GIB, avail: 150 * GIB, dataUsed: nil, sysUsed: nil)
             live.swap = SwapInfo(total: 8 * GIB, used: 1 * GIB, free: 7 * GIB)
@@ -366,7 +366,7 @@ extension SerialTests {
         private func nowCells(_ report: FullReport, _ live: LiveSnapshot, pressure: MemoryPressureLevel?,
                               tasks: [HomeTask]? = nil, hasBattery: Bool = true, cpu: CPUUsage? = CPUUsage(user: 20.2, sys: 5.5, idle: 74.3),
                               short: Bool = false, narrow: Bool = false, gpu: Int? = 23) -> [HomeNowCell] {
-            let a = Assess.assess(report: report, live: live, memPressure: pressure)
+            let a = Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: pressure)
             let input = homeInput(report, live, assessment: a, hasBattery: hasBattery)
             let t = tasks ?? HomeModel.tasks(a, report: report, disk: live.disk, battery: live.battery)
             return HomeModel.nowCells(input, tasks: t, memPressure: pressure, socTempC: 48, gpuUtil: gpu, cpu: cpu, short: short, narrow: narrow)
@@ -466,7 +466,7 @@ extension SerialTests {
             L10nStore.shared.language = .en
             var (report, live) = nowFixture()
             report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: 300, condition: "Normal", maxCapacity: 86)
-            live.battery = BatteryInfo(source: nil, charge: 55, state: "charging", cycles: nil, condition: nil, maxCapacity: nil)
+            live.battery = BatteryInfo(source: nil, charge: 55, state: .charging, cycles: nil, condition: nil, maxCapacity: nil)
             let cell = nowCells(report, live, pressure: .normal)[3]
             #expect(cell.loading == false && cell.big == "86%")
             #expect(cell.foot.contains("300 cycles") && cell.foot.contains("now 55%"), "foot \(cell.foot)")
@@ -474,13 +474,13 @@ extension SerialTests {
         }
 
         @Test func batteryMergedHelper() {
-            let live = BatteryInfo(source: "ac", charge: 50, state: "charging", cycles: nil, condition: nil, maxCapacity: nil)
-            let rep = BatteryInfo(source: "old", charge: 10, state: "old", cycles: 300, condition: "Normal", maxCapacity: 86)
+            let live = BatteryInfo(source: .ac, charge: 50, state: .charging, cycles: nil, condition: nil, maxCapacity: nil)
+            let rep = BatteryInfo(source: .battery, charge: 10, state: .other("old"), cycles: 300, condition: "Normal", maxCapacity: 86)
             #expect(BatteryInfo.merged(live: nil, report: nil) == nil)
             #expect(BatteryInfo.merged(live: live, report: nil) == live)
             #expect(BatteryInfo.merged(live: nil, report: rep) == rep)
             #expect(BatteryInfo.merged(live: live, report: rep) ==
-                    BatteryInfo(source: "ac", charge: 50, state: "charging", cycles: 300, condition: "Normal", maxCapacity: 86))
+                    BatteryInfo(source: .ac, charge: 50, state: .charging, cycles: 300, condition: "Normal", maxCapacity: 86))
         }
 
         @Test func wornTaskUsesMergedCapacity() {
@@ -492,13 +492,13 @@ extension SerialTests {
             report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: 100, condition: "Normal", maxCapacity: nil)
             var live = LiveSnapshot()
             live.battery = BatteryInfo(source: nil, charge: 50, state: nil, cycles: nil, condition: nil, maxCapacity: 65)
-            var a = Assess.assess(report: report, live: live, memPressure: nil)
+            var a = Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: nil)
             #expect(a.items.contains { $0.kind == .batteryCapacity && $0.sev == .serious }, "live capacity raises the item")
             var t = HomeModel.tasks(a, report: report, disk: nil, battery: live.battery).first { $0.kind == .batteryCapacity }
             #expect(t?.state == "35% worn", "fallback state \(String(describing: t?.state))")
             // Both carry it: the report value wins.
             report.battery?.maxCapacity = 60
-            a = Assess.assess(report: report, live: live, memPressure: nil)
+            a = Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: nil)
             t = HomeModel.tasks(a, report: report, disk: nil, battery: live.battery).first { $0.kind == .batteryCapacity }
             #expect(t?.state == "40% worn", "report state \(String(describing: t?.state))")
         }
@@ -513,7 +513,7 @@ extension SerialTests {
             let crit = nowCells(report, live, pressure: .critical)
             #expect(crit[1].tone == .hot && crit[1].chipText == "pressure high" && crit[1].chipTone == .hot)
             // SMART errors: storage hot, focus smart. Battery service: hot, chip "service".
-            report.smart = [SmartDisk(device: "internal", title: "Boot SSD", status: "SMART: errors",
+            report.smart = [SmartDisk(device: "internal", title: "Boot SSD", status: .mediaErrors,
                                       attrs: [("Media and Data Integrity Errors", "3")], severity: .crit)]
             report.battery?.condition = "Service Recommended"
             live.battery = report.battery
@@ -574,7 +574,7 @@ extension SerialTests {
         /// SOC-DETAILS 4.1: fraction, bar colour and gauge of the SoC cell.
         @Test func nowSoCBarsAndGauge() {
             let (report, live) = nowFixture()
-            let a = Assess.assess(report: report, live: live, memPressure: .normal)
+            let a = Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: .normal)
             func cell(temp: Int?, gpu: Int?, high: Bool, cpu: CPUUsage? = CPUUsage(user: 60.2, sys: 25.5, idle: 14.3)) -> HomeNowCell {
                 HomeModel.nowCells(homeInput(report, live, assessment: a), tasks: [], memPressure: .normal, socTempC: temp, gpuUtil: gpu,
                                    cpu: cpu, cpuHigh: high, short: false, narrow: false)[0]

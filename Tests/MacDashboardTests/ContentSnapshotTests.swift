@@ -245,7 +245,7 @@ extension SerialTests {
             @MainActor func reassess(_ h: AppModel) {
                 h.assessment = Assess.assess(report: h.report,
                                              live: LiveSnapshot(t: homeRef, load: h.load, cpu: h.cpu, mem: h.mem,
-                                                                swap: h.swap, disk: h.disk, battery: h.battery),
+                                                                swap: h.swap, disk: h.disk, battery: h.battery), language: L10nStore.shared.language,
                                              memPressure: .normal, now: homeRef)
             }
             /// Folder count done, no home folder refused (the plain `ok` page).
@@ -279,12 +279,12 @@ extension SerialTests {
                 return h
             }()
             let stWorn = storageOK {
-                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED",
+                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: .verified,
                                              attrs: [("Percentage Used", "82%")], health: stWornHealth)]
                 reassess($0)
             }
             let stFailing = storageOK {
-                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED",
+                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: .verified,
                                              health: VisualFixture.internalHealth), VisualFixture.externalFailingDisk]
                 reassess($0)
             }
@@ -293,8 +293,8 @@ extension SerialTests {
                                          failure: SmartInstallFailure? = nil) -> AppModel {
                 storageOK {
                     $0.report.smartctlPresent = false
-                    $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED"),
-                                       SmartDisk(device: "/dev/disk4", title: "External SSD", status: "NO ACCESS")]
+                    $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: .verified),
+                                       SmartDisk(device: "/dev/disk4", title: "External SSD", status: .noAccess)]
                     $0.smart.applyFixture(updatedAt: VisualFixture.referenceDate, tools: state, installing: installing, failure: failure)
                 }
             }
@@ -304,9 +304,9 @@ extension SerialTests {
             let stNeedsBrew = storageTools(.needsHomebrew)
             /// smartctl present, the external bridge passes nothing through.
             let stUnavailable = storageOK {
-                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "VERIFIED",
+                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: .verified,
                                              health: VisualFixture.internalHealth),
-                                   SmartDisk(device: "/dev/disk4", title: "External SSD", status: "NO ACCESS")]
+                                   SmartDisk(device: "/dev/disk4", title: "External SSD", status: .noAccess)]
             }
             let stNoDisks = storageOK { $0.report.smart = [] }
             // REDESIGN-BATTERY: Battery page states. The fixture detail is charging + worn (76 %); each state changes one thing.
@@ -1161,13 +1161,13 @@ extension SerialTests {
                         }
                         HarnessSection(label: "Task tones") {
                             HomeNowCard(model: fixtureHome {
-                                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: "SMART: errors",
+                                $0.report.smart = [SmartDisk(device: "internal", title: "APPLE SSD AP0512Z", status: .mediaErrors,
                                                              attrs: [("Media and Data Integrity Errors", "3")], severity: .crit)]
                                 $0.report.battery?.condition = "Service Recommended"
                                 $0.applyFixturePressure(.critical)
                                 $0.assessment = Assess.assess(report: $0.report,
                                                               live: LiveSnapshot(t: VisualFixture.referenceDate, load: $0.load, cpu: $0.cpu, mem: $0.mem,
-                                                                                 swap: $0.swap, disk: $0.disk, battery: $0.battery),
+                                                                                 swap: $0.swap, disk: $0.disk, battery: $0.battery), language: L10nStore.shared.language,
                                                               memPressure: .critical, now: VisualFixture.referenceDate)
                             }, router: NavigationRouter(), tier: .mid, animatesEntrance: false)
                         }

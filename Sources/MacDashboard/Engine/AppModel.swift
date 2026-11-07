@@ -120,7 +120,7 @@ final class AppModel {
 
     /// Renders, writes `mac_report.txt` and publishes the text. `reportUpdatedAt` is the caller's business.
     private func commitReportText(_ input: ReportSummaryInput) {
-        let text = ReportWriter.render(input)
+        let text = ReportWriter.render(input, language: L10nStore.shared.language)
         do { try ReportWriter.write(text: text, to: reportURL) }
         catch { lastError = L.errorReportWriteFailed(error.localizedDescription) }
         reportText = text
@@ -774,6 +774,17 @@ final class AppModel {
         }
     }
 
+    /// ARCH-TEXT-EDGE: a language switch re-derives every text the model caches from the data already collected.
+    /// No pass, no command: the assessment comes from `homeReport` (the committed report, as the fast tick does), the
+    /// report text is re-rendered only when no pass is in flight (the pass commit re-renders it otherwise).
+    /// Fixture mode is a no-op, as in `refreshReport`: the fixture never sets the fields `assessed` reads.
+    func relocalize() {
+        guard !VisualFixture.isRequested else { return }
+        setAssessment(assessed(homeReport))
+        guard !isCollectingReport, reportText != nil else { return }
+        commitReportText(reportSummaryInput(report: report, generatedAt: reportUpdatedAt ?? Date()))
+    }
+
     /// `ReportHost.afterPass` (PASS-WAIT-PARTIAL): `work` now when no pass is in flight, else queued for the pass's
     /// `defer` (see `afterPassQueue`). Replaces the bounded 15 s poll, whose give-up wrote into the partial (findings C1–C3).
     func runAfterPass(_ work: @escaping @MainActor () -> Void) {
@@ -931,7 +942,7 @@ final class AppModel {
     /// forgot it. Reads settings ONLY through `settings.assessmentSettings` (ARCH-SETTINGS-PATH; EngineBoundaryTests enforces it).
     private func assessed(_ r: FullReport) -> Assessment {
         let s = settings.assessmentSettings
-        return Assess.assess(report: r, live: live, memPressure: memPressure, topApps: topApps,
+        return Assess.assess(report: r, live: live, language: L10nStore.shared.language, memPressure: memPressure, topApps: topApps,
                              wakeHolders: wakeHolders, ignoredWakeHolders: s.ignoredWakeHolders,
                              claudeBackup: claudeBackup, claudeAttempt: claudeRun.attempt, backupStaleHours: s.backupStaleHours,
                              lowSpacePercent: s.lowSpacePercent,

@@ -121,12 +121,12 @@ extension SerialTests {
             defer { L10nStore.shared.language = originalLang }
             L10nStore.shared.language = .ru
             #expect(iphoneOneDecimal(91.25) == "91,3")
-            #expect(ReportWriter.fmtSeconds(1.5) == "1,5 " + L.uptimeUnitSecond)
-            #expect(ReportWriter.fmtBytes(1536) == "1,5 " + L.byteUnitKB)
+            #expect(ReportWriter.fmtSeconds(1.5, language: L10nStore.shared.language) == "1,5 " + L.uptimeUnitSecond)
+            #expect(ReportWriter.fmtBytes(1536, language: L10nStore.shared.language) == "1,5 " + L.byteUnitKB)
             L10nStore.shared.language = .en
             #expect(iphoneOneDecimal(91.25) == "91.3")
-            #expect(ReportWriter.fmtSeconds(1.5) == "1.5 " + L.uptimeUnitSecond)
-            #expect(ReportWriter.fmtBytes(1536) == "1.5 " + L.byteUnitKB)
+            #expect(ReportWriter.fmtSeconds(1.5, language: L10nStore.shared.language) == "1.5 " + L.uptimeUnitSecond)
+            #expect(ReportWriter.fmtBytes(1536, language: L10nStore.shared.language) == "1.5 " + L.byteUnitKB)
         }
     }
 }

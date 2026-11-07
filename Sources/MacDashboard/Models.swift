@@ -44,10 +44,43 @@ struct DiskInfo: Equatable {
     /// Note that `avail` (important usage) already INCLUDES this amount.
     var purgeable: Int64? = nil
 }
+/// `pmset -g batt` "Now drawing from" / IOKit power-source state. Stored as a value; text at read time (ARCH-TEXT-EDGE).
+enum BatteryPowerSource: Equatable, Sendable {
+    case ac, battery
+    func text(_ s: AppStrings) -> String { self == .ac ? s.battSourceAC : s.battSourceBattery }
+    var localizedText: String { text(L) }
+}
+/// `pmset -g batt` first clause / IOKit charging flags. `.other` keeps an unrecognised clause verbatim (as before).
+enum BatteryChargeState: Equatable, Sendable {
+    case charging, discharging, charged, finishingCharge, notCharging, other(String)
+    func text(_ s: AppStrings) -> String {
+        switch self {
+        case .charging: return s.battStateCharging
+        case .discharging: return s.battStateDischarging
+        case .charged: return s.battStateCharged
+        case .finishingCharge: return s.battStateFinishingCharge
+        case .notCharging: return s.battStateNotCharging
+        case .other(let raw): return raw
+        }
+    }
+    var localizedText: String { text(L) }
+}
+/// `mdutil -s /`. `.other` keeps the trimmed raw line (as before).
+enum SpotlightState: Equatable, Sendable {
+    case enabled, disabled, other(String)
+    func text(_ s: AppStrings) -> String {
+        switch self {
+        case .enabled: return s.reportCollectorSpotlightEnabled
+        case .disabled: return s.reportCollectorSpotlightDisabled
+        case .other(let raw): return raw
+        }
+    }
+    var localizedText: String { text(L) }
+}
 struct BatteryInfo: Equatable {
-    var source: String?         // "от сети" | "от батареи"
+    var source: BatteryPowerSource?
     var charge: Int?            // %
-    var state: String?          // localized: заряжается/разряжается/заряжена/дозаряд/не заряжается
+    var state: BatteryChargeState?
     var cycles: Int?
     var condition: String?      // raw pmset/system_profiler value, e.g. "Normal"
     var maxCapacity: Int?       // %
@@ -89,7 +122,7 @@ struct SystemInfo: Equatable {
     var chip: String?           // "Apple M3" | Intel brand string
     var cores: String?          // "8 (4 Performance and 4 Efficiency)" | "6" (Intel, or a proc shape whose tiers can't be named)
     var memBytes: Int64?
-    var uptime: String?         // human, Russian ("2 дня 3 мин")
+    var uptimeSeconds: Int?     // from uptime(1); formatted by fmtUptime at the edge
     var hostName: String?
 }
 struct DirSize: Identifiable, Equatable, Codable { var id: String { path }; var path: String; var bytes: Int64 }
@@ -174,14 +207,42 @@ struct SmartHealth: Equatable, Sendable {
     var dataUnitsRead: UInt64?; var dataUnitsWritten: UInt64?
     var mediaErrors: UInt64?; var errorLogEntries: UInt64?; var criticalWarning: UInt64?
 }
+/// SMART verdict of one disk. The collector classifies; the text is made at read time (ARCH-TEXT-EDGE).
+enum SmartStatus: Equatable, Sendable {
+    case verified            // diskutil "Verified"                 -> reportCollectorSmartOkVerified
+    case notSupported        // diskutil "Not Supported"            -> reportCollectorSmartNotSupported
+    case statusUnavailable   // diskutil returned no SMART status   -> reportCollectorSmartStatusUnavailable
+    case diskutil(String)    // any other diskutil word              -> "SMART: \(raw)"
+    case ok                  // smartctl attributes, no finding      -> reportSmartStatusOk
+    case mediaErrors         // smartctl critical finding            -> reportCollectorSmartMediaErrors
+    case wearHigh            // smartctl Percentage Used >= 80       -> reportCollectorSmartWearHigh
+    case noAccess            // external, no attributes, smartctl present -> reportCollectorSmartUnavailable
+    case noAccessNoTools     // external, no attributes, no smartctl -> reportCollectorSmartUnavailableNoTools
+    func text(_ s: AppStrings) -> String {
+        switch self {
+        case .verified: return s.reportCollectorSmartOkVerified
+        case .notSupported: return s.reportCollectorSmartNotSupported
+        case .statusUnavailable: return s.reportCollectorSmartStatusUnavailable
+        case .diskutil(let raw): return "SMART: \(raw)"
+        case .ok: return s.reportSmartStatusOk
+        case .mediaErrors: return s.reportCollectorSmartMediaErrors
+        case .wearHigh: return s.reportCollectorSmartWearHigh
+        case .noAccess: return s.reportCollectorSmartUnavailable
+        case .noAccessNoTools: return s.reportCollectorSmartUnavailableNoTools
+        }
+    }
+    var localizedText: String { text(L) }
+}
 struct SmartDisk: Identifiable, Equatable {
     var id: String { device }
     var device: String          // "/dev/disk4" or "internal"
-    var title: String           // model/name for display
-    var status: String          // "OK" | "VERIFIED" | "NO ACCESS" | "NOT SUPPORTED" | free text
+    var title: String?          // media/model name; nil = diskutil gave none (fallback title at the edge)
+    var status: SmartStatus
     var attrs: [(String, String)] = []   // ordered SMART attributes (already human labels)
     var severity: Severity = .good
     var health: SmartHealth? = nil
+    func displayTitle(_ s: AppStrings) -> String { title ?? s.reportCollectorInternalDiskFallbackTitle }
+    var localizedTitle: String { displayTitle(L) }
     static func == (l: Self, r: Self) -> Bool {
         l.device == r.device && l.title == r.title && l.status == r.status &&
         l.severity == r.severity && l.health == r.health && l.attrs.elementsEqual(r.attrs, by: { $0 == $1 })
@@ -265,7 +326,7 @@ struct FullReport {
     var serviceDirsNotMeasured: [String] = []
     var security: SecurityState?
     var tmDest: TMDestination??         // .some(nil) = checked & not configured; nil = not checked yet
-    var spotlight: String?
+    var spotlight: SpotlightState?
     var crashes: [CrashGroup]?          // grouped, ≤7 days old (V2-CRASH-SIGNAL)
     var crashesHidden: [CrashGroup]?    // groups of reports the user hid (CRASH-REPORT-DISMISS); only the Security page reads it
     var brewStatus: BrewStatus?          // nil = not checked yet
@@ -302,7 +363,7 @@ struct Assessment: Equatable {
     var items: [AttentionItem] = []       // v2 attention model — mirrors `problems`
     var capsules: [TipCapsule] = []       // v2 attention model — mirrors `tips`
     var summarySev: Severity = .good
-    var summaryText: String = L.recommendationsAllGood
+    var summaryText: String = ""
     var diskSev: Severity = .good; var swapSev: Severity = .good
     var battSev: Severity = .good; var smartSev: Severity = .good
 }

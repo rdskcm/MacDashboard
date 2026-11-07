@@ -218,7 +218,7 @@ struct BackupsPageModel: Equatable {
         default:
             let age = Int(max(0, now.timeIntervalSince(d)))
             t.dot = .green
-            t.note = age < 60 ? L.claudeBackupJustNow : L.claudeBackupAgo(BackupLog.durationText(seconds: age))
+            t.note = age < 60 ? L.claudeBackupJustNow : L.claudeBackupAgo(BackupLog.durationText(seconds: age, language: L10nStore.shared.language))
             t.noteTone = .green
         }
         return t
@@ -239,7 +239,7 @@ struct BackupsPageModel: Equatable {
             if let last = dest.lastBackupDate {
                 let next = last.addingTimeInterval(TimeInterval(seconds))
                 t.value = next > now
-                    ? L.bkNextIn(BackupLog.durationText(seconds: Int(next.timeIntervalSince(now))))
+                    ? L.bkNextIn(BackupLog.durationText(seconds: Int(next.timeIntervalSince(now)), language: L10nStore.shared.language))
                     : L.bkNextSoon
             } else {
                 t.value = L.bkNextSoon
@@ -381,7 +381,7 @@ struct BackupsPageModel: Equatable {
             ? L.bkProgressBytes(d.value, "\(t.value) \(t.unit)")
             : L.bkProgressBytes("\(d.value) \(d.unit)", "\(t.value) \(t.unit)")
         if let secs = secondsRemaining, secs > 0 {
-            s += " · " + L.bkTimeLeft(BackupLog.durationText(seconds: secs))
+            s += " · " + L.bkTimeLeft(BackupLog.durationText(seconds: secs, language: L10nStore.shared.language))
         }
         return s
     }
@@ -410,7 +410,7 @@ struct BackupsPageModel: Equatable {
         }
         switch attempt?.result {
         case .failed(let exit, let reason)?:
-            return BackupsNote(tone: .amber, text: L.bkNoteClaudeFailed(BackupLog.reasonText(reason, exit: exit)), button: nil)
+            return BackupsNote(tone: .amber, text: L.bkNoteClaudeFailed(BackupLog.reasonText(reason, exit: exit, language: L10nStore.shared.language)), button: nil)
         case .interrupted?:
             return BackupsNote(tone: .amber, text: L.bkNoteClaudeInterrupted, button: nil)
         case .ok?, .running?, nil:
@@ -447,7 +447,7 @@ struct BackupsPageModel: Equatable {
             t.dot = .green; t.note = L.bkClaudeAttemptOK; t.noteTone = .green
         case .running:
             let secs = max(60, Int(now.timeIntervalSince(a.at)))
-            t.dot = .accent; t.note = L.bkClaudeAttemptRunning(BackupLog.durationText(seconds: secs)); t.noteTone = .accent
+            t.dot = .accent; t.note = L.bkClaudeAttemptRunning(BackupLog.durationText(seconds: secs, language: L10nStore.shared.language)); t.noteTone = .accent
         case .interrupted:
             t.dot = .amber; t.note = L.bkClaudeAttemptInterrupted; t.noteTone = .amber
         case .failed(let exit, _):
@@ -517,7 +517,7 @@ struct BackupsPageModel: Equatable {
         case .ok, .stale:
             if case .lastSuccess(let d)? = status {
                 let secs = Int(max(0, now.timeIntervalSince(d)))
-                age.value = secs < 60 ? L.claudeBackupJustNow : L.claudeBackupAgo(BackupLog.durationText(seconds: secs))
+                age.value = secs < 60 ? L.claudeBackupJustNow : L.claudeBackupAgo(BackupLog.durationText(seconds: secs, language: L10nStore.shared.language))
                 last.value = L.shortDateTime(d)
                 last.valueTone = nil
             }

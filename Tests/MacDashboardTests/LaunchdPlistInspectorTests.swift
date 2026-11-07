@@ -76,10 +76,10 @@ extension SerialTests {
                     "Label": "com.example.orphantest",
                     "Program": "/path/does/not/exist-\(UUID().uuidString)",
                 ], format: .xml, options: 0)
-            let info = LaunchdPlistInspector.inspect(plistPath: "/tmp/fake.plist", plistData: plistData, language: .en)
+            let info = LaunchdPlistInspector.inspect(plistPath: "/tmp/fake.plist", plistData: plistData)
             #expect(info.label == "com.example.orphantest", "inspect: label parsed")
             #expect(info.isOrphan, "inspect: nonexistent executable -> isOrphan true")
-            #expect(info.description == "Example — background process", "inspect: heuristic description attached")
+            #expect(LaunchdPlistInspector.description(forLabel: info.label, language: .en) == "Example — background process", "inspect: heuristic description looked up from the label")
 
             // F: deletion-target validation
             let userAgentsPath = (NSHomeDirectory() as NSString).appendingPathComponent("Library/LaunchAgents/x.plist")
