@@ -10,7 +10,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct VisualFixtureTests {
+    @MainActor struct VisualFixtureTests {
         @Test func visualFixture() async {
             let originalLang = L10nStore.shared.language
             defer { L10nStore.shared.language = originalLang }

@@ -151,7 +151,7 @@ struct DS3StretchSprite<S: InsettableShape>: View {
     private var live: some View { gradientView(stops) }
 
     var body: some View {
-        let key = self.key
+        let key = self.key, slice = self.slice, scale = self.scale
         Color.clear
             .onGeometryChange(for: DS3SliceGeometry.Measure?.self,
                               of: { g in slice.map { DS3SliceGeometry.measure($0, size: g.size, scale: scale) } }) { measure = $0 }

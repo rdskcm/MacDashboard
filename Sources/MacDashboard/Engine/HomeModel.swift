@@ -143,7 +143,7 @@ struct HomeHistoryDigest: Equatable {
 }
 
 extension Page {
-    var title: String {
+    @MainActor var title: String {
         switch self {
         case .home: return L.commonThisMac
         case .cpu: return L.commonSoC
@@ -212,11 +212,11 @@ enum HomeModel {
 
     /// One task per assessment item, same order (already crit > serious > warn, stable).
     /// `disk` = `model.disk`, `battery` = `model.battery` — the same values Assessment used.
-    static func tasks(_ a: Assessment, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?) -> [HomeTask] {
+    @MainActor static func tasks(_ a: Assessment, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?) -> [HomeTask] {
         a.items.map { task($0, report: report, disk: disk, battery: battery) }
     }
 
-    private static func task(_ item: AttentionItem, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?) -> HomeTask {
+    @MainActor private static func task(_ item: AttentionItem, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?) -> HomeTask {
         let tone: HomeTone = (item.sev == .crit || item.sev == .serious) ? .hot : .amber
         var section: Page = .system
         var focus: CardID? = nil
@@ -324,7 +324,7 @@ enum HomeModel {
 
     // MARK: chips
 
-    static func chips(_ input: HomeInput) -> [HomeChip] {
+    @MainActor static func chips(_ input: HomeInput) -> [HomeChip] {
         let report = input.report
         var out: [HomeChip] = []
 
@@ -414,7 +414,7 @@ enum HomeModel {
     }
 
     /// "+" for v > 0 (after rounding to `decimals`), U+2212 for v < 0, no sign for 0.
-    static func signed(_ v: Double, decimals: Int) -> String {
+    @MainActor static func signed(_ v: Double, decimals: Int) -> String {
         let factor = pow(10.0, Double(decimals))
         let rounded = (v * factor).rounded() / factor
         let magnitude = decimals > 0 ? fmtFixed(abs(v), decimals: decimals) : String(Int(abs(v).rounded()))
@@ -433,7 +433,7 @@ enum HomeModel {
 
     // MARK: tiles
 
-    static func tiles(_ input: HomeInput, tasks: [HomeTask], scan: HomeScan, narrow: Bool = false) -> [HomeTile] {
+    @MainActor static func tiles(_ input: HomeInput, tasks: [HomeTask], scan: HomeScan, narrow: Bool = false) -> [HomeTile] {
         var pages: [Page] = [.cpu, .memory, .storage, .battery, .security, .backups, .system, .history]
         if !input.hasBattery { pages.removeAll { $0 == .battery } }
         let skeleton = scan == .firstScan
@@ -457,7 +457,7 @@ enum HomeModel {
     }
 
     /// The SoC tile's row for the model values of `input`.
-    static func socRow(for i: HomeInput, narrow: Bool) -> HomeSocRow {
+    @MainActor static func socRow(for i: HomeInput, narrow: Bool) -> HomeSocRow {
         let high = i.cpu.map { CPULoad.isHigh($0, since: i.cpuHighSince, now: i.now) } ?? false
         return socRow(thermal: i.thermal, socTempC: i.socTempC, cpuHigh: high,
                       highMinutes: CPULoad.highMinutes(since: i.cpuHighSince, now: i.now),
@@ -468,7 +468,7 @@ enum HomeModel {
     /// tip). Otherwise the thermal state word with its rail step and the chip temperature on the right. Text takes the
     /// thermal tone, the right value the temperature tone when warm / hot, the row tint the more severe of the two.
     /// Thermal unknown and load normal: `.empty`.
-    static func socRow(thermal: ThermalLevel?, socTempC: Int?, cpuHigh: Bool, highMinutes: Int?, cpuPct: Int?,
+    @MainActor static func socRow(thermal: ThermalLevel?, socTempC: Int?, cpuHigh: Bool, highMinutes: Int?, cpuPct: Int?,
                        narrow: Bool) -> HomeSocRow {
         if cpuHigh {
             return HomeSocRow(kind: .highLoad(text: L.cpuTagHigh, help: highMinutes.map { L.cpuHighLoadFor($0) } ?? L.cpuTagHigh),
@@ -486,7 +486,7 @@ enum HomeModel {
     }
 
     /// OK tag, normal sub line and the two mini KVs of one tile.
-    private static func tileParts(_ page: Page, _ i: HomeInput, tasks: [HomeTask])
+    @MainActor private static func tileParts(_ page: Page, _ i: HomeInput, tasks: [HomeTask])
         -> (HomeTone, String, String, [HomeKV]) {
         let r = i.report
         func has(_ k: AttentionKind) -> Bool { tasks.contains { $0.kind == k } }
@@ -641,7 +641,7 @@ extension HomeModel {
     private static let gib: Double = Double(1 << 30)
 
     /// The Now card cells (battery omitted when the Mac has none).
-    static func nowCells(_ input: HomeInput, tasks: [HomeTask], memPressure: MemoryPressureLevel?, socTempC: Int?, gpuUtil: Int?,
+    @MainActor static func nowCells(_ input: HomeInput, tasks: [HomeTask], memPressure: MemoryPressureLevel?, socTempC: Int?, gpuUtil: Int?,
                          cpu: CPUUsage?, cpuHigh: Bool = false, short: Bool, narrow: Bool) -> [HomeNowCell] {
         func task(_ k: AttentionKind) -> HomeTask? { tasks.first { $0.kind == k } }
         func loadingCell(_ kind: HomeNowKind, _ label: String, _ dest: Destination,

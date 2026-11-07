@@ -8,7 +8,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct IPhoneTests {
+    @MainActor struct IPhoneTests {
         @Test func iPhone() async {
             // --- precise health / watt-hours ---
             #expect(abs((IPhoneData.preciseHealth(maxMAh: 4917, designMAh: 5030) ?? 0) - 97.753) < 0.001,
@@ -327,7 +327,7 @@ extension SerialTests {
             let idCamera: [String: Any] = ["IOService": ["Props": ["BackCameraModuleSerialNumString": "FAKEBACKCAM1"]]]
             let idFields = IPhoneData.identityFields(lockdown: idLock, diskUsage: ["TotalDiskCapacity": 256_000_000_000 as Int64],
                                                      battery: ["BatteryData": ["Serial": "FAKEBATT"]], panel: ["Panel_ID": "FAKEPANEL"],
-                                                     product: idProduct, camera: idCamera)
+                                                     product: idProduct, camera: idCamera, language: L10nStore.shared.language)
             let idByLabel = Dictionary(uniqueKeysWithValues: idFields.map { ($0.label, $0) })
             #expect(idByLabel[.modelNumber]?.value == "MXXX1 LL/A" && idByLabel[.ios]?.value == "99.1 (99A1)",
                   "iPhone: identity model number + region and iOS + build joined")
@@ -341,7 +341,7 @@ extension SerialTests {
             #expect(idFields.allSatisfy { $0.isSecret == $0.label.isSecret } && idByLabel[.serial]?.isSecret == true
                   && idByLabel[.colorCode]?.isSecret == false, "iPhone: identity secret flag")
             #expect(IPhoneData.identityFields(lockdown: ["DeviceColor": "7"], diskUsage: nil, battery: nil, panel: nil,
-                                            product: nil, camera: nil).map(\.value) == ["7"], "iPhone: identity colour falls back to DeviceColor")
+                                            product: nil, camera: nil, language: L10nStore.shared.language).map(\.value) == ["7"], "iPhone: identity colour falls back to DeviceColor")
 
             // --- history day helpers (IPHONE-REVIEW-LEFTOVERS) ---
             let dayNoon = Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 7, hour: 12))!
@@ -455,27 +455,27 @@ extension SerialTests {
 // IPHONE-BATTERY-DETAILS: per-class relay merge, pure functions, no process-wide state.
 // Values are the trimmed probe readings of the findings file (iPhone14,5 on 27.0.1, iPhone18,2 on 26.4.1); no identifiers.
 @Suite struct IPhoneBatteryDetailsTests {
-    static let main27: [String: Any] = [
+    static var main27: [String: Any] { [
         "CycleCount": 1937, "CurrentCapacity": 86, "IsCharging": true, "ExternalConnected": true,
         "BatteryData": ["DesignCapacity": 3208, "FullChargeCapacity": 2600, "NominalChargeCapacity": 2580] as [String: Any],
-    ]
-    static let pack27: [String: Any] = [
+    ] }
+    static var pack27: [String: Any] { [
         "Temperature": 3950, "VirtualTemperature": 3909, "Voltage": 3901, "Amperage": 624, "InstantAmperage": 630,
         "DesignCapacity": 3208, "CycleCount": 1937,
         "LifetimeData": ["AverageTemperature": 28, "MaximumTemperature": 45, "MinimumTemperature": 11] as [String: Any],
         "PowerTelemetryData": ["BatteryPower": 2434] as [String: Any],
-    ]
-    static let charger27: [String: Any] = [
+    ] }
+    static var charger27: [String: Any] { [
         "ChargerData": ["ChargerPower": 6159, "ChargerVBUS": 4716, "ChargerIBUS": 1306, "ChargerEfficiency": 90,
                         "SlowChargingReason": 8, "NotChargingReason": 0] as [String: Any],
-    ]
-    static let main26: [String: Any] = [
+    ] }
+    static var main26: [String: Any] { [
         "CycleCount": 269, "CurrentCapacity": 79, "AppleRawMaxCapacity": 4915, "DesignCapacity": 5030,
         "Temperature": 3169, "VirtualTemperature": 2929, "Voltage": 4033, "Amperage": 2630, "InstantAmperage": 2636,
         "IsCharging": true, "ExternalConnected": true,
         "AdapterDetails": ["Watts": 15, "AdapterVoltage": 5000, "Current": 3000, "Description": "pd charger"] as [String: Any],
         "ChargerData": ["ChargingVoltage": 4185, "ChargingCurrent": 3641] as [String: Any],
-    ]
+    ] }
 
     @Test func needsPerClassQueries() {
         #expect(IPhoneData.batteryNeedsPerClassQueries(Self.main27))
@@ -532,7 +532,7 @@ extension SerialTests {
 
 // IPHONE-BATTERY-DETAILS: note and tooltip texts (language state → SerialTests, which starts in Russian).
 extension SerialTests {
-    struct IPhoneBatteryDetailsTextTests {
+    @MainActor struct IPhoneBatteryDetailsTextTests {
         private func detail(powerW: Double?, v: Int?, a: Int?, charging: Bool,
                             chargerMW: Int? = nil, eff: Int? = nil, adapterW: Int? = nil) -> BatteryDetail {
             var d = BatteryInspector.parse(dict: [:])

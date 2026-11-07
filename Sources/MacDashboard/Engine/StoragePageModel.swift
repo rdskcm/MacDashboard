@@ -125,7 +125,7 @@ enum StoragePageModel {
         }
     }
 
-    static func tagText(_ k: StorageTagKind) -> String {
+    @MainActor static func tagText(_ k: StorageTagKind) -> String {
         switch k {
         case .driveFailing: return L.storageTagDriveFailing
         case .almostFull: return L.storageTagAlmostFull
@@ -136,7 +136,7 @@ enum StoragePageModel {
         }
     }
 
-    static func sub(internalName: String?, size: Int64?) -> String {
+    @MainActor static func sub(internalName: String?, size: Int64?) -> String {
         let name = internalName ?? L.reportCollectorInternalDiskFallbackTitle
         guard let size else { return name }
         return "\(name) · \(fmtCapacity(size))"
@@ -144,7 +144,7 @@ enum StoragePageModel {
 
     // MARK: Disk card
 
-    static func heroNote(size: Int64, usedFraction: Double) -> String {
+    @MainActor static func heroNote(size: Int64, usedFraction: Double) -> String {
         L.storageHeroNote(fmtCapacity(size), L.homePercent("\(Int((usedFraction * 100).rounded()))"))
     }
 
@@ -159,7 +159,7 @@ enum StoragePageModel {
         return items.filter { $0.bytes >= freeableMinBytes }
     }
 
-    static func itemName(_ k: FreeableItem.Kind) -> String {
+    @MainActor static func itemName(_ k: FreeableItem.Kind) -> String {
         switch k {
         case .downloads: return L.storageDownloads
         case .caches: return L.storageCaches
@@ -167,7 +167,7 @@ enum StoragePageModel {
         }
     }
 
-    static func diskNote(level: SpaceLevel, lowPercent: Int, items: [FreeableItem]) -> String? {
+    @MainActor static func diskNote(level: SpaceLevel, lowPercent: Int, items: [FreeableItem]) -> String? {
         let list = items.map { L.storageFreeItem(itemName($0.kind), fmtCapacity($0.bytes)) }.joined(separator: ", ")
         let pctText = L.homePercent("\(lowPercent)")
         let critText = L.homePercent("\(StorageSpace.criticalPercent)")
@@ -193,13 +193,13 @@ enum StoragePageModel {
         }.map(\.element)
     }
 
-    private static func finish(_ raw: [(id: String, label: String, bytes: Int64, action: FolderRowAction?)]) -> [FolderRow] {
+    @MainActor private static func finish(_ raw: [(id: String, label: String, bytes: Int64, action: FolderRowAction?)]) -> [FolderRow] {
         let top = raw.map(\.bytes).max() ?? 0
         return raw.map { FolderRow(id: $0.id, label: $0.label, value: fmtCapacity($0.bytes),
                                    fraction: top > 0 ? Double($0.bytes) / Double(top) : 0, action: $0.action) }
     }
 
-    static func homeRows(homeDirs: [DirSize], homeCaches: DirSize?, home: String, trashHidden: Bool) -> [FolderRow] {
+    @MainActor static func homeRows(homeDirs: [DirSize], homeCaches: DirSize?, home: String, trashHidden: Bool) -> [FolderRow] {
         typealias Raw = (id: String, label: String, bytes: Int64, action: FolderRowAction?)
         let trashPath = home + "/.Trash"
         let top = sortedDesc(homeDirs.filter { $0.path != home && $0.path != trashPath && $0.bytes > 0 }, bytes: \.bytes)
@@ -215,7 +215,7 @@ enum StoragePageModel {
         return finish(sortedDesc(raw, bytes: { $0.bytes }))
     }
 
-    static func systemRows(_ dirs: [DirSize]) -> [FolderRow] {
+    @MainActor static func systemRows(_ dirs: [DirSize]) -> [FolderRow] {
         finish(sortedDesc(dirs.filter { $0.bytes > 0 }, bytes: \.bytes).map { ($0.path, $0.path, $0.bytes, nil) })
     }
 
@@ -233,7 +233,7 @@ enum StoragePageModel {
         }
     }
 
-    static func foldersCaption(phase: FoldersPhase, counting: Bool, countedAt: Date?, now: Date, trashFreed: Int64?, someHidden: Bool) -> String {
+    @MainActor static func foldersCaption(phase: FoldersPhase, counting: Bool, countedAt: Date?, now: Date, trashFreed: Int64?, someHidden: Bool) -> String {
         switch phase {
         case .wait: return L.storageCaptionCounting
         case .failedEmpty, .failedWithList: return L.storageCaptionCountFailed
@@ -249,7 +249,7 @@ enum StoragePageModel {
         return L.storageCaptionTop
     }
 
-    static func failureNote(_ f: BlockFailure) -> String {
+    @MainActor static func failureNote(_ f: BlockFailure) -> String {
         switch f {
         case .timedOut: return L.storageCountTimedOut
         case .noReading: return L.storageCountNoResult
@@ -267,7 +267,7 @@ enum StoragePageModel {
         return out
     }
 
-    static func fdaNote(_ names: [String]) -> String? {
+    @MainActor static func fdaNote(_ names: [String]) -> String? {
         guard !names.isEmpty else { return nil }
         let first = names.prefix(3).joined(separator: ", ")
         return names.count > 3 ? L.storageFDANoteMore(first, names.count - 3) : L.storageFDANote(first)
@@ -283,7 +283,7 @@ enum StoragePageModel {
         return .ok
     }
 
-    static func driveSub(_ s: DriveState, isInternal: Bool) -> String {
+    @MainActor static func driveSub(_ s: DriveState, isInternal: Bool) -> String {
         switch s {
         case .ok: return isInternal ? L.storageSubInternalOK : L.storageSubExternalOK
         case .noData, .unavailable: return isInternal ? L.storageSubInternalNoData : L.storageSubExternalNoData
@@ -306,7 +306,7 @@ enum StoragePageModel {
 
     static let temperatureHighC = 70
 
-    static func kvTiles(_ h: SmartHealth?) -> [KVTile] {
+    @MainActor static func kvTiles(_ h: SmartHealth?) -> [KVTile] {
         func tile<T>(_ label: String, _ v: T?, _ fmt: (T) -> String, _ tone: (T) -> KVTone = { _ in .plain }) -> KVTile {
             guard let v else { return KVTile(label: label, value: "—", tone: .muted) }
             return KVTile(label: label, value: fmt(v), tone: tone(v))
@@ -329,7 +329,7 @@ enum StoragePageModel {
         ]
     }
 
-    static func statusLine(_ s: DriveState) -> (text: String, hot: Bool)? {
+    @MainActor static func statusLine(_ s: DriveState) -> (text: String, hot: Bool)? {
         switch s {
         case .failing: return (L.storageStatusFailing, true)
         case .unavailable: return (L.storageStatusUnavailable, false)
@@ -337,7 +337,7 @@ enum StoragePageModel {
         }
     }
 
-    static func wearNote(_ s: DriveState) -> String? {
+    @MainActor static func wearNote(_ s: DriveState) -> String? {
         if case .worn(let p) = s { return L.storageWearNote(L.homePercent("\(p)")) }
         return nil
     }
@@ -350,7 +350,7 @@ enum StoragePageModel {
 
     // MARK: smartmontools
 
-    static func installFailureText(_ f: SmartInstallFailure) -> String {
+    @MainActor static func installFailureText(_ f: SmartInstallFailure) -> String {
         switch f {
         case .exitCode(let c): return L.storageInstallFailedCode(c)
         case .timedOut: return L.storageInstallTimedOut

@@ -95,7 +95,7 @@ struct CPUPageModel: Equatable {
     var split: SocSplit         // User / System / Idle (logic 3.3); "—" without a reading
     var gpu: CPUHeroModel       // GPU card hero
 
-    static func make(_ i: Input) -> CPUPageModel {
+    @MainActor static func make(_ i: Input) -> CPUPageModel {
         let phase: CPUPagePhase
         switch i.block {
         case .failed(let f, let g): phase = .failed(f, lastGoodAt: g)
@@ -189,12 +189,12 @@ struct CPUPageModel: Equatable {
 
     // MARK: Processes card
 
-    static func procsCaption(metric: Metric, processCount: Int?) -> String {
+    @MainActor static func procsCaption(metric: Metric, processCount: Int?) -> String {
         (metric == .cpu ? L.procsTopByCPU : L.procsTopByMemory)
             + (processCount.map { " · " + L.procsCount($0) } ?? "")
     }
 
-    static func procTexts(_ row: ProcEntry, metric: Metric) -> (value: String, secondary: String) {
+    @MainActor static func procTexts(_ row: ProcEntry, metric: Metric) -> (value: String, secondary: String) {
         let cpuText = row.cpu.map { L.homePercent(fmtFixed($0, decimals: 1)) } ?? "—"
         switch metric {
         case .cpu: return (cpuText, fmtBytes(row.memBytes))

@@ -8,7 +8,7 @@ import Testing
 
 private let plot = CGRect(x: 0, y: 0, width: 1000, height: 160)
 
-struct SocChartHoverTests {
+@MainActor struct SocChartHoverTests {
     // MARK: box width
 
     @Test func boxWidthKeepsTheBaseWhenTheRowsFit() {

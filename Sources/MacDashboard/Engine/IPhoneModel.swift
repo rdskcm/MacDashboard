@@ -469,7 +469,7 @@ final class IPhoneModel {
     /// No-op when the phone is not connected or a read over the current connection is already running.
     func loadIdentity(deviceKey: String) {
         guard let h = connected[deviceKey], let id = identityLoading.begin(deviceKey, handle: h) else { return }
-        transport.readIdentity(h) { [weak self] result in
+        transport.readIdentity(h, language: L10nStore.shared.language) { [weak self] result in
             guard let self else { return }
             // A read superseded by a newer one, or whose phone detached, is dropped.
             guard identityLoading.finish(deviceKey, id: id), attached.contains(h) else { return }
@@ -941,7 +941,7 @@ final class IPhoneModel {
 }
 
 extension IPhoneModel.UnlinkNotice {
-    var message: String {
+    @MainActor var message: String {
         switch self {
         case .saveFailed(let name): return L.iphoneUnlinkSaveFailed(name)
         case .trashFailed(let n, let folder): return L.iphoneUnlinkTrashFailed(n, folder)

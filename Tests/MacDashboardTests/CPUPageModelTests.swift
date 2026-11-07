@@ -15,7 +15,7 @@ private func cpuInput(cpu: CPUUsage? = CPUUsage(user: 18, sys: 7.7, idle: 74.3),
                        compactSub: compactSub)
 }
 
-private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -23,7 +23,7 @@ private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
 }
 
 extension SerialTests {
-    struct CPUPageModelTests {
+    @MainActor struct CPUPageModelTests {
         // MARK: high-load tracker
 
         @Test func nextHighSince() {

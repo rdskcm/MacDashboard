@@ -92,7 +92,7 @@ enum ReportSection: String, CaseIterable {
     case crashes, brew, updates, autostart, smart, energy, battery
 }
 
-final class ReportCollector {
+final class ReportCollector: Sendable {
     /// Report file names the user hid on the Security page (CRASH-REPORT-DISMISS); the crash scan lists them
     /// apart. Captured once per collector — AppModel builds one per pass.
     let hiddenCrashReports: Set<String>
@@ -100,9 +100,9 @@ final class ReportCollector {
     init(hiddenCrashReports: Set<String> = []) { self.hiddenCrashReports = hiddenCrashReports }
 
     /// A section's result: which section, and how to fold it into the report.
-    private struct Outcome {
+    private struct Outcome: Sendable {
         let section: ReportSection
-        let mutate: (inout FullReport) -> Void
+        let mutate: @Sendable (inout FullReport) -> Void
     }
 
     /// Freshness window for the session brew-outdated cache (Block N5): the brew
@@ -351,7 +351,7 @@ final class ReportCollector {
         await MainActor.run { onSection(initial) }
 
         // All sections run concurrently in one group; the merges are serialized by the for-await loop.
-        var jobs: [() async -> Outcome] = [
+        var jobs: [@Sendable () async -> Outcome] = [
             { await self.collectSystem() },
             { await self.collectSnapshots() },
             { await self.collectSecurity() },
@@ -414,7 +414,8 @@ final class ReportCollector {
             if info.uptimeSeconds == nil, let f = ParseFailure(.uptime, stdout: up) { failures.append(f) }
         }
         let has = info.osName != nil || info.modelName != nil || info.chip != nil
-        return Outcome(section: .system) { $0.system = has ? info : nil; $0.parseFailures += failures }
+        let finalInfo = info, finalFailures = failures   // immutable copies: the @Sendable mutate closure cannot capture the vars
+        return Outcome(section: .system) { $0.system = has ? finalInfo : nil; $0.parseFailures += finalFailures }
     }
 
     private static func sysctlString(_ name: String) -> String? {
@@ -422,7 +423,7 @@ final class ReportCollector {
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
         var buf = [CChar](repeating: 0, count: size)
         guard sysctlbyname(name, &buf, &size, nil, 0) == 0 else { return nil }
-        return String(cString: buf)
+        return String(nulTerminated: buf)
     }
 
     private static func sysctlInt32(_ name: String) -> Int32? {
@@ -1106,7 +1107,8 @@ final class ReportCollector {
             b = nil
         }
         let value = b
-        return Outcome(section: .battery) { $0.battery = value; $0.parseFailures += failures }
+        let finalFailures = failures   // immutable copy: the @Sendable mutate closure cannot capture the var
+        return Outcome(section: .battery) { $0.battery = value; $0.parseFailures += finalFailures }
     }
 
     // MARK: - folder sizes (background job, SIZES-BACKGROUND)

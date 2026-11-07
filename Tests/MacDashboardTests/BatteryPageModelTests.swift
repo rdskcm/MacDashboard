@@ -18,7 +18,7 @@ private func batInput(detail: BatteryDetail? = batDetail(), condition: String? =
     BatteryPageModel.Input(detail: detail, condition: condition, block: block, history: history)
 }
 
-private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -30,7 +30,7 @@ private func entries(_ month: String, days: Int, pct: (Int) -> Int?) -> [MacHist
 }
 
 extension SerialTests {
-    struct BatteryPageModelTests {
+    @MainActor struct BatteryPageModelTests {
         @Test func classify() {
             #expect(BatteryHealth.classify(healthPercent: nil, condition: nil) == .unknown)
             #expect(BatteryHealth.classify(healthPercent: 88, condition: "Normal") == .normal)

@@ -40,7 +40,7 @@ private struct SettingsTimeField: NSViewRepresentable {
         return CGSize(width: proposal.width ?? natural.width, height: natural.height)
     }
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var parent: SettingsTimeField
         init(_ parent: SettingsTimeField) { self.parent = parent }
         @objc func changed(_ sender: NSDatePicker) { parent.selection = sender.dateValue }
@@ -202,20 +202,20 @@ private struct SettingsGroup<Content: View>: View {
 
 struct SettingsView: View {
     @MainActor init(model: AppModel, state: SettingsWindowState, iphone: IPhoneModel? = nil,
-         launchLanguage: AppLanguage = L10nStore.launchLanguage) {
+         launchLanguage: AppLanguage? = nil) {
         self.model = model
         _settings = Bindable(model.settings)
         self.iphone = iphone ?? .shared
         self.state = state
-        self.launchLanguage = launchLanguage
-        _relaunchRowShown = State(initialValue: L10nStore.shared.language != launchLanguage)
+        self.launchLanguage = launchLanguage ?? L10nStore.launchLanguage
+        _relaunchRowShown = State(initialValue: L10nStore.shared.language != self.launchLanguage)
         _bannerShown = State(initialValue: model.claudeBackup == .unreadable)
     }
 
     // Harness-only init param so offscreen renders can show any section without
     // clicks (same precedent as MemoryCompositionCard.initialView).
     @MainActor init(model: AppModel, startSection: SettingsSection = .general, iphone: IPhoneModel? = nil,
-         launchLanguage: AppLanguage = L10nStore.launchLanguage) {
+         launchLanguage: AppLanguage? = nil) {
         self.init(model: model, state: SettingsWindowState(section: startSection), iphone: iphone, launchLanguage: launchLanguage)
     }
 
@@ -472,11 +472,12 @@ struct SettingsView: View {
                     groupLabel: L.settingsIntervalLabel
                 ) { s in L.settingsIntervalOption(s) }
             }
+            let timeFieldCapHalf = SettingsTimeField.font.capHeight / 2
             SettingsRow(label: L.settingsSnapshotLabel, sub: L.settingsSnapshotSub) {
                 SettingsTimeField(selection: timeBinding)
                     // The picker's 21 pt cell keeps the bezel's asymmetric insets (about 1.4 pt above the line, 4.3 pt below) with the
                     // bezel off, so centring the frame leaves the text ~1 pt high. Centre the digits' cap height instead, from the baseline.
-                    .alignmentGuide(VerticalAlignment.center) { d in d[.firstTextBaseline] - SettingsTimeField.font.capHeight / 2 }
+                    .alignmentGuide(VerticalAlignment.center) { d in d[.firstTextBaseline] - timeFieldCapHalf }
                     .padding(.horizontal, 10)
                     .frame(width: 100, height: 28)
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(DS3.field))

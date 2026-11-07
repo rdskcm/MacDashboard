@@ -47,7 +47,7 @@ enum EnergyApplyState: Equatable, Sendable { case idle, applying, applied, faile
 
 /// File-scope thunk to the shared `brewProgressText` (SharedUI.swift): inside `SystemPageModel` the name is shadowed
 /// by the `brewProgressText` property, and a module-qualified call breaks the single-module harness build.
-private func brewProgressLine(_ p: BrewProgress) -> String { brewProgressText(p) }
+@MainActor private func brewProgressLine(_ p: BrewProgress) -> String { brewProgressText(p) }
 
 struct SystemPageModel: Equatable {
     struct Input {
@@ -102,7 +102,7 @@ struct SystemPageModel: Equatable {
 
     // MARK: make
 
-    static func make(_ i: Input) -> SystemPageModel {
+    @MainActor static func make(_ i: Input) -> SystemPageModel {
         var m = SystemPageModel()
         m.sub = L.sysSub
 
@@ -218,7 +218,7 @@ struct SystemPageModel: Equatable {
     /// Priority: energy apply failed (hot) · warnable sleep blocker (amber) · stale startup items after a
     /// check (amber) · brew updating (accent) · brew upgrade failed (amber, a fault) · brew outdated (neutral,
     /// not an attention item) · else green.
-    static func tag(energyFailed: Bool, warnableSleep: Bool, staleFound: Bool,
+    @MainActor static func tag(energyFailed: Bool, warnableSleep: Bool, staleFound: Bool,
                     brewUpdating: Bool, brewOutdated: Bool, brewUpgradeFailed: Bool) -> (SystemTone, String) {
         if energyFailed { return (.hot, L.sysTagApplyFailed) }
         if warnableSleep { return (.amber, L.commonMacCantSleep) }
@@ -233,7 +233,7 @@ struct SystemPageModel: Equatable {
 
     static func rowID(_ key: WakeHolderKey) -> String { "\(key.owner)|\(key.requester ?? "")" }
 
-    private static func sleepRow(_ h: WakeHolder, warnable: Bool) -> SleepRow {
+    @MainActor private static func sleepRow(_ h: WakeHolder, warnable: Bool) -> SleepRow {
         SleepRow(id: rowID(h.key), name: WakeHolders.label(for: h, language: L10nStore.shared.language),
                  age: WakeHolders.ageText(h.ageSeconds, language: L10nStore.shared.language), warnable: warnable, key: h.key)
     }
@@ -244,7 +244,7 @@ struct SystemPageModel: Equatable {
     static func hhmm(_ d: Date) -> String { SecurityPageModel.hhmm(d) }
 
     /// " · checked just now" below a minute, else " · checked HH:MM" (the strings carry the separator).
-    static func checkedCaption(checkedAt: Date, now: Date) -> String {
+    @MainActor static func checkedCaption(checkedAt: Date, now: Date) -> String {
         now.timeIntervalSince(checkedAt) < 60 ? L.sysCheckedJustNow : L.sysCheckedAt(hhmm(checkedAt))
     }
 
@@ -261,7 +261,7 @@ struct SystemPageModel: Equatable {
         return dir
     }
 
-    private static func plistHelp(_ info: LaunchdPlistInfo, stale: Bool) -> String {
+    @MainActor private static func plistHelp(_ info: LaunchdPlistInfo, stale: Bool) -> String {
         var parts: [String] = []
         if let d = LaunchdPlistInspector.description(forLabel: info.label, language: L10nStore.shared.language), !d.isEmpty { parts.append(d) }
         if let e = info.executablePath { parts.append(e) }
@@ -269,7 +269,7 @@ struct SystemPageModel: Equatable {
         return parts.joined(separator: "\n")
     }
 
-    private static func groups(_ auto: AutostartInfo, checked: Bool) -> [StartupGroup] {
+    @MainActor private static func groups(_ auto: AutostartInfo, checked: Bool) -> [StartupGroup] {
         func plistGroup(_ id: StartupGroupID, _ title: String, _ items: [LaunchdPlistInfo]) -> StartupGroup {
             let pills = items.map { info -> StartupPill in
                 let stale = checked && info.isOrphan
@@ -298,7 +298,7 @@ struct SystemPageModel: Equatable {
     }
 
     /// Orphans of the three plist groups: user-level first, then /Library, each by file name.
-    private static func staleRows(_ auto: AutostartInfo, deleting: Set<String>) -> [StaleRow] {
+    @MainActor private static func staleRows(_ auto: AutostartInfo, deleting: Set<String>) -> [StaleRow] {
         let orphans = (auto.userAgents + auto.systemAgents + auto.systemDaemons).filter(\.isOrphan)
         let rows = orphans.map { info in
             StaleRow(id: info.path, fileName: fileName(info.path), folder: folder(info.path),
@@ -311,10 +311,10 @@ struct SystemPageModel: Equatable {
         }
     }
 
-    static func startupConfirmTitle(_ n: Int) -> String { L.sysDeleteConfirmTitle(n) }
+    @MainActor static func startupConfirmTitle(_ n: Int) -> String { L.sysDeleteConfirmTitle(n) }
 
     /// One paragraph per kind present: user items go to the Trash, /Library items are removed for good.
-    static func confirmParagraphs(userCount: Int, systemCount: Int) -> [String] {
+    @MainActor static func confirmParagraphs(userCount: Int, systemCount: Int) -> [String] {
         var out: [String] = []
         if userCount > 0 { out.append(L.sysDeleteParagraphUser) }
         if systemCount > 0 { out.append(L.sysDeleteParagraphSystem) }
@@ -331,7 +331,7 @@ struct SystemPageModel: Equatable {
     }
 
     /// Same day -> "Checked today at HH:MM."; another day -> "Checked <date, time>."; nil -> "".
-    static func brewCheckedText(checkedAt: Date?, now: Date, calendar: Calendar = .current) -> String {
+    @MainActor static func brewCheckedText(checkedAt: Date?, now: Date, calendar: Calendar = .current) -> String {
         guard let d = checkedAt else { return "" }
         if calendar.isDate(d, inSameDayAs: now) { return L.sysBrewCheckedToday(hhmm(d)) }
         return L.sysBrewCheckedOn(L.shortDateTime(d))
@@ -357,7 +357,7 @@ struct SystemPageModel: Equatable {
         }
     }
 
-    private static func brewCaption(_ i: Input, state: BrewCardState) -> String {
+    @MainActor private static func brewCaption(_ i: Input, state: BrewCardState) -> String {
         guard case .installed(let version)? = i.brewStatus else {
             if case .notInstalled? = i.brewStatus { return L.sysBrewCaptionNone }
             return ""
@@ -378,7 +378,7 @@ struct SystemPageModel: Equatable {
     // MARK: energy
 
     /// Exactly the ten rows of the handoff, in its order.
-    static var energySpecs: [EnergyRowSpec] {
+    @MainActor static var energySpecs: [EnergyRowSpec] {
         [
             EnergyRowSpec(key: "displaysleep", kind: .number, label: L.sysEnergyRowDisplaySleep, info: L.sysEnergyInfoDisplaySleep),
             EnergyRowSpec(key: "sleep", kind: .number, label: L.sysEnergyRowSleep, info: L.sysEnergyInfoSleep),
@@ -410,7 +410,7 @@ struct SystemPageModel: Equatable {
         return bucket == .battery ? pair.battery : pair.ac
     }
 
-    static func shownValue(key: String, raw: String?) -> String {
+    @MainActor static func shownValue(key: String, raw: String?) -> String {
         guard let raw else { return dash }
         switch energySpecs.first(where: { $0.key == key })?.kind {
         case .toggle?, .readOnly?:
@@ -451,7 +451,7 @@ struct SystemPageModel: Equatable {
     private static func isEditable(_ spec: EnergyRowSpec) -> Bool { spec.kind == .number || spec.kind == .toggle }
 
     /// Stages every editable key present in the report at its default (nil default skipped).
-    static func resetChanges(energy: EnergySettings, pending: [EnergyChange]) -> [EnergyChange] {
+    @MainActor static func resetChanges(energy: EnergySettings, pending: [EnergyChange]) -> [EnergyChange] {
         var out = pending
         for spec in energySpecs where isEditable(spec) {
             for bucket in [EnergyBucket.battery, .ac] {
@@ -463,7 +463,7 @@ struct SystemPageModel: Equatable {
         return out
     }
 
-    private static func resetAvailable(energy: EnergySettings, pending: [EnergyChange]) -> Bool {
+    @MainActor private static func resetAvailable(energy: EnergySettings, pending: [EnergyChange]) -> Bool {
         for spec in energySpecs where isEditable(spec) {
             for bucket in [EnergyBucket.battery, .ac] {
                 guard rawValue(bucket: bucket, key: spec.key, energy: energy) != nil,
@@ -474,7 +474,7 @@ struct SystemPageModel: Equatable {
         return false
     }
 
-    private static func cell(_ spec: EnergyRowSpec, _ bucket: EnergyBucket, _ energy: EnergySettings,
+    @MainActor private static func cell(_ spec: EnergyRowSpec, _ bucket: EnergyBucket, _ energy: EnergySettings,
                              _ pending: [EnergyChange]) -> EnergyCell {
         guard rawValue(bucket: bucket, key: spec.key, energy: energy) != nil else {
             return EnergyCell(raw: nil, shown: dash, dirty: false)
@@ -505,7 +505,7 @@ struct SystemPageModel: Equatable {
 
     /// «On battery:» then its lines, «On AC power:» then its lines; each bucket in table order, a bucket
     /// without edits contributes nothing.
-    static func confirmLines(_ pending: [EnergyChange]) -> [String] {
+    @MainActor static func confirmLines(_ pending: [EnergyChange]) -> [String] {
         let specs = energySpecs
         func order(_ key: String) -> Int { specs.firstIndex { $0.key == key } ?? Int.max }
         func lines(_ bucket: EnergyBucket) -> [String] {
@@ -523,7 +523,7 @@ struct SystemPageModel: Equatable {
         return out
     }
 
-    static func energyBannerText(_ f: PrivilegedActionFailure) -> String {
+    @MainActor static func energyBannerText(_ f: PrivilegedActionFailure) -> String {
         switch f {
         case .cancelled: return L.sysEnergyCancelled
         case .timedOut: return L.sysEnergyTimedOut

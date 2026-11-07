@@ -29,7 +29,7 @@ struct AssessmentSettings: Equatable {
 }
 
 /// User-tunable settings backed by UserDefaults. Mirrors L10nStore's pattern.
-@Observable
+@Observable @MainActor
 final class AppSettings {
     static let shared = AppSettings(defaults: .standard)
     /// The store every `didSet` writes to: `.standard` for `shared`, an isolated suite in tests.
@@ -70,7 +70,7 @@ final class AppSettings {
     static let backupStaleDaysKey = "backupStaleDays"
     static let legacyBackupStaleHoursKey = "backupStaleHours"
     static let backupStaleDaysRange = 1...30
-    static let defaultBackupStaleDays = 2
+    nonisolated static let defaultBackupStaleDays = 2
     static func resolveBackupStaleDays(raw: Int) -> Int { backupStaleDaysRange.contains(raw) ? raw : defaultBackupStaleDays }
     /// Hours → days for the one-time migration: round(h / 24) clamped to the range (24→1, 48→2, 72→3, 168→7, 30→1, 1000→30).
     static func daysFromLegacyHours(_ hours: Int) -> Int { min(max(Int((Double(hours) / 24).rounded()), backupStaleDaysRange.lowerBound), backupStaleDaysRange.upperBound) }
@@ -105,7 +105,7 @@ final class AppSettings {
     /// REDESIGN-STORAGE: amber low-space line (% free); any other stored value resolves to the default.
     static let lowSpacePercentKey = "lowSpacePercent"
     static let allowedLowSpacePercents = [10, 15, 20]
-    static let defaultLowSpacePercent = 20
+    nonisolated static let defaultLowSpacePercent = 20
     static func resolveLowSpacePercent(raw: Int) -> Int {
         allowedLowSpacePercents.contains(raw) ? raw : defaultLowSpacePercent
     }

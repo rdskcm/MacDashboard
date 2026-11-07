@@ -40,7 +40,7 @@ struct SocReadout: Equatable {
     /// Shortening order (owner decision 2026-11-05): below 1000 pt the thermal segment shows the word only; below
     /// 1000 pt with the state tag visible the power segment also loses its "Mac" prefix (the sub line then drops
     /// "updates every N s" through `CPUPageModel`). The power segment is never dropped.
-    static func make(socTempC: Int?, thermal: ThermalLevel?, powerW: Double?, narrow: Bool, tagVisible: Bool) -> SocReadout {
+    @MainActor static func make(socTempC: Int?, thermal: ThermalLevel?, powerW: Double?, narrow: Bool, tagVisible: Bool) -> SocReadout {
         var temperature: Temperature? = nil
         if let t = socTempC {
             let level = CPULoad.socLevel(t)
@@ -83,7 +83,7 @@ struct SocSplit: Equatable {
     let idleFraction: Double
 
     /// 1 decimal each, "—" when the CPU reading is missing. The sum is not forced to 100.
-    static func make(cpu: CPUUsage?) -> SocSplit {
+    @MainActor static func make(cpu: CPUUsage?) -> SocSplit {
         guard let cpu else { return SocSplit(user: "—", system: "—", idle: "—", userFraction: 0, systemFraction: 0, idleFraction: 0) }
         func text(_ v: Double) -> String { L.homePercent(fmtFixed(v, decimals: SocDisplay.splitDecimals)) }
         // The bar follows the shown value, so `SocSplit ==` changes exactly when a text changes (Stage 5a, D39).
@@ -102,7 +102,7 @@ struct SocLoadAverage: Equatable {
     let available: Bool
 
     /// 2 decimals each, "—" for all three when the reading is missing.
-    static func make(load: [Double]?) -> SocLoadAverage {
+    @MainActor static func make(load: [Double]?) -> SocLoadAverage {
         guard let l = load, l.count == 3 else { return SocLoadAverage(one: "—", five: "—", fifteen: "—", available: false) }
         return SocLoadAverage(one: fmtFixed(l[0], decimals: 2), five: fmtFixed(l[1], decimals: 2),
                               fifteen: fmtFixed(l[2], decimals: 2), available: true)
@@ -120,7 +120,7 @@ struct SocCoresCardModel: Equatable {
 
     // Pure pieces used by the per-cell views (each view computes only its own text).
 
-    static func caption(loadFailed: Bool) -> String { loadFailed ? L.gpuNotAvailable : L.socLoadPerCore }
+    @MainActor static func caption(loadFailed: Bool) -> String { loadFailed ? L.gpuNotAvailable : L.socLoadPerCore }
 
     /// "P1" for the first core of the Performance group; "1" in a group of unknown type. `index` is zero-based.
     static func cellID(groupName: String?, index n: Int) -> String {
@@ -128,7 +128,7 @@ struct SocCoresCardModel: Equatable {
         return (letter ?? "") + String(n + 1)
     }
 
-    static func cell(id: String, load: Int?, loadFailed: Bool, hasReading: Bool) -> Cell {
+    @MainActor static func cell(id: String, load: Int?, loadFailed: Bool, hasReading: Bool) -> Cell {
         if let load {
             return Cell(id: id, valueText: L.homePercent("\(load)"), fraction: min(1, max(0, Double(load) / 100)))
         }
@@ -136,9 +136,9 @@ struct SocCoresCardModel: Equatable {
     }
 
     /// "Performance · 4".
-    static func heading(_ group: CoreGroup) -> String { typeName(group.name) + " · \(group.count)" }
+    @MainActor static func heading(_ group: CoreGroup) -> String { typeName(group.name) + " · \(group.count)" }
 
-    static func frequency(_ f: FrequencyState) -> (text: String, isValue: Bool, help: String?) {
+    @MainActor static func frequency(_ f: FrequencyState) -> (text: String, isValue: Bool, help: String?) {
         switch f {
         case .notYet: return ("—", false, nil)
         case .unavailable: return ("—", false, L.gpuNotAvailable)
@@ -160,7 +160,7 @@ struct SocCoresCardModel: Equatable {
 
     /// The two names the system gives every Apple silicon chip are translated (design 9: "Производительные ·
     /// 4"); any other name is shown as the system gives it (3.1), nil is a group of unknown type.
-    static func typeName(_ name: String?) -> String {
+    @MainActor static func typeName(_ name: String?) -> String {
         guard let name else { return L.socCoresUnknown }
         switch name {
         case "Performance": return L.socCoreTypePerformance
@@ -192,11 +192,11 @@ struct SocGPUListModel: Equatable {
     }
 
     /// "8 GPU cores · top by GPU", or "top by GPU" when the core count is unknown.
-    static func caption(coreCount: Int?) -> String {
+    @MainActor static func caption(coreCount: Int?) -> String {
         coreCount.map { "\(L.socGPUCores($0)) · \(L.socTopByGPU)" } ?? L.socTopByGPU
     }
 
-    static func row(_ r: GPUProcessRow) -> Row {
+    @MainActor static func row(_ r: GPUProcessRow) -> Row {
         guard let share = r.sharePct else {
             return Row(id: r.id, name: r.name, valueText: "—", muted: true, fraction: 0)
         }
@@ -244,7 +244,7 @@ enum SocChartModel {
     ///   breaks only its own series.
     /// - State: fewer than 2 sample instants → `.collecting`; no CPU and no GPU value → `.unavailable`; no GPU value →
     ///   `.gpuMissing`; the oldest sample more than one interval after the window start → `.partial`; else `.full`.
-    static func series(cpu: [(Date, Double)], gpu: [(Date, Int?)], now: Date, interval: Int) -> SocChartSeries {
+    @MainActor static func series(cpu: [(Date, Double)], gpu: [(Date, Int?)], now: Date, interval: Int) -> SocChartSeries {
         let start = now.addingTimeInterval(-windowSeconds)
         let maxGap = gapIntervals * Double(max(1, interval))
         func inWindow(_ t: Date) -> Bool { t >= start && t <= now }
@@ -321,7 +321,7 @@ extension SocChartSeries {
 
 extension SocChartModel {
     /// CPU with one decimal ("14.2 %"), GPU as a whole number ("23 %"), through the app's percent format.
-    static func tooltipText(_ s: SocChartSample) -> SocChartTooltipText {
+    @MainActor static func tooltipText(_ s: SocChartSample) -> SocChartTooltipText {
         let dash = "—"
         return SocChartTooltipText(
             time: CPUPageModel.hhmmss(s.t),

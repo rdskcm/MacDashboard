@@ -518,7 +518,7 @@ private struct ReportRenderer {
             if let v = dest.mountPoint { lines.append("Mount Point   : \(v)") }
             if let v = dest.quotaBytes { lines.append("Quota         : \(ReportWriter.fmtBytes(v, language: language))") }
             if let v = dest.lastBackup { lines.append(S.reportTMLastBackup(v)) }
-            else if let v = dest.lastBackupUnavailableReason { lines.append(S.reportTMLastBackup(v.localizedText)) }
+            else if let v = dest.lastBackupUnavailableReason { lines.append(S.reportTMLastBackup(v.text(S))) }
             return lines.isEmpty ? [S.reportTMNotConfigured] : lines
         }
     }
@@ -705,7 +705,7 @@ func reportUpdatedTimeString(_ updatedAt: Date,
 }
 
 /// Age of the cached macOS update result for the Updates card. Future or < 60 s => "just now".
-func updatesAgeString(checkedAt: Date, now: Date = Date()) -> String {
+@MainActor func updatesAgeString(checkedAt: Date, now: Date = Date()) -> String {
     let age = now.timeIntervalSince(checkedAt)
     if age < 60 { return L.updatesCheckedJustNow }
     if age < 3600 { return L.updatesCheckedAgo("\(Int(age / 60)) \(L.uptimeUnitMinute)") }

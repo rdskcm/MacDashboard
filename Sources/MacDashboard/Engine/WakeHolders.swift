@@ -243,7 +243,7 @@ enum WakeHolders {
     static func processRecord(pid: Int32) -> ProcRecord? {
         var buffer = [Int8](repeating: 0, count: maxPathSize)
         let n = proc_pidpath(pid, &buffer, UInt32(maxPathSize))
-        let path: String? = n > 0 ? String(cString: buffer) : nil
+        let path: String? = n > 0 ? String(nulTerminated: buffer) : nil
 
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.stride

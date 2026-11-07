@@ -28,7 +28,7 @@ enum ProcessInspector {
         var buffer = [Int8](repeating: 0, count: maxPathSize)
         let n = proc_pidpath(pid, &buffer, UInt32(maxPathSize))
         guard n > 0 else { return nil }
-        return String(cString: buffer)
+        return String(nulTerminated: buffer)
     }
 
     /// Owner via `sysctl(KERN_PROC_PID)` → effective uid → passwd name. Unlike

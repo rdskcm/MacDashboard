@@ -565,7 +565,7 @@ private struct IPhoneHealthChart: View {
 }
 
 /// One decimal, half-up, with the locale's decimal separator.
-func iphoneOneDecimal(_ v: Double) -> String {
+@MainActor func iphoneOneDecimal(_ v: Double) -> String {
     fmtFixed((v * 10).rounded() / 10, decimals: 1)
 }
 

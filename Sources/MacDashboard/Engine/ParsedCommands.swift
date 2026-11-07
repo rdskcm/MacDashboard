@@ -130,7 +130,7 @@ enum ParsedCommand: String, CaseIterable {
 
 /// Non-blank stdout that its parser rejected, kept so the report carries the evidence
 /// (R3 part 5). The excerpt is capped and identifier-masked; it is diagnostic, not a fixture.
-struct ParseFailure: Equatable {
+struct ParseFailure: Equatable, Sendable {
     static let excerptLineLimit = 8
     static let excerptLineLength = 160
 

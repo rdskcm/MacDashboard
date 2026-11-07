@@ -20,10 +20,12 @@ struct RussianUITrait: SuiteTrait, TestTrait, TestScoping {
 
     func provideScope(for test: Test, testCase: Test.Case?,
                       performing function: @Sendable () async throws -> Void) async throws {
-        let saved = L10nStore.shared.language
-        L10nStore.shared.language = .ru
-        defer { L10nStore.shared.language = saved }
-        try await function()
+        let saved = await MainActor.run { let s = L10nStore.shared.language; L10nStore.shared.language = .ru; return s }
+        do { try await function() } catch {
+            await MainActor.run { L10nStore.shared.language = saved }
+            throw error
+        }
+        await MainActor.run { L10nStore.shared.language = saved }
     }
 }
 

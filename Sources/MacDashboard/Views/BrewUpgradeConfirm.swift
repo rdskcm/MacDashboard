@@ -16,7 +16,7 @@ enum BrewUpgradeConfirm {
     static let listCap = 10
 
     /// "pkg1, pkg2, …" plus "и ещё N" / "and N more" once the list exceeds `listCap`.
-    static func message(_ outdated: [String]) -> String {
+    @MainActor static func message(_ outdated: [String]) -> String {
         let shown = outdated.prefix(listCap)
         let rest = outdated.count - shown.count
         let names = shown.joined(separator: ", ")

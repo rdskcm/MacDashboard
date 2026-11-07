@@ -32,13 +32,13 @@ private let tmLate: TMDestination = {
     return d
 }()
 
-private func homeAssess(_ report: FullReport, _ live: LiveSnapshot, wake: Bool = true) -> Assessment {
+@MainActor private func homeAssess(_ report: FullReport, _ live: LiveSnapshot, wake: Bool = true) -> Assessment {
     Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: .critical,
                   wakeHolders: wake ? [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)] : [],
                   claudeBackup: .noSuccessFound)
 }
 
-private func homeInput(_ report: FullReport, _ live: LiveSnapshot, assessment: Assessment? = nil,
+@MainActor private func homeInput(_ report: FullReport, _ live: LiveSnapshot, assessment: Assessment? = nil,
                        scan: BlockState = BlockState(.scan), hasBattery: Bool = true,
                        history: [MacHistoryEntry] = [], now: Date = Date()) -> HomeInput {
     HomeInput(assessment: assessment ?? homeAssess(report, live), report: report, scan: scan,
@@ -54,7 +54,7 @@ private func dayString(_ offset: Int, from base: Date) -> String {
 }
 
 extension SerialTests {
-    struct HomeModelTests {
+    @MainActor struct HomeModelTests {
         @Test func taskTable() {
             let saved = L10nStore.shared.language
             defer { L10nStore.shared.language = saved }

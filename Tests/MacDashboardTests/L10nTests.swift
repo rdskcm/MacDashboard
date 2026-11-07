@@ -5,7 +5,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct L10nTests {
+    @MainActor struct L10nTests {
         @Test func languageChoiceResolve() {
             #expect(LanguageChoice.resolve(.system, preferredLanguages: ["ru-RU"]) == .ru)
             #expect(LanguageChoice.resolve(.system, preferredLanguages: ["en-US", "ru"]) == .en)

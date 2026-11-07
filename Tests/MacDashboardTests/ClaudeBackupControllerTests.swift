@@ -82,9 +82,8 @@ extension SerialTests {
             #expect(fake.attemptReads == reads && clock.sleeps.count == sleeps)
 
             let (c2, _, _, clock2) = make()
-            var t: Task<Void, Never>!
+            let t = Task { await c2.observe() }   // main-actor task: cannot start before this test suspends
             clock2.onSleep = { n in if n == 3 { t.cancel() } }
-            t = Task { await c2.observe() }
             await t.value
             #expect(c2.pollTask == nil)
             #expect(clock2.sleeps.count <= 4)

@@ -62,7 +62,7 @@ enum BatteryChargeState: Equatable, Sendable {
         case .other(let raw): return raw
         }
     }
-    var localizedText: String { text(L) }
+    @MainActor var localizedText: String { text(L) }
 }
 /// `mdutil -s /`. `.other` keeps the trimmed raw line (as before).
 enum SpotlightState: Equatable, Sendable {
@@ -75,7 +75,7 @@ enum SpotlightState: Equatable, Sendable {
         }
     }
 }
-struct BatteryInfo: Equatable {
+struct BatteryInfo: Equatable, Sendable {
     var source: BatteryPowerSource?
     var charge: Int?            // %
     var state: BatteryChargeState?
@@ -113,7 +113,7 @@ struct LiveSnapshot {
 }
 
 // ---- Full report (sections nil until collected; nil ⇒ "недоступно") ----
-struct SystemInfo: Equatable {
+struct SystemInfo: Equatable, Sendable {
     var osName: String?; var osVersion: String?; var osBuild: String?
     var modelName: String?; var modelId: String?
     var chip: String?           // "Apple M3" | Intel brand string
@@ -122,7 +122,7 @@ struct SystemInfo: Equatable {
     var uptimeSeconds: Int?     // from uptime(1); formatted by fmtUptime at the edge
 }
 struct DirSize: Identifiable, Equatable, Codable { var id: String { path }; var path: String; var bytes: Int64 }
-struct SecurityState: Equatable {
+struct SecurityState: Equatable, Sendable {
     // nil = unknown/no permission; true = enabled
     var fileVault: Bool?; var gatekeeper: Bool?; var sip: Bool?; var firewall: Bool?
 }
@@ -143,7 +143,7 @@ struct SoftwareUpdate: Codable, Equatable, Sendable, Identifiable {
 /// the stored string against the current language's translation, so right after a
 /// language switch the comparison stopped matching and the row lost its alarm colour
 /// until the next report refresh (V2-HONEST-READINGS).
-enum TMBackupUnavailableReason: Equatable {
+enum TMBackupUnavailableReason: Equatable, Sendable {
     /// `tmutil latestbackup` answered "no backup…".
     case noBackupsYet
     /// The destination has no mount point — the disk is not connected.
@@ -153,16 +153,18 @@ enum TMBackupUnavailableReason: Equatable {
     /// Mounted, but the date is unreadable — the only case that is a real problem.
     case dateUnavailableNoFDA
 
-    /// Rendered in the language current at READ time, so a language switch updates the
-    /// card immediately instead of waiting for the next collect.
-    var localizedText: String {
+    /// Rendered in the strings table `s` (the text report passes its own language).
+    func text(_ s: AppStrings) -> String {
         switch self {
-        case .noBackupsYet:         return L.reportCollectorNoBackupsYet
-        case .diskNotConnected:     return L.reportCollectorDiskNotConnected
-        case .noCompletedBackups:   return L.reportCollectorNoCompletedBackups
-        case .dateUnavailableNoFDA: return L.reportCollectorDateUnavailableNoFDA
+        case .noBackupsYet:         return s.reportCollectorNoBackupsYet
+        case .diskNotConnected:     return s.reportCollectorDiskNotConnected
+        case .noCompletedBackups:   return s.reportCollectorNoCompletedBackups
+        case .dateUnavailableNoFDA: return s.reportCollectorDateUnavailableNoFDA
         }
     }
+    /// Rendered in the language current at READ time, so a language switch updates the
+    /// card immediately instead of waiting for the next collect.
+    @MainActor var localizedText: String { text(L) }
 }
 
 /// REDESIGN-BACKUPS: `AutoBackup` / `AutoBackupInterval` of /Library/Preferences/com.apple.TimeMachine.plist.
@@ -171,7 +173,7 @@ enum TMSchedule: Equatable, Sendable {
     case manual
 }
 
-struct TMDestination: Equatable {
+struct TMDestination: Equatable, Sendable {
     var name: String?; var kind: String?; var mountPoint: String?; var quotaBytes: Int64?; var lastBackup: String?
     // nil when lastBackup is set (or destination not yet checked); otherwise an
     // honest reason no date could be obtained (e.g. disk unmounted, or backup
@@ -186,7 +188,7 @@ struct TMDestination: Equatable {
     /// REDESIGN-BACKUPS: automatic-backup schedule from the TimeMachine prefs plist; nil = unreadable (no FDA).
     var schedule: TMSchedule? = nil
 }
-struct AutostartInfo: Equatable {
+struct AutostartInfo: Equatable, Sendable {
     var loginItems: [String]?   // nil = no permission
     var userAgents: [LaunchdPlistInfo] = []; var systemAgents: [LaunchdPlistInfo] = []; var systemDaemons: [LaunchdPlistInfo] = []
     var background: [(pid: String, label: String)] = []
@@ -228,7 +230,7 @@ enum SmartStatus: Equatable, Sendable {
         }
     }
 }
-struct SmartDisk: Identifiable, Equatable {
+struct SmartDisk: Identifiable, Equatable, Sendable {
     var id: String { device }
     var device: String          // "/dev/disk4" or "internal"
     var title: String?          // media/model name; nil = diskutil gave none (fallback title at the edge)
@@ -237,13 +239,13 @@ struct SmartDisk: Identifiable, Equatable {
     var severity: Severity = .good
     var health: SmartHealth? = nil
     func displayTitle(_ s: AppStrings) -> String { title ?? s.reportCollectorInternalDiskFallbackTitle }
-    var localizedTitle: String { displayTitle(L) }
+    @MainActor var localizedTitle: String { displayTitle(L) }
     static func == (l: Self, r: Self) -> Bool {
         l.device == r.device && l.title == r.title && l.status == r.status &&
         l.severity == r.severity && l.health == r.health && l.attrs.elementsEqual(r.attrs, by: { $0 == $1 })
     }
 }
-struct EnergySettings: Equatable { var battery: [(String, String)]; var ac: [(String, String)]
+struct EnergySettings: Equatable, Sendable { var battery: [(String, String)]; var ac: [(String, String)]
     static func == (l: Self, r: Self) -> Bool {
         l.battery.elementsEqual(r.battery, by: { $0 == $1 }) && l.ac.elementsEqual(r.ac, by: { $0 == $1 })
     }

@@ -44,9 +44,9 @@ private func input(wakeSampled: Bool = true, holders: [WakeHolder] = [], system:
                           brewError: brewError, brewNotice: notice, brewRefreshing: refreshing, energy: energy,
                           energyPending: pending, energyApply: apply, now: now)
 }
-private func make(_ i: SystemPageModel.Input) -> SystemPageModel { SystemPageModel.make(i) }
+@MainActor private func make(_ i: SystemPageModel.Input) -> SystemPageModel { SystemPageModel.make(i) }
 
-private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -58,7 +58,7 @@ private let zoom = WakeHolder(owner: "zoom.us", requester: nil, ageSeconds: 900)
 private let backupd = WakeHolder(owner: "backupd", requester: nil, ageSeconds: 700)
 
 extension SerialTests {
-    struct SystemPageModelTests {
+    @MainActor struct SystemPageModelTests {
         @Test func tagPriority() {
             let bad = EnergyApplyState.failed(.error("boom"))
             withLanguage(.en) {

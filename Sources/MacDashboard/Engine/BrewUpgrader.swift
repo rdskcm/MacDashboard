@@ -21,9 +21,10 @@ enum BrewUpgrader {
 
     /// Cancelling the awaiting Task kills brew's process group. Streams progress via
     /// `onProgress` (invoked on CommandRunner's private serial queue — caller hops to
-    /// main). Returns nil only when brew exited with status 0, else a short localized failure string.
-    static func upgradeAll(totalOutdated: Int, onProgress: @escaping (BrewProgress) -> Void) async -> String? {
-        await upgradeAll(totalOutdated: totalOutdated, brewPath: ReportCollector.findBrew(),
+    /// main). Returns nil only when brew exited with status 0, else a short failure string in `language`
+    /// (the caller reads the UI language on the main actor: this runs off it).
+    static func upgradeAll(totalOutdated: Int, language: AppLanguage, onProgress: @escaping (BrewProgress) -> Void) async -> String? {
+        await upgradeAll(totalOutdated: totalOutdated, brewPath: ReportCollector.findBrew(), language: language,
                          onProgress: onProgress, run: { invocation, onLine in
             await CommandRunner.run(invocation.path, invocation.args, timeout: invocation.timeout,
                                     environment: invocation.environment,
@@ -33,9 +34,10 @@ enum BrewUpgrader {
 
     /// `upgradeAll(totalOutdated:onProgress:)` with brew's location and the launcher injected —
     /// Checks pass a fake so brew never runs. This is the whole flow.
-    static func upgradeAll(totalOutdated: Int, brewPath: String?,
+    static func upgradeAll(totalOutdated: Int, brewPath: String?, language: AppLanguage,
                            onProgress: @escaping (BrewProgress) -> Void, run: Runner) async -> String? {
-        guard let brew = brewPath else { return L.maintenanceBrewUpgradeFailed }
+        let S = language.strings
+        guard let brew = brewPath else { return S.maintenanceBrewUpgradeFailed }
         var parser = BrewProgressParser(total: totalOutdated)
         var lastStderr: String?
         let outcome = await run(invocation(brewPath: brew), { line, isStderr in
@@ -50,8 +52,8 @@ enum BrewUpgrader {
         // After an ordinary non-zero exit the last non-empty stderr line is shown (REDESIGN-SYSTEM «Update failed: …»).
         // A timeout or kill ends the run mid-output, so that line says nothing about the cause: generic message.
         if outcome.termination == .exited(0) { return nil }
-        if case .exited = outcome.termination, let lastStderr { return L.sysBrewFailedLine(lastStderr) }
-        return L.maintenanceBrewUpgradeFailed
+        if case .exited = outcome.termination, let lastStderr { return S.sysBrewFailedLine(lastStderr) }
+        return S.maintenanceBrewUpgradeFailed
     }
 
     static func invocation(brewPath: String) -> Invocation {
@@ -77,7 +79,7 @@ enum BrewUpgrader {
     }
 
     /// Pure (unit-tested). The neutral line shown after the user stopped a run (BREW-CANCEL).
-    static func stoppedNotice(before: [String], after: [String]?) -> String {
+    @MainActor static func stoppedNotice(before: [String], after: [String]?) -> String {
         guard let k = upgradedCount(before: before, after: after) else { return L.maintenanceBrewStoppedUnknown }
         return L.maintenanceBrewStopped(k, before.count)
     }

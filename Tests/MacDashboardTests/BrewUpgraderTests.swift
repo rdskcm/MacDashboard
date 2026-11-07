@@ -23,13 +23,13 @@ private func buOutcome(_ t: CommandOutcome.Termination, stdout: String = "") -> 
     CommandOutcome(termination: t, stdout: stdout, stdoutTruncated: false, stderrHead: "")
 }
 /// Runs the injectable flow with a fake; never the 2-argument production overload.
-private func buRun(total: Int, brewPath: String?, _ fake: BUFakeRunner, _ log: BUProgressLog) async -> String? {
-    await BrewUpgrader.upgradeAll(totalOutdated: total, brewPath: brewPath,
-                                  onProgress: { log.items.append($0) }, run: fake.run)
+@MainActor private func buRun(total: Int, brewPath: String?, _ fake: BUFakeRunner, _ log: BUProgressLog) async -> String? {
+    await BrewUpgrader.upgradeAll(totalOutdated: total, brewPath: brewPath, language: L10nStore.shared.language,
+                                  onProgress: { @Sendable p in log.items.append(p) }, run: fake.run)
 }
 
 extension SerialTests {
-    struct BrewUpgraderTests {
+    @MainActor struct BrewUpgraderTests {
         @Test func brewUpgrader() async {
             let fail = L.maintenanceBrewUpgradeFailed
             let homebrew = "/opt/homebrew/bin/brew"

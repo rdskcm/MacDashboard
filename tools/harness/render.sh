@@ -33,7 +33,7 @@ while IFS= read -r f; do SRCS+=("$f"); done < <(
 )
 
 # NOTE: no `-framework Observation` — it's an SDK Swift module, linking it fails.
-swiftc -o "$BUILD/harness" "${SRCS[@]}" "$ROOT/tools/harness/HarnessKit.swift" "$BUILD/main.swift" \
+swiftc -swift-version 6 -o "$BUILD/harness" "${SRCS[@]}" "$ROOT/tools/harness/HarnessKit.swift" "$BUILD/main.swift" \
   -framework AppKit -framework SwiftUI -framework IOKit
 
 case "$MODE" in

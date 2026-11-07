@@ -242,7 +242,7 @@ private final class CommandJob: @unchecked Sendable {
     private let interruptGrace: TimeInterval?
     private var phase = Phase.idle
     private var killReason: CommandOutcome.KillReason?
-    private var completion: ((CommandOutcome) -> Void)?
+    private var completion: (@Sendable (CommandOutcome) -> Void)?
     private var stdoutBuf = CappedBuffer(cap: CommandRunner.outputCap)
     private var stderrBuf = CappedBuffer(cap: CommandRunner.stderrHeadCap)
     private var stdoutLines = LineSplitter()
@@ -274,13 +274,13 @@ private final class CommandJob: @unchecked Sendable {
     }
 
     func start(path: String, args: [String], environment: [String: String], timeout: TimeInterval,
-               completion: @escaping (CommandOutcome) -> Void) {
+               completion: @escaping @Sendable (CommandOutcome) -> Void) {
         queue.async { self.launch(path, args, environment, timeout, completion) }
     }
     func cancel() { queue.async { self.requestKill(.cancelled) } }
 
     private func launch(_ path: String, _ args: [String], _ env: [String: String],
-                        _ timeout: TimeInterval, _ completion: @escaping (CommandOutcome) -> Void) {
+                        _ timeout: TimeInterval, _ completion: @escaping @Sendable (CommandOutcome) -> Void) {
         self.completion = completion
         if killReason == .cancelled {                         // cancelled before spawn: spawn nothing
             finish(CommandOutcome(termination: .cancelled, stdout: "", stdoutTruncated: false, stderrHead: ""))

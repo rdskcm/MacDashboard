@@ -55,7 +55,7 @@ func ruPlural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String 
 /// re-renders instantly on language change. Engine code never reads it (ARCH-TEXT-EDGE):
 /// parsers and collectors store values, text is made at the view / page-model edge or by
 /// functions that take `language:`.
-@Observable
+@Observable @MainActor
 final class L10nStore {
     static let shared = L10nStore()
     /// Language the process started with — UI offers «Relaunch Now» only while
@@ -91,9 +91,11 @@ final class L10nStore {
         choice = initial
         language = LanguageChoice.resolve(initial, preferredLanguages: Locale.preferredLanguages)
         localeObserver = NotificationCenter.default.addObserver(forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self, self.choice == .system else { return }
-            let l = LanguageChoice.resolve(.system, preferredLanguages: Locale.preferredLanguages)
-            if l != self.language { self.language = l }
+            MainActor.assumeIsolated {
+                guard let self, self.choice == .system else { return }
+                let l = LanguageChoice.resolve(.system, preferredLanguages: Locale.preferredLanguages)
+                if l != self.language { self.language = l }
+            }
         }
     }
 }
@@ -117,4 +119,4 @@ extension AppLanguage {
     var strings: AppStrings { self == .en ? StringsEN() : StringsRU() }
 }
 
-var L: AppStrings { L10nStore.shared.language.strings }
+@MainActor var L: AppStrings { L10nStore.shared.language.strings }

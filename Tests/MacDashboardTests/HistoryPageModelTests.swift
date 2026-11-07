@@ -6,7 +6,7 @@ import Foundation
 import Testing
 @testable import MacDashboard
 
-private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -53,13 +53,13 @@ private func input(_ e: [MacHistoryEntry], metric: HistoryMetric = .disk, range:
           showAll: showAll, narrow: narrow, now: day("2026-10-21"), historyPath: "~/x/mac_check_state.json")
 }
 
-private func make(_ i: HistoryPageModel.Input) -> HistoryPageModel { HistoryPageModel.make(i, calendar: cal) }
+@MainActor private func make(_ i: HistoryPageModel.Input) -> HistoryPageModel { HistoryPageModel.make(i, calendar: cal) }
 
 private func pt(_ date: String, _ v: Double) -> HistoryChartPoint { .init(id: date, date: day(date), value: v) }
 private func chart(_ m: HistoryPageModel) -> HistoryChartData? { if case .chart(let d) = m.block { return d } else { return nil } }
 
 extension SerialTests {
-    struct HistoryPageModelTests {
+    @MainActor struct HistoryPageModelTests {
         @Test func spanAndRanges() {
             withLanguage(.en) {
                 let e500 = entries(500)
@@ -176,7 +176,7 @@ extension SerialTests {
 
         @Test func xTicks() {
             withLanguage(.en) {
-                func ticks(_ n: Int, _ r: HistoryRange, narrow: Bool = false, end: String = "2026-10-21") -> [HistoryXTick] {
+                @MainActor func ticks(_ n: Int, _ r: HistoryRange, narrow: Bool = false, end: String = "2026-10-21") -> [HistoryXTick] {
                     let es = entries(n, end: end)
                     let w = HistoryPageModel.window(es, range: r, calendar: cal)!
                     return HistoryPageModel.xTicks(window: w, range: r, narrow: narrow, calendar: cal)
@@ -425,11 +425,11 @@ extension SerialTests {
         /// Ticks by plotted length; Swap only on the last `keep` of 120 days, 3M. End day 2026-10-21.
         @Test func sinceTicksByWindowLength() {
             withLanguage(.en) {
-                func data(_ keep: Int) -> HistoryChartData? {
+                @MainActor func data(_ keep: Int) -> HistoryChartData? {
                     let e = entries(120) { i, e in if i < 120 - keep { e.swap = nil } }
                     return chart(make(input(e, metric: .swap, range: .quarter)))
                 }
-                func labels(_ keep: Int) -> [String] { data(keep)?.ticks.compactMap(\.label) ?? [] }
+                @MainActor func labels(_ keep: Int) -> [String] { data(keep)?.ticks.compactMap(\.label) ?? [] }
                 #expect(labels(2) == [])
                 #expect(labels(3) == ["Oct 20"])
                 #expect(labels(4) == ["Oct 20"])

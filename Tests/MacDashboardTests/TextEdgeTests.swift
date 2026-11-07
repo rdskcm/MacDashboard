@@ -7,7 +7,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct TextEdgeTests {
+    @MainActor struct TextEdgeTests {
         @Test func assessIgnoresGlobalLanguage() {
             let saved = L10nStore.shared.language
             defer { L10nStore.shared.language = saved }

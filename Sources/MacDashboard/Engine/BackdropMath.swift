@@ -116,7 +116,8 @@ struct OrbBitmap {
         guard let surface = IOSurfaceCreate(props as CFDictionary),
               let space = CGColorSpace(name: CGColorSpace.sRGB), let tag = space.copyPropertyList() else { return nil }
         IOSurfaceLock(surface, [], nil)
-        let out = IOSurfaceGetBaseAddress(surface).assumingMemoryBound(to: UInt8.self)
+        // nonisolated(unsafe) (SWIFT6-MODE): the bands write disjoint rows [y0, y1) × stride of one locked IOSurface; no two iterations touch the same byte, and the surface is unlocked only after concurrentPerform returns.
+        nonisolated(unsafe) let out = IOSurfaceGetBaseAddress(surface).assumingMemoryBound(to: UInt8.self)
         let stride = IOSurfaceGetBytesPerRow(surface)
         let bandRows = 64
         let bands = (side + bandRows - 1) / bandRows

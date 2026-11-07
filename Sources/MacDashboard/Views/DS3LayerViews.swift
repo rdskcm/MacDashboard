@@ -485,10 +485,10 @@ final class RimSettingsObserver {
 // MARK: - Orbs
 
 /// One soft colour glow: colour, diameter and a centre function of the layer size.
-struct DS3OrbSpec {
+struct DS3OrbSpec: Sendable {
     let color: Color
     let d: CGFloat
-    let centre: (CGSize) -> CGPoint
+    let centre: @Sendable (CGSize) -> CGPoint
 
     /// The main window's three v2 orbs (`This Mac Home v2.dc.html:33-35`): A back 780 `top -300 right -220`,
     /// B mid 580 `top 330 left -250`, C front 420 `bottom -190 right 20%`. REDESIGN-ORBS.

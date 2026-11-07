@@ -9,7 +9,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct HistorySeriesTests {
+    @MainActor struct HistorySeriesTests {
         @Test func historySeries() async {
             let fixture: [MacHistoryEntry] = [
                 MacHistoryEntry(date: "2026-07-01", disk_used_gb: 100, disk_free_gb: 50,

@@ -5,7 +5,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct AppSettingsTests {
+    @MainActor struct AppSettingsTests {
         @Test func fastIntervalPersistence() {
             let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
             #expect(AppSettings(defaults: d).fastIntervalSeconds == 2, "empty suite -> default interval 2")

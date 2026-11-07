@@ -1,9 +1,9 @@
 // swift-tools-version: 6.2
 // Package.swift — scaffold owns this file (SPEC §3). Tools-version 6.2 is the first whose
 // PackageDescription has `.v26`; it ships with Xcode 26, the minimum Xcode the README and
-// .github/actions/select-xcode already require. Swift 5 language mode is set explicitly
-// (`swiftLanguageModes` below): tools-version 6.x would otherwise default to Swift 6 mode
-// and its strict-concurrency errors.
+// .github/actions/select-xcode already require. Swift 6 language mode (SWIFT6-MODE): strict
+// data-race checking is on and every concurrency violation is a compiler error. Kept explicit
+// so a tools-version change can never move it silently.
 import PackageDescription
 
 let package = Package(
@@ -29,5 +29,5 @@ let package = Package(
             path: "Tests/MacDashboardTests"
         )
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )

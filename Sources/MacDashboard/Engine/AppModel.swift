@@ -263,8 +263,9 @@ final class AppModel {
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
     /// `passCollect`: tests pass a fake pass; the app passes nothing.
-    init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings = .shared, time: TimeSource = .live,
+    init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings? = nil, time: TimeSource = .live,
          passCollect: PassCollect? = nil) {
+        let settings = settings ?? .shared
         self.settings = settings
         self.actions = actions
         self.time = time

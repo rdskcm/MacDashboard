@@ -6,16 +6,16 @@ import Testing
 
 // Values verbatim from inputs/GPU-UTILIZATION-capture/ioaccel-idle.plist and ioaccel-loaded.plist
 // (macOS 27.2, MacBook Air, arm64, 2026-11-05).
-private let idleStats: [String: Any] = [
+private var idleStats: [String: Any] { [
     "Alloc system memory": 1733017600, "Allocated PB Size": 40894464, "Device Utilization %": 2,
     "In use system memory": 284950528, "In use system memory (driver)": 0, "Renderer Utilization %": 2,
     "SplitSceneCount": 0, "TiledSceneBytes": 688128, "Tiler Utilization %": 2, "lastRecoveryTime": 0, "recoveryCount": 0,
-]
-private let loadedStats: [String: Any] = [
+] }
+private var loadedStats: [String: Any] { [
     "Alloc system memory": 1773862912, "Allocated PB Size": 40894464, "Device Utilization %": 99,
     "In use system memory": 348127232, "In use system memory (driver)": 0, "Renderer Utilization %": 28,
     "SplitSceneCount": 0, "TiledSceneBytes": 786432, "Tiler Utilization %": 28, "lastRecoveryTime": 0, "recoveryCount": 0,
-]
+] }
 
 struct GPUStatsTests {
     @Test func captureValues() {

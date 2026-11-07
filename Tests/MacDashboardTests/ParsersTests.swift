@@ -469,7 +469,7 @@ struct ParsersTests {
 
 /// The one test in this file that flips the process-wide UI language stays in the serialized suite.
 extension SerialTests {
-    struct ParsersSerialTests {
+    @MainActor struct ParsersSerialTests {
         @Test func tmBackupUnavailableReason() async {
             // =====================================================================
             // MARK: - TMBackupUnavailableReason

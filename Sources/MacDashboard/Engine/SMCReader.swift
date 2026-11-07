@@ -17,6 +17,7 @@
 
 import Foundation
 import IOKit
+import Synchronization
 
 final class SMCReader {
     // MARK: - Wire format (AppleSMC `SMCKeyData`, 80 bytes)
@@ -127,24 +128,24 @@ final class SMCReader {
 
     // MARK: - Shared connection
 
-    private static let lock = NSLock()
-    private static var shared: SMCReader?
-    /// Set once the first open failed: the SMC is then treated as absent for the process lifetime (never retried).
-    private static var openFailed = false
+    /// The kept connection and the "never retry" flag, under one lock (SWIFT6-MODE D6; was NSLock + two statics).
+    private struct Connection { var reader: SMCReader? = nil; var openFailed = false }
+    private static let connection = Mutex(Connection())
 
     /// Whole-Mac power now, in watts. nil on any failure or an implausible value. Safe from any thread.
+    /// `openFailed` is set once the first open failed: the SMC is then treated as absent for the process lifetime (never retried).
     static func readSystemPowerW() -> Double? {
-        lock.lock()
-        defer { lock.unlock() }
-        if openFailed { return nil }
-        if shared == nil {
-            shared = SMCReader()
-            if shared == nil { openFailed = true; return nil }
+        connection.withLock { c -> Double? in
+            if c.openFailed { return nil }
+            if c.reader == nil {
+                c.reader = SMCReader()
+                if c.reader == nil { c.openFailed = true; return nil }
+            }
+            guard let reader = c.reader else { return nil }
+            let outcome = powerOutcome(reader.read(key: systemPowerKey))
+            // A call failure may mean a broken kept connection: drop it so the next call opens a new one.
+            if outcome.dropConnection { c.reader = nil }
+            return outcome.watts
         }
-        guard let reader = shared else { return nil }
-        let outcome = powerOutcome(reader.read(key: systemPowerKey))
-        // A call failure may mean a broken kept connection: drop it so the next call opens a new one.
-        if outcome.dropConnection { shared = nil }
-        return outcome.watts
     }
 }

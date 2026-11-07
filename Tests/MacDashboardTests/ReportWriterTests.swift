@@ -41,7 +41,7 @@ private func rwVM(_ label: String, _ pages: Int64) -> String {
     return rwCol(label + ":", 32) + String(repeating: " ", count: max(0, 10 - n.count)) + n
 }
 
-private func rwNames() -> [String] {
+@MainActor private func rwNames() -> [String] {
     [L.reportSectionSystem, L.reportSectionDisk, L.reportSectionSnapshots, L.reportSectionHomeDirs,
      L.reportSectionServiceDirs, L.reportSectionMemory, L.reportSectionTopMem, L.reportSectionTopCPU,
      L.reportSectionLoginItems, L.reportSectionAgents, L.reportSectionBackground, L.reportSectionBattery,
@@ -50,7 +50,7 @@ private func rwNames() -> [String] {
      L.reportSectionTimings, L.reportSectionUnparsed]
 }
 
-private func rwCheckOrder(_ out: String, _ tag: String) {
+@MainActor private func rwCheckOrder(_ out: String, _ tag: String) {
     let lines = out.components(separatedBy: "\n")
     let names = rwNames()
     let idx = names.map { lines.firstIndex(of: "===== \($0) =====") }
@@ -65,7 +65,7 @@ private func rwCheckOrder(_ out: String, _ tag: String) {
 
 
 /// The short report with the full diagnostic sections appended (REDESIGN-REPORT fix wave 2).
-private func renderDetails(_ r: FullReport, _ l: LiveSnapshot) -> String {
+@MainActor private func renderDetails(_ r: FullReport, _ l: LiveSnapshot) -> String {
     var i = emptyInput()
     i.parseFailures = r.parseFailures + l.parseFailures
     i.details = ReportDetails(report: r, live: l)
@@ -85,7 +85,7 @@ private func rwDate() -> Date {
 }
 
 /// Two tasks (one hot, one amber) built through the real task builder.
-private func rwTasks() -> [HomeTask] {
+@MainActor private func rwTasks() -> [HomeTask] {
     var a = Assessment()
     a.items = [
         AttentionItem(kind: .smartErrors, sev: .crit, label: "", detail: "", fullText: ""),
@@ -94,7 +94,7 @@ private func rwTasks() -> [HomeTask] {
     return HomeModel.tasks(a, report: FullReport(), disk: nil, battery: nil)
 }
 
-func fullInput() -> ReportSummaryInput {
+@MainActor func fullInput() -> ReportSummaryInput {
     let at = rwDate()
     let tasks = rwTasks()
     return ReportSummaryInput(
@@ -121,7 +121,7 @@ private func emptyInput() -> ReportSummaryInput {
 }
 
 extension SerialTests {
-    struct ReportWriterTests {
+    @MainActor struct ReportWriterTests {
         @Test func renderEN() {
             let originalLang = L10nStore.shared.language
             defer { L10nStore.shared.language = originalLang }

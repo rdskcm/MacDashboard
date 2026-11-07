@@ -77,7 +77,7 @@ final class HistoryStore {
     /// keep entries sorted by date, set last_run. Pure in-memory mutation — call save()
     /// afterward to persist.
     func upsertToday(from report: FullReport, live: LiveSnapshot) {
-        let today = Self.dayFormatter.string(from: Date())
+        let today = dayFormatter.string(from: Date())
         let battery = report.battery ?? live.battery
 
         var entry = MacHistoryEntry(date: today)
@@ -206,7 +206,7 @@ final class HistoryStore {
     /// `<file name>.unreadable-<yyyyMMdd-HHmmss>` next to the history file.
     private func unreadableBackupURL() -> URL {
         url.deletingLastPathComponent().appendingPathComponent(
-            url.lastPathComponent + ".unreadable-" + Self.backupStampFormatter.string(from: Date()))
+            url.lastPathComponent + ".unreadable-" + backupStampFormatter.string(from: Date()))
     }
 
     private static func roundedGiB(_ bytes: Int64) -> Int {
@@ -217,7 +217,7 @@ final class HistoryStore {
         Int((Double(bytes) / 1_048_576.0).rounded())        // ÷ 2^20
     }
 
-    private static var dayFormatter: DateFormatter = {
+    private let dayFormatter: DateFormatter = {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.timeZone = .current
@@ -225,7 +225,7 @@ final class HistoryStore {
         return df
     }()
 
-    private static var backupStampFormatter: DateFormatter = {
+    private let backupStampFormatter: DateFormatter = {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.timeZone = .current

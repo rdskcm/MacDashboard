@@ -7,11 +7,17 @@
 // home-directory path (needed so home-relative paths look real).
 
 import Foundation
+import Synchronization
 
 enum VisualFixture {
     /// HARNESS-REDESIGN-RETARGET: test hook. The offscreen snapshot suite cannot add a launch argument to its
     /// own process, so it sets this for the duration of its render (and restores it). Never set by the app.
-    static var forced = false
+    /// Backed by a lock: the snapshot suite (SerialTests) writes it; main-actor code and detached pass code read it (SWIFT6-MODE D5).
+    private static let forcedFlag = Mutex(false)
+    static var forced: Bool {
+        get { forcedFlag.withLock { $0 } }
+        set { forcedFlag.withLock { $0 = newValue } }
+    }
 
     /// `-visualFixture` on the command line (or `forced` in the snapshot tests) requests fixture mode.
     static var isRequested: Bool {
@@ -216,7 +222,7 @@ enum VisualFixture {
         var claudeJob: ClaudeBackupJob
     }
 
-    static func make() -> Dataset {
+    @MainActor static func make() -> Dataset {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
 
         let load: [Double] = [2.10, 1.85, 1.60]
