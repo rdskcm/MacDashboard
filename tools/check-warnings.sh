@@ -10,12 +10,8 @@
 # Usage: tools/check-warnings.sh [scratch-dir]
 #   scratch-dir  absent or empty; kept afterwards (CI runs `swift test --skip-build` on it).
 #   Without it a new temporary directory is used and removed at exit.
-# SWIFT6-MODE hook: a warning tagged [#G] stays a warning with `-Xswiftc -Wwarning -Xswiftc G`
-# added after `-Xswiftc -warnings-as-errors` below. That does NOT reach the warnings ending in
-# "this is an error in the Swift 6 language mode": they carry no tag, and
-# `-Wwarning ErrorInFutureSwiftVersion` still fails them (checked on Swift 6.4.2, 2026-11-07).
-# To keep those as warnings, drop -warnings-as-errors and fail on every `warning:` line in the
-# log except the ones with that ending.
+# Swift 6 language mode (SWIFT6-MODE, Package.swift): concurrency violations are compiler errors, so this
+# check needs no staging hook; -warnings-as-errors below covers every remaining warning class.
 set -euo pipefail
 
 LOG="$(mktemp -t check-warnings)"

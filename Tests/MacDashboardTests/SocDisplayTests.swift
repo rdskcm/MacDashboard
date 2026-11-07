@@ -6,7 +6,7 @@ import Testing
 
 // `fmtFixed` reads the process-wide UI language (decimal separator), so the suite is serialized (`tests-layout`).
 extension SerialTests {
-    struct SocDisplayTests {
+    @MainActor struct SocDisplayTests {
         private func row(_ share: Double?, name: String = "Dock", pid: Int32 = 5) -> GPUProcessRow {
             GPUProcessRow(id: pid, name: name, sharePct: share)
         }

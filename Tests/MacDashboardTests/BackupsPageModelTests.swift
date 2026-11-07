@@ -32,7 +32,7 @@ private func att(_ r: ClaudeBackupAttempt.Result, ago: Double = 3 * 3600) -> Cla
     .init(at: t0 - ago, result: r, mount: "/Volumes/Backup SSD")
 }
 
-private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -44,7 +44,7 @@ private func state(_ d: TMDestination, backup: TMBackupProgress? = nil, action: 
 }
 
 extension SerialTests {
-    struct BackupsPageModelTests {
+    @MainActor struct BackupsPageModelTests {
         // MARK: state
 
         @Test func overdueThresholds() {
@@ -141,7 +141,7 @@ extension SerialTests {
 
         @Test func nextBackup() {
             withLanguage(.en) {
-                func next(_ d: TMDestination, _ st: TMCardState = .ok) -> BackupsTile { BackupsPageModel.nextBackupTile(dest: d, state: st, now: t0) }
+                @MainActor func next(_ d: TMDestination, _ st: TMCardState = .ok) -> BackupsTile { BackupsPageModel.nextBackupTile(dest: d, state: st, now: t0) }
                 #expect(next(dest(last: t0 - 50 * min)).value == "in 10 min")
                 #expect(next(dest(last: t0 - 2 * hr)).value == "soon")
                 #expect(next(dest(mount: nil, last: t0 - 50 * min)).value == "when connected")
@@ -312,7 +312,7 @@ extension SerialTests {
 
         @Test func caption() {
             withLanguage(.en) {
-                func cap(_ d: TMDestination, _ st: TMCardState = .ok, updated: Date? = nil) -> String? {
+                @MainActor func cap(_ d: TMDestination, _ st: TMCardState = .ok, updated: Date? = nil) -> String? {
                     BackupsPageModel.caption(dest: d, state: st, updatedAt: updated)
                 }
                 #expect(cap(dest(last: nil)) == "automatic · every hour")
@@ -638,7 +638,7 @@ extension SerialTests {
 
         @Test func claudeNextTile() {
             withLanguage(.en) {
-                func next(job: ClaudeBackupJob? = runJob, _ a: ClaudeBackupAttempt? = nil, success: Double? = 7 * hr, disk: Bool? = true) -> BackupsTile {
+                @MainActor func next(job: ClaudeBackupJob? = runJob, _ a: ClaudeBackupAttempt? = nil, success: Double? = 7 * hr, disk: Bool? = true) -> BackupsTile {
                     BackupsPageModel.claudeNextTile(job: job, attempt: a, status: success.map { .lastSuccess(t0 - $0) }, diskConnected: disk, now: t0)
                 }
                 #expect(next(job: nil).note == "no scheduled job found")
@@ -687,7 +687,7 @@ extension SerialTests {
         @Test func claudeTagWithAttempt() {
             withLanguage(.en) {
                 typealias R = ClaudeBackupAttempt.Result
-                func tag(_ tm: TMCardState, _ cl: ClaudeCardState, _ r: R?) -> (BackupsTone, String) { BackupsPageModel.tag(tm: tm, claude: cl, attempt: r) }
+                @MainActor func tag(_ tm: TMCardState, _ cl: ClaudeCardState, _ r: R?) -> (BackupsTone, String) { BackupsPageModel.tag(tm: tm, claude: cl, attempt: r) }
                 #expect(tag(.ok, .ok, .failed(exit: 1, reason: .other)) == (.amber, "Claude backup failed"))
                 #expect(tag(.ok, .stale, .running) == (.accent, "Claude backup running"))
                 #expect(tag(.ok, .ok, .interrupted) == (.amber, "Claude backup did not finish"))

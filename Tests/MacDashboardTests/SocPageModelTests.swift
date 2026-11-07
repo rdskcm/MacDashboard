@@ -4,7 +4,7 @@ import Foundation
 import Testing
 @testable import MacDashboard
 
-private func withEnglish(_ body: () -> Void) {
+@MainActor private func withEnglish(_ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = .en
@@ -17,7 +17,7 @@ private let perf = CoreGroup(name: "Performance", count: 4, coreIndices: [4, 5, 
 private let eff = CoreGroup(name: "Efficiency", count: 4, coreIndices: [0, 1, 2, 3])
 
 extension SerialTests {
-    struct SocPageModelTests {
+    @MainActor struct SocPageModelTests {
         // MARK: columns (design 7.5)
 
         @Test func columnsFourPerGroupAtEveryWidth() {
@@ -65,7 +65,7 @@ extension SerialTests {
 
         @Test func readoutTemperatureZonesAndMarker() {
             withEnglish {
-                func temp(_ t: Int) -> SocReadout.Temperature? { SocReadout.make(socTempC: t, thermal: nil, powerW: nil, narrow: false, tagVisible: false).temperature }
+                @MainActor func temp(_ t: Int) -> SocReadout.Temperature? { SocReadout.make(socTempC: t, thermal: nil, powerW: nil, narrow: false, tagVisible: false).temperature }
                 #expect(temp(84)?.zone == 0)
                 #expect(temp(85)?.zone == 1 && temp(85)?.word == "warm")
                 #expect(temp(94)?.zone == 1)
@@ -80,7 +80,7 @@ extension SerialTests {
 
         @Test func readoutThermalToneAndStep() {
             withEnglish {
-                func th(_ l: ThermalLevel) -> SocReadout.Thermal? { SocReadout.make(socTempC: nil, thermal: l, powerW: nil, narrow: false, tagVisible: false).thermal }
+                @MainActor func th(_ l: ThermalLevel) -> SocReadout.Thermal? { SocReadout.make(socTempC: nil, thermal: l, powerW: nil, narrow: false, tagVisible: false).thermal }
                 #expect(th(.nominal)?.step == 0 && th(.nominal)?.tone == .green)
                 #expect(th(.fair)?.step == 1 && th(.fair)?.tone == .neutral)
                 #expect(th(.serious)?.step == 2 && th(.serious)?.tone == .amber && th(.serious)?.text == "thermal: high")

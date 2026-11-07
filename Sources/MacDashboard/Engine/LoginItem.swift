@@ -4,7 +4,7 @@ import ServiceManagement
 
 /// REDESIGN-SETTINGS: «Launch at login» over SMAppService.mainApp. The system is the source of truth — nothing is
 /// persisted in defaults; the view re-reads `status()` every time the Settings window is shown (D7).
-enum LoginItem {
+@MainActor enum LoginItem {
     enum Status: Equatable { case enabled, disabled, requiresApproval }
 
     /// -visualFixture / snapshot tests: when non-nil, `status()` answers this and `setEnabled` only updates it, never

@@ -771,7 +771,7 @@ struct IPSWModelTests {
 // MARK: - messages (language is process-wide → SerialTests)
 
 extension SerialTests {
-    struct IPSWMessageTests {
+    @MainActor struct IPSWMessageTests {
         static let allErrors: [IPSWError] = [
             .noIdentifier, .badIdentifier("x"), .unknownDevice, .http(503), .offline, .timedOut, .badResponse,
             .notDownloadable("http"), .noChecksum, .noSize, .sourcesDisagree,

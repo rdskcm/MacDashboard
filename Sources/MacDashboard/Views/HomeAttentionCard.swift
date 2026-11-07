@@ -274,7 +274,7 @@ struct HomeAttentionCard: View {
 /// not the card body (tasks, chips, rows, glass).
 struct HeroColumnWidth: ViewModifier {
     let width: LiveWindowWidth
-    static func heroWidth(window w: CGFloat) -> CGFloat { max(220, (w - 56 - 44 - 16) * 0.8 / 2.8) }
+    nonisolated static func heroWidth(window w: CGFloat) -> CGFloat { max(220, (w - 56 - 44 - 16) * 0.8 / 2.8) }
     func body(content: Content) -> some View {
         content.frame(width: Self.heroWidth(window: width.value))
     }

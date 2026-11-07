@@ -5,7 +5,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct CrashReportTests {
+    @MainActor struct CrashReportTests {
         @Test func crashSignal() async {
             // =====================================================================
             // MARK: - Block V2-CRASH-SIGNAL: crash filename parsing, age window, grouping

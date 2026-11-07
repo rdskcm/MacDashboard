@@ -5,7 +5,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct DirectoryAccessTests {
+    @MainActor struct DirectoryAccessTests {
         @Test func directoryAccess() async {
             // =====================================================================
             // MARK: - DirectoryAccess (Block V2-FDA-DEGRADE)

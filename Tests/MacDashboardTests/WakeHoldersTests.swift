@@ -7,7 +7,7 @@ import Foundation
 import Testing
 @testable import MacDashboard
 
-struct WakeHoldersTests {
+@MainActor struct WakeHoldersTests {
     @Test func wakeHolders() async {
         let fixtureURL = fixturesRoot.appendingPathComponent("pmset-assertions/pmset-assertions-macos27.0-caffeinate.txt")
         guard let captureText = try? String(contentsOf: fixtureURL, encoding: .utf8) else {

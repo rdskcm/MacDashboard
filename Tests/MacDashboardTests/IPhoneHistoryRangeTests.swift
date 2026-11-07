@@ -6,7 +6,7 @@ import Foundation
 import Testing
 @testable import MacDashboard
 
-private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -14,7 +14,7 @@ private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
 }
 
 extension SerialTests {
-    struct IPhoneHistoryRangeTests {
+    @MainActor struct IPhoneHistoryRangeTests {
         /// `n` consecutive days ending on `end` ("yyyy-MM-dd"), oldest first; health 100, source "import".
         func days(_ n: Int, endingOn end: String) -> [BatteryPoint] {
             let e = IPhoneData.historyDate(end)!

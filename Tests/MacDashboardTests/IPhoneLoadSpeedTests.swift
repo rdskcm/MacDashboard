@@ -13,7 +13,7 @@ private final class Log: @unchecked Sendable {
 }
 
 extension SerialTests {
-    struct IPhoneLoadSpeedTests {
+    @MainActor struct IPhoneLoadSpeedTests {
         private func file(_ path: String, dir: Bool = false, size: Int64 = 10, at: TimeInterval? = nil) -> IPhoneAFCEntry {
             IPhoneAFCEntry(path: path, isDirectory: dir, size: size, modified: at.map { Date(timeIntervalSince1970: $0) })
         }

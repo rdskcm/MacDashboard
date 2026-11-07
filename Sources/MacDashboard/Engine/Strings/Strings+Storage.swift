@@ -182,7 +182,7 @@ extension StringsEN: StorageStrings {
     var storageEmptyTrashButton: String { "Empty Trash…" }
     var storageEmptyTrashA11y: String { "Empty the Trash" }
     var storageConfirmTitle: String { "Empty Trash?" }
-    func storageConfirmText(_ n: Int, _ size: String) -> String { "\(fmtGrouped(n)) \(n == 1 ? "item" : "items") (\(size)) will be deleted permanently. You can’t undo this." }
+    func storageConfirmText(_ n: Int, _ size: String) -> String { "\(fmtGrouped(n, language: .en)) \(n == 1 ? "item" : "items") (\(size)) will be deleted permanently. You can’t undo this." }
     func storageConfirmTextNoCount(_ size: String) -> String { "Everything in the Trash (\(size)) will be deleted permanently. You can’t undo this." }
     var storageConfirmEmpty: String { "Empty Trash" }
     var storageConfirmCancel: String { "Cancel" }
@@ -300,7 +300,7 @@ extension StringsRU: StorageStrings {
     var storageEmptyTrashButton: String { "Очистить…" }
     var storageEmptyTrashA11y: String { "Очистить корзину" }
     var storageConfirmTitle: String { "Очистить корзину?" }
-    func storageConfirmText(_ n: Int, _ size: String) -> String { "\(fmtGrouped(n)) \(ruPlural(n, "объект", "объекта", "объектов")) (\(size)) будут удалены без возможности восстановления." }
+    func storageConfirmText(_ n: Int, _ size: String) -> String { "\(fmtGrouped(n, language: .ru)) \(ruPlural(n, "объект", "объекта", "объектов")) (\(size)) будут удалены без возможности восстановления." }
     func storageConfirmTextNoCount(_ size: String) -> String { "Всё содержимое корзины (\(size)) будет удалено без возможности восстановления." }
     var storageConfirmEmpty: String { "Очистить" }
     var storageConfirmCancel: String { "Отмена" }

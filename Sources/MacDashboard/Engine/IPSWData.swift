@@ -396,7 +396,7 @@ enum IPSWData {
 
     // MARK: messages
 
-    static func message(for e: IPSWError) -> String {
+    @MainActor static func message(for e: IPSWError) -> String {
         switch e {
         case .noIdentifier, .badIdentifier: return L.ipswErrNoIdentifier
         case .unknownDevice: return L.ipswErrUnknownDevice
@@ -422,7 +422,7 @@ enum IPSWData {
 
     /// Decision 3: the exact verified set as one line, e.g.
     /// "Verified: SHA-256 (ipsw.me), SHA-1 (Apple, ipsw.me) and size".
-    static func verifiedText(_ verified: Set<VerifiedDigest>) -> String {
+    @MainActor static func verifiedText(_ verified: Set<VerifiedDigest>) -> String {
         func name(_ s: IPSWSource) -> String { s == .apple ? "Apple" : "ipsw.me" }
         let order: [DigestAlgorithm] = [.sha256, .sha1]
         let parts = order.compactMap { alg -> String? in

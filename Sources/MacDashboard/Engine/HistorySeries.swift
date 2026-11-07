@@ -58,7 +58,7 @@ enum DayWindowRule {
     /// Tooltip of the disabled segments; nil when every segment is enabled. < 2 samples: "Needs at least 2
     /// samples". Otherwise "Only N months of data" (covered days / 30.44, rounded), or "Only N days of data" while
     /// the data covers less than 30 days (IPHONE-HISTORY-RANGE D5: the month form read "0 months" there).
-    static func disabledHelp<R: DayWindowRange>(_ type: R.Type, sampleCount: Int, spanDays: Int) -> String? {
+    @MainActor static func disabledHelp<R: DayWindowRange>(_ type: R.Type, sampleCount: Int, spanDays: Int) -> String? {
         if sampleCount < 2 { return L.historyNeedsTwo }
         guard enabled(type, sampleCount: sampleCount, spanDays: spanDays).count < R.allCases.count else { return nil }
         let covered = spanDays + 1
@@ -101,7 +101,7 @@ enum HistorySeries {
 
     /// Table cell «<used, 2 decimals> / <total, 0 decimals> GB» (10-history: «1.25 / 2 GB»); nil if the raw
     /// string is nil or unparseable — the table renders nil as «—».
-    static func formattedSwap(_ raw: String?) -> String? {
+    @MainActor static func formattedSwap(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let parts = raw.split(separator: "/")
         guard parts.count == 2,

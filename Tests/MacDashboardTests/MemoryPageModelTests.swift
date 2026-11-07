@@ -25,7 +25,7 @@ private func memInput(mem: MemSnapshot? = memSnap(),
                           block: block ?? .ok(at: t0), intervalSeconds: 2, narrow: narrow)
 }
 
-private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -33,7 +33,7 @@ private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
 }
 
 extension SerialTests {
-    struct MemoryPageModelTests {
+    @MainActor struct MemoryPageModelTests {
         @Test func pressureTone() {
             #expect(MemoryLoad.pressureTone(.normal) == .low)
             #expect(MemoryLoad.pressureTone(.warn) == .medium)

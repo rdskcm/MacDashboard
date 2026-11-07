@@ -3,11 +3,11 @@
 // The app passes `AppActions.live` (AppShell.swift); tests and the harness scenarios keep the default `.none`.
 import Foundation
 
-struct AppActions {
+struct AppActions: Sendable {
     /// Opens a System Settings pane by URL (REDESIGN-STORAGE D14: Full Disk Access).
-    var openSettingsPane: (String) -> Void
+    var openSettingsPane: @MainActor @Sendable (String) -> Void
     /// Reopens the main window when a notification is clicked while no window is open (REDESIGN-NOTIFY R5).
-    var ensureWindowShown: () -> Void
+    var ensureWindowShown: @MainActor @Sendable () -> Void
 
     static let none = AppActions(openSettingsPane: { _ in }, ensureWindowShown: {})
 }

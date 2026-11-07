@@ -149,7 +149,7 @@ extension StringsEN: BatteryStrings {
     var batteryDetailManufacturer: String { "Manufacturer" }
     var batteryDetailSerial: String { "Serial number" }
     var batteryDetailMfgDate: String { "Manufacture date" }
-    func batSub(_ cycles: Int?) -> String { cycles.map { "internal · \(fmtGrouped($0)) " + ($0 == 1 ? "cycle" : "cycles") } ?? "internal" }
+    func batSub(_ cycles: Int?) -> String { cycles.map { "internal · \(fmtGrouped($0, language: .en)) " + ($0 == 1 ? "cycle" : "cycles") } ?? "internal" }
     func batTagCapacity(_ pct: String) -> String { "capacity \(pct)" }
     var batTagReadFailed: String { "Read failed" }
     var batTagUnknown: String { "health unknown" }
@@ -237,7 +237,7 @@ extension StringsRU: BatteryStrings {
     var batteryDetailManufacturer: String { "Производитель" }
     var batteryDetailSerial: String { "Серийный номер" }
     var batteryDetailMfgDate: String { "Дата изготовления" }
-    func batSub(_ cycles: Int?) -> String { cycles.map { "встроенная · \(fmtGrouped($0)) " + ruPlural($0, "цикл", "цикла", "циклов") } ?? "встроенная" }
+    func batSub(_ cycles: Int?) -> String { cycles.map { "встроенная · \(fmtGrouped($0, language: .ru)) " + ruPlural($0, "цикл", "цикла", "циклов") } ?? "встроенная" }
     func batTagCapacity(_ pct: String) -> String { "ёмкость \(pct)" }
     var batTagReadFailed: String { "Ошибка чтения" }
     var batTagUnknown: String { "здоровье неизвестно" }

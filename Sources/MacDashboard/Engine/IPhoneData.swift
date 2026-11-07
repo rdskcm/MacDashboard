@@ -277,7 +277,7 @@ enum IPhoneData {
     /// The State tile's note: `powerW` (= Voltage mV × Amperage mA / 10^6, `BatteryInspector.parse`) with the Mac
     /// page's explicit sign, only while the gauge says charging and the figure is at least `powerNoteMinW`.
     /// Decision 3: «Plugged in» never carries a note; its figure is in `powerHelpText`.
-    static func powerNoteText(powerW: Double?, isCharging: Bool) -> String? {
+    @MainActor static func powerNoteText(powerW: Double?, isCharging: Bool) -> String? {
         guard isCharging, let p = powerW, p >= powerNoteMinW else { return nil }
         return L.batteryWatts(BatteryPageModel.signed(fmtNum(p, decimals: 1), p))
     }
@@ -286,7 +286,7 @@ enum IPhoneData {
     /// Line 1 (battery side, when `powerW` exists): «Battery: +2.4 W = 3.9 V × +0.62 A».
     /// Line 2 (cable side): iOS 27 `ChargerData.ChargerPower` (mW) with `ChargerEfficiency` when present;
     /// else iOS 26.x `AdapterDetails.Watts` as «offers up to» (it is the source's PD offer, not the draw).
-    static func powerHelpText(_ b: BatteryDetail) -> String? {
+    @MainActor static func powerHelpText(_ b: BatteryDetail) -> String? {
         var lines: [String] = []
         if let p = b.powerW, let v = b.voltageMV, let a = b.amperageMA {
             lines.append(L.iphonePowerBatteryLine(
@@ -518,7 +518,7 @@ enum IPhoneData {
         let shown: [BatteryPoint]
     }
 
-    static func historyRangeState(_ points: [BatteryPoint], selected: IPhoneHistoryRange) -> HistoryRangeState {
+    @MainActor static func historyRangeState(_ points: [BatteryPoint], selected: IPhoneHistoryRange) -> HistoryRangeState {
         let count = points.filter { HomeModel.dayNumber($0.day) != nil }.count
         let span = historySpanDays(points) ?? 0
         let enabled = DayWindowRule.enabled(IPhoneHistoryRange.self, sampleCount: count, spanDays: span)
@@ -751,9 +751,11 @@ enum IPhoneData {
     /// Builds the identity rows from the lockdown values, the `com.apple.disk_usage` domain
     /// and the relay payloads. A value that is missing or empty omits its field; order =
     /// `IdentityLabel.allCases`.
+    /// Runs on the MobileDevice transport thread, so the UI language arrives as `language`, never read here.
     static func identityFields(lockdown: [String: Any], diskUsage: [String: Any]?,
                                battery: [String: Any]?, panel: [String: Any]?,
-                               product: [String: Any]?, camera: [String: Any]?) -> [IPhoneIdentityField] {
+                               product: [String: Any]?, camera: [String: Any]?,
+                               language: AppLanguage) -> [IPhoneIdentityField] {
         func lock(_ key: String) -> String? { stringValue(lockdown[key]) }
         func from(_ dict: [String: Any]?, _ key: String) -> String? {
             dict.flatMap { findValue(key, in: $0) }.flatMap { stringValue($0) }
@@ -772,7 +774,7 @@ enum IPhoneData {
         values[.regulatoryModel] = lock("RegulatoryModelNumber")
         values[.hardwareModel] = lock("HardwareModel")
         values[.ios] = joined(lock("ProductVersion"), lock("BuildVersion").map { "(\($0))" }, sep: " ")
-        values[.storage] = storageBytes(diskUsage: diskUsage).map { fmtCapacity($0) }
+        values[.storage] = storageBytes(diskUsage: diskUsage).map { fmtCapacity($0, language: language) }
         values[.colorCode] = lock("DeviceEnclosureColor") ?? lock("DeviceColor")
         values[.serial] = lock("SerialNumber")
         values[.logicBoard] = lock("MLBSerialNumber")
@@ -933,7 +935,7 @@ enum IPhoneStorageRead: Equatable {
     /// The deadline passed: `.waiting` becomes `.missing`; anything else stays.
     func afterDeadline() -> IPhoneStorageRead { self == .waiting ? .missing : self }
     /// A result arrived (on time or late): bytes > 0 → `.value(fmtCapacity(bytes))`, else `.missing`.
-    static func result(bytes: Int64?) -> IPhoneStorageRead {
+    @MainActor static func result(bytes: Int64?) -> IPhoneStorageRead {
         guard let b = bytes, b > 0 else { return .missing }
         return .value(fmtCapacity(b))
     }

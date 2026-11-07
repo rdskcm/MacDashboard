@@ -5,7 +5,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct FormattingTests {
+    @MainActor struct FormattingTests {
         @Test func capacityFormatting() async {
             // =====================================================================
             // MARK: - fmtCapacity (decimal GB/TB disk-capacity formatting)

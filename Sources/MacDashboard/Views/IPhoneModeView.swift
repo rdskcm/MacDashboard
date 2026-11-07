@@ -199,14 +199,14 @@ struct IPhoneModeView: View {
 
 /// IPHONE-UNLINK: resting frame of every mounted identified tile, by device key.
 private struct IPhoneTileAnchorsKey: PreferenceKey {
-    static var defaultValue: [String: Anchor<CGRect>] = [:]
+    static let defaultValue: [String: Anchor<CGRect>] = [:]
     static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
         value.merge(nextValue()) { $1 }
     }
 }
 /// IPHONE-UNLINK: keys of the mounted identified tiles (the lazy grid unmounts tiles scrolled far away).
 private struct IPhoneTileMountedKey: PreferenceKey {
-    static var defaultValue: Set<String> = []
+    static let defaultValue: Set<String> = []
     static func reduce(value: inout Set<String>, nextValue: () -> Set<String>) { value.formUnion(nextValue()) }
 }
 

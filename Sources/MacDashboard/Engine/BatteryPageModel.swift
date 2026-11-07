@@ -74,7 +74,7 @@ struct BatteryPageModel: Equatable {
 
     static let dash = "—"
 
-    static func make(_ i: Input) -> BatteryPageModel {
+    @MainActor static func make(_ i: Input) -> BatteryPageModel {
         let d = i.detail
         let hp = d?.healthPercent
         let health = BatteryHealth.classify(healthPercent: hp, condition: i.condition)
@@ -208,7 +208,7 @@ struct BatteryPageModel: Equatable {
 
     // MARK: Now hero
 
-    private static func heroNow(_ d: BatteryDetail) -> BatteryHeroModel {
+    @MainActor private static func heroNow(_ d: BatteryDetail) -> BatteryHeroModel {
         var noteParts: [String] = []
         if !d.cellVoltagesMV.isEmpty {
             noteParts.append(L.batteryCellsLine(d.cellVoltagesMV.map { fmtNum(Double($0) / 1000, decimals: 3) }.joined(separator: " · ")))
@@ -233,7 +233,7 @@ struct BatteryPageModel: Equatable {
 
     // MARK: Charging / lifetime / passport cards
 
-    private static func chargingTiles(_ d: BatteryDetail) -> [BatteryTileModel] {
+    @MainActor private static func chargingTiles(_ d: BatteryDetail) -> [BatteryTileModel] {
         guard d.externalConnected else { return [] }
         func tile(_ label: String, _ value: String, note: String? = nil, tone: BatteryTone? = nil, dot: BatteryTone? = nil) -> BatteryTileModel {
             BatteryTileModel(label: label, value: value, note: note, valueTone: tone, dot: dot)
@@ -271,7 +271,7 @@ struct BatteryPageModel: Equatable {
         return out
     }
 
-    private static func lifetimeTiles(_ d: BatteryDetail) -> [BatteryTileModel] {
+    @MainActor private static func lifetimeTiles(_ d: BatteryDetail) -> [BatteryTileModel] {
         guard let l = d.lifetime else { return [] }
         func tile(_ label: String, _ value: String, note: String? = nil) -> BatteryTileModel {
             BatteryTileModel(label: label, value: value, note: note, valueTone: nil, dot: nil)
@@ -296,7 +296,7 @@ struct BatteryPageModel: Equatable {
         "ATL": "Amperex (ATL)", "SMP": "Simplo (SMP)", "LGC": "LG Chem (LGC)", "SDI": "Samsung SDI",
     ]
 
-    private static func passportTiles(_ d: BatteryDetail) -> [BatteryTileModel] {
+    @MainActor private static func passportTiles(_ d: BatteryDetail) -> [BatteryTileModel] {
         func tile(_ label: String, _ value: String, note: String? = nil) -> BatteryTileModel {
             BatteryTileModel(label: label, value: value, note: note, valueTone: nil, dot: nil)
         }
@@ -320,7 +320,7 @@ struct BatteryPageModel: Equatable {
     }
 
     /// ISO-8601 week → Monday → "Mar 2024" / "март 2024"; nil when the date cannot be built.
-    static func mfgMonth(year: Int, week: Int) -> String? {
+    @MainActor static func mfgMonth(year: Int, week: Int) -> String? {
         var comps = DateComponents()
         comps.weekOfYear = week
         comps.yearForWeekOfYear = year
@@ -335,11 +335,11 @@ struct BatteryPageModel: Equatable {
 
     // MARK: Helpers
 
-    static func fmtMinutes(_ m: Int) -> String {
+    @MainActor static func fmtMinutes(_ m: Int) -> String {
         m < 60 ? L.batteryMinutes(m % 60) : L.batteryHoursMinutes(m / 60, m % 60)
     }
 
-    static func statusLine(_ d: BatteryDetail) -> String {
+    @MainActor static func statusLine(_ d: BatteryDetail) -> String {
         if !d.externalConnected {
             var s = L.batteryStatusOnBattery
             if let m = d.timeToEmptyMin { s += L.batteryStatusRemaining(fmtMinutes(m)) }
@@ -355,7 +355,7 @@ struct BatteryPageModel: Equatable {
     }
 
     /// `system_profiler` Condition in the app's language; unknown non-empty strings are shown as macOS reports them.
-    static func conditionText(_ raw: String?) -> String? {
+    @MainActor static func conditionText(_ raw: String?) -> String? {
         guard let c = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty else { return nil }
         switch c {
         case "Normal": return L.batConditionNormal
@@ -398,7 +398,7 @@ struct BatteryPageModel: Equatable {
         return (y, m)
     }
 
-    static func monthLabel(_ yyyyMM: String) -> String {
+    @MainActor static func monthLabel(_ yyyyMM: String) -> String {
         guard let (y, m) = yearMonth(yyyyMM) else { return yyyyMM }
         var comps = DateComponents()
         comps.year = y; comps.month = m; comps.day = 1
@@ -418,7 +418,7 @@ struct BatteryPageModel: Equatable {
         return df
     }
 
-    static func capacityHistory(_ entries: [MacHistoryEntry]) -> (rows: [BatteryHistoryRow], caption: String) {
+    @MainActor static func capacityHistory(_ entries: [MacHistoryEntry]) -> (rows: [BatteryHistoryRow], caption: String) {
         let monthly = monthlyCapacity(entries)
         let rows = monthly.map {
             BatteryHistoryRow(id: $0.month, label: monthLabel($0.month), value: L.homePercent(fmtNum($0.mean, decimals: 1)))

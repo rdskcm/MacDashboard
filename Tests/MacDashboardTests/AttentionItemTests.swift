@@ -46,7 +46,7 @@ private func attnMegaBadFixture() -> (FullReport, LiveSnapshot) {
 }
 
 extension SerialTests {
-    struct AttentionItemTests {
+    @MainActor struct AttentionItemTests {
         @Test func attentionModel() async {
             // =====================================================================
             // MARK: - AttentionItem

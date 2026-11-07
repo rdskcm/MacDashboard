@@ -84,7 +84,7 @@ struct BackupsPageModel: Equatable {
 
     // MARK: make
 
-    static func make(_ i: Input) -> BackupsPageModel {
+    @MainActor static func make(_ i: Input) -> BackupsPageModel {
         var m = BackupsPageModel()
         m.sub = L.bkSub
 
@@ -185,7 +185,7 @@ struct BackupsPageModel: Equatable {
     }
 
     /// today, HH:mm / yesterday, HH:mm / short date and time. «Today» is relative to `now` (the fixture clock in snapshots).
-    static func lastBackupText(_ d: Date, now: Date, calendar: Calendar = .current) -> String {
+    @MainActor static func lastBackupText(_ d: Date, now: Date, calendar: Calendar = .current) -> String {
         if calendar.isDate(d, inSameDayAs: now) { return L.bkToday(hhmm(d)) }
         if let y = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(d, inSameDayAs: y) {
             return L.bkYesterday(hhmm(d))
@@ -193,7 +193,7 @@ struct BackupsPageModel: Equatable {
         return L.shortDateTime(d)
     }
 
-    static func lastBackupTile(dest: TMDestination, state: TMCardState, now: Date) -> BackupsTile {
+    @MainActor static func lastBackupTile(dest: TMDestination, state: TMCardState, now: Date) -> BackupsTile {
         var t = BackupsTile(id: "last", label: L.bkLastBackup, value: dash)
         let reason = dest.lastBackupUnavailableReason
         guard let d = dest.lastBackupDate else {
@@ -224,7 +224,7 @@ struct BackupsPageModel: Equatable {
         return t
     }
 
-    static func nextBackupTile(dest: TMDestination, state: TMCardState, now: Date) -> BackupsTile {
+    @MainActor static func nextBackupTile(dest: TMDestination, state: TMCardState, now: Date) -> BackupsTile {
         var t = BackupsTile(id: "next", label: L.bkNextBackup, value: dash)
         if state == .backing { t.value = L.bkNextAfterThis; return t }
         if dest.mountPoint == nil { t.value = L.bkNextWhenConnected; return t }
@@ -249,7 +249,7 @@ struct BackupsPageModel: Equatable {
     }
 
     /// `state` colours the «not connected» note (amber when overdue, red when long overdue) and removes it during a backup.
-    static func destinationTile(dest: TMDestination, state: TMCardState = .ok) -> BackupsTile {
+    @MainActor static func destinationTile(dest: TMDestination, state: TMCardState = .ok) -> BackupsTile {
         var t = BackupsTile(id: "dest", label: L.timeMachineDestination, value: dest.name ?? dash)
         if dest.name == nil { t.valueTone = .neutral }
         if dest.mountPoint != nil {
@@ -261,7 +261,7 @@ struct BackupsPageModel: Equatable {
         return t
     }
 
-    static func snapshotsTile(names: [String]?, now: Date, calendar: Calendar = .current) -> BackupsTile {
+    @MainActor static func snapshotsTile(names: [String]?, now: Date, calendar: Calendar = .current) -> BackupsTile {
         var t = BackupsTile(id: "snaps", label: L.commonLocalSnapshots, value: dash, valueTone: .neutral)
         guard let names else { return t }
         t.value = "\(names.count)"
@@ -272,12 +272,12 @@ struct BackupsPageModel: Equatable {
         return t
     }
 
-    static func updatedCaption(_ updatedAt: Date?) -> String? {
+    @MainActor static func updatedCaption(_ updatedAt: Date?) -> String? {
         updatedAt.map { L.storageSmartUpdatedCaption(hhmm($0)) }
     }
 
     /// Schedule word · connection word, else «updated HH:MM» (D15).
-    static func caption(dest: TMDestination, state: TMCardState, updatedAt: Date?) -> String? {
+    @MainActor static func caption(dest: TMDestination, state: TMCardState, updatedAt: Date?) -> String? {
         switch state {
         case .wait, .notSet: return updatedCaption(updatedAt)
         case .backing: return L.bkCaptionBacking
@@ -299,7 +299,7 @@ struct BackupsPageModel: Equatable {
         return parts.isEmpty ? updatedCaption(updatedAt) : parts.joined(separator: " · ")
     }
 
-    static func overdueNote(dest: TMDestination, days: Int, hot: Bool) -> BackupsNote {
+    @MainActor static func overdueNote(dest: TMDestination, days: Int, hot: Bool) -> BackupsNote {
         let name = dest.name ?? L.bkTheBackupDisk
         let text: String
         if dest.mountPoint == nil {
@@ -313,7 +313,7 @@ struct BackupsPageModel: Equatable {
     /// Mirrors TimeMachineController.startBackupNow: needs a mounted destination and no start or stop in flight. `.backing`
     /// also covers a running backup, which the controller does not check. A failed action counts as idle: it may be retried.
     /// `dest` is the effective destination: while no backup runs it equals the stored one the controller reads.
-    static func tmButton(dest: TMDestination, state: TMCardState, action: TMActionState, deleting: Bool = false) -> BackupsTMButton {
+    @MainActor static func tmButton(dest: TMDestination, state: TMCardState, action: TMActionState, deleting: Bool = false) -> BackupsTMButton {
         let connected = dest.mountPoint != nil
         let backing = state == .backing
         let enabled = connected && !backing && !deleting
@@ -324,7 +324,7 @@ struct BackupsPageModel: Equatable {
 
     /// STORAGE-ACTIONS-COPY Stage 2. Disabled during a backup (deletion then is untested and a snapshot may be in use)
     /// and with an unread list (nothing to name). Hidden only at 0 snapshots and in `.wait`.
-    static func tmDeleteButton(names: [String]?, state: TMCardState, deleting: Bool) -> BackupsTMDeleteButton? {
+    @MainActor static func tmDeleteButton(names: [String]?, state: TMCardState, deleting: Bool) -> BackupsTMDeleteButton? {
         guard state != .wait else { return nil }
         let count = names?.count ?? 0
         let title = count > 0 ? L.bkDeleteSnapshots(count) : L.bkDeleteSnapshotsNoCount
@@ -336,7 +336,7 @@ struct BackupsPageModel: Equatable {
     }
 
     /// The outcome note. A total failure from tmutil (not of unreadable names) also points at Full Disk Access: what tmutil prints without it inside the app is not measured.
-    static func tmDeleteNote(_ state: SnapshotDeleteState) -> BackupsNote? {
+    @MainActor static func tmDeleteNote(_ state: SnapshotDeleteState) -> BackupsNote? {
         guard case .finished(let r) = state else { return nil }
         guard r.failed > 0 else {
             return BackupsNote(tone: .green, text: r.deleted > 0 ? L.bkSnapshotsDeleted(r.deleted) : L.bkSnapshotsAlreadyGone, button: nil)
@@ -361,7 +361,7 @@ struct BackupsPageModel: Equatable {
         return BackupsNote(tone: .hot, text: text, button: button)
     }
 
-    static func progress(dest: TMDestination, backup: TMBackupProgress, action: TMActionState) -> BackupsProgress {
+    @MainActor static func progress(dest: TMDestination, backup: TMBackupProgress, action: TMActionState) -> BackupsProgress {
         let stopping = action == .stopping || backup.stopping
         let caption: String
         let finding = backup.phase == "FindingChanges"
@@ -374,7 +374,7 @@ struct BackupsPageModel: Equatable {
                                fraction: finding && stopping ? nil : TimeMachineStatus.overallFraction(backup), stopping: stopping)
     }
 
-    static func bytesCaption(done: Int64?, total: Int64?, secondsRemaining: Int?) -> String {
+    @MainActor static func bytesCaption(done: Int64?, total: Int64?, secondsRemaining: Int?) -> String {
         guard let total, total > 0 else { return L.bkPreparing }
         let d = fmtBackupBytesParts(done ?? 0), t = fmtBackupBytesParts(total)
         var s = d.unit == t.unit
@@ -398,7 +398,7 @@ struct BackupsPageModel: Equatable {
         }
     }
 
-    static func claudeNote(state: ClaudeCardState, path: String, warnAfterHours: Int,
+    @MainActor static func claudeNote(state: ClaudeCardState, path: String, warnAfterHours: Int,
                            attempt: ClaudeBackupAttempt? = nil, hasJob: Bool = false) -> BackupsNote? {
         switch state {
         case .missing:
@@ -428,7 +428,7 @@ struct BackupsPageModel: Equatable {
         }
     }
 
-    static func claudeSizeTile(_ s: ClaudeBackupSize?) -> BackupsTile {
+    @MainActor static func claudeSizeTile(_ s: ClaudeBackupSize?) -> BackupsTile {
         var t = BackupsTile(id: "size", label: L.bkClaudeSizeLabel, value: dash, valueTone: .neutral)
         guard let s else { t.note = L.bkClaudeSizeNone; return t }
         t.value = fmtBytes(s.snapshotBytes)
@@ -437,7 +437,7 @@ struct BackupsPageModel: Equatable {
         return t
     }
 
-    static func claudeAttemptTile(_ a: ClaudeBackupAttempt?, now: Date) -> BackupsTile {
+    @MainActor static func claudeAttemptTile(_ a: ClaudeBackupAttempt?, now: Date) -> BackupsTile {
         var t = BackupsTile(id: "attempt", label: L.bkClaudeAttemptLabel, value: dash, valueTone: .neutral)
         guard let a else { return t }
         t.value = lastBackupText(a.at, now: now)
@@ -456,7 +456,7 @@ struct BackupsPageModel: Equatable {
         return t
     }
 
-    static func claudeNextTile(job: ClaudeBackupJob?, attempt: ClaudeBackupAttempt?, status: ClaudeBackupStatus?,
+    @MainActor static func claudeNextTile(job: ClaudeBackupJob?, attempt: ClaudeBackupAttempt?, status: ClaudeBackupStatus?,
                                diskConnected: Bool?, now: Date) -> BackupsTile {
         var t = BackupsTile(id: "next", label: L.bkClaudeNextLabel, value: dash, valueTone: .neutral)
         guard let job else { t.note = L.bkClaudeNextNoJob; return t }
@@ -480,7 +480,7 @@ struct BackupsPageModel: Equatable {
     }
 
     /// today, HH:mm / tomorrow, HH:mm / short date and time.
-    static func nextRunText(_ d: Date, now: Date, calendar: Calendar = .current) -> String {
+    @MainActor static func nextRunText(_ d: Date, now: Date, calendar: Calendar = .current) -> String {
         if calendar.isDate(d, inSameDayAs: now) { return L.bkToday(hhmm(d)) }
         if let t = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(d, inSameDayAs: t) {
             return L.bkTomorrow(hhmm(d))
@@ -488,7 +488,7 @@ struct BackupsPageModel: Equatable {
         return L.shortDateTime(d)
     }
 
-    static func claudeActionNote(_ a: ClaudeBackupAction) -> BackupsNote? {
+    @MainActor static func claudeActionNote(_ a: ClaudeBackupAction) -> BackupsNote? {
         switch a {
         case .idle, .starting: return nil
         case .diskNotConnected: return BackupsNote(tone: .amber, text: L.bkClaudeClickNoDisk, button: nil)
@@ -508,7 +508,7 @@ struct BackupsPageModel: Equatable {
         return BackupsClaudeButton(busy: action == .starting || result == .running, primary: problem)
     }
 
-    static func claudeTiles(status: ClaudeBackupStatus?, state: ClaudeCardState, warnAfterHours: Int, now: Date) -> [BackupsTile] {
+    @MainActor static func claudeTiles(status: ClaudeBackupStatus?, state: ClaudeCardState, warnAfterHours: Int, now: Date) -> [BackupsTile] {
         var age = BackupsTile(id: "age", label: L.claudeBackupAgeLabel, value: dash, valueTone: .neutral)
         var last = BackupsTile(id: "lastSnap", label: L.claudeBackupLastLabel, value: dash, valueTone: .neutral)
         let warn = BackupsTile(id: "warn", label: L.claudeBackupLimitLabel,
@@ -552,7 +552,7 @@ struct BackupsPageModel: Equatable {
     }
 
     /// The more severe card wins; on a tie the Time Machine card wins (both green → «All good»).
-    static func tag(tm: TMCardState, claude: ClaudeCardState, attempt: ClaudeBackupAttempt.Result? = nil) -> (BackupsTone, String) {
+    @MainActor static func tag(tm: TMCardState, claude: ClaudeCardState, attempt: ClaudeBackupAttempt.Result? = nil) -> (BackupsTone, String) {
         let t: (BackupsTone, String)
         switch tm {
         case .wait: t = (.neutral, L.commonCollectingData)

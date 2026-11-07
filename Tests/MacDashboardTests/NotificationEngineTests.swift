@@ -4,7 +4,7 @@ import Foundation
 import Testing
 @testable import MacDashboard
 
-struct NotificationEngineTests {
+@MainActor struct NotificationEngineTests {
     private func item(_ k: AttentionKind, detail: String = "") -> AttentionItem {
         AttentionItem(kind: k, sev: .warn, label: k.rawValue, detail: detail, fullText: "t")
     }

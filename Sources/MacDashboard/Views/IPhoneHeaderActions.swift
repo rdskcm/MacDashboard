@@ -135,6 +135,6 @@ struct IPhoneRestartConfirm: View {
 
 /// IPHONE-UNLINK Stage C: frame of the iPhone header actions row, read at the window root to place the restart panel.
 struct IPhoneActionsAnchorKey: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>? = nil
+    static let defaultValue: Anchor<CGRect>? = nil
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = nextValue() ?? value }
 }

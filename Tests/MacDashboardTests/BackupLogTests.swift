@@ -4,10 +4,11 @@
 // duration text, setting resolution and the `Assess.assess` branch in both languages.
 // Temp files only (temporaryDirectory/<UUID>); never touches ~/Library/Logs.
 import Foundation
+import Synchronization
 import Testing
 @testable import MacDashboard
 
-struct BackupLogTests {
+@MainActor struct BackupLogTests {
     @Test func backupLog() async {
         let utc = TimeZone(identifier: "UTC")!
         func utcDate(_ s: String, _ fmt: String = "yyyy-MM-dd HH:mm:ss") -> Date {
@@ -55,15 +56,15 @@ struct BackupLogTests {
         #expect(BackupLog.latestSuccess(in: stampLine, timeZone: tokyo) == utcDate("2026-10-09 09:43:40")
               && BackupLog.latestSuccess(in: stampLine, timeZone: utc) == utcDate("2026-10-09 18:43:40"),
               "BackupLog: Snapshot stamp Tokyo -> UTC each parsed in its own zone")
-        let badLock = NSLock()
-        var bad = 0
+        let bad = Mutex(0)
         DispatchQueue.concurrentPerform(iterations: 400) { i in
             let even = i.isMultiple(of: 2)
             if BackupLog.latestSuccess(in: okLine, timeZone: even ? utc : tokyo) != (even ? okUTC : okTokyo) {
-                badLock.lock(); bad += 1; badLock.unlock()
+                bad.withLock { $0 += 1 }
             }
         }
-        #expect(bad == 0, "BackupLog: 400 concurrent calls alternating UTC/Tokyo all correct (bad \(bad))")
+        let badCount = bad.withLock { $0 }
+        #expect(badCount == 0, "BackupLog: 400 concurrent calls alternating UTC/Tokyo all correct (bad \(badCount))")
 
         // 3-5. File-based checks in a temp dir.
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

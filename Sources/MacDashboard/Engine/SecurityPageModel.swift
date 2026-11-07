@@ -83,7 +83,7 @@ struct SecurityPageModel: Equatable {
     // MARK: Helpers
 
     /// One paragraph per folder kind present: per-user reports go to the Trash, system ones are deleted for good.
-    static func crashDeleteParagraphs(_ paths: [String], systemDirectory: String = CrashDismiss.systemDirectory) -> [String] {
+    @MainActor static func crashDeleteParagraphs(_ paths: [String], systemDirectory: String = CrashDismiss.systemDirectory) -> [String] {
         let inSystem = { (p: String) in (p as NSString).deletingLastPathComponent == systemDirectory }
         var out: [String] = []
         if paths.contains(where: { !inSystem($0) }) { out.append(L.secCrashDeleteParagraphUser) }
@@ -91,7 +91,7 @@ struct SecurityPageModel: Equatable {
         return out
     }
 
-    static func crashNoteText(_ f: CrashDeleteFailure) -> String {
+    @MainActor static func crashNoteText(_ f: CrashDeleteFailure) -> String {
         switch f {
         case .cancelled: return L.sysDeleteCancelled
         case .timedOut: return L.sysDeleteTimedOut
@@ -118,7 +118,7 @@ struct SecurityPageModel: Equatable {
         value(p, s) == false && action != .enabling(p)
     }
 
-    static func bannerText(_ p: SecurityProtection, _ f: PrivilegedActionFailure) -> String {
+    @MainActor static func bannerText(_ p: SecurityProtection, _ f: PrivilegedActionFailure) -> String {
         let head: String
         switch f {
         case .timedOut: head = L.secBannerTimeout
@@ -137,12 +137,12 @@ struct SecurityPageModel: Equatable {
         return df.string(from: d)
     }
 
-    static func crashDateText(_ d: Date, now: Date, calendar: Calendar = .current) -> String {
+    @MainActor static func crashDateText(_ d: Date, now: Date, calendar: Calendar = .current) -> String {
         if calendar.isDate(d, inSameDayAs: now) { return L.secCrashLastToday(hhmm(d)) }
         return L.secCrashDate(L.shortDateTime(d))
     }
 
-    static func updatesCaption(updates: [SoftwareUpdate]?, checkedAt: Date?, checking: Bool, now: Date) -> String {
+    @MainActor static func updatesCaption(updates: [SoftwareUpdate]?, checkedAt: Date?, checking: Bool, now: Date) -> String {
         var s: String
         if let checkedAt { s = updatesAgeString(checkedAt: checkedAt, now: now) }
         else if checking { s = L.secUpdatesCaptionChecking }
@@ -153,7 +153,7 @@ struct SecurityPageModel: Equatable {
 
     // MARK: make
 
-    static func make(_ i: Input) -> SecurityPageModel {
+    @MainActor static func make(_ i: Input) -> SecurityPageModel {
         var m = SecurityPageModel()
         m.sub = L.secSub
         let crashTotal = (i.crashes ?? []).reduce(0) { $0 + $1.count }
@@ -254,7 +254,7 @@ struct SecurityPageModel: Equatable {
         return m
     }
 
-    private static func tile(_ p: SecurityProtection, _ s: SecurityState, _ i: Input) -> SecurityTileModel {
+    @MainActor private static func tile(_ p: SecurityProtection, _ s: SecurityState, _ i: Input) -> SecurityTileModel {
         let label: String
         switch p {
         case .fileVault: label = L.securityFileVault

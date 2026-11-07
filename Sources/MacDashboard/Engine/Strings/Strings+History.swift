@@ -61,7 +61,7 @@ protocol HistoryStrings {
 
 extension StringsEN: HistoryStrings {
     // MARK: History page (REDESIGN-HISTORY)
-    func historySub(_ samples: Int) -> String { "\(fmtGrouped(samples)) daily \(samples == 1 ? "sample" : "samples") · mac_check_state.json" }
+    func historySub(_ samples: Int) -> String { "\(fmtGrouped(samples, language: .en)) daily \(samples == 1 ? "sample" : "samples") · mac_check_state.json" }
     var historyTagUnreadable: String { "file unreadable" }
     var historyTagReading: String { "reading…" }
     func historySince(day: Int, month: Int, year: Int?) -> String {
@@ -73,8 +73,8 @@ extension StringsEN: HistoryStrings {
     var historyTitleCycles: String { "Battery: charge cycles" }
     var historyTitleSwap: String { "Swap: used" }
     var historyAllMetrics: String { "All metrics" }
-    func historyDaysCaption(_ n: Int) -> String { "\(fmtGrouped(n)) \(n == 1 ? "day" : "days")" }
-    func historySamples(_ n: Int) -> String { "\(fmtGrouped(n)) \(n == 1 ? "sample" : "samples")" }
+    func historyDaysCaption(_ n: Int) -> String { "\(fmtGrouped(n, language: .en)) \(n == 1 ? "day" : "days")" }
+    func historySamples(_ n: Int) -> String { "\(fmtGrouped(n, language: .en)) \(n == 1 ? "sample" : "samples")" }
     var historyEmptyTitle: String { "Not enough data yet" }
     func historyEmptySub(_ samples: Int) -> String { "\(historySamples(samples)) · the chart needs at least 2" }
     var historyNeedsTwo: String { "Needs at least 2 samples" }
@@ -92,14 +92,14 @@ extension StringsEN: HistoryStrings {
     var historyMetricA11y: String { "History metric" }
     var historyViewA11y: String { "History view" }
     func historyDeltaPerMonth(_ value: String) -> String { "\(value) per month" }
-    func historyCycles(_ n: Int) -> String { "\(fmtGrouped(n)) \(n == 1 ? "cycle" : "cycles")" }
+    func historyCycles(_ n: Int) -> String { "\(fmtGrouped(n, language: .en)) \(n == 1 ? "cycle" : "cycles")" }
     func historyPercent(_ n: Int) -> String { "\(n)%" }
     func historyPercentText(_ number: String) -> String { "\(number)%" }
     var historyColDate: String { "Date" }
     var historyColDiskUsed: String { "Disk used" }
     var historyColFree: String { "Free" }
     var historyColCycles: String { "Cycles" }
-    func historyGbValue(_ n: Int) -> String { "\(fmtGrouped(n)) GB" }
+    func historyGbValue(_ n: Int) -> String { "\(fmtGrouped(n, language: .en)) GB" }
     var historyBatteryHelp: String { "Maximum capacity, not the current charge" }
     var historyTableA11y: String { "Sample history" }
     var historyReading: String { "Reading history…" }
@@ -128,7 +128,7 @@ extension StringsEN: HistoryStrings {
 extension StringsRU: HistoryStrings {
     // MARK: History page (REDESIGN-HISTORY)
     func historySub(_ samples: Int) -> String {
-        "\(fmtGrouped(samples)) \(ruPlural(samples, "ежедневный замер", "ежедневных замера", "ежедневных замеров")) · mac_check_state.json"
+        "\(fmtGrouped(samples, language: .ru)) \(ruPlural(samples, "ежедневный замер", "ежедневных замера", "ежедневных замеров")) · mac_check_state.json"
     }
     var historyTagUnreadable: String { "файл не читается" }
     var historyTagReading: String { "чтение…" }
@@ -142,8 +142,8 @@ extension StringsRU: HistoryStrings {
     var historyTitleCycles: String { "Батарея: циклы зарядки" }
     var historyTitleSwap: String { "Swap: занято" }
     var historyAllMetrics: String { "Все метрики" }
-    func historyDaysCaption(_ n: Int) -> String { "\(fmtGrouped(n)) \(ruPlural(n, "день", "дня", "дней"))" }
-    func historySamples(_ n: Int) -> String { "\(fmtGrouped(n)) \(ruPlural(n, "замер", "замера", "замеров"))" }
+    func historyDaysCaption(_ n: Int) -> String { "\(fmtGrouped(n, language: .ru)) \(ruPlural(n, "день", "дня", "дней"))" }
+    func historySamples(_ n: Int) -> String { "\(fmtGrouped(n, language: .ru)) \(ruPlural(n, "замер", "замера", "замеров"))" }
     var historyEmptyTitle: String { "Пока недостаточно данных" }
     func historyEmptySub(_ samples: Int) -> String { "\(historySamples(samples)) · для графика нужно минимум 2" }
     var historyNeedsTwo: String { "Нужно минимум 2 замера" }
@@ -161,14 +161,14 @@ extension StringsRU: HistoryStrings {
     var historyMetricA11y: String { "Метрика истории" }
     var historyViewA11y: String { "Вид истории" }
     func historyDeltaPerMonth(_ value: String) -> String { "\(value) за месяц" }
-    func historyCycles(_ n: Int) -> String { "\(fmtGrouped(n)) \(ruPlural(n, "цикл", "цикла", "циклов"))" }
+    func historyCycles(_ n: Int) -> String { "\(fmtGrouped(n, language: .ru)) \(ruPlural(n, "цикл", "цикла", "циклов"))" }
     func historyPercent(_ n: Int) -> String { "\(n) %" }
     func historyPercentText(_ number: String) -> String { "\(number) %" }
     var historyColDate: String { "Дата" }
     var historyColDiskUsed: String { "Диск занято" }
     var historyColFree: String { "Свободно" }
     var historyColCycles: String { "Циклы" }
-    func historyGbValue(_ n: Int) -> String { "\(fmtGrouped(n)) ГБ" }
+    func historyGbValue(_ n: Int) -> String { "\(fmtGrouped(n, language: .ru)) ГБ" }
     var historyBatteryHelp: String { "Максимальная ёмкость, а не текущий заряд" }
     var historyTableA11y: String { "История замеров" }
     var historyReading: String { "Чтение истории…" }

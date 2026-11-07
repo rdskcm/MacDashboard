@@ -173,7 +173,7 @@ struct HistoryPageModel: Equatable {
         return a < 1 ? 2 : (a < 10 ? 1 : 0)
     }
 
-    static func deltaCaption(_ delta: Double, metric: HistoryMetric) -> String {
+    @MainActor static func deltaCaption(_ delta: Double, metric: HistoryMetric) -> String {
         let d = deltaDecimals(delta, metric: metric)
         let f = pow(10.0, Double(d))
         let magnitude = (abs(delta) * f).rounded() / f
@@ -210,7 +210,7 @@ struct HistoryPageModel: Equatable {
                              decimals: step < 1 ? (step < 0.1 ? 2 : 1) : 0)
     }
 
-    static func axisLabel(_ v: Double, metric: HistoryMetric, decimals: Int) -> String {
+    @MainActor static func axisLabel(_ v: Double, metric: HistoryMetric, decimals: Int) -> String {
         let number = decimals == 0 ? fmtGrouped(Int(v.rounded())) : fmtFixed(v, decimals: decimals)
         switch metric {
         case .disk, .swap: return number + " " + L.byteUnitGB
@@ -219,7 +219,7 @@ struct HistoryPageModel: Equatable {
         }
     }
 
-    static func tooltipValue(_ v: Double, metric: HistoryMetric) -> String {
+    @MainActor static func tooltipValue(_ v: Double, metric: HistoryMetric) -> String {
         switch metric {
         case .disk: return L.historyGbValue(Int(v.rounded()))
         case .battery: return L.historyPercent(Int(v.rounded()))
@@ -236,7 +236,7 @@ struct HistoryPageModel: Equatable {
     /// narrow plot).
     static let weekLabelLeftEdge = 0.04
 
-    static func xTicks(window: ClosedRange<Date>, range: HistoryRange, narrow: Bool, shortened: Bool = false,
+    @MainActor static func xTicks(window: ClosedRange<Date>, range: HistoryRange, narrow: Bool, shortened: Bool = false,
                        calendar: Calendar) -> [HistoryXTick] {
         let start = window.lowerBound, end = window.upperBound
         let total = end.timeIntervalSince(start)
@@ -278,20 +278,20 @@ struct HistoryPageModel: Equatable {
 
     // MARK: display dates (D13)
 
-    static func shortDate(_ d: Date, now: Date, calendar: Calendar) -> String {
+    @MainActor static func shortDate(_ d: Date, now: Date, calendar: Calendar) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: d)
         let ny = calendar.component(.year, from: now)
         return L.historyShortDate(day: c.day ?? 1, month: c.month ?? 1, year: c.year == ny ? nil : c.year)
     }
 
-    static func tooltipDate(_ d: Date, calendar: Calendar) -> String {
+    @MainActor static func tooltipDate(_ d: Date, calendar: Calendar) -> String {
         let c = calendar.dateComponents([.year, .month, .day, .weekday], from: d)
         return L.historyTooltipDate(weekday: c.weekday ?? 1, day: c.day ?? 1, month: c.month ?? 1, year: c.year ?? 1970)
     }
 
     // MARK: table (D6, D7, D8)
 
-    static func table(_ entries: [MacHistoryEntry], window: ClosedRange<Date>?, narrow: Bool, showAll: Bool,
+    @MainActor static func table(_ entries: [MacHistoryEntry], window: ClosedRange<Date>?, narrow: Bool, showAll: Bool,
                       now: Date, calendar: Calendar) -> HistoryTableData {
         let inWindow = entries.filter { e in
             guard let w = window else { return true }
@@ -323,13 +323,13 @@ struct HistoryPageModel: Equatable {
     // MARK: page bar (D20)
 
     /// «since Oct 3» / «since Sep 2, 2025»: the year only when it is not `now`'s year.
-    static func sinceLabel(_ d: Date, now: Date, calendar: Calendar) -> String {
+    @MainActor static func sinceLabel(_ d: Date, now: Date, calendar: Calendar) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: d)
         let sameYear = c.year == calendar.component(.year, from: now)
         return L.historySince(day: c.day ?? 1, month: c.month ?? 1, year: sameYear ? nil : c.year)
     }
 
-    static func bar(entries: [MacHistoryEntry], unreadable: Bool, refreshing: Bool, now: Date,
+    @MainActor static func bar(entries: [MacHistoryEntry], unreadable: Bool, refreshing: Bool, now: Date,
                     calendar: Calendar = .current) -> Bar {
         if unreadable && refreshing { return Bar(sub: fileName, tone: .accent, tag: L.historyTagReading) }
         if unreadable { return Bar(sub: fileName, tone: .hot, tag: L.historyTagUnreadable) }
@@ -339,7 +339,7 @@ struct HistoryPageModel: Equatable {
 
     // MARK: page / card
 
-    static func make(_ i: Input, calendar: Calendar = .current) -> HistoryPageModel {
+    @MainActor static func make(_ i: Input, calendar: Calendar = .current) -> HistoryPageModel {
         let entries = i.entries
         let span = spanDays(entries) ?? 0
         let enabled = enabledRanges(sampleCount: entries.count, spanDays: span)

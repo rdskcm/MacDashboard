@@ -7,7 +7,7 @@ import Testing
 private let home = "/Users/x"
 private let GB: Int64 = 1_000_000_000
 
-private func withLang(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLang(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -29,7 +29,7 @@ private func disk(_ device: String, _ h: SmartHealth?) -> SmartDisk {
 }
 
 extension SerialTests {
-    struct StoragePageModelTests {
+    @MainActor struct StoragePageModelTests {
         @Test func spaceLevelCaps() {
             typealias C = (size: Int64, avail: Int64, pct: Int, want: SpaceLevel)
             let cases: [C] = [
@@ -157,7 +157,7 @@ extension SerialTests {
             #expect(StoragePageModel.foldersPhase(block: .failed(.noReading, lastGoodAt: t), hasCount: true) == .failedWithList(.noReading))
             withLang(.en) {
                 let now = t.addingTimeInterval(7 * 60)
-                func cap(_ p: FoldersPhase, counting: Bool = false, at: Date? = t, freed: Int64? = nil, hidden: Bool = false) -> String {
+                @MainActor func cap(_ p: FoldersPhase, counting: Bool = false, at: Date? = t, freed: Int64? = nil, hidden: Bool = false) -> String {
                     StoragePageModel.foldersCaption(phase: p, counting: counting, countedAt: at, now: now, trashFreed: freed, someHidden: hidden)
                 }
                 #expect(cap(.wait) == "counting folder sizes…")
@@ -226,7 +226,7 @@ extension SerialTests {
 
         @Test func kvTones() {
             withLang(.en) {
-                func tones(_ h: SmartHealth) -> [KVTone] { StoragePageModel.kvTiles(h).map(\.tone) }
+                @MainActor func tones(_ h: SmartHealth) -> [KVTone] { StoragePageModel.kvTiles(h).map(\.tone) }
                 #expect(StoragePageModel.kvTiles(health()).count == 12)
                 #expect(tones(health(\.temperatureC, 69))[0] == .plain && tones(health(\.temperatureC, 70))[0] == .amber)
                 #expect(tones(health(\.percentageUsed, 79))[1] == .plain && tones(health(\.percentageUsed, 80))[1] == .amber)

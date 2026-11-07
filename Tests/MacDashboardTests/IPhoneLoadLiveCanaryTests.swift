@@ -127,7 +127,7 @@ extension SerialTests {
             }
 
             // 4. identity
-            transport.readIdentity(h) { box.identity = $0 }
+            transport.readIdentity(h, language: .en) { box.identity = $0 }
             guard await Self.wait(30, until: { box.identity != nil }), case .success(let fields)? = box.identity else {
                 Issue.record("identity failed: \(String(describing: box.identity))")
                 return

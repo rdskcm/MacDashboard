@@ -176,7 +176,7 @@ extension StringsEN: IPhoneLogsStrings {
     func iphoneImportProgress(_ p: ImportProgress) -> String {
         switch p {
         case .copying(let done, let total):
-            return "Copying from the phone: \(fmtBytes(done)) of \(fmtBytes(total))"
+            return "Copying from the phone: \(fmtBytes(done, language: .en)) of \(fmtBytes(total, language: .en))"
         case .extracting: return "Extracting the needed files…"
         case .parsing: return "Parsing…"
         }
@@ -417,7 +417,7 @@ extension StringsRU: IPhoneLogsStrings {
     func iphoneImportProgress(_ p: ImportProgress) -> String {
         switch p {
         case .copying(let done, let total):
-            return "Копирование с телефона: \(fmtBytes(done)) из \(fmtBytes(total))"
+            return "Копирование с телефона: \(fmtBytes(done, language: .ru)) из \(fmtBytes(total, language: .ru))"
         case .extracting: return "Распаковка нужных файлов…"
         case .parsing: return "Разбор…"
         }

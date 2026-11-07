@@ -5,7 +5,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct BrewAndUpdatesTests {
+    @MainActor struct BrewAndUpdatesTests {
         @Test func brewProgressParser() async {
             // =====================================================================
             // MARK: - BrewProgressParser

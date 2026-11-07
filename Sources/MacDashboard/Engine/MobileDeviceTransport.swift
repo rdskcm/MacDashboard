@@ -57,7 +57,7 @@ struct IPhoneSnapshot {
     var batteryRead: Bool = true
 }
 
-final class MobileDeviceTransport {
+final class MobileDeviceTransport: @unchecked Sendable {
     static let shared = MobileDeviceTransport()
 
     typealias Ptr = UnsafeMutableRawPointer
@@ -194,6 +194,7 @@ final class MobileDeviceTransport {
 
     // MARK: - State
 
+    // @unchecked Sendable (SWIFT6-MODE D9): `syms` and `runner` are immutable (`runner` is itself @unchecked Sendable, IPhoneJobQueue.swift:52); `thread` is guarded by `threadLock` (in `onThread`); `eventHandler`, `started`, `notification`, `devices` are touched only inside `onThread`/`enqueue` bodies and the subscription callback, all of which run on the one transport thread (header "Threading (D2)"). Results reach the caller through `onMain`.
     private let syms: Syms?
     /// false when the framework or any required symbol is missing (R16).
     var isAvailable: Bool { syms != nil }
@@ -569,7 +570,7 @@ final class MobileDeviceTransport {
 
     /// Identity and parts without storage (read by `readStorage`): lockdown keys and registry entries
     /// over one relay connection. Values are returned to the caller only; nothing is stored or logged here.
-    func readIdentity(_ h: IPhoneHandle,
+    func readIdentity(_ h: IPhoneHandle, language: AppLanguage,
                       completion: @escaping @MainActor (Result<[IPhoneIdentityField], IPhoneReadError>) -> Void) {
         let queued = enqueue(.interactive) { [self] in
             let result = withSession(h) { dev -> [IPhoneIdentityField] in
@@ -592,7 +593,8 @@ final class MobileDeviceTransport {
                     return [battery, panel, product, camera]
                 } ?? [nil, nil, nil, nil]
                 return IPhoneData.identityFields(lockdown: lockdown, diskUsage: nil, battery: payloads[0],
-                                                 panel: payloads[1], product: payloads[2], camera: payloads[3])
+                                                 panel: payloads[1], product: payloads[2], camera: payloads[3],
+                                                 language: language)
             }
             Self.onMain { completion(result) }
         }

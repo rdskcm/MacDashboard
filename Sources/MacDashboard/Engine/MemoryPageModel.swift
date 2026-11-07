@@ -60,7 +60,7 @@ struct MemoryPageModel: Equatable {
     var segments: [MemorySegmentModel]  // always 6, MemorySegmentKey order
     var showsWait: Bool             // phase == .loading
 
-    static func make(_ i: Input) -> MemoryPageModel {
+    @MainActor static func make(_ i: Input) -> MemoryPageModel {
         let mem = i.mem.flatMap { $0.total > 0 ? $0 : nil }
         let phase: MemoryPagePhase
         switch i.block {
@@ -164,12 +164,12 @@ struct MemoryPageModel: Equatable {
     // MARK: Processes card (memory-page variant of ProcessListCard)
 
     /// "top 8 · 412 processes"; without a count just "top 8".
-    static func procsCaption(processCount: Int?) -> String {
+    @MainActor static func procsCaption(processCount: Int?) -> String {
         L.memProcsTop(LiveCollector.topProcessCount) + (processCount.map { " · " + L.procsCount($0) } ?? "")
     }
 
     /// Row secondary text on the Memory page: "7.5% CPU" / "7,5 % CPU"; "—" when the CPU share is unknown.
-    static func procSecondary(_ row: ProcEntry) -> String {
+    @MainActor static func procSecondary(_ row: ProcEntry) -> String {
         row.cpu.map { L.memProcCPU(L.homePercent(fmtFixed($0, decimals: 1))) } ?? "—"
     }
 }

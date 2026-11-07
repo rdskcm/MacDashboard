@@ -7,7 +7,7 @@ import Testing
 @testable import MacDashboard
 
 extension SerialTests {
-    struct SettingsLiveCanaryTests {
+    @MainActor struct SettingsLiveCanaryTests {
         @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
         func liveCanaryLanguage() {
             let first = Locale.preferredLanguages.first ?? ""

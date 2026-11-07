@@ -97,7 +97,7 @@ enum CoreTopology {
             defer { IOObjectRelease(child) }
             var nameBuffer = [CChar](repeating: 0, count: 128)
             guard IORegistryEntryGetName(child, &nameBuffer) == KERN_SUCCESS else { continue }
-            guard let index = coreIndex(fromNodeName: String(cString: nameBuffer)) else { continue }
+            guard let index = coreIndex(fromNodeName: String(nulTerminated: nameBuffer)) else { continue }
             guard let cf = IORegistryEntryCreateCFProperty(child, "cluster-type" as CFString, kCFAllocatorDefault, 0),
                   let data = cf.takeRetainedValue() as? Data, let first = data.first else { return nil }
             byIndex[index] = Character(UnicodeScalar(first))
@@ -124,7 +124,7 @@ enum CoreTopology {
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 1 else { return nil }
         var buffer = [CChar](repeating: 0, count: size)
         guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
-        let s = String(cString: buffer)
+        let s = String(nulTerminated: buffer)
         return s.isEmpty ? nil : s
     }
 }

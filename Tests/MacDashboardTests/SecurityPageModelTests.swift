@@ -27,7 +27,7 @@ private func input(security: SecurityState? = allOn, action: SecurityActionState
                             updatesCheckedAt: checkedAt, checkingUpdates: checking, crashes: crashes,
                             openedReportPath: opened, now: now, hiddenCrashes: hidden, crashAction: crashAction)
 }
-private func make(_ i: SecurityPageModel.Input) -> SecurityPageModel { SecurityPageModel.make(i) }
+@MainActor private func make(_ i: SecurityPageModel.Input) -> SecurityPageModel { SecurityPageModel.make(i) }
 
 private func crash(_ name: String, _ count: Int = 1, panic: Bool = false, last: Date? = nil, path: String? = nil,
                    paths: [String] = []) -> CrashGroup {
@@ -35,7 +35,7 @@ private func crash(_ name: String, _ count: Int = 1, panic: Bool = false, last: 
                reportPaths: paths)
 }
 
-private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
+@MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
     let saved = L10nStore.shared.language
     defer { L10nStore.shared.language = saved }
     L10nStore.shared.language = lang
@@ -43,7 +43,7 @@ private func withLanguage(_ lang: AppLanguage, _ body: () -> Void) {
 }
 
 extension SerialTests {
-    struct SecurityPageModelTests {
+    @MainActor struct SecurityPageModelTests {
         @Test func allOnIsGreen() {
             withLanguage(.en) {
                 let m = make(input())

@@ -7,7 +7,7 @@ import Testing
 private func c(_ pid: Int32, _ name: String, _ ns: UInt64) -> GPUClientSample {
     GPUClientSample(pid: pid, name16: name, gpuTimeNs: ns)
 }
-private let noNames: (Int32) -> String? = { _ in nil }
+private let noNames: @Sendable (Int32) -> String? = { _ in nil }
 
 struct GPUClientRankingTests {
     @Test func sharePerElapsedSecond() {

@@ -53,7 +53,7 @@ final class AppActivityMonitor {
         ]
     }
 
-    deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 
     /// Paused = not (app active AND at least one non-panel window that is visible and not fully occluded).
     private func recompute() {

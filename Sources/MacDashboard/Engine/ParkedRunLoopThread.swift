@@ -8,7 +8,8 @@ import Foundation
 
 /// Blocks queue on this thread's run loop, so two blocks can never overlap and no
 /// lock is needed.
-final class ParkedRunLoopThread {
+final class ParkedRunLoopThread: @unchecked Sendable {
+    // @unchecked Sendable (SWIFT6-MODE D8): `runLoop` is written exactly once, on the new thread before `ready.signal()`; every read (`async`) happens after `ready.wait()` in init and the value never changes — the semaphore is the barrier. CFRunLoop functions are thread-safe (Threading Programming Guide, "Thread Safety and Run Loop Objects").
     private var runLoop: CFRunLoop?
 
     init(name: String) {

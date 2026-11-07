@@ -16,7 +16,9 @@ final class BrewController {
         var collect: @MainActor () async -> BrewSnapshot
 
         static let live = Dependencies(
-            upgrade: { total, onProgress in await BrewUpgrader.upgradeAll(totalOutdated: total, onProgress: onProgress) },
+            upgrade: { total, onProgress in
+                await BrewUpgrader.upgradeAll(totalOutdated: total, language: L10nStore.shared.language, onProgress: onProgress)
+            },
             collect: { await ReportCollector().collectBrewInfo(refreshIndex: false) })
     }
 

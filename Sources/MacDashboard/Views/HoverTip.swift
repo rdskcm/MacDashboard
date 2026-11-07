@@ -114,7 +114,7 @@ struct AttentionTipBubble: View {
 /// Measured on a detached probe; the result only sizes a separate NSPanel, so no view's
 /// own size is fed back into its container (`no-measured-size-feedback`).
 /// Internal (not private) so the render harness can call it.
-func attnTipContentWidth(for text: String) -> CGFloat {
+@MainActor func attnTipContentWidth(for text: String) -> CGFloat {
     let probe = NSHostingController(rootView:
         Text(text)
             .font(.system(size: 12))
@@ -128,7 +128,8 @@ func attnTipContentWidth(for text: String) -> CGFloat {
 /// Owns the floating NSPanel and its lifecycle. Created once per HoverTipModifier
 /// instance via @State, so it survives body re-evaluations; must be explicitly torn
 /// down (onDisappear) rather than left to accumulate hidden panels.
-private final class TipPanelController: NSObject {
+// @MainActor: owns NSPanel/NSWindow state; every entry (SwiftUI modifiers, main-queue observers, the show work item) runs on the main thread.
+@MainActor private final class TipPanelController: NSObject {
     private var panel: NSPanel?
     private var moveObserver: NSObjectProtocol?
     private var boundsObserver: NSObjectProtocol?
@@ -252,11 +253,15 @@ private final class TipPanelController: NSObject {
         //    on its content view automatically), for scrolling content underneath.
         let center = NotificationCenter.default
         moveObserver = center.addObserver(forName: NSWindow.didMoveNotification, object: window, queue: .main) { [weak self] _ in
-            self?.hide()
+            MainActor.assumeIsolated { self?.hide() }
         }
         boundsObserver = center.addObserver(forName: NSView.boundsDidChangeNotification, object: nil, queue: .main) { [weak self] note in
-            guard let self, let changedView = note.object as? NSView, changedView.window === window else { return }
-            self.hide()
+            // Cast outside: `Notification` is not Sendable, `NSView` (main-actor) is.
+            let changedView = note.object as? NSView
+            MainActor.assumeIsolated {
+                guard let self, let changedView, changedView.window === window else { return }
+                self.hide()
+            }
         }
     }
 }
@@ -282,7 +287,9 @@ struct HoverTipModifier: ViewModifier {
                         // during the 1s delay, `.onChange` below keeps latestText
                         // current, so the bubble appears with the current value
                         // instead of whatever was hovered a second ago.
-                        if let anchorView { controller.show(text: controller.latestText, anchor: anchorView) }
+                        MainActor.assumeIsolated {
+                            if let anchorView { controller.show(text: controller.latestText, anchor: anchorView) }
+                        }
                     }
                     pending = item
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: item)

@@ -21,7 +21,7 @@ struct SocSplitPanel: View, Equatable {
     let split: SocSplit
 
     /// Explicit: the panel holds an `@Environment` value, so the synthesized comparison is not available (Stage 5a).
-    static func == (a: Self, b: Self) -> Bool { a.split == b.split }
+    nonisolated static func == (a: Self, b: Self) -> Bool { a.split == b.split }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -83,7 +83,7 @@ struct SocSplitPanel: View, Equatable {
 struct SocLoadAverageTile: View, Equatable {
     let load: SocLoadAverage
 
-    static func == (a: Self, b: Self) -> Bool { a.load == b.load }
+    nonisolated static func == (a: Self, b: Self) -> Bool { a.load == b.load }
 
     var body: some View {
         let columns: [(value: String, caption: String)] = [(load.one, L.socLoadMin(1)), (load.five, L.socLoadMin(5)),
