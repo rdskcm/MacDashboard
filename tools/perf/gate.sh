@@ -13,8 +13,8 @@
 #   --runs       runs per scenario and arm, 1-7 (default 3)
 #   --out        run directory, must be inside tools/perf/out/ (default tools/perf/out/<stamp>)
 #   --keep-traces  keep .trace bundles and exported XML (10-60 MB each)
-#   --g1-max     absolute G1 (Home idle) app CPU limit in % (default 5.6, the level before C7; 2.5 after Step 7)
-#   --g9-max     absolute G9 (CPU page idle) app CPU limit in % (default 6.5: the accepted CPU-page idle cost after SOC-DETAILS #180, median ~5.6 with runs up to 6.2)
+#   --g1-max     absolute G1 (Home idle) app CPU limit in % (default: the home idle_app_pct budget in tools/perf/budgets.tsv)
+#   --g9-max     absolute G9 (CPU page idle) app CPU limit in % (default: the cpu idle_app_pct budget in tools/perf/budgets.tsv)
 #   -h, --help   this text
 # Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed
 #       during the run | 5 ERROR: at least one scenario not measured (an AX element was still missing after one
@@ -40,8 +40,8 @@ SCENARIOS=""
 RUNS=""
 OUT=""
 KEEP=0
-G1_MAX="5.6"
-G9_MAX="6.5"
+G1_MAX=""
+G9_MAX=""
 
 NPASS=0; NFAIL=0; NNOISY=0; INVALID=0; NERROR=0; QUIET_EXIT=0; LS_DIRTY=0; STARTED=0; VERDICT_DONE=0
 PIDS=""; HOMEDIR=""; BIN=""; PID=""; CAND_APP=""; BASE_APP=""; CUR_PREFIX=""; POS_CHECK=0
@@ -109,13 +109,17 @@ while [ $# -gt 0 ]; do
     --scenarios)  need "$@"; SCENARIOS="$2"; shift 2 ;;
     --runs)       need "$@"; RUNS="$2"; shift 2 ;;
     --out)        need "$@"; OUT="$2"; shift 2 ;;
-    --g1-max)     need "$@"; G1_MAX="$2"; shift 2 ;;
-    --g9-max)     need "$@"; G9_MAX="$2"; shift 2 ;;
+    --g1-max)     need "$@"; [ -n "$2" ] || fatal 64 "--g1-max must be a number"; G1_MAX="$2"; shift 2 ;;
+    --g9-max)     need "$@"; [ -n "$2" ] || fatal 64 "--g9-max must be a number"; G9_MAX="$2"; shift 2 ;;
     --keep-traces) KEEP=1; shift ;;
     -h|--help)    QUIET_EXIT=1; usage; exit 0 ;;
     *)            usage >&2; fatal 64 "unknown argument: $1" ;;
   esac
 done
+
+# PAGE-BUDGETS: the absolute idle limits are the Home and CPU page budgets; tools/perf/budgets.tsv is their only copy.
+[ -n "$G1_MAX" ] || G1_MAX="$(python3 -I "$PERF/budgets.py" get home idle_app_pct)" || fatal 70 "cannot read the home idle_app_pct budget from $PERF/budgets.tsv"
+[ -n "$G9_MAX" ] || G9_MAX="$(python3 -I "$PERF/budgets.py" get cpu idle_app_pct)" || fatal 70 "cannot read the cpu idle_app_pct budget from $PERF/budgets.tsv"
 
 abspath() { python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 
