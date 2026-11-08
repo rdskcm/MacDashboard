@@ -174,7 +174,9 @@ final class StorageController {
         host.update { self.applyFolderSizes(to: &$0) }           // display only: spinner if no cache yet
         let count = deps.countFolderSizes
         sizeCountTask = Task(priority: trigger.taskPriority) { [weak self] in
+            let sp = PerfSignposts.begin(PerfSignposts.foldersCount)
             let result = await count(trigger)
+            sp.end()
             guard let self, gen == self.sizeCountGeneration else { return }
             self.isCountingSizes = false
             guard !Task.isCancelled else { return }

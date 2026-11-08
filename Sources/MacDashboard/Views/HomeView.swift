@@ -41,6 +41,8 @@ extension HomeInput {
     /// that render tiles may call it.
     @MainActor
     static func make(_ model: AppModel) -> HomeInput {
+        let sp = PerfSignposts.begin(PerfSignposts.homeInput)
+        defer { sp.end() }
         let report = model.homeReport
         let battery = model.battery ?? report.battery
         return HomeInput(assessment: model.assessment, report: report, scan: model.blockState(.scan),
@@ -71,6 +73,8 @@ extension HomeInput {
     /// The eight section tiles (seven without a battery) for the current model state.
     @MainActor
     static func tiles(_ model: AppModel, narrow: Bool = false) -> [HomeTile] {
+        let sp = PerfSignposts.begin(PerfSignposts.homeTiles)
+        defer { sp.end() }
         let input = make(model)
         let scan = HomeModel.scan(input.scan)
         let tasks = HomeModel.tasks(input.assessment, report: input.report, disk: input.disk, battery: model.battery)

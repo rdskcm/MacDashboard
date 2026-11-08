@@ -154,6 +154,8 @@ struct SecurityPageModel: Equatable {
     // MARK: make
 
     @MainActor static func make(_ i: Input) -> SecurityPageModel {
+        let sp = PerfSignposts.begin(PerfSignposts.securityMake)
+        defer { sp.end() }
         var m = SecurityPageModel()
         m.sub = L.secSub
         let crashTotal = (i.crashes ?? []).reduce(0) { $0 + $1.count }

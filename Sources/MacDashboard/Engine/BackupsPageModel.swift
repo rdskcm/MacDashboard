@@ -85,6 +85,8 @@ struct BackupsPageModel: Equatable {
     // MARK: make
 
     @MainActor static func make(_ i: Input) -> BackupsPageModel {
+        let sp = PerfSignposts.begin(PerfSignposts.backupsMake)
+        defer { sp.end() }
         var m = BackupsPageModel()
         m.sub = L.bkSub
 

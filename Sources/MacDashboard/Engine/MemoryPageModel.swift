@@ -61,6 +61,8 @@ struct MemoryPageModel: Equatable {
     var showsWait: Bool             // phase == .loading
 
     @MainActor static func make(_ i: Input) -> MemoryPageModel {
+        let sp = PerfSignposts.begin(PerfSignposts.memoryMake)
+        defer { sp.end() }
         let mem = i.mem.flatMap { $0.total > 0 ? $0 : nil }
         let phase: MemoryPagePhase
         switch i.block {

@@ -96,6 +96,8 @@ struct CPUPageModel: Equatable {
     var gpu: CPUHeroModel       // GPU card hero
 
     @MainActor static func make(_ i: Input) -> CPUPageModel {
+        let sp = PerfSignposts.begin(PerfSignposts.cpuMake)
+        defer { sp.end() }
         let phase: CPUPagePhase
         switch i.block {
         case .failed(let f, let g): phase = .failed(f, lastGoodAt: g)

@@ -268,6 +268,8 @@ final class SocLiveSampler {
     private func readPass() async -> Pass {
         let readers = self.readers
         return await offMain {
+            let sp = PerfSignposts.begin(PerfSignposts.cpuSocRead)
+            defer { sp.end() }
             let clients = readers.gpuClients()
             var names: [Int32: String] = [:]
             for pid in Set((clients ?? []).map(\.pid)) { if let n = readers.processName(pid) { names[pid] = n } }
@@ -341,6 +343,8 @@ final class SocLiveSampler {
     }
 
     private func publish(_ pass: Pass, since base: Pass, dt: Double) {
+        let sp = PerfSignposts.begin(PerfSignposts.cpuSocPublish)
+        defer { sp.end() }
         readCount += 1
 
         // Per-core load. A failed call on either side is a failed call (3.1), shown as empty tracks.

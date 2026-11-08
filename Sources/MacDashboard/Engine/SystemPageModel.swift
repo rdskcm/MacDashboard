@@ -103,6 +103,8 @@ struct SystemPageModel: Equatable {
     // MARK: make
 
     @MainActor static func make(_ i: Input) -> SystemPageModel {
+        let sp = PerfSignposts.begin(PerfSignposts.systemMake)
+        defer { sp.end() }
         var m = SystemPageModel()
         m.sub = L.sysSub
 

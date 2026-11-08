@@ -347,7 +347,9 @@ extension AppModel {
     /// Read inside the chart card's body only, so it is evaluated once per tick (the card re-runs when `cpuHistory`
     /// or `gpuHistory` change).
     var socChartSeries: SocChartSeries {
-        SocChartModel.series(cpu: cpuHistory, gpu: gpuHistory, now: now(or: lastSampleAt),
-                             interval: settings.fastIntervalSeconds)
+        let sp = PerfSignposts.begin(PerfSignposts.cpuChartSeries)
+        defer { sp.end() }
+        return SocChartModel.series(cpu: cpuHistory, gpu: gpuHistory, now: now(or: lastSampleAt),
+                                    interval: settings.fastIntervalSeconds)
     }
 }

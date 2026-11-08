@@ -193,6 +193,8 @@ final class HistoryHoverTextLayer: CALayer {
     }
 
     override func draw(in ctx: CGContext) {
+        let sp = PerfSignposts.begin(PerfSignposts.historyChartTip)
+        defer { sp.end() }
         guard let dateColor, let valueColor else { return }
         let h = bounds.height
         let dateFont = Self.dateFont, valueFont = Self.valueFont
