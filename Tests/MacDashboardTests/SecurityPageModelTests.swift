@@ -301,5 +301,58 @@ extension SerialTests {
             #expect(SecurityPageModel.privilegedEnableCommand(.gatekeeper) == "/usr/sbin/spctl --global-enable")
             #expect(SecurityPageModel.privilegedEnableCommand(.firewall).hasSuffix("--setglobalstate on"))
         }
+
+        // MARK: explanations (REDESIGN-INFO-RESTORE)
+
+        @Test func explanationsInEveryState() {
+            let en = ["Full-disk encryption — without your password the data on the drive cannot be read.",
+                      "Checks that the apps you launch are signed and notarized by Apple.",
+                      "System Integrity Protection — even an administrator cannot modify system files.",
+                      "Blocks unsolicited incoming network connections."]
+            withLanguage(.en) {
+                let inputs = [
+                    input(),
+                    input(security: SecurityState(fileVault: false, gatekeeper: false, sip: false, firewall: false)),
+                    input(security: SecurityState()),
+                    input(security: SecurityState(fileVault: true, gatekeeper: true, sip: true, firewall: false), action: .enabling(.firewall)),
+                ]
+                for i in inputs { #expect(make(i).tiles.map(\.explanation) == en) }
+            }
+        }
+
+        @Test func explanationsRussian() {
+            withLanguage(.ru) {
+                let m = make(input())
+                #expect(m.tiles.map(\.explanation) == [
+                    "Шифрование диска — без вашего пароля данные на диске прочитать нельзя.",
+                    "Проверяет, что запускаемые приложения подписаны и заверены Apple.",
+                    "Защита целостности системы — даже администратор не может менять системные файлы.",
+                    "Блокирует незапрошенные входящие сетевые подключения."])
+            }
+        }
+
+        @Test func explanationLinePicksOpenTile() {
+            withLanguage(.en) {
+                let m = make(input(security: VisualFixture.mixedSecurity))
+                #expect(SecurityPageModel.explanationLine(tiles: m.tiles, open: nil) == nil)
+                #expect(SecurityPageModel.explanationLine(tiles: m.tiles, open: .gatekeeper)
+                        == SectionFactLine(label: "Gatekeeper", text: "Checks that the apps you launch are signed and notarized by Apple."))
+                #expect(SecurityPageModel.explanationLine(tiles: m.tiles, open: .firewall)
+                        == SectionFactLine(label: "Firewall", text: "Blocks unsolicited incoming network connections."))
+                #expect(SecurityPageModel.explanationLine(tiles: [], open: .fileVault) == nil)
+            }
+            withLanguage(.ru) {
+                let m = make(input(security: VisualFixture.mixedSecurity))
+                #expect(SecurityPageModel.explanationLine(tiles: m.tiles, open: .firewall)
+                        == SectionFactLine(label: "Брандмауэр", text: "Блокирует незапрошенные входящие сетевые подключения."))
+            }
+        }
+
+        @Test func noExplanationsWhileCollecting() {
+            withLanguage(.en) {
+                let m = make(input(security: nil))
+                #expect(m.protectionWait && m.tiles.isEmpty)
+            }
+        }
     }
 }

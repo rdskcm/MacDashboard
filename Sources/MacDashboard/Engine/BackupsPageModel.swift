@@ -19,6 +19,9 @@ struct BackupsTile: Equatable {
     var noteTone: BackupsTone? = nil    // nil → DS3.muted
 }
 
+/// One label + text line under a tile grid (`SectionFactLines`): a destination fact here, a protection's explanation on Security.
+struct SectionFactLine: Equatable { var label: String; var text: String }
+
 /// The Claude card's Back up now button; nil = not shown.
 struct BackupsClaudeButton: Equatable { var busy: Bool; var primary: Bool }
 
@@ -66,6 +69,7 @@ struct BackupsPageModel: Equatable {
     var tmNote: BackupsNote? = nil; var tmProgress: BackupsProgress? = nil
     var tmTiles: [BackupsTile] = []           // notset: 3 tiles (snaps, purgeable, dest); else 4 (last, next, dest, snaps)
     var tmSnapshotsExplanation: String? = nil  // the line under the tiles; nil when the card has no tiles
+    var tmDestinationFacts: [SectionFactLine] = []   // Type, then Quota; empty in .wait / .notSet and when neither is known
     var tmFailure: String? = nil              // hot note from TMActionState.failed
     var tmButton: BackupsTMButton? = nil      // nil in .wait and .notSet
     var tmDeleteButton: BackupsTMDeleteButton? = nil
@@ -125,6 +129,7 @@ struct BackupsPageModel: Equatable {
                 destinationTile(dest: dest, state: state),
                 snapshotsTile(names: i.snapshots, now: i.now),
             ]
+            m.tmDestinationFacts = destinationFacts(dest)
         }
         // What the «Local snapshots» tile counts (https://support.apple.com/en-us/102154). No frequency in the text: it is true on every schedule.
         m.tmSnapshotsExplanation = m.tmTiles.isEmpty ? nil : L.bkSnapshotsExplanation
@@ -261,6 +266,24 @@ struct BackupsPageModel: Equatable {
             t.noteTone = state == .overdue30 ? .hot : (state == .overdue7 ? .amber : nil)
         }
         return t
+    }
+
+    /// tmutil's `Kind` in words: «Local» / «Network» translated, any other non-empty kind as tmutil wrote it, nil when absent.
+    @MainActor static func kindText(_ kind: String?) -> String? {
+        guard let k = kind?.trimmingCharacters(in: .whitespacesAndNewlines), !k.isEmpty else { return nil }
+        switch k.lowercased() {
+        case "local": return L.bkKindLocal
+        case "network": return L.bkKindNetwork
+        default: return k
+        }
+    }
+
+    /// The lines under the Time Machine tiles that the report used to carry alone: destination type, then quota (decimal).
+    @MainActor static func destinationFacts(_ dest: TMDestination) -> [SectionFactLine] {
+        var facts: [SectionFactLine] = []
+        if let k = kindText(dest.kind) { facts.append(SectionFactLine(label: L.timeMachineType, text: k)) }
+        if let q = dest.quotaBytes, q > 0 { facts.append(SectionFactLine(label: L.timeMachineQuota, text: fmtCapacity(q))) }
+        return facts
     }
 
     @MainActor static func snapshotsTile(names: [String]?, now: Date, calendar: Calendar = .current) -> BackupsTile {

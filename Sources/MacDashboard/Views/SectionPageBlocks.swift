@@ -167,6 +167,36 @@ struct SectionTile: View {
     }
 }
 
+// MARK: - Fact lines
+
+/// Label + text lines under a tile grid: what a tile counts (Backups «Local snapshots»), what a protection is (Security),
+/// a destination fact (Backups Type / Quota). The recipe of the former `BackupsTimeMachineCard.snapshotsExplanation`;
+/// the grid lines the texts up in one column. Horizontal padding lines it up with the tiles' text. Static text only.
+struct SectionFactLines: View {
+    let rows: [SectionFactLine]
+
+    var body: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 6) {
+            ForEach(rows, id: \.label) { r in
+                GridRow {
+                    Text(r.label)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(DS3.inkSoft)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                        .accessibilityHidden(true)
+                    Text(r.text)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(DS3.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(r.label + ", " + r.text)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+}
+
 // MARK: - Note
 
 /// Tinted note with an optional action button (e.g. the folder-count failure's «Try again» on Storage).

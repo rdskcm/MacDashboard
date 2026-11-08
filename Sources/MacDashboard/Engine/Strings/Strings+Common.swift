@@ -42,6 +42,7 @@ protocol CommonStrings {
     // MARK: Common (strings.json › Shared + 00 §4.16/§7; REDESIGN-FOUNDATION)
     var commonShowInFinder: String { get }
     var commonFirewall: String { get }
+    func commonExplainA11y(_ name: String) -> String
     var commonEnable: String { get }
     var commonDisk: String { get }
     var commonSetUp: String { get }
@@ -124,6 +125,7 @@ extension StringsEN: CommonStrings {
     // MARK: Common (strings.json › Shared + 00 §4.16/§7; REDESIGN-FOUNDATION)
     var commonShowInFinder: String { "Show in Finder" }
     var commonFirewall: String { "Firewall" }
+    func commonExplainA11y(_ name: String) -> String { "Explain \(name)" }
     var commonEnable: String { "Enable…" }
     var commonDisk: String { "Disk" }
     var commonSetUp: String { "Set up…" }
@@ -206,6 +208,7 @@ extension StringsRU: CommonStrings {
     // MARK: Common (strings.json › Shared + 00 §4.16/§7; REDESIGN-FOUNDATION)
     var commonShowInFinder: String { "Показать в Finder" }
     var commonFirewall: String { "Брандмауэр" }
+    func commonExplainA11y(_ name: String) -> String { "Пояснение: \(name)" }
     var commonEnable: String { "Включить…" }
     var commonDisk: String { "Диск" }
     var commonSetUp: String { "Настроить…" }

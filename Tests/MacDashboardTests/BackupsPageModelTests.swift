@@ -748,5 +748,62 @@ extension SerialTests {
             #expect(free != nil && free! > 0)
             #expect(ReportCollector.volumeFreeBytes(atPath: "/definitely/not/a/path") == nil)
         }
+
+        // MARK: destination facts (REDESIGN-INFO-RESTORE)
+
+        private func destKind(_ kind: String?, quota: Int64?) -> TMDestination {
+            var d = dest(last: t0 - 50 * min); d.kind = kind; d.quotaBytes = quota; return d
+        }
+
+        @Test func kindText() {
+            withLanguage(.en) {
+                #expect(BackupsPageModel.kindText("Local") == "Local disk")
+                #expect(BackupsPageModel.kindText("Network") == "Network disk")
+                #expect(BackupsPageModel.kindText(" network\n") == "Network disk")
+                #expect(BackupsPageModel.kindText("LOCAL") == "Local disk")
+                #expect(BackupsPageModel.kindText("Cloud") == "Cloud")
+                #expect(BackupsPageModel.kindText(nil) == nil)
+                #expect(BackupsPageModel.kindText("") == nil)
+                #expect(BackupsPageModel.kindText("  ") == nil)
+            }
+            withLanguage(.ru) {
+                #expect(BackupsPageModel.kindText("Local") == "Локальный диск")
+                #expect(BackupsPageModel.kindText("Network") == "Сетевой диск")
+            }
+        }
+
+        @Test func destinationFactsLines() {
+            let q: Int64 = 500_000_000_000
+            withLanguage(.en) {
+                #expect(BackupsPageModel.destinationFacts(destKind("Local", quota: nil)) == [SectionFactLine(label: "Type", text: "Local disk")])
+                #expect(BackupsPageModel.destinationFacts(destKind("Network", quota: q))
+                        == [.init(label: "Type", text: "Network disk"), .init(label: "Quota", text: fmtCapacity(q))])
+                #expect(fmtCapacity(q).hasPrefix("500"))
+                #expect(BackupsPageModel.destinationFacts(destKind(nil, quota: q)) == [.init(label: "Quota", text: fmtCapacity(q))])
+                #expect(BackupsPageModel.destinationFacts(destKind(nil, quota: nil)).isEmpty)
+                #expect(BackupsPageModel.destinationFacts(destKind("Local", quota: 0)) == [.init(label: "Type", text: "Local disk")])
+            }
+            withLanguage(.ru) {
+                #expect(BackupsPageModel.destinationFacts(destKind("Network", quota: q))
+                        == [.init(label: "Тип", text: "Сетевой диск"), .init(label: "Квота", text: fmtCapacity(q))])
+            }
+        }
+
+        @Test func destinationFactsByState() {
+            withLanguage(.en) {
+                let net = BackupsPageModel.make(input(.some(destKind("Network", quota: 500_000_000_000))))
+                #expect(net.tmDestinationFacts.count == 2)
+                let gone = BackupsPageModel.make(input(.some(dest(mount: nil, last: t0 - 34 * dy))))
+                #expect(gone.tmState == .overdue30)
+                #expect(gone.tmDestinationFacts == [.init(label: "Type", text: "Local disk")])
+                let backing = BackupsPageModel.make(input(.some(destKind("Local", quota: nil)),
+                                                          backup: TMBackupProgress(running: true, stopping: false, phase: "Copying")))
+                #expect(backing.tmState == .backing)
+                #expect(backing.tmDestinationFacts == [.init(label: "Type", text: "Local disk")])
+                let notSet = BackupsPageModel.make(input(.some(nil)))
+                #expect(notSet.tmDestinationFacts.isEmpty && notSet.tmSnapshotsExplanation != nil)
+                #expect(BackupsPageModel.make(input(nil)).tmDestinationFacts.isEmpty)
+            }
+        }
     }
 }

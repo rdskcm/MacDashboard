@@ -808,7 +808,7 @@ struct SystemEnergyCard: View {
                 .font(.custom("Georgia-BoldItalic", size: 11))
                 .foregroundStyle(DS3.muted)
                 .frame(width: 22, height: 22)
-                .background(Circle().fill(open ? DS3.lens : Color.clear))
+                .background(Circle().fill(open ? DS3.infoOpen : Color.clear))
                 .ds3InsetRims(Circle(), ring: DS3.lineStrong)
                 .contentShape(Circle())
         }
@@ -817,7 +817,7 @@ struct SystemEnergyCard: View {
         .frame(width: 30, alignment: .trailing)
         .frame(minHeight: 36)
         .overlay(alignment: .top) { Rectangle().fill(DS3.line).frame(height: 1) }
-        .accessibilityLabel(L.sysEnergyInfoA11y(row.spec.label))
+        .accessibilityLabel(L.commonExplainA11y(row.spec.label))
         .accessibilityIdentifier("system-energy-info-\(row.id)")
     }
 
