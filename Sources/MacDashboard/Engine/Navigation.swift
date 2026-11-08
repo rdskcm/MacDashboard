@@ -82,6 +82,7 @@ final class NavigationRouter {
         isInlineConfirmOpen = false
         self.destination = destination
         navigationSerial += 1
+        PerfSignposts.pageShown(destination.page)
     }
 
     /// Back chip, Esc, ⌘[: the sheet closes (the page underneath stays); a section page returns to Home;

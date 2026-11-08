@@ -172,6 +172,8 @@ final class SocChartHoverTextLayer: CALayer {
     }
 
     override func draw(in ctx: CGContext) {
+        let sp = PerfSignposts.begin(PerfSignposts.cpuChartTip)
+        defer { sp.end() }
         guard let text, let colors else { return }
         let h = bounds.height, w = bounds.width
         let timeFont = Self.timeFont, nameFont = Self.nameFont, valueFont = Self.valueFont

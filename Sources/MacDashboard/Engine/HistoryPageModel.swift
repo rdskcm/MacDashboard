@@ -340,6 +340,8 @@ struct HistoryPageModel: Equatable {
     // MARK: page / card
 
     @MainActor static func make(_ i: Input, calendar: Calendar = .current) -> HistoryPageModel {
+        let sp = PerfSignposts.begin(PerfSignposts.historyMake)
+        defer { sp.end() }
         let entries = i.entries
         let span = spanDays(entries) ?? 0
         let enabled = enabledRanges(sampleCount: entries.count, spanDays: span)

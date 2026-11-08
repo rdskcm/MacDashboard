@@ -75,6 +75,8 @@ struct BatteryPageModel: Equatable {
     static let dash = "—"
 
     @MainActor static func make(_ i: Input) -> BatteryPageModel {
+        let sp = PerfSignposts.begin(PerfSignposts.batteryMake)
+        defer { sp.end() }
         let d = i.detail
         let hp = d?.healthPercent
         let health = BatteryHealth.classify(healthPercent: hp, condition: i.condition)

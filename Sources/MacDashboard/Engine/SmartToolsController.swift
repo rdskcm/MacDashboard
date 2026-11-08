@@ -96,9 +96,13 @@ final class SmartToolsController {
                 await time.sleep(.seconds(2))
                 continue
             }
+            let collectSp = PerfSignposts.begin(PerfSignposts.smartCollect)
             let (disks, tmDest) = await CommandRunner.$qos.withValue(.utility) { await self.deps.collect() }
+            collectSp.end()
             guard !Task.isCancelled else { return }
+            let landSp = PerfSignposts.begin(PerfSignposts.smartLand)
             await land(disks: disks, tmDest: tmDest)
+            landSp.end()
         }
     }
 

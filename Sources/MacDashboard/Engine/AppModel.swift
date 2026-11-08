@@ -497,16 +497,19 @@ final class AppModel {
                 self.beginBlock(.memory)
                 let (snap, socTempC, gpuUtil, pressure): (LiveSnapshot, Int?, Int?, MemoryPressureLevel?) = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .userInitiated).async {
+                        let sp = PerfSignposts.begin(PerfSignposts.liveFastRead)
                         let s = fastBox.value.collectFast()
                         // Block N7: same background hop — one HID pass costs ~50 ms.
                         let soc = ThermalSensors.socTemperature(
                             from: ThermalHIDReader.readTemperatureSensors())
                         let gpu = GPUStats.readDeviceUtilization()
                         let pressure = LiveCollector.readMemoryPressure()
+                        sp.end()
                         continuation.resume(returning: (s, soc.map { Int($0.rounded()) }, gpu, pressure))
                     }
                 }
                 guard !Task.isCancelled else { return }
+                let apply = PerfSignposts.begin(PerfSignposts.liveFastApply)
                 // Block verdicts. A failed read never blanks the last good value below (keep-last-good);
                 // the block's phase is what says the value is stale.
                 if snap.cpu != nil { self.succeedBlock(.cpu) }
@@ -534,6 +537,7 @@ final class AppModel {
                 }
                 // SOC-DETAILS D6: one memory append, no new system call. A failed GPU read is kept as nil (a gap).
                 Self.appendTrimmed(&self.gpuHistory, (snap.t, gpuUtil))
+                apply.end()
                 // `self.report` is a partial during a collect and a partial must never be
                 // assessed — it would resurrect the header churn (V2-HEADER-CHURN). But the
                 // live disk/swap readings are ready every tick, so instead of freezing the
@@ -542,7 +546,9 @@ final class AppModel {
                 // as they were when the pass started, live-derived ones keep moving
                 // (V2-HONEST-READINGS, A11).
                 // `homeReport` is that choice (ARCH-MODEL-SPLIT, P5).
+                let assess = PerfSignposts.begin(PerfSignposts.liveFastAssess)
                 self.setAssessment(self.assessed(self.homeReport))
+                assess.end()
 
                 try? await Task.sleep(for: .seconds(self.settings.fastIntervalSeconds))
             }
@@ -562,11 +568,16 @@ final class AppModel {
                 // sampleProcesses() is async and suspends while `/bin/ps` and `/usr/bin/top`
                 // run (and, on the FIRST tick only, while it sleeps 0.6 s to prime its CPU
                 // baseline) — it runs on the global executor, not the main thread.
+                let procsSp = PerfSignposts.begin(PerfSignposts.liveSlowProcs)
                 let procs = await CommandRunner.$qos.withValue(.utility) { await procBox.value.sampleProcesses(limit: LiveCollector.topProcessCount) }
+                procsSp.end()
                 guard !Task.isCancelled else { return }
+                let wakeSp = PerfSignposts.begin(PerfSignposts.liveSlowWake)
                 let wake = await CommandRunner.$qos.withValue(.utility) { await WakeHolders.sample() }
+                wakeSp.end()
                 guard !Task.isCancelled else { return }
 
+                let apply = PerfSignposts.begin(PerfSignposts.liveSlowApply)
                 if self.topCPU != procs.topCPU { self.topCPU = procs.topCPU }
                 if self.topMem != procs.topMem { self.topMem = procs.topMem }
                 if procs.processCount > 0, self.processCount != procs.processCount { self.processCount = procs.processCount }
@@ -577,6 +588,7 @@ final class AppModel {
                 if !self.wakeSampled { self.wakeSampled = true }
                 let wakeFailures = wake.failure.map { [$0] } ?? []
                 if self.wakeParseFailures != wakeFailures { self.wakeParseFailures = wakeFailures }
+                apply.end()
 
                 try? await Task.sleep(for: .seconds(6))
             }
@@ -701,8 +713,11 @@ final class AppModel {
 
             let cachedBrew = self.brew.cachedSnapshot(now: self.time.now())
             let hiddenCrashes = self.crashReports.hiddenNames
+            let pass = PerfSignposts.begin(PerfSignposts.reportPass)
             let collected = await CommandRunner.$qos.withValue(trigger.commandQoS) {
                 await self.passCollect(hiddenCrashes, cachedBrew) { partial in
+                    let section = PerfSignposts.begin(PerfSignposts.reportSection)
+                    defer { section.end() }
                     // onSection is @MainActor; we're already isolated here. Detect the
                     // .smart section's arrival by its progress-flag transition (false/absent
                     // -> true) BEFORE overwriting self.report, so `smart.updatedAt` reflects the
@@ -732,7 +747,9 @@ final class AppModel {
                     self.smart.recomputeToolsState()
                 }
             }
+            pass.end()
             guard !Task.isCancelled else { return }
+            let commit = PerfSignposts.begin(PerfSignposts.reportCommit)
             var final = collected
             self.storage.applyBackground(to: &final)
 
@@ -754,6 +771,7 @@ final class AppModel {
                 self.reportUpdatedAt = now
             }
             self.smart.recomputeToolsState()
+            commit.end()
         }
     }
 
@@ -799,7 +817,9 @@ final class AppModel {
     func runBatteryLoop() async {
         guard !VisualFixture.isRequested else { return }
         while !Task.isCancelled {
+            let read = PerfSignposts.begin(PerfSignposts.batteryRead)
             await readBatteryNow()
+            read.end()
             try? await Task.sleep(for: .seconds(BatteryPageModel.refreshSeconds))
         }
     }
