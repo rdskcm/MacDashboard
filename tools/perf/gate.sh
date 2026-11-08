@@ -200,6 +200,7 @@ if [ -n "$FOREIGN" ]; then
 fi
 
 mkdir -p "$OUT" || fatal 70 "cannot create $OUT"
+"$ROOT/tools/keep-latest.sh" --exclude "$OUT" "$OUT_ROOT" '^[0-9]{8}-[0-9]{6}$' 5 > "$OUT/prune.log" 2>&1 || true   # NIGHT-STANDING-JOBS retention: 5 newest stamp runs
 STARTED=1
 # Bench copies: own bundle id, so the gate never touches the real defaults domain (R11); removed on exit.
 CAND_APP="$("$ROOT/tools/bench-app.sh" "$APP" "$OUT/apps/cand")" || fatal 70 "bench copy of --app failed"

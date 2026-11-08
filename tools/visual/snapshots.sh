@@ -126,6 +126,7 @@ fi
 if [ -e "$OUT" ]; then echo "output directory already exists: $OUT" >&2; exit 64; fi
 mkdir -p "$OUT/.bin" || exit 70
 OUT="$(cd "$OUT" && pwd)"
+"$ROOT/tools/keep-latest.sh" --exclude "$OUT" "$ROOT/tools/visual/out" '^snap-[0-9]{8}-[0-9]{6}$' 5 > "$OUT/prune.log" 2>&1 || true   # NIGHT-STANDING-JOBS retention
 
 VBTOOL="$OUT/.bin/vbtool"
 if ! swiftc -O -o "$VBTOOL" "$ROOT/tools/visual/vbtool.swift" -framework AppKit >"$OUT/vbtool-build.log" 2>&1; then
