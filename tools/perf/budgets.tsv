@@ -5,18 +5,20 @@
 #   idle_app_pct  app process CPU while the page is shown and nobody uses the Mac, % of one core (100 = one core busy).
 #                 Readings: gate G1 (home) and G9 (cpu) app_pct, sampled with top, no instrument attached; every page
 #                 from the MAIN-THREAD-AUDIT Time Profiler recording (includes Time Profiler's own overhead).
-#   frame_ms      time of one frame while the page scrolls or animates, with the 144 Hz display as main; the budget
-#                 is one refresh interval, so no frame misses its deadline. No night job records it yet (no data).
+#   hitch_ms_per_s  ms of hitches per second while the page scrolls or animates, the M27P6 as main display; a frame
+#                 later than its 6.94 ms refresh deadline (1000 ms / 144 Hz) counts as a hitch. No night job records it yet (no data).
 # Derivation of the "*" idle budget (2026-11-08):
 #   1.5   always-on floor: Home's idle cost before SOC-DETAILS (night gate G1 medians 1.58, 1.51, 1.54, 2026-11-04..06)
 #   +0.35 one page update per 2 s default sampler tick, each fitting one 144 Hz frame (6.94 ms every 2 s)
 #   +1.0  the user's action threshold: about 1 % of one core is no reason for a block (2026-11-03)
 #   = 2.85, rounded up to the half percent. Quiet pages share it: their 0.35 less is below the action threshold.
-# Sources: Apple, Understanding hitches in your app (a frame shown after its refresh deadline is a hitch),
+# Sources: Apple, WWDC20 session 10077, Eliminate animation hitches with XCTest (hitch time ratio: < 5 ms/s good, 5-10 ms/s noticeable),
+#   https://developer.apple.com/videos/play/wwdc2020/10077/
+#   Apple, Understanding hitches in your app (a frame shown after its refresh deadline is a hitch),
 #   https://developer.apple.com/documentation/xcode/understanding-hitches-in-your-app
 #   Apple, Energy Efficiency Guide for Mac Apps (work only when needed, near zero CPU when nothing changes),
 #   https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/
 page	metric	max	basis
 *	idle_app_pct	3.0	floor 1.5 + one 144 Hz frame per 2 s tick 0.35 + action threshold 1.0, rounded up
 cpu	idle_app_pct	6.5	cost the user accepted after SOC-DETAILS #180 (2026-11-06/07); G9-OWN-LIMIT #188
-*	frame_ms	6.94	1000 ms / 144 Hz, the M27P6 as main display
+*	hitch_ms_per_s	5.0	Apple good threshold (WWDC20 10077), measured with the M27P6 (144 Hz, 6.94 ms frame deadline) as main display

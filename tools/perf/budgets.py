@@ -22,9 +22,9 @@ import tempfile
 
 PAGES = ("cpu memory storage battery security backups system history home iphone iphone-device report settings").split()
 GATE_IDLE = (("home", "G1"), ("cpu", "G9"))
-NO_READER = {"frame_ms": "no night job records frame times with the 144 Hz display as main"}
-UNITS = {"idle_app_pct": "% of one core", "frame_ms": "ms"}
-WORDS = {"idle_app_pct": "idle", "frame_ms": "frame"}
+NO_READER = {"hitch_ms_per_s": "no night job records hitches with the 144 Hz display as main"}
+UNITS = {"idle_app_pct": "% of one core", "hitch_ms_per_s": "ms/s"}
+WORDS = {"idle_app_pct": "idle", "hitch_ms_per_s": "hitches"}
 DEFAULT_BUDGETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "budgets.tsv")
 HEADER = ["page", "metric", "max", "basis"]
 GATE_DIR_RE = re.compile(r"^night-\d{8}(-\d{6})?$")
@@ -177,12 +177,12 @@ def traced_readings(runs, sha):
 
 
 def fmt_val(metric, v):
-    return "%.2f" % v if metric == "frame_ms" else "%.1f" % v
+    return "%.1f" % v
 
 
 def fmt_diff(metric, d):
     s = fmt_val(metric, d)
-    if metric != "frame_ms" and s == "0.0":
+    if metric != "hitch_ms_per_s" and s == "0.0":
         s = "%.2f" % d
     return s
 
@@ -252,7 +252,7 @@ def _read(sha, gate_root, runs, bpath):
             head = "- %s %s: %s %s (%s), budget %s" % (page, word, fmt_val(metric, reading), unit, label, mx.raw)
             if reading > mx:
                 over.append("%s: over budget by %s %s" % (head, fmt_diff(metric, reading - mx),
-                                                          "ms" if metric == "frame_ms" else "pp"))
+                                                          "ms/s" if metric == "hitch_ms_per_s" else "pp"))
             else:
                 within.append(head + ": within budget")
     lines = ["BUDGETS %d over, %d within, %d no data" % (len(over), len(within), len(nodata))]
@@ -341,7 +341,7 @@ def run(argv):
 # ---------------------------------------------------------------- selftest
 
 FIX_BUDGETS = ("# fixture\npage\tmetric\tmax\tbasis\n*\tidle_app_pct\t2.0\tb\ncpu\tidle_app_pct\t5.0\tb\n"
-               "*\tframe_ms\t7.0\tb\n")
+               "*\thitch_ms_per_s\t7.0\tb\n")
 MANIFEST_COLS = ["seq", "item", "template", "sha", "nav", "rec_end_epoch", "idle_start_epoch", "xctrace_rc", "toc_ok",
                  "cpu_ms", "note"]
 
@@ -427,7 +427,7 @@ def cmd_selftest():
         cases.append(("nav MISS not usable", "memory idle: no data (recording not usable (nav MISS))" in out))
         # 10-12
         code, out, _ = rd("--sha", S, "--gate-root", os.path.join(tmp, "empty"))
-        cases.append(("frame line", "- all pages frame: no data (" in out and ", budget 7.0 ms" in out))
+        cases.append(("hitches line", "- all pages hitches: no data (" in out and ", budget 7.0 ms/s" in out))
         cases.append(("empty: 26 no data", out.startswith("BUDGETS 0 over, 0 within, 26 no data")))
         out = rd("--sha", S, "--gate-root", g, "--run", r)[1]
         head, body = out.splitlines()[0], out.splitlines()[2:]
