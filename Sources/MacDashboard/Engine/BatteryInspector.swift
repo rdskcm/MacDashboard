@@ -81,6 +81,8 @@ struct BatteryDetail: Equatable {
     var mfgWeek: Int? = nil                 // 1...53
     var mfgCode: String? = nil              // raw 4-digit code, e.g. "2213"
     var lowPowerMode: Bool? = nil           // set by collect() only, never by parse()
+    var settingsBasisMAh: Int? = nil        // iOS 27 reply only (no AppleRawMaxCapacity anywhere): BatteryData.NominalChargeCapacity,
+                                            // the basis of iPhone Settings' Maximum Capacity (IPHONE-HISTORY-MIXUP BH-C4). nil on Mac and iOS ≤ 26.
 }
 
 enum BatteryInspector {
@@ -166,6 +168,9 @@ enum BatteryInspector {
         )
 
         detail.serial = dict["Serial"] as? String
+        if dict["AppleRawMaxCapacity"] == nil, packData?["AppleRawMaxCapacity"] == nil {
+            detail.settingsBasisMAh = batteryData?["NominalChargeCapacity"] as? Int
+        }
         if let md = dict["ManufacturerData"] as? Data {
             let (mfgCode, manufacturerCode) = decodeManufacturerData(md)
             detail.mfgCode = mfgCode

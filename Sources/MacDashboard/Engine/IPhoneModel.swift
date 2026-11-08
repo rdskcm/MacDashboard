@@ -234,6 +234,8 @@ final class IPhoneModel {
     /// Why the last «Choose…» left the folder unchanged; cleared by the next successful change.
     var archiveFolderError: ArchiveFolderError?
     var archiveFolderBusy = false
+    /// BATTERY-HEALTH-UNIFY D9: Settings › Devices › «Raw battery health»; the tile and battery card take it as a parameter.
+    var prefersRawHealth: Bool { AppSettings.shared.batteryShowsRawIPhone }
     enum ReadTrigger: Equatable { case attach, user }
     /// Per device: when the last automatic crash-log listing started (memory only).
     @ObservationIgnored private var autoReadAt: [String: Date] = [:]
@@ -713,7 +715,7 @@ final class IPhoneModel {
             if let b = snap.battery, b.healthPercent != nil || b.cycleCount != nil {
                 let point = BatteryPoint(day: IPhoneData.historyDay(now),
                                          cycles: b.cycleCount,
-                                         healthPercent: b.healthPercent,
+                                         healthPercent: IPhoneData.historyHealthPercent(b),
                                          maxCapacityMAh: b.maxCapacityMAh,
                                          designCapacityMAh: b.designCapacityMAh,
                                          source: "live")

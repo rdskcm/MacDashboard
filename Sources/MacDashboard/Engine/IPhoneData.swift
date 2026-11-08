@@ -201,6 +201,22 @@ enum IPhoneData {
         return Double(maxMAh) / Double(designMAh) * 100
     }
 
+    /// BATTERY-HEALTH-UNIFY: the live health the iPhone shows, unrounded. Default = the figure iPhone Settings shows:
+    /// NominalChargeCapacity / design on iOS 27 (`settingsBasisMAh`), AppleRawMaxCapacity / design on iOS ≤ 26 (equal to
+    /// Settings, IPHONE-SPIKE C5). `prefersRaw` (Settings › Devices switch) = max (AppleRaw or FullChargeCapacity) / design.
+    /// nil when the pair of capacities is missing (the caller falls back to `healthPercent`).
+    static func preciseLiveHealth(_ b: BatteryDetail, prefersRaw: Bool) -> Double? {
+        guard let design = b.designCapacityMAh else { return nil }
+        let basis = prefersRaw ? b.maxCapacityMAh : (b.settingsBasisMAh ?? b.maxCapacityMAh)
+        return basis.flatMap { preciseHealth(maxMAh: $0, designMAh: design) }
+    }
+
+    /// The integer health a live read stores in history: always the Settings figure (D8), so live points match
+    /// imported `MaxCapacityPercent` points. Rounds half up, as Settings does (BH-C4).
+    static func historyHealthPercent(_ b: BatteryDetail) -> Int? {
+        preciseLiveHealth(b, prefersRaw: false).map { Int($0.rounded()) } ?? b.healthPercent
+    }
+
     /// Approximate energy for a capacity in mAh at `nominalVoltage`.
     static func wattHours(mAh: Int) -> Double {
         Double(mAh) * nominalVoltage / 1000

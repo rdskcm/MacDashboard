@@ -1,9 +1,9 @@
 // Engine/AppSettings.swift
 // Non-language app settings (interval, wake-holder ignore list, hidden crash reports, backup-stale days, low-space %,
-// notify categories, appearance, orbs, keep-archives, iPhone auto-read, archive folder, snapshot time,
+// notify categories, appearance, orbs, keep-archives, iPhone auto-read, raw battery switches, archive folder, snapshot time,
 // claude log path).
 // Foundation + Observation only — covered by Tests/MacDashboardTests.
-// `init(defaults:)` is injectable; the four assessment inputs live in `AssessmentSettings` (ARCH-SETTINGS-PATH).
+// `init(defaults:)` is injectable; the five assessment inputs live in `AssessmentSettings` (ARCH-SETTINGS-PATH).
 import Foundation
 import Observation
 
@@ -23,6 +23,8 @@ struct AssessmentSettings: Equatable {
     var lowSpacePercent: Int
     /// nil = the default log; never an empty string.
     var claudeLogPath: String?
+    /// BATTERY-HEALTH-UNIFY D2/D5: judge and show the ioreg raw ratio instead of Apple's «Maximum Capacity». Default off.
+    var batteryShowsRawMac: Bool
 
     var ignoredWakeHolders: [WakeHolderKey] { ignoredWakeHolderEntries.map(\.key) }
     var backupStaleHours: Int { backupStaleDays * 24 }
@@ -89,6 +91,7 @@ final class AppSettings {
     static let iphoneArchiveFolderKey = "iphoneArchiveFolder"
     /// DEVICE-ARCHIVE-CLEANUP: when true, an archive the app requested stays on the iPhone after its import (C5).
     static let iphoneKeepRequestedOnPhoneKey = "iphoneKeepRequestedOnPhone"
+    static let batteryShowsRawIPhoneKey = "batteryShowsRawIPhone"
     /// Pure resolution: nil, empty or a non-absolute path → `defaultRoot`; otherwise the stored path as a directory URL.
     static func resolveArchiveFolder(raw: String?, defaultRoot: URL) -> URL {
         guard let raw, !raw.isEmpty, raw.hasPrefix("/") else { return defaultRoot }
@@ -104,6 +107,7 @@ final class AppSettings {
 
     /// REDESIGN-STORAGE: amber low-space line (% free); any other stored value resolves to the default.
     static let lowSpacePercentKey = "lowSpacePercent"
+    static let batteryShowsRawMacKey = "batteryShowsRawMac"
     static let allowedLowSpacePercents = [10, 15, 20]
     nonisolated static let defaultLowSpacePercent = 20
     static func resolveLowSpacePercent(raw: Int) -> Int {
@@ -140,7 +144,7 @@ final class AppSettings {
         didSet { defaults.set(fastIntervalSeconds, forKey: Self.fastIntervalKey) }
     }
 
-    /// ARCH-SETTINGS-PATH: the four assessment inputs. Written only through the forwarders below (or
+    /// ARCH-SETTINGS-PATH: the five assessment inputs. Written only through the forwarders below (or
     /// `setWakeHolderIgnored`), so a whole-struct write cannot skip their validation.
     private(set) var assessmentSettings: AssessmentSettings {
         didSet {
@@ -155,6 +159,7 @@ final class AppSettings {
                 if let p = new.claudeLogPath { defaults.set(p, forKey: Self.claudeLogPathKey) }
                 else { defaults.removeObject(forKey: Self.claudeLogPathKey) }
             }
+            if new.batteryShowsRawMac != oldValue.batteryShowsRawMac { defaults.set(new.batteryShowsRawMac, forKey: Self.batteryShowsRawMacKey) }
             if let hook = onAssessmentSettingsChange { MainActor.assumeIsolated { hook(oldValue) } }
         }
     }
@@ -205,6 +210,12 @@ final class AppSettings {
         set { if Self.allowedLowSpacePercents.contains(newValue) { assessmentSettings.lowSpacePercent = newValue } }
     }
 
+    /// BATTERY-HEALTH-UNIFY: the Monitoring «Raw battery health» switch (an assessment input: the verdict follows it, D5).
+    var batteryShowsRawMac: Bool {
+        get { assessmentSettings.batteryShowsRawMac }
+        set { assessmentSettings.batteryShowsRawMac = newValue }
+    }
+
     /// CRASH-REPORT-DISMISS: crash report files hidden on the Security page. Mutate through
     /// `CrashReportsController.hide(_:)` / `unhide(_:)` so the list and the assessment update.
     var hiddenCrashReports: [HiddenCrashReport] {
@@ -230,6 +241,11 @@ final class AppSettings {
     }
     var iphoneAutoRead: Bool {
         didSet { defaults.set(iphoneAutoRead, forKey: Self.iphoneAutoReadKey) }
+    }
+    /// BATTERY-HEALTH-UNIFY D8/D9: live iPhone health as FullChargeCapacity / design instead of the Settings figure
+    /// (differs on iOS 27 and later only). Read by the iPhone tile and battery card through IPhoneModel; no assessment.
+    var batteryShowsRawIPhone: Bool {
+        didSet { defaults.set(batteryShowsRawIPhone, forKey: Self.batteryShowsRawIPhoneKey) }
     }
     /// nil = the default archive folder; an empty string is stored as nil (same contract as `claudeLogPath`).
     var iphoneArchiveFolder: String? {
@@ -265,13 +281,15 @@ final class AppSettings {
             ignoredWakeHolderEntries: Self.decodeIgnoredWakeHolders(d.data(forKey: Self.ignoredWakeHoldersKey)),
             backupStaleDays: Self.resolveBackupStaleDays(raw: d.integer(forKey: Self.backupStaleDaysKey)),
             lowSpacePercent: Self.resolveLowSpacePercent(raw: d.integer(forKey: Self.lowSpacePercentKey)), // 0 if unset
-            claudeLogPath: (storedPath?.isEmpty ?? true) ? nil : storedPath)
+            claudeLogPath: (storedPath?.isEmpty ?? true) ? nil : storedPath,
+            batteryShowsRawMac: d.object(forKey: Self.batteryShowsRawMacKey) as? Bool ?? false)
         appearance = Self.resolveAppearance(raw: d.string(forKey: Self.appearanceKey))
         orbsEnabled = d.object(forKey: Self.orbsEnabledKey) as? Bool ?? true
         rimProfile = Self.resolveRimProfile(raw: d.string(forKey: Self.rimProfileKey))
         keepImportedArchives = d.object(forKey: Self.keepImportedArchivesKey) as? Bool ?? true
         iphoneKeepRequestedOnPhone = d.object(forKey: Self.iphoneKeepRequestedOnPhoneKey) as? Bool ?? false
         iphoneAutoRead = d.object(forKey: Self.iphoneAutoReadKey) as? Bool ?? true
+        batteryShowsRawIPhone = d.object(forKey: Self.batteryShowsRawIPhoneKey) as? Bool ?? false
         let storedFolder = d.string(forKey: Self.iphoneArchiveFolderKey)
         iphoneArchiveFolder = (storedFolder?.isEmpty ?? true) ? nil : storedFolder
         snapshotMinutes = Self.resolveSnapshotMinutes(raw: d.object(forKey: Self.snapshotMinutesKey) as? Int)

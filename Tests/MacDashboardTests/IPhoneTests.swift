@@ -108,6 +108,7 @@ extension SerialTests {
             #expect(b.temperatureC == 30.89, "iPhone: parse(dict:) temperature 30.89 C")
             #expect(b.externalConnected && !b.isCharging && b.maxCapacityMAh == 4933 && b.designCapacityMAh == 5030,
                   "iPhone: parse(dict:) power state and capacities")
+            #expect(b.settingsBasisMAh == nil, "iPhone: parse(dict:) top-level AppleRawMaxCapacity -> no separate Settings basis")
 
             // iOS 26.x shape: top-level AppleRawMaxCapacity wins even when BatteryData carries
             // NominalChargeCapacity (Nominal would give 97; Apple's Settings shows 98).
@@ -117,6 +118,7 @@ extension SerialTests {
             let b26 = BatteryInspector.parse(dict: shape26)
             #expect(b26.healthPercent == 98 && b26.maxCapacityMAh == 4915 && b26.designCapacityMAh == 5030,
                   "iPhone: parse(dict:) 26.x shape keeps the AppleRawMaxCapacity basis (got \(String(describing: b26.healthPercent)))")
+            #expect(b26.settingsBasisMAh == nil, "iPhone: parse(dict:) 26.x shape has no iOS 27 Settings basis")
 
             // iOS 27.0 shape: no top-level capacities, no children; capacities in BatteryData.
             let shape27: [String: Any] = ["CycleCount": 666, "CurrentCapacity": 86, "MaxCapacity": 100,
@@ -129,6 +131,7 @@ extension SerialTests {
                   "iPhone: parse(dict:) iOS 27 health 86% from FullChargeCapacity 3771/4395 (got \(String(describing: b27.healthPercent)))")
             #expect(b27.designCapacityMAh == 4395 && b27.cycleCount == 666 && b27.percent == 86,
                   "iPhone: parse(dict:) iOS 27 design capacity, cycles, charge")
+            #expect(b27.settingsBasisMAh == 3732, "iPhone: parse(dict:) iOS 27 Settings basis = NominalChargeCapacity")
             #expect(b27.currentCapacityMAh == nil,
                   "iPhone: parse(dict:) iOS 27 RemainingCapacity is not mapped")
 
@@ -136,6 +139,7 @@ extension SerialTests {
             let b27nominal = BatteryInspector.parse(dict: ["BatteryData": ["DesignCapacity": 4395, "NominalChargeCapacity": 3732] as [String: Any]])
             #expect(b27nominal.healthPercent == 85 && b27nominal.maxCapacityMAh == nil,
                   "iPhone: parse(dict:) iOS 27 without FullChargeCapacity -> Nominal basis 85%")
+            #expect(b27nominal.settingsBasisMAh == 3732, "iPhone: parse(dict:) iOS 27 Nominal-only reply keeps the Settings basis")
 
             // Nothing to compute from: no crash, nil health and capacities.
             let none = [BatteryInspector.parse(dict: [:]),
@@ -431,6 +435,34 @@ extension SerialTests {
         #expect(IPhoneData.healthTone(shown: 100) == nil)
         #expect(IPhoneData.healthTone(shown: nil) == nil)
         #expect(IPhoneData.healthTone(shown: .nan) == nil)
+    }
+
+    @Test func liveHealthBasis() {
+        let fixture: [String: Any] = ["CycleCount": 268, "DesignCapacity": 5030, "AppleRawMaxCapacity": 4933,
+                                      "CurrentCapacity": 80, "Temperature": 3089, "Voltage": 4234,
+                                      "IsCharging": false, "ExternalConnected": true]
+        let shape26: [String: Any] = ["CycleCount": 269, "CurrentCapacity": 79, "AppleRawMaxCapacity": 4915,
+                                      "DesignCapacity": 5030,
+                                      "BatteryData": ["DesignCapacity": 5030, "NominalChargeCapacity": 4865] as [String: Any]]
+        let shape27: [String: Any] = ["CycleCount": 666, "CurrentCapacity": 86, "MaxCapacity": 100,
+                                      "BatteryData": ["DesignCapacity": 4395, "FullChargeCapacity": 3771,
+                                                      "NominalChargeCapacity": 3732, "AbsoluteCapacity": 3282,
+                                                      "RemainingCapacity": 3222, "CurrentCapacity": 86,
+                                                      "MaxCapacity": 100] as [String: Any]]
+        let nominalOnly: [String: Any] = ["BatteryData": ["DesignCapacity": 4395, "NominalChargeCapacity": 3732] as [String: Any]]
+        let b = BatteryInspector.parse(dict: fixture), b26 = BatteryInspector.parse(dict: shape26)
+        let b27 = BatteryInspector.parse(dict: shape27), b27nominal = BatteryInspector.parse(dict: nominalOnly)
+        func close(_ v: Double?, _ x: Double) -> Bool { v.map { abs($0 - x) < 0.001 } ?? false }
+        #expect(close(IPhoneData.preciseLiveHealth(b27, prefersRaw: false), 84.915))
+        #expect(close(IPhoneData.preciseLiveHealth(b27, prefersRaw: true), 85.802))
+        #expect(close(IPhoneData.preciseLiveHealth(b26, prefersRaw: false), 97.714))
+        #expect(close(IPhoneData.preciseLiveHealth(b26, prefersRaw: true), 97.714))
+        #expect(close(IPhoneData.preciseLiveHealth(b27nominal, prefersRaw: false), 84.915))
+        #expect(IPhoneData.preciseLiveHealth(b27nominal, prefersRaw: true) == nil, "no full-charge capacity")
+        #expect(IPhoneData.historyHealthPercent(b27) == 85)
+        #expect(IPhoneData.historyHealthPercent(b26) == 98)
+        #expect(IPhoneData.historyHealthPercent(b) == 98)
+        #expect(IPhoneData.historyHealthPercent(BatteryInspector.parse(dict: [:])) == nil)
     }
 
     @Test func cyclesBoundaries() {
