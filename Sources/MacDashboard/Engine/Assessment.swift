@@ -25,11 +25,6 @@ enum Assess {
     // machine parameter it scales with. Values are fixed by the block spec; do not
     // re-tune them to make a fixture pass.
 
-    /// Cycles below which a capacity under 80 % counts as early wear. Mechanism:
-    /// `BatteryInfo.maxCapacity` + `cycles`. Parameter: rated cycle life (1000 cycles to
-    /// 80 % on modern Mac notebooks); 800 is 80 % of that life.
-    private static let batteryEarlyWearCycles = 800
-
     static func memoryPressureSeverity(_ level: MemoryPressureLevel?) -> Severity? {
         switch level {
         case .warn: return .warn
@@ -38,7 +33,7 @@ enum Assess {
         }
     }
 
-    static func assess(report: FullReport, live: LiveSnapshot, language: AppLanguage, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, claudeAttempt: ClaudeBackupAttempt? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleDays * 24, lowSpacePercent: Int = AppSettings.defaultLowSpacePercent, claudeLogPath: String = BackupLog.logURL.path, now: Date = Date()) -> Assessment {
+    static func assess(report: FullReport, live: LiveSnapshot, language: AppLanguage, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, claudeAttempt: ClaudeBackupAttempt? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleDays * 24, lowSpacePercent: Int = AppSettings.defaultLowSpacePercent, claudeLogPath: String = BackupLog.logURL.path, batteryRawPercent: Int? = nil, batteryPrefersRaw: Bool = false, now: Date = Date()) -> Assessment {
         var a = Assessment()
         var items: [AttentionItem] = []
         let S = language.strings
@@ -79,29 +74,32 @@ enum Assess {
             }
         }
 
-        // --- battery: static fields from the report, falling back field by field to the live sample (BatteryInfo.merged) ---
+        // --- battery (BATTERY-HEALTH-UNIFY): ONE rule, `BatteryHealth.classify`, shared with the Battery page and the
+        // iPhone. Input: Apple's «Maximum Capacity» (report first, then live — BatteryInfo.merged), or the raw ioreg
+        // ratio when the user chose it (macShownPercent, D5: the verdict judges the shown number).
+        // Service supersedes worn: a battery macOS flags for service raises only the condition item (D3).
         let batt = BatteryInfo.merged(live: live.battery, report: report.battery)
-        if let cap = batt?.maxCapacity {
-            if cap < 70 {
-                let action = AdviceAction.settingsPane(AdvicePanes.battery)
-                let text = S.assessBatteryCapacityLow(cap)
-                items.append(AttentionItem(kind: .batteryCapacity, sev: .serious, label: S.attnLabelBatteryCapacity,
-                                           detail: S.attnDetailBatteryCapacity(cap), fullText: text,
-                                           action: action, why: S.attnWhyBatteryWorn))
-            } else if cap < 80, (batt?.cycles ?? 0) < batteryEarlyWearCycles {
+        let shown = BatteryHealth.macShownPercent(apple: batt?.maxCapacity, raw: batteryRawPercent,
+                                                  prefersRaw: batteryPrefersRaw)
+        a.battShownPercent = shown
+        switch BatteryHealth.classify(healthPercent: shown, condition: batt?.condition) {
+        case .service:
+            let cond = (batt?.condition ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let action = AdviceAction.settingsPane(AdvicePanes.battery)
+            let text = S.assessBatteryConditionBad(cond)
+            items.append(AttentionItem(kind: .batteryCondition, sev: .serious, label: S.attnLabelBatteryCondition,
+                                       detail: S.attnDetailBatteryCondition(cond), fullText: text,
+                                       action: action, why: S.attnWhyBatteryService))
+        case .worn:
+            if let cap = shown {
                 let action = AdviceAction.settingsPane(AdvicePanes.battery)
                 let text = S.assessBatteryCapacityWarn(cap)
                 items.append(AttentionItem(kind: .batteryCapacity, sev: .warn, label: S.attnLabelBatteryCapacity,
                                            detail: S.attnDetailBatteryCapacity(cap), fullText: text,
                                            action: action, why: S.attnWhyBatteryWorn))
             }
-        }
-        if let cond = batt?.condition, !cond.isEmpty, cond != "Normal" {
-            let action = AdviceAction.settingsPane(AdvicePanes.battery)
-            let text = S.assessBatteryConditionBad(cond)
-            items.append(AttentionItem(kind: .batteryCondition, sev: .serious, label: S.attnLabelBatteryCondition,
-                                       detail: S.attnDetailBatteryCondition(cond), fullText: text,
-                                       action: action, why: S.attnWhyBatteryService))
+        case .normal, .unknown:
+            break
         }
 
         // --- security (nil = unknown ⇒ silent; only an explicit false warns) ---

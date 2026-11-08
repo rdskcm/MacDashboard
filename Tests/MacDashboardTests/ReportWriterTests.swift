@@ -139,7 +139,7 @@ extension SerialTests {
                 k("CPU") + "25.7% · load 2.10 · 8 cores · SoC 48 °C",
                 k("MEMORY") + "9.5 of 16 GB · pressure low · swap 512 MB",
                 k("STORAGE") + "187.6 of 494.4 GB free · purgeable 19.7 GB",
-                k("BATTERY") + "82%, charging · capacity 88% · 412 cycles",
+                k("BATTERY") + "82%, charging · health 88% · 412 cycles",
                 k("SECURITY") + "FileVault · Gatekeeper · SIP · Firewall off",
                 k("BACKUPS") + "Claude backup 5 h ago · 3 local snapshots",
                 k("UPTIME") + "3 d 4 h",
@@ -181,7 +181,7 @@ extension SerialTests {
             #expect(rows.contains(k("ПРОЦЕССОР") + "25,7 % · нагрузка 2,10 · 8 ядер · SoC 48 °C"), "renderRU CPU")
             #expect(rows.contains(k("ПАМЯТЬ") + "9,5 из 16 ГБ · давление низкое · swap 512 МБ"), "renderRU MEMORY")
             #expect(rows.contains(k("ХРАНИЛИЩЕ") + "свободно 187,6 из 494,4 ГБ · очищаемое 19,7 ГБ"), "renderRU STORAGE")
-            #expect(rows.contains(k("БАТАРЕЯ") + "82 %, заряжается · ёмкость 88 % · 412 циклов"), "renderRU BATTERY")
+            #expect(rows.contains(k("БАТАРЕЯ") + "82 %, заряжается · здоровье 88 % · 412 циклов"), "renderRU BATTERY")
             #expect(rows.contains(k("ЗАЩИТА") + "FileVault · Gatekeeper · SIP · брандмауэр выкл."), "renderRU SECURITY")
             #expect(rows.contains(k("КОПИИ") + "Бэкап Claude 5 ч назад · 3 локальных снимка"), "renderRU BACKUPS")
         }

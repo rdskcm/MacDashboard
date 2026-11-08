@@ -2,27 +2,6 @@
 // REDESIGN-BATTERY: pure state, texts, tones, thresholds and the capacity-history pick of the Battery page (handoff 06-battery).
 import Foundation
 
-enum BatteryHealthClass: Equatable, Sendable { case normal, worn, service, unknown }
-
-/// Battery thresholds — the ONLY health → class rule on the Battery page (D6: Assessment keeps its own attention rules).
-enum BatteryHealth {
-    /// Apple's service threshold: a Mac notebook battery is designed to retain up to 80 % of its original capacity
-    /// at the rated cycle count (Apple Support 102888). Below it the page shows the amber note.
-    static let wornBelowPercent = 80
-
-    /// `system_profiler` Condition other than "Normal" (trimmed, case-sensitive) and non-empty.
-    static func isServiceCondition(_ condition: String?) -> Bool {
-        guard let c = condition?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty else { return false }
-        return c != "Normal"
-    }
-
-    static func classify(healthPercent: Int?, condition: String?) -> BatteryHealthClass {
-        if isServiceCondition(condition) { return .service }
-        guard let hp = healthPercent else { return .unknown }
-        return hp < wornBelowPercent ? .worn : .normal
-    }
-}
-
 enum BatteryPagePhase: Equatable { case reading, live, failed(BlockFailure, lastGoodAt: Date?) }
 enum BatteryTagKind: Equatable { case healthy, worn, service, reading, failed }
 /// Tones the view maps to DS3 colours (green / amber / hot; neutral = muted panel / dimmed value;
@@ -47,6 +26,8 @@ struct BatteryPageModel: Equatable {
         var condition: String?            // model.report.battery?.condition ?? model.battery?.condition
         var block: BlockPhase             // model.batteryBlock.phase
         var history: [MacHistoryEntry]    // model.history.state.mac_history (chronological, as stored)
+        var capacityPercent: Int? = nil   // Apple's «Maximum Capacity» — BatteryInfo.merged(live:report: homeReport)?.maxCapacity
+        var prefersRaw: Bool = false      // Settings › Monitoring raw switch (AppSettings.batteryShowsRawMac)
     }
     static let refreshSeconds = 3
 
@@ -78,7 +59,12 @@ struct BatteryPageModel: Equatable {
         let sp = PerfSignposts.begin(PerfSignposts.batteryMake)
         defer { sp.end() }
         let d = i.detail
-        let hp = d?.healthPercent
+        // BATTERY-HEALTH-UNIFY (D2): show and judge the number Home shows — Apple's «Maximum Capacity», or the ioreg
+        // ratio with the raw switch on. Page-only fallback: the ioreg ratio when system_profiler has none. No read
+        // yet → nil, so the reading/failed states stay as before.
+        let hp = d == nil ? nil
+            : (BatteryHealth.macShownPercent(apple: i.capacityPercent, raw: d?.healthPercent, prefersRaw: i.prefersRaw)
+               ?? d?.healthPercent)
         let health = BatteryHealth.classify(healthPercent: hp, condition: i.condition)
 
         let phase: BatteryPagePhase

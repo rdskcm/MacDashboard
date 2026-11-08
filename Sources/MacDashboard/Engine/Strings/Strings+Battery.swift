@@ -150,7 +150,7 @@ extension StringsEN: BatteryStrings {
     var batteryDetailSerial: String { "Serial number" }
     var batteryDetailMfgDate: String { "Manufacture date" }
     func batSub(_ cycles: Int?) -> String { cycles.map { "internal · \(fmtGrouped($0, language: .en)) " + ($0 == 1 ? "cycle" : "cycles") } ?? "internal" }
-    func batTagCapacity(_ pct: String) -> String { "capacity \(pct)" }
+    func batTagCapacity(_ pct: String) -> String { "health \(pct)" }
     var batTagReadFailed: String { "Read failed" }
     var batTagUnknown: String { "health unknown" }
     func batNowCaption(_ time: String) -> String { "updated \(time) · every 3 s" }
@@ -158,9 +158,9 @@ extension StringsEN: BatteryStrings {
     var batFailNoReading: String { "Couldn’t read battery data: ioreg reported no battery." }
     var batFailShowingSaved: String { "Showing the last saved values." }
     var batHealthNote: String { "maximum vs design" }
-    var batWornNote: String { "Capacity is below 80%: the battery is nearing the service threshold. Replace it at an Apple service provider." }
+    var batWornNote: String { "Health is below 80%: the battery is nearing the service threshold. Replace it at an Apple service provider." }
     func batServiceNote(_ parts: [String]) -> String { "macOS recommends service" + (parts.isEmpty ? "" : ": " + parts.joined(separator: " and ")) + ". Runtime may be shorter and the Mac may shut down unexpectedly. Replace it at an Apple service provider." }
-    func batServiceCapacity(_ pct: String) -> String { "capacity is \(pct)" }
+    func batServiceCapacity(_ pct: String) -> String { "health is \(pct)" }
     var batServiceCycles: String { "the cycle count exceeds the rated limit" }
     var batBatterySettings: String { "Battery Settings" }
     var batBatterySettingsA11y: String { "Open the system Battery settings" }
@@ -169,7 +169,7 @@ extension StringsEN: BatteryStrings {
     func batHours(_ s: String) -> String { "\(s) h" }
     var batEstimate: String { "estimate" }
     func batCode(_ code: String) -> String { "code \(code)" }
-    var batHistoryTitle: String { "Capacity history" }
+    var batHistoryTitle: String { "Health history" }
     func batHistoryDelta(_ signedPct: String, months: Int) -> String { "\(signedPct) over \(months) " + (months == 1 ? "month" : "months") }
     var batHistoryNotEnough: String { "not enough data for a trend yet" }
     var batHistoryFoot: String { "full chart in History" }
@@ -238,7 +238,7 @@ extension StringsRU: BatteryStrings {
     var batteryDetailSerial: String { "Серийный номер" }
     var batteryDetailMfgDate: String { "Дата изготовления" }
     func batSub(_ cycles: Int?) -> String { cycles.map { "встроенная · \(fmtGrouped($0, language: .ru)) " + ruPlural($0, "цикл", "цикла", "циклов") } ?? "встроенная" }
-    func batTagCapacity(_ pct: String) -> String { "ёмкость \(pct)" }
+    func batTagCapacity(_ pct: String) -> String { "здоровье \(pct)" }
     var batTagReadFailed: String { "Ошибка чтения" }
     var batTagUnknown: String { "здоровье неизвестно" }
     func batNowCaption(_ time: String) -> String { "обновлено \(time) · каждые 3 с" }
@@ -246,9 +246,9 @@ extension StringsRU: BatteryStrings {
     var batFailNoReading: String { "Не удалось прочитать данные батареи: ioreg не нашёл батарею." }
     var batFailShowingSaved: String { "Показаны последние сохранённые значения." }
     var batHealthNote: String { "максимальная от проектной" }
-    var batWornNote: String { "Ёмкость ниже 80 %: батарея приближается к сервисному порогу. Замена — в сервисе Apple." }
+    var batWornNote: String { "Здоровье ниже 80 %: батарея приближается к сервисному порогу. Замена — в сервисе Apple." }
     func batServiceNote(_ parts: [String]) -> String { "macOS рекомендует обслуживание" + (parts.isEmpty ? "" : ": " + parts.joined(separator: ", ")) + ". Mac может работать от батареи меньше или внезапно выключаться. Замена — в сервисе Apple." }
-    func batServiceCapacity(_ pct: String) -> String { "ёмкость \(pct)" }
+    func batServiceCapacity(_ pct: String) -> String { "здоровье \(pct)" }
     var batServiceCycles: String { "циклов больше расчётных" }
     var batBatterySettings: String { "Настройки батареи" }
     var batBatterySettingsA11y: String { "Открыть системные настройки батареи" }
@@ -257,7 +257,7 @@ extension StringsRU: BatteryStrings {
     func batHours(_ s: String) -> String { "\(s) ч" }
     var batEstimate: String { "оценка" }
     func batCode(_ code: String) -> String { "код \(code)" }
-    var batHistoryTitle: String { "История ёмкости" }
+    var batHistoryTitle: String { "История здоровья" }
     func batHistoryDelta(_ signedPct: String, months: Int) -> String { "\(signedPct) за \(months) " + ruPlural(months, "месяц", "месяца", "месяцев") }
     var batHistoryNotEnough: String { "данных для тренда пока мало" }
     var batHistoryFoot: String { "полный график — в разделе «История»" }

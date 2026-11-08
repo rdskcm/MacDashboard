@@ -214,7 +214,7 @@ enum IPhoneData {
     static let ratedCyclesLegacy = 500
     /// First `iPhoneM,m` major number that is iPhone 15 Pro or later. Source: api.ipsw.me /v4/devices (iPhone15,4/15,5 handled separately).
     static let modernModelMajor = 16
-    /// Amber share of the rated cycle life. Source: Assessment.batteryEarlyWearCycles (80 % of rated life).
+    /// Amber share of the rated cycle life. Source: the handoff's cycles tone, ≥ 800 «aging» of 1000 (handoff DESIGN-SPEC.md:109); no Apple source.
     static let cyclesAmberShare = 0.8
     /// Charge at or below which the tile turns amber. Source: iOS Low Power Mode prompt at 20 % (Apple Wiki, Low Power Mode).
     static let chargeAmberPercent = 20
@@ -255,6 +255,12 @@ enum IPhoneData {
         if celsius >= temperatureHotC { return .hot }
         if celsius >= temperatureAmberC { return .amber }
         return nil
+    }
+
+    /// Device-list tile health bar: amber when the shared rule says worn (`BatteryHealth`, < 80 %), else nil (the view
+    /// keeps accent / muted). `shown` is the health the tile displays, at the precision it displays it.
+    static func healthTone(shown: Double?) -> HomeTone? {
+        BatteryHealth.classify(precisePercent: shown, condition: nil) == .worn ? .amber : nil
     }
 
     // MARK: - Auto-read on connect (REDESIGN-IPHONE)

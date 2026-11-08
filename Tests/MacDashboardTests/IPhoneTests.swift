@@ -424,6 +424,15 @@ extension SerialTests {
         #expect(IPhoneData.temperatureTone(nil) == nil)
     }
 
+    @Test func healthToneBoundaries() {
+        #expect(IPhoneData.healthTone(shown: 79.9) == .amber)
+        #expect(IPhoneData.healthTone(shown: 80.0) == nil)
+        #expect(IPhoneData.healthTone(shown: 76) == .amber)
+        #expect(IPhoneData.healthTone(shown: 100) == nil)
+        #expect(IPhoneData.healthTone(shown: nil) == nil)
+        #expect(IPhoneData.healthTone(shown: .nan) == nil)
+    }
+
     @Test func cyclesBoundaries() {
         let old = "iPhone14,7", modern = "iPhone17,1"
         #expect(IPhoneData.cyclesTone(399, productType: old) == nil)

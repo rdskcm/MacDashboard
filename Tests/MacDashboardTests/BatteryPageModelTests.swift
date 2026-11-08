@@ -14,8 +14,10 @@ private func batDetail(_ tweak: (inout BatteryDetail) -> Void = { _ in }) -> Bat
 }
 
 private func batInput(detail: BatteryDetail? = batDetail(), condition: String? = "Normal",
-                      block: BlockPhase = .ok(at: t0), history: [MacHistoryEntry] = []) -> BatteryPageModel.Input {
-    BatteryPageModel.Input(detail: detail, condition: condition, block: block, history: history)
+                      block: BlockPhase = .ok(at: t0), history: [MacHistoryEntry] = [],
+                      capacity: Int? = nil, raw: Bool = false) -> BatteryPageModel.Input {
+    BatteryPageModel.Input(detail: detail, condition: condition, block: block, history: history,
+                           capacityPercent: capacity, prefersRaw: raw)
 }
 
 @MainActor private func withLanguage(_ lang: AppLanguage, _ body: @MainActor () -> Void) {
@@ -42,6 +44,56 @@ extension SerialTests {
             #expect(BatteryHealth.classify(healthPercent: 95, condition: " Normal ") == .normal)
         }
 
+        @Test func judgesShownNumber() {
+            withLanguage(.en) {
+                var m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = 76 }, capacity: 81))
+                #expect(m.tag == .healthy)
+                #expect(m.healthHero.value == "81%")
+
+                m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = 88 }, capacity: 76))
+                #expect(m.tag == .worn)
+                #expect(m.tagText == "health 76%")
+                #expect(m.healthHero.value == "76%")
+                #expect(m.healthNote?.tone == .amber)
+
+                m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = 76 }, capacity: nil))
+                #expect(m.tag == .worn, "page fallback to the ioreg ratio (P3)")
+
+                m = BatteryPageModel.make(batInput(detail: nil, block: .ok(at: t0), capacity: 76))
+                #expect(m.tag == .reading)
+                #expect(m.healthHero.value == "—")
+
+                m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = 74 }, condition: "Service Recommended", capacity: 71))
+                #expect(m.tag == .service)
+                #expect(m.healthNote?.text.contains("71%") == true)
+                #expect(m.healthNote?.text.contains("74%") == false)
+
+                m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = 78 }, capacity: 82, raw: true))
+                #expect(m.tag == .worn)
+                #expect(m.healthHero.value == "78%")
+                m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = nil }, capacity: 82, raw: true))
+                #expect(m.tag == .healthy)
+                #expect(m.healthHero.value == "82%")
+            }
+        }
+
+        @Test func batteryRuleMatchesAssessment() {
+            for cap in [nil, 0, 69, 70, 79, 80, 81, 100] as [Int?] {
+                for cond in [nil, "", "Normal", "Service Recommended", "Replace Now"] as [String?] {
+                    var r = FullReport()
+                    r.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: nil, condition: cond, maxCapacity: cap)
+                    let a = Assess.assess(report: r, live: LiveSnapshot(), language: .en)
+                    let tag = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = cap }, condition: cond, capacity: cap)).tag
+                    let msg = "cap \(String(describing: cap)) cond \(String(describing: cond))"
+                    #expect((tag == .service) == a.items.contains { $0.kind == .batteryCondition }, "\(msg)")
+                    #expect((tag == .worn) == a.items.contains { $0.kind == .batteryCapacity }, "\(msg)")
+                    if tag != .service && tag != .worn {
+                        #expect(!a.items.contains { $0.kind == .batteryCondition || $0.kind == .batteryCapacity } && (tag == .healthy || tag == .reading), "\(msg)")
+                    }
+                }
+            }
+        }
+
         @Test func conditionText() {
             let known = ["Normal", "Service Recommended", "Replace Soon", "Replace Now", "Check Battery"]
             withLanguage(.en) {
@@ -62,7 +114,7 @@ extension SerialTests {
             withLanguage(.en) {
                 let m = BatteryPageModel.make(batInput())
                 #expect(m.tag == .worn)
-                #expect(m.tagText == "capacity 76%")
+                #expect(m.tagText == "health 76%")
                 #expect(m.sub == "internal · 412 cycles")
                 #expect(m.symbol == "battery.100percent.bolt")
                 #expect(m.nowCaption == "updated \(CPUPageModel.hhmmss(t0)) · every 3 s")
@@ -101,7 +153,7 @@ extension SerialTests {
         @Test func liveChargingRU() {
             withLanguage(.ru) {
                 let m = BatteryPageModel.make(batInput())
-                #expect(m.tagText == "ёмкость 76 %")
+                #expect(m.tagText == "здоровье 76 %")
                 #expect(m.sub == "встроенная · 412 циклов")
                 #expect(m.nowTiles[0].value == "+28,4 Вт")
                 #expect(m.nowTiles[1].value == "+2\u{2009}140 мА")
@@ -146,11 +198,11 @@ extension SerialTests {
                 #expect(m.healthTiles[4].dot == .hot)
                 #expect(m.healthTiles[4].valueTone == .hot)
                 #expect(m.healthNote?.tone == .hot)
-                #expect(m.healthNote?.text == "macOS recommends service: capacity is 71% and the cycle count exceeds the rated limit. Runtime may be shorter and the Mac may shut down unexpectedly. Replace it at an Apple service provider.")
+                #expect(m.healthNote?.text == "macOS recommends service: health is 71% and the cycle count exceeds the rated limit. Runtime may be shorter and the Mac may shut down unexpectedly. Replace it at an Apple service provider.")
             }
             withLanguage(.ru) {
                 let m = BatteryPageModel.make(input)
-                #expect(m.healthNote?.text == "macOS рекомендует обслуживание: ёмкость 71 %, циклов больше расчётных. Mac может работать от батареи меньше или внезапно выключаться. Замена — в сервисе Apple.")
+                #expect(m.healthNote?.text == "macOS рекомендует обслуживание: здоровье 71 %, циклов больше расчётных. Mac может работать от батареи меньше или внезапно выключаться. Замена — в сервисе Apple.")
             }
         }
 

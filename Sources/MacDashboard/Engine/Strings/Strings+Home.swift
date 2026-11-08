@@ -184,7 +184,7 @@ extension StringsEN: HomeStrings {
     var homeKVProcesses: String { "Processes" }
     var homeKVFailing: String { "failing" }
     func homeKVWorn(_ pct: Int) -> String { "\(pct)% worn" }
-    var homeKVCapacity: String { "Capacity" }
+    var homeKVCapacity: String { "Health" }
     func homeKVProtection(_ on: Int) -> String { "\(on) of 4" }
     var homeKVNone: String { "none" }
     var homeKVSnapshots: String { "Snapshots" }
@@ -300,7 +300,7 @@ extension StringsRU: HomeStrings {
     var homeKVProcesses: String { "Процессов" }
     var homeKVFailing: String { "сбой диска" }
     func homeKVWorn(_ pct: Int) -> String { "износ \(pct) %" }
-    var homeKVCapacity: String { "Ёмкость" }
+    var homeKVCapacity: String { "Здоровье" }
     func homeKVProtection(_ on: Int) -> String { "\(on) из 4" }
     var homeKVNone: String { "нет" }
     var homeKVSnapshots: String { "Снимки" }

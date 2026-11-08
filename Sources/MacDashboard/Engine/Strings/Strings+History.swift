@@ -11,7 +11,7 @@ protocol HistoryStrings {
     func historySince(day: Int, month: Int, year: Int?) -> String   // "since Sep 2, 2025"
     func historyChartSinceA11y(_ since: String) -> String      // "Chart shows data since Oct 3"
     var historyTitleDisk: String { get }                       // "Disk: used"
-    var historyTitleBattery: String { get }                    // "Battery: maximum capacity"
+    var historyTitleBattery: String { get }                    // "Battery health"
     var historyTitleCycles: String { get }                     // "Battery: charge cycles"
     var historyTitleSwap: String { get }                       // "Swap: used"
     var historyAllMetrics: String { get }                      // "All metrics"
@@ -69,7 +69,7 @@ extension StringsEN: HistoryStrings {
     }
     func historyChartSinceA11y(_ since: String) -> String { "Chart shows data \(since)" }
     var historyTitleDisk: String { "Disk: used" }
-    var historyTitleBattery: String { "Battery: maximum capacity" }
+    var historyTitleBattery: String { "Battery health" }
     var historyTitleCycles: String { "Battery: charge cycles" }
     var historyTitleSwap: String { "Swap: used" }
     var historyAllMetrics: String { "All metrics" }
@@ -138,7 +138,7 @@ extension StringsRU: HistoryStrings {
     }
     func historyChartSinceA11y(_ since: String) -> String { "На графике данные \(since)" }
     var historyTitleDisk: String { "Диск: занято" }
-    var historyTitleBattery: String { "Батарея: максимальная ёмкость" }
+    var historyTitleBattery: String { "Здоровье батареи" }
     var historyTitleCycles: String { "Батарея: циклы зарядки" }
     var historyTitleSwap: String { "Swap: занято" }
     var historyAllMetrics: String { "Все метрики" }
