@@ -169,7 +169,7 @@ content-system-startup-flow-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-system-startup-fail-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-system-brew-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-system-energy-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
-content-system-energy-result-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
+content-system-energy-result-dark	2026-11-08	27.2	Xcode 27.2	20c56e2-dirty
 content-system-narrow-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-system-bars-dark	2026-11-04	27.2	Xcode 27.2	ab64412-dirty
 content-system-sleep-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
@@ -178,7 +178,7 @@ content-system-startup-flow-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-system-startup-fail-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-system-brew-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-system-energy-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
-content-system-energy-result-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
+content-system-energy-result-light	2026-11-08	27.2	Xcode 27.2	20c56e2-dirty
 content-system-narrow-light	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
 content-system-bars-light	2026-11-04	27.2	Xcode 27.2	ab64412-dirty
 content-history-tooltip-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty
@@ -211,8 +211,8 @@ content-security-crash-actions-light	2026-11-04	27.2	Xcode 27.2	81ba45d-dirty
 content-security-crash-actions-narrow-light	2026-11-04	27.2	Xcode 27.2	81ba45d-dirty
 content-settings-monitoring-denied-dark	2026-11-05	27.2	Xcode 27.2	0965167-dirty
 content-settings-monitoring-denied-light	2026-11-05	27.2	Xcode 27.2	0965167-dirty
-content-settings-iphone-movefailed-dark	2026-11-05	27.2	Xcode 27.2	0965167-dirty
-content-settings-iphone-movefailed-light	2026-11-05	27.2	Xcode 27.2	0965167-dirty
+content-settings-iphone-movefailed-dark	2026-11-08	27.2	Xcode 27.2	20c56e2-dirty
+content-settings-iphone-movefailed-light	2026-11-08	27.2	Xcode 27.2	20c56e2-dirty
 content-backdrop-window-dark	2026-10-26	27.0.1	Xcode 27.1	c7e6d75+host
 content-backdrop-window-light	2026-10-26	27.0.1	Xcode 27.1	c7e6d75+host
 content-spinner-roles-dark	2026-10-28	27.2	Xcode 27.1	49a058b-dirty

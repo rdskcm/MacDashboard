@@ -108,7 +108,7 @@ extension StringsEN: AttentionStrings {
     }
     func assessWakeHolders(_ entries: [String]) -> String {
         let head = entries.count == 1 ? "1 program is keeping the Mac awake" : "\(entries.count) programs are keeping the Mac awake"
-        return "\(head): \(entries.joined(separator: "; "))."
+        return "\(head): \(entries.joined(separator: ", "))."
     }
     func assessBatteryCapacityLow(_ cap: Int) -> String { "Battery capacity is \(cap)% of new — consider a replacement." }
     func assessBatteryCapacityWarn(_ cap: Int) -> String { "Battery capacity is \(cap)% — nearing the service threshold (80%)." }
@@ -170,21 +170,21 @@ extension StringsEN: AttentionStrings {
     var attnDetailClaudeBackupFailed: String { "last attempt failed" }
     var attnDetailClaudeBackupInterrupted: String { "last attempt did not finish" }
     // TRIAGE-THRESHOLDS-REVIEW: why it matters
-    var attnWhyDiskFull: String { "macOS needs free space for updates and for swap; without it, updates fail and apps slow down or can't save files." }
-    var attnWhyDiskFullSoon: String { "A macOS update alone needs tens of gigabytes free; freeing space now avoids a failed update later." }
+    var attnWhyDiskFull: String { "macOS needs free space for updates and for swap. Without it, updates fail and apps slow down or can't save files." }
+    var attnWhyDiskFullSoon: String { "A macOS update alone needs tens of gigabytes free. Freeing space now avoids a failed update later." }
     var attnWhyMemPressure: String { "macOS reports that memory has run out and the disk is standing in for it, so apps slow down." }
     var attnWhyFileVault: String { "Without FileVault your password isn't needed to unlock the disk, so anyone holding the Mac has an easier path to your files." }
     var attnWhyGatekeeper: String { "Gatekeeper checks before first launch that an app comes from an identified developer and was checked by Apple for malware." }
     var attnWhySip: String { "System Integrity Protection stops any program, even one with administrator rights, from changing macOS system files." }
-    var attnWhyFirewall: String { "The firewall blocks unwanted incoming connections; it matters most on public Wi-Fi." }
-    var attnWhyUpdates: String { "macOS updates close security holes; Apple lists the fixes for every release." }
-    var attnWhyKernelPanic: String { "A kernel panic restarts the whole Mac and loses unsaved work; repeated panics usually point to a driver or hardware." }
+    var attnWhyFirewall: String { "The firewall blocks unwanted incoming connections. It matters most on public Wi-Fi." }
+    var attnWhyUpdates: String { "macOS updates close security holes. Apple lists the fixes for every release." }
+    var attnWhyKernelPanic: String { "A kernel panic restarts the whole Mac and loses unsaved work. Repeated panics usually point to a driver or hardware." }
     var attnWhyOwnCrash: String { "The report shows where the app failed and helps get it fixed." }
     var attnWhyTimeMachine: String { "Without a backup, a lost, stolen or broken Mac takes your files with it." }
     var attnWhyTimeMachineOverdue: String { "Files changed since the last backup exist only on this Mac." }
     var attnWhyClaudeBackup: String { "Claude sessions and settings changed since then exist only on this Mac." }
-    var attnWhySmartErrors: String { "The drive reports data it could not read back or a failure warning; files on it may already be damaged, so back up now." }
-    var attnWhySmartWear: String { "The drive has used most of its rated write endurance; it can work past 100 %, but plan a replacement and keep backups current." }
+    var attnWhySmartErrors: String { "The drive reports data it could not read back or a failure warning. Files on it may already be damaged, so back up now." }
+    var attnWhySmartWear: String { "The drive has used most of its rated write endurance. It can work past 100 %, but plan a replacement and keep backups current." }
     var attnWhyWakeHolders: String { "While a program holds this, the Mac doesn't go to sleep on its own, which drains the battery and keeps it warm." }
     var attnWhyBatteryWorn: String { "The battery now holds less than 80 % of its original capacity, so a full charge runs out sooner than when it was new. Apple designs Mac batteries to keep up to 80 % at their maximum cycle count." }
     var attnWhyBatteryService: String { "macOS has flagged this battery for service: it holds less charge than when new or isn't working normally. It's safe to keep using it, but Apple recommends having it checked." }
@@ -207,7 +207,7 @@ extension StringsRU: AttentionStrings {
     }
     func assessWakeHolders(_ entries: [String]) -> String {
         let n = entries.count
-        return "\(n) \(ruPlural(n, "программа не даёт", "программы не дают", "программ не дают")) Mac уснуть: \(entries.joined(separator: "; "))."
+        return "\(n) \(ruPlural(n, "программа не даёт", "программы не дают", "программ не дают")) Mac уснуть: \(entries.joined(separator: ", "))."
     }
     func assessBatteryCapacityLow(_ cap: Int) -> String { "Ёмкость батареи \(cap)% от новой — думайте о замене." }
     func assessBatteryCapacityWarn(_ cap: Int) -> String { "Ёмкость батареи \(cap)% — ресурс подходит к сервисному порогу (80%)." }
@@ -269,21 +269,21 @@ extension StringsRU: AttentionStrings {
     var attnDetailClaudeBackupFailed: String { "последняя попытка не удалась" }
     var attnDetailClaudeBackupInterrupted: String { "последняя попытка не завершилась" }
     // TRIAGE-THRESHOLDS-REVIEW: why it matters
-    var attnWhyDiskFull: String { "macOS нужно свободное место для обновлений и подкачки; без него обновления не ставятся, а приложения тормозят или не могут сохранить файлы." }
-    var attnWhyDiskFullSoon: String { "Одному обновлению macOS нужны десятки гигабайт свободного места; лучше освободить их заранее, чем получить сбой установки." }
+    var attnWhyDiskFull: String { "macOS нужно свободное место для обновлений и подкачки. Без него обновления не ставятся, а приложения тормозят или не могут сохранить файлы." }
+    var attnWhyDiskFullSoon: String { "Одному обновлению macOS нужны десятки гигабайт свободного места. Лучше освободить их заранее, чем получить сбой установки." }
     var attnWhyMemPressure: String { "macOS сообщает, что память закончилась и её подменяет диск, поэтому приложения замедляются." }
     var attnWhyFileVault: String { "Без FileVault для разблокировки диска не нужен пароль, и у того, кто получит Mac в руки, проще путь к вашим файлам." }
     var attnWhyGatekeeper: String { "Gatekeeper перед первым запуском проверяет, что приложение от известного разработчика и проверено Apple на вредоносный код." }
     var attnWhySip: String { "Защита целостности системы не даёт программам, даже с правами администратора, менять системные файлы macOS." }
-    var attnWhyFirewall: String { "Брандмауэр блокирует нежелательные входящие подключения; важнее всего это в публичных сетях Wi-Fi." }
-    var attnWhyUpdates: String { "Обновления macOS закрывают уязвимости; Apple публикует список исправлений к каждому выпуску." }
-    var attnWhyKernelPanic: String { "При панике ядра весь Mac перезагружается и несохранённая работа теряется; повторы обычно указывают на драйвер или железо." }
+    var attnWhyFirewall: String { "Брандмауэр блокирует нежелательные входящие подключения. Важнее всего это в публичных сетях Wi-Fi." }
+    var attnWhyUpdates: String { "Обновления macOS закрывают уязвимости. Apple публикует список исправлений к каждому выпуску." }
+    var attnWhyKernelPanic: String { "При панике ядра весь Mac перезагружается и несохранённая работа теряется. Повторные паники обычно указывают на драйвер или железо." }
     var attnWhyOwnCrash: String { "Отчёт показывает, где приложение упало, и помогает это исправить." }
     var attnWhyTimeMachine: String { "Без резервной копии потеря, кража или поломка Mac означает потерю файлов." }
     var attnWhyTimeMachineOverdue: String { "Файлы, изменённые после последней копии, есть только на этом Mac." }
     var attnWhyClaudeBackup: String { "Сессии и настройки Claude, изменённые с тех пор, есть только на этом Mac." }
-    var attnWhySmartErrors: String { "Накопитель сообщает о данных, которые не удалось прочитать, или о предупреждении об отказе; файлы на нём могут быть повреждены, сделайте копию сейчас." }
-    var attnWhySmartWear: String { "Накопитель израсходовал большую часть расчётного ресурса записи; он может работать и после 100 %, но планируйте замену и держите копии свежими." }
+    var attnWhySmartErrors: String { "Накопитель сообщает о данных, которые не удалось прочитать, или о предупреждении об отказе. Файлы на нём уже могут быть повреждены. Сделайте копию сейчас." }
+    var attnWhySmartWear: String { "Накопитель израсходовал большую часть расчётного ресурса записи. Он может работать и после 100 %, но планируйте замену и держите копии свежими." }
     var attnWhyWakeHolders: String { "Пока программа держит этот запрет, Mac не засыпает сам: батарея садится, корпус греется." }
     var attnWhyBatteryWorn: String { "Батарея теперь держит меньше 80 % исходной ёмкости, поэтому полного заряда хватает меньше, чем в новой. Apple рассчитывает батареи Mac на сохранение до 80 % к максимальному числу циклов." }
     var attnWhyBatteryService: String { "macOS пометила батарею для сервиса: она держит меньше заряда, чем новая, или работает не как положено. Пользоваться ею безопасно, но Apple советует её проверить." }

@@ -261,8 +261,9 @@ import Testing
             #expect(item.detail.hasSuffix(", ещё 2"), "WakeHolders: Assess RU, 3 holders -> detail ends with ', ещё 2' (got \(item.detail))")
             #expect(item.fullText.hasPrefix("3 программы не дают Mac уснуть: "),
                   "WakeHolders: Assess RU, 3 holders -> fullText prefix (got \(item.fullText))")
-            #expect(item.fullText.components(separatedBy: "; ").count - 1 == 2,
-                  "WakeHolders: Assess RU, 3 holders -> two '; ' separators")
+            #expect(item.fullText.components(separatedBy: ", ").count - 1 == 2,
+                  "WakeHolders: Assess RU, 3 holders -> two ', ' separators (got \(item.fullText))")
+            #expect(!item.fullText.contains(";"), "WakeHolders: Assess RU, 3 holders -> no semicolon (got \(item.fullText))")
         } else { Issue.record( "WakeHolders: Assess RU, 3 holders -> item present") }
 
         let assessFive = Assess.assess(report: FullReport(), live: LiveSnapshot(), language: .ru, wakeHolders: holdersOfCount(5))
