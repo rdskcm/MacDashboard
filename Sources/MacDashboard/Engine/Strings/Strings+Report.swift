@@ -160,7 +160,7 @@ extension StringsEN: ReportStrings {
     var reportSectionUpdates: String { "macOS UPDATES" }
     var reportSectionSmart: String { "EXTERNAL AND INTERNAL DISKS: SMART" }
     var reportSectionUnparsed: String { "UNRECOGNISED COMMAND OUTPUT (first lines)" }
-    var reportUnparsedHint: String { "MacDashboard could not read the output of these commands. Serial numbers and UUIDs are masked; attach this block to a bug report." }
+    var reportUnparsedHint: String { "MacDashboard could not read the output of these commands. Serial numbers and UUIDs are masked. Attach this block to a bug report." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(+\(n) more lines not shown)" }
     var reportNone: String { "(none)" }
     func reportUptime(_ v: String) -> String { "Uptime: \(v)" }
@@ -283,7 +283,7 @@ extension StringsRU: ReportStrings {
     var reportSectionUpdates: String { "ОБНОВЛЕНИЯ macOS" }
     var reportSectionSmart: String { "ВНЕШНИЕ И ВСТРОЕННЫЕ ДИСКИ: SMART" }
     var reportSectionUnparsed: String { "НЕРАСПОЗНАННЫЙ ВЫВОД КОМАНД (первые строки)" }
-    var reportUnparsedHint: String { "MacDashboard не смог разобрать вывод этих команд. Серийные номера и UUID скрыты; приложите этот блок к сообщению об ошибке." }
+    var reportUnparsedHint: String { "MacDashboard не смог разобрать вывод этих команд. Серийные номера и UUID скрыты. Приложите этот блок к сообщению об ошибке." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(ещё не показано строк: \(n))" }
     var reportNone: String { "(нет)" }
     func reportUptime(_ v: String) -> String { "Аптайм: \(v)" }

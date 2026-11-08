@@ -79,10 +79,10 @@ extension StringsEN: MemoryStrings {
     var memoryLegendSpeculative: String { "Speculative" }
     var memoryLegendFree: String { "Free" }
     var memoryNoteActive: String { "Memory that apps are using right now or have accessed recently." }
-    var memoryNoteWired: String { "Held by the macOS kernel and drivers; can't be swapped out or freed." }
+    var memoryNoteWired: String { "Held by the macOS kernel and drivers. It can't be swapped out or freed." }
     var memoryNoteOther: String { "Mostly compressed memory: macOS compresses rarely used pages instead of writing them to swap." }
-    var memoryNoteInactive: String { "Hasn't been used in a while and will be reclaimed when needed; often data from recently closed apps." }
-    var memoryNoteSpeculative: String { "Read from disk ahead of time, “just in case”; the first to be freed." }
+    var memoryNoteInactive: String { "Hasn't been used in a while and will be reclaimed when needed. Often it is data from recently closed apps." }
+    var memoryNoteSpeculative: String { "Read from disk ahead of time, “just in case”. It is the first to be freed." }
     var memoryNoteFree: String { "Completely unused memory. A small value here is normal." }
 }
 
@@ -121,9 +121,9 @@ extension StringsRU: MemoryStrings {
     var memoryLegendSpeculative: String { "Спекулятивная" }
     var memoryLegendFree: String { "Свободно" }
     var memoryNoteActive: String { "Память, которую программы используют прямо сейчас или недавно к ней обращались." }
-    var memoryNoteWired: String { "Занята ядром macOS и драйверами; не выгружается на диск и не освобождается." }
+    var memoryNoteWired: String { "Занята ядром macOS и драйверами. Она не выгружается на диск и не освобождается." }
     var memoryNoteOther: String { "В основном сжатая память: macOS ужимает редко используемые страницы вместо записи в swap." }
-    var memoryNoteInactive: String { "Давно не использовалась и будет отдана при нехватке; часто это данные недавно закрытых программ." }
-    var memoryNoteSpeculative: String { "Прочитано с диска впрок, «на всякий случай»; освобождается в первую очередь." }
+    var memoryNoteInactive: String { "Давно не использовалась и будет отдана при нехватке. Часто это данные недавно закрытых программ." }
+    var memoryNoteSpeculative: String { "Прочитано с диска впрок, «на всякий случай». Освобождается в первую очередь." }
     var memoryNoteFree: String { "Совсем не занятая память. Малое значение — норма." }
 }

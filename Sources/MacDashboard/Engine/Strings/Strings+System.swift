@@ -216,15 +216,15 @@ extension StringsEN: SystemStrings {
     func sysEnergyApply(_ n: Int) -> String { "Apply (\(n))" }
     var sysEnergyCancel: String { "Cancel" }
     var sysEnergyReset: String { "Reset to defaults" }
-    var sysEnergyResetHelp: String { "Fills in default values; press Apply to apply them" }
+    var sysEnergyResetHelp: String { "Fills in default values. Press Apply to apply them." }
     var sysEnergyApplied: String { "Applied ✓" }
     func sysEnergyConfirmTitle(_ n: Int) -> String { n == 1 ? "Apply 1 change?" : "Apply \(n) changes?" }
     var sysEnergyOnBattery: String { "On battery:" }
     var sysEnergyOnAC: String { "On AC power:" }
     var sysEnergyConfirmAdmin: String { "Touch ID or administrator password required." }
     var sysEnergyConfirmApply: String { "Apply" }
-    var sysEnergyCancelled: String { "Authentication cancelled. Nothing was changed; your edits are kept and can be applied again." }
-    var sysEnergyTimedOut: String { "Touch ID didn’t respond within 30 s. Nothing was changed; your edits are kept and can be applied again." }
+    var sysEnergyCancelled: String { "Authentication cancelled. Nothing was changed. Your edits are kept and can be applied again." }
+    var sysEnergyTimedOut: String { "Touch ID didn’t respond within 30 s. Nothing was changed. Your edits are kept and can be applied again." }
     func sysEnergyFailed(_ detail: String) -> String { "Couldn’t apply: pmset returned an error (\(detail)). Values were reverted." }
     func batMAh(_ s: String) -> String { "\(s) mAh" }
     func batMA(_ s: String) -> String { "\(s) mA" }
@@ -334,7 +334,7 @@ extension StringsRU: SystemStrings {
     func sysEnergyApply(_ n: Int) -> String { "Применить (\(n))" }
     var sysEnergyCancel: String { "Отменить" }
     var sysEnergyReset: String { "Сбросить к стандартным" }
-    var sysEnergyResetHelp: String { "Подставляет стандартные значения; применяются они кнопкой «Применить»" }
+    var sysEnergyResetHelp: String { "Подставляет стандартные значения. Применяются они кнопкой «Применить»." }
     var sysEnergyApplied: String { "Применено ✓" }
     func sysEnergyConfirmTitle(_ n: Int) -> String { "Применить \(n) " + ruPlural(n, "изменение", "изменения", "изменений") + "?" }
     var sysEnergyOnBattery: String { "От батареи:" }

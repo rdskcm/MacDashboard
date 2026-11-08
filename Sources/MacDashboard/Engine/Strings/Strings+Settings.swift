@@ -132,7 +132,7 @@ extension StringsEN: SettingsStrings {
     var settingsAutoReadSub: String { "Battery and crash logs" }
     var settingsArchiveFolderLabel: String { "Archive folder" }
     func settingsArchiveFolderMoveFailed(_ n: Int) -> String {
-        "Could not move \(n) " + (n == 1 ? "archive" : "archives") + " to this folder; the folder is unchanged"
+        "Could not move \(n) " + (n == 1 ? "archive" : "archives") + " to this folder. The folder is unchanged."
     }
 }
 
@@ -198,6 +198,6 @@ extension StringsRU: SettingsStrings {
     var settingsAutoReadSub: String { "Батарея и журналы сбоев" }
     var settingsArchiveFolderLabel: String { "Папка архивов" }
     func settingsArchiveFolderMoveFailed(_ n: Int) -> String {
-        "Не удалось переместить \(n) " + ruPlural(n, "архив", "архива", "архивов") + " в эту папку; папка не изменена"
+        "Не удалось переместить \(n) " + ruPlural(n, "архив", "архива", "архивов") + " в эту папку. Папка не изменена."
     }
 }
