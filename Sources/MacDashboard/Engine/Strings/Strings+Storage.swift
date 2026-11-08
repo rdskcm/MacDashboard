@@ -9,6 +9,8 @@ protocol StorageStrings {
 
     // MARK: Storage — folders that could not be read (V2-FDA-DEGRADE)
     func storageFoldersNoFDA(_ folders: String) -> String
+    /// Name of the app a protected location belongs to (Storage FDA note).
+    func storageProtectedAppName(_ app: ProtectedApp) -> String
 
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String
@@ -128,6 +130,17 @@ extension StringsEN: StorageStrings {
 
     // MARK: Storage — folders that could not be read (V2-FDA-DEGRADE)
     func storageFoldersNoFDA(_ folders: String) -> String { "Not shown here: \(folders) — the app doesn't have Full Disk Access." }
+    func storageProtectedAppName(_ app: ProtectedApp) -> String {
+        switch app {
+        case .mail: "Mail"
+        case .messages: "Messages"
+        case .safari: "Safari"
+        case .contacts: "Contacts"
+        case .calendar: "Calendar"
+        case .notes: "Notes"
+        case .home: "Home"
+        }
+    }
 
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String { "Not measured in time: \(folders)." }
@@ -246,6 +259,17 @@ extension StringsRU: StorageStrings {
 
     // MARK: Storage — folders that could not be read (V2-FDA-DEGRADE)
     func storageFoldersNoFDA(_ folders: String) -> String { "Здесь не показаны: \(folders) — у приложения нет полного доступа к диску." }
+    func storageProtectedAppName(_ app: ProtectedApp) -> String {
+        switch app {
+        case .mail: "Почта"
+        case .messages: "Сообщения"
+        case .safari: "Safari"
+        case .contacts: "Контакты"
+        case .calendar: "Календарь"
+        case .notes: "Заметки"
+        case .home: "Дом"
+        }
+    }
 
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String { "Не успели измерить: \(folders)." }

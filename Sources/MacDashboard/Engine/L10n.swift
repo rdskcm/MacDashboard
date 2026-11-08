@@ -9,6 +9,17 @@ enum AppLanguage: String, CaseIterable {
     case ru, en
 }
 
+extension AppLanguage {
+    /// The language's own name, shown in the Settings picker whatever the UI language. The one Russian literal
+    /// outside the Russian string tables (EnglishFirstTests lists it).
+    var endonym: String {
+        switch self {
+        case .en: return "English"
+        case .ru: return "Русский"
+        }
+    }
+}
+
 /// REDESIGN-SETTINGS: the persisted language choice; `system` follows the macOS preferred language.
 enum LanguageChoice: String, CaseIterable { case system, en, ru }
 

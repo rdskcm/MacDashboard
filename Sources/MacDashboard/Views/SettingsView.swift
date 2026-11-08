@@ -385,8 +385,8 @@ struct SettingsView: View {
                 ) { c in
                     switch c {
                     case .system: L.settingsOptionSystem
-                    case .en: "English"
-                    case .ru: "Русский"
+                    case .en: AppLanguage.en.endonym
+                    case .ru: AppLanguage.ru.endonym
                     }
                 }
             }

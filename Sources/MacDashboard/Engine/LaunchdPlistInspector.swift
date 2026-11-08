@@ -24,7 +24,7 @@ enum PlistDeleteOutcome: Equatable {
     case failed(String)
 }
 
-/// The Автозагрузка card collapses an orphan row the instant the user confirms,
+/// The Autostart card collapses an orphan row the instant the user confirms,
 /// before the Trash/`rm` has run (deliberate — see `SystemStartupCard`'s inline confirm in Views/SystemPage.swift).
 /// This is the counter-signal: paths whose delete did NOT happen, so the card can put
 /// exactly those rows back. ACCUMULATING: `StartupItemsController` unions new paths in
@@ -82,66 +82,30 @@ enum LaunchdPlistInspector {
 
     // MARK: - C. Curated descriptions
 
-    /// Short one-line descriptions for well-known launchd labels, keyed by `Label`.
-    static let curatedDescriptions: [String: (ru: String, en: String)] = [
-        // Apple system agents/daemons
-        "com.apple.cloudd": ("iCloud — синхронизация данных", "iCloud — data sync"),
-        "com.apple.bird": ("iCloud Drive — синхронизация файлов", "iCloud Drive — file sync"),
-        "com.apple.suggestd": ("Spotlight — предложения и рекомендации", "Spotlight — suggestions"),
-        "com.apple.AirPlayXPCHelper": ("AirPlay — вспомогательный процесс", "AirPlay — helper process"),
-        "com.apple.security.pboxd": ("Sandbox — изоляция приложений (Privacy Sandbox)", "Sandbox — app privacy boxing"),
-        "com.apple.spindump": ("Диагностика зависаний процессов", "Hang/crash diagnostics"),
-        "com.apple.softwareupdated": ("Обновления macOS", "macOS software updates"),
-        "com.apple.coreduetd": ("CoreDuet — предсказание использования приложений", "CoreDuet — app usage prediction"),
-        "com.apple.photoanalysisd": ("Фото — анализ и распознавание объектов", "Photos — on-device analysis"),
-        "com.apple.mediaanalysisd": ("Медиа — анализ фото/видео", "Media analysis (photos/video)"),
-        "com.apple.corespotlightd": ("Spotlight — индексация", "Spotlight — indexing"),
-        "com.apple.spotlight.Siri": ("Spotlight — интеграция с Siri", "Spotlight — Siri integration"),
-        "com.apple.familycircled": ("Семейный доступ", "Family Sharing"),
-        "com.apple.notificationcenterui.agent": ("Центр уведомлений", "Notification Center"),
-        "com.apple.rapportd": ("Handoff / Continuity", "Handoff / Continuity"),
-        "com.apple.sharingd": ("AirDrop / Общий доступ", "AirDrop / Sharing"),
-        "com.apple.parsecd": ("Карты/погода — фоновые данные", "Maps/Weather background data"),
-        "com.apple.commerce": ("App Store — фоновая служба покупок", "App Store — commerce background service"),
-        // Common third-party vendor agents
-        "com.google.keystone.agent": ("Google Keystone — автообновление Google-приложений", "Google Keystone — Google app auto-update"),
-        "com.google.keystone.daemon": ("Google Keystone — автообновление Google-приложений", "Google Keystone — Google app auto-update"),
-        "com.microsoft.autoupdate.helper": ("Microsoft AutoUpdate — обновление приложений Microsoft", "Microsoft AutoUpdate — Microsoft app updates"),
-        "com.microsoft.update.agent": ("Microsoft AutoUpdate — обновление приложений Microsoft", "Microsoft AutoUpdate — Microsoft app updates"),
-        "com.docker.helper": ("Docker Desktop — системный помощник", "Docker Desktop — privileged helper"),
-        "com.docker.vmnetd": ("Docker Desktop — сетевой демон виртуальных машин", "Docker Desktop — VM networking daemon"),
-        "com.spotify.webhelper": ("Spotify — веб-помощник", "Spotify — web helper"),
-        "com.adobe.acc.installer.v2": ("Adobe Creative Cloud — установщик обновлений", "Adobe Creative Cloud — update installer"),
-        "com.adobe.ARMDC.Communicator": ("Adobe — служба обновлений (ARM)", "Adobe — update service (ARM)"),
-        "com.valvesoftware.steamclean": ("Steam — очистка кэша", "Steam — cache cleanup"),
-        "com.dropbox.DropboxMacUpdate.agent": ("Dropbox — автообновление", "Dropbox — auto-update"),
-    ]
-
     // MARK: - D. Heuristic fallback
 
-    /// Derives a human-readable guess from a reverse-DNS launchd label when it isn't
-    /// present in `curatedDescriptions`, e.g. "com.adobe.acrobat.helper" -> vendor
-    /// "Adobe" -> "Adobe — фоновый процесс" / "Adobe — background process".
+    /// Derives a human-readable guess from a reverse-DNS launchd label when the curated table
+    /// (`autostartCuratedDescriptions`) has no entry, e.g. "com.adobe.acrobat.helper" -> vendor
+    /// "Adobe" -> "Adobe — background process" (both languages through the string tables).
     static func heuristicDescription(forLabel label: String, language: AppLanguage) -> String {
+        let S = language.strings
         var components = label.split(separator: ".").map(String.init)
         for prefix in ["com", "org", "net"] where components.first == prefix {
             components.removeFirst()
             break
         }
         guard let vendorRaw = components.first, !vendorRaw.isEmpty else {
-            return language == .ru ? "Фоновый процесс" : "Background process"
+            return S.autostartBackgroundProcess
         }
         let vendor = vendorRaw.prefix(1).uppercased() + vendorRaw.dropFirst()
-        return language == .ru ? "\(vendor) — фоновый процесс" : "\(vendor) — background process"
+        return S.autostartVendorBackgroundProcess(vendor)
     }
 
     /// Looks up a description for `label`: curated dictionary first, heuristic
     /// fallback otherwise. Returns nil if `label` itself is nil.
     static func description(forLabel label: String?, language: AppLanguage) -> String? {
         guard let label = label, !label.isEmpty else { return nil }
-        if let curated = curatedDescriptions[label] {
-            return language == .ru ? curated.ru : curated.en
-        }
+        if let curated = language.strings.autostartCuratedDescriptions[label] { return curated }
         return heuristicDescription(forLabel: label, language: language)
     }
 

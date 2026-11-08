@@ -225,7 +225,7 @@ struct StorageFoldersCard: View {
         let report = model.report
         let phase = StoragePageModel.foldersPhase(block: model.foldersBlock.phase, hasCount: report.homeDirs != nil)
         let names = StoragePageModel.hiddenNames(denied: model.storage.fdaDenied, unreadableHome: report.homeDirsUnreadable,
-                                                 russian: L10nStore.shared.language == .ru)
+                                                 language: L10nStore.shared.language)
         let fda = StoragePageModel.fdaNote(names)
         let caption = StoragePageModel.foldersCaption(phase: phase, counting: model.storage.isCountingSizes,
                                                       countedAt: report.folderSizesCountedAt, now: now,
