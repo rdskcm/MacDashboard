@@ -329,6 +329,7 @@ extension SerialTests {
                 fixtureHome {
                     var d = VisualFixture.batteryDetail
                     tweak(&d)
+                    $0.report.battery?.maxCapacity = d.healthPercent   // BATTERY-HEALTH-UNIFY: the page shows Apple's figure now; keep every state's number
                     $0.report.battery?.condition = condition
                     $0.applyFixtureBattery(d, block: block ?? batOKBlock)
                 }
@@ -1226,6 +1227,27 @@ extension SerialTests {
                     // and no phone is attached is rendered directly.
                     HarnessSection(label: "Stored devices, no phone attached: unlock-first hint") {
                         IPhoneUnlockFirstHint(alignment: .leading)
+                    }
+                }
+                run.snap("content-iphone-tile-health", mode, width: 1134) {
+                    let ip = fixtureIPhone()
+                    let samRecord = ip.devices.first { $0.id == sam }!
+                    // Assignments are not allowed in a ViewBuilder closure, so each record is built by a closure.
+                    let worn: IPhoneDeviceRecord = {
+                        var r = samRecord
+                        r.battery = r.battery.map { var p = $0; p.healthPercent = 76; return p }
+                        return r
+                    }()
+                    let edge: IPhoneDeviceRecord = {
+                        var r = samRecord
+                        r.battery = r.battery.map { var p = $0; p.healthPercent = 80; return p }
+                        return r
+                    }()
+                    HarnessSection(label: "iPhone tile health bar: 76 % amber / 80 % muted (remembered)") {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
+                            IPhoneTileView(record: worn, status: .remembered, snapshot: nil, storage: nil) {}
+                            IPhoneTileView(record: edge, status: .remembered, snapshot: nil, storage: nil) {}
+                        }
                     }
                 }
                 run.snap("content-iphone-menu", mode, width: 1134) {

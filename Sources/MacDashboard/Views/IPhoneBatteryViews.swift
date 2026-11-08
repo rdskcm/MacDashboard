@@ -7,6 +7,7 @@ import SwiftUI
 struct IPhoneBatteryCard: View {
     let record: IPhoneDeviceRecord?
     let snapshot: IPhoneSnapshot?
+    var prefersRawHealth = false   // BATTERY-HEALTH-UNIFY D9: IPhoneModel.prefersRawHealth, passed by IPhoneDeviceView
     @AppStorage("iphoneCapacityUnit") private var unit = "mAh"
 
     var body: some View {
@@ -58,16 +59,14 @@ struct IPhoneBatteryCard: View {
 
     /// One decimal, half-up, when both capacities are known; the integer value otherwise.
     private func health(_ b: BatteryDetail) -> String? {
-        if let max = b.maxCapacityMAh, let design = b.designCapacityMAh,
-           let h = IPhoneData.preciseHealth(maxMAh: max, designMAh: design) {
+        if let h = IPhoneData.preciseLiveHealth(b, prefersRaw: prefersRawHealth) {
             return oneDecimal(h) + " %"
         }
         return b.healthPercent.map { "\($0) %" }
     }
 
     private func healthNumber(_ b: BatteryDetail) -> Double? {
-        if let max = b.maxCapacityMAh, let design = b.designCapacityMAh,
-           let h = IPhoneData.preciseHealth(maxMAh: max, designMAh: design) {
+        if let h = IPhoneData.preciseLiveHealth(b, prefersRaw: prefersRawHealth) {
             return h
         }
         return b.healthPercent.map(Double.init)

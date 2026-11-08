@@ -69,8 +69,11 @@ struct BatteryPage: View {
 
 @MainActor
 private func batteryPageInput(_ model: AppModel) -> BatteryPageModel.Input {
-    .init(detail: model.batteryDetail, condition: model.report.battery?.condition ?? model.battery?.condition,
-          block: model.batteryBlock.phase, history: model.history.state.mac_history)
+    // Same input as Home (BATTERY-HEALTH-UNIFY): the report the assessment came from, then the live sample.
+    let merged = BatteryInfo.merged(live: model.battery, report: model.homeReport.battery)
+    return .init(detail: model.batteryDetail, condition: merged?.condition, block: model.batteryBlock.phase,
+                 history: model.history.state.mac_history, capacityPercent: merged?.maxCapacity,
+                 prefersRaw: model.settings.batteryShowsRawMac)
 }
 
 private func panelTone(_ t: BatteryTone) -> (Color, Color) {

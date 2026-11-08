@@ -492,6 +492,9 @@ struct SettingsView: View {
                     groupLabel: L.settingsLowSpaceLabel
                 ) { p in L.settingsLowSpaceOption(p) }
             }
+            SettingsRow(label: L.settingsRawHealthLabel, sub: L.settingsRawHealthMacSub) {
+                DS3Switch(isOn: $settings.batteryShowsRawMac, label: L.settingsRawHealthLabel, metrics: .settings)
+            }
         }
         notifyGroup
     }
@@ -657,6 +660,9 @@ struct SettingsView: View {
                 disabled: !iphone.importing.isEmpty,
                 action: chooseArchiveFolder
             )
+            SettingsRow(label: L.settingsRawHealthLabel, sub: L.settingsRawHealthIPhoneSub) {
+                DS3Switch(isOn: $settings.batteryShowsRawIPhone, label: L.settingsRawHealthLabel, metrics: .settings)
+            }
         }
     }
 
