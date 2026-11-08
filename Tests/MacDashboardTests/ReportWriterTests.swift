@@ -217,6 +217,12 @@ extension SerialTests {
             #expect(out.hasSuffix("—\n") && !out.hasSuffix("\n\n"), "renderMissing ends with exactly one newline")
         }
 
+        @Test func batterySummaryShowsTheJudgedFigure() {
+            var i = fullInput()
+            i.batteryShown = MacShownHealth(percent: 85.8, isRaw: true)
+            #expect(ReportWriter.render(i, language: .en).contains("health 85.8%"))
+            #expect(ReportWriter.render(i, language: .ru).contains("здоровье 85,8 %"))
+        }
         @Test func renderNoBatteryValues() {
             var i = emptyInput()
             i.hasBattery = true

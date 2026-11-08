@@ -62,10 +62,11 @@ struct BatteryPageModel: Equatable {
         // BATTERY-HEALTH-UNIFY (D2): show and judge the number Home shows — Apple's «Maximum Capacity», or the ioreg
         // ratio with the raw switch on. Page-only fallback: the ioreg ratio when system_profiler has none. No read
         // yet → nil, so the reading/failed states stay as before.
-        let hp = d == nil ? nil
-            : (BatteryHealth.macShownPercent(apple: i.capacityPercent, raw: d?.healthPercent, prefersRaw: i.prefersRaw)
-               ?? d?.healthPercent)
-        let health = BatteryHealth.classify(healthPercent: hp, condition: i.condition)
+        let hp: MacShownHealth? = d == nil ? nil
+            : (BatteryHealth.macShownPercent(apple: i.capacityPercent, raw: d?.rawHealthOneDecimal, prefersRaw: i.prefersRaw)
+               ?? d?.healthPercent.map { MacShownHealth(percent: Double($0), isRaw: false) })
+        let health = BatteryHealth.classify(precisePercent: hp?.percent, condition: i.condition)
+        let hpText = hp?.digits(language: L10nStore.shared.language)
 
         let phase: BatteryPagePhase
         var okAt: Date?
@@ -95,7 +96,7 @@ struct BatteryPageModel: Equatable {
         case .live:
             switch health {
             case .service: (tag, tagText) = (.service, L.commonServiceRecommended)
-            case .worn: (tag, tagText) = (.worn, L.batTagCapacity(L.homePercent("\(hp ?? 0)")))
+            case .worn: (tag, tagText) = (.worn, L.batTagCapacity(L.homePercent(hpText ?? "0")))
             case .normal: (tag, tagText) = (.healthy, L.homeTagHealthy)
             case .unknown: (tag, tagText) = (.reading, L.batTagUnknown)
             }
@@ -143,8 +144,8 @@ struct BatteryPageModel: Equatable {
         case .unknown: healthTone = .neutral
         }
         let healthHero = BatteryHeroModel(
-            label: L.batteryCapHealth, value: hp.map { L.homePercent("\($0)") } ?? dash,
-            fraction: hp.map { min(max(Double($0) / 100, 0), 1) } ?? 0, note: L.batHealthNote,
+            label: L.batteryCapHealth, value: hpText.map { L.homePercent($0) } ?? dash,
+            fraction: hp.map { min(max($0.percent / 100, 0), 1) } ?? 0, note: L.batHealthNote,
             tone: healthTone, dimmed: healthTone == .neutral)
 
         func capTile(_ label: String, _ v: Int?) -> BatteryTileModel {
@@ -177,7 +178,7 @@ struct BatteryPageModel: Equatable {
         case .worn:
             healthNote = BatteryNoteModel(tone: .amber, text: L.batWornNote, button: .batterySettings)
         case .service:
-            let parts = [hp.map { L.batServiceCapacity(L.homePercent("\($0)")) }, overRated ? L.batServiceCycles : nil]
+            let parts = [hpText.map { L.batServiceCapacity(L.homePercent($0)) }, overRated ? L.batServiceCycles : nil]
                 .compactMap { $0 }
             healthNote = BatteryNoteModel(tone: .hot, text: L.batServiceNote(parts), button: .batterySettings)
         case .normal, .unknown: break

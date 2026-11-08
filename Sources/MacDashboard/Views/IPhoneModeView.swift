@@ -357,11 +357,11 @@ struct IPhoneTileView: View {
 
     private var healthValue: Double { health.value }
     private var health: (value: Double, text: String, shown: Double?) {
-        if connected, let b = snapshot?.battery, let h = IPhoneData.preciseLiveHealth(b, prefersRaw: prefersRawHealth) {
+        if prefersRawHealth, connected, let b = snapshot?.battery, let h = IPhoneData.preciseLiveHealth(b) {
             return (h, iphoneOneDecimal(h) + " %", (h * 10).rounded() / 10)
         }
-        if let hp = latestPoint(where: { $0.healthPercent != nil })?.healthPercent {
-            return (Double(hp), "\(hp) %", Double(hp))
+        if let f = IPhoneData.shownHealth(points: record.battery, live: connected ? snapshot?.battery : nil) {
+            return (Double(f.percent), f.text, Double(f.percent))
         }
         return (0, "—", nil)
     }

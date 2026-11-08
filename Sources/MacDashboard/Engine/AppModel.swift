@@ -104,8 +104,7 @@ final class AppModel {
     /// Values for the short report (ReportWriter.render). `report` is the pass being committed; `assessment` must
     /// already be the one computed from it.
     private func reportSummaryInput(report: FullReport, generatedAt: Date) -> ReportSummaryInput {
-        var merged = BatteryInfo.merged(live: battery, report: report.battery)
-        if let p = assessment.battShownPercent { merged?.maxCapacity = p }   // summary «health N%» = the judged number
+        let merged = BatteryInfo.merged(live: battery, report: report.battery)
         let tasks = HomeModel.tasks(assessment, report: report, disk: disk, battery: battery)
         return ReportSummaryInput(
             generatedAt: generatedAt, system: report.system ?? lastKnownSystem,
@@ -113,7 +112,7 @@ final class AppModel {
             cpu: cpu, load: load, ncpu: ncpu, socTempC: socTempC,
             thermal: thermal,
             mem: mem, memPressure: memPressure, swap: swap, disk: disk,
-            hasBattery: merged != nil, battery: merged,
+            hasBattery: merged != nil, battery: merged, batteryShown: assessment.battShownPercent,
             security: report.security, claudeBackup: claudeBackup, claudeAttempt: claudeRun.attempt, snapshotCount: report.snapshots?.count,
             now: fixtureNow ?? Date(), parseFailures: report.parseFailures + live.parseFailures,
             details: ReportDetails(report: report, live: live))
@@ -845,7 +844,7 @@ final class AppModel {
         switch result {
         case .detail(let d):
             if batteryDetail != d {
-                let rawMoved = batteryDetail?.healthPercent != d.healthPercent
+                let rawMoved = batteryDetail?.rawHealthOneDecimal != d.rawHealthOneDecimal
                 batteryDetail = d
                 // BATTERY-HEALTH-UNIFY D5: with the raw switch on the verdict depends on this read.
                 if rawMoved, settings.assessmentSettings.batteryShowsRawMac { reassessCommitted() }
@@ -982,7 +981,7 @@ final class AppModel {
                              claudeBackup: claudeBackup, claudeAttempt: claudeRun.attempt, backupStaleHours: s.backupStaleHours,
                              lowSpacePercent: s.lowSpacePercent,
                              claudeLogPath: BackupLog.resolvedURLs(custom: s.claudeLogPath).log.path,
-                             batteryRawPercent: batteryDetail?.healthPercent, batteryPrefersRaw: s.batteryShowsRawMac,
+                             batteryRawPercent: batteryDetail?.rawHealthOneDecimal, batteryPrefersRaw: s.batteryShowsRawMac,
                              now: fixtureNow ?? Date())
     }
 

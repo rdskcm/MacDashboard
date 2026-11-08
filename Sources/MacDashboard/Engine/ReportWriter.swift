@@ -25,6 +25,7 @@ struct ReportSummaryInput {
     var disk: DiskInfo?
     var hasBattery: Bool
     var battery: BatteryInfo?          // already BatteryInfo.merged(live:report:)
+    var batteryShown: MacShownHealth? = nil   // the assessment's judged figure; nil = print maxCapacity
     var security: SecurityState?
     var claudeBackup: ClaudeBackupStatus?
     var claudeAttempt: ClaudeBackupAttempt? = nil
@@ -238,7 +239,8 @@ private struct ReportRenderer {
         guard let b = i.battery else { return dash }
         var parts: [String] = []
         if let c = b.charge { parts.append(S.homePercent("\(c)") + (b.state.map { ", \($0.text(S))" } ?? "")) }
-        if let m = b.maxCapacity { parts.append(S.reportCapacity(S.homePercent("\(m)"))) }
+        if let shown = i.batteryShown { parts.append(S.reportCapacity(S.homePercent(shown.digits(language: language)))) }
+        else if let m = b.maxCapacity { parts.append(S.reportCapacity(S.homePercent("\(m)"))) }
         if let n = b.cycles { parts.append(S.reportCycles(n)) }
         return parts.isEmpty ? dash : parts.joined(separator: " · ")
     }

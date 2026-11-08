@@ -13,6 +13,7 @@ extension IPhoneModel {
         let now = VisualFixture.referenceDate
         let cal = Calendar.current
         func day(_ back: Int) -> Date { cal.date(byAdding: .day, value: -back, to: now)! }
+        let alexLive = ProcessInfo.processInfo.environment["MACDASH_FIXTURE_IPHONE"] == "estimate" ? 180 : 2   // fix wave 1: all live points, so the «≈» shows on the bench build
 
         func history(n: Int, endBack: Int, steps: [(Double, Int)], last: Int,
                      c0: Int, c1: Int, design: Int, live: Int) -> [BatteryPoint] {
@@ -36,7 +37,7 @@ extension IPhoneModel {
                 id: Self.fixtureAlexKey, name: "Alex’s iPhone", marketingName: "iPhone 17 Pro Max",
                 productType: "iPhone18,2", enclosureColor: "2", osVersion: "26.4.1", lastSeen: now,
                 battery: history(n: 180, endBack: 0, steps: [(0.5, 101), (0.627, 100), (0.874, 99)], last: 98,
-                                 c0: 70, c1: 269, design: 5030, live: 2),
+                                 c0: 70, c1: 269, design: 5030, live: alexLive),
                 keptArchives: [Self.fixtureAlexKeptArchive]
             ),
             IPhoneDeviceRecord(

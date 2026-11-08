@@ -11,8 +11,10 @@ extension SerialTests {
         @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
         func liveCanaryBatteryHealth() async {
             guard case .detail(let d) = await BatteryInspector.read() else { print("liveCanary no battery on this Mac"); return }
-            print("liveCanary ioreg maxCapacityMAh = \(String(describing: d.maxCapacityMAh)), designCapacityMAh = \(String(describing: d.designCapacityMAh)), healthPercent (raw) = \(String(describing: d.healthPercent)), settingsBasisMAh = \(String(describing: d.settingsBasisMAh))")
-            #expect(d.settingsBasisMAh == nil, "a Mac reply carries AppleRawMaxCapacity, so the iOS 27 basis stays nil")
+            print("liveCanary ioreg maxCapacityMAh = \(String(describing: d.maxCapacityMAh)), designCapacityMAh = \(String(describing: d.designCapacityMAh)), healthPercent (raw) = \(String(describing: d.healthPercent)), rawHealthOneDecimal = \(String(describing: d.rawHealthOneDecimal))")
+            if let raw1 = d.rawHealthOneDecimal, let raw = d.healthPercent {
+                #expect(abs(raw1 - Double(raw)) <= 0.5, "the one-decimal ratio rounds to healthPercent")
+            }
             if let m = d.maxCapacityMAh, let des = d.designCapacityMAh, des > 0 {
                 #expect(d.healthPercent == Int((Double(m) / Double(des) * 100).rounded()), "raw ratio = round(max / design)")
                 #expect(m <= des + des / 10, "max capacity is at most 10 % above design")
@@ -27,8 +29,8 @@ extension SerialTests {
                 #expect((1...100).contains(apple) && (1...110).contains(raw), "both percentages are plausible")
                 #expect(abs(apple - raw) <= 10, "Apple's figure and the raw ratio are within 10 points of each other")
             }
-            #expect(BatteryHealth.macShownPercent(apple: parsed.maxCapacity, raw: d.healthPercent, prefersRaw: false) == parsed.maxCapacity)
-            #expect(BatteryHealth.macShownPercent(apple: parsed.maxCapacity, raw: d.healthPercent, prefersRaw: true) == d.healthPercent)
+            #expect(BatteryHealth.macShownPercent(apple: parsed.maxCapacity, raw: d.rawHealthOneDecimal, prefersRaw: false)?.percent == parsed.maxCapacity.map(Double.init))
+            #expect(BatteryHealth.macShownPercent(apple: parsed.maxCapacity, raw: d.rawHealthOneDecimal, prefersRaw: true)?.percent == d.rawHealthOneDecimal)
         }
     }
 }

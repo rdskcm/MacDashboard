@@ -33,7 +33,7 @@ enum Assess {
         }
     }
 
-    static func assess(report: FullReport, live: LiveSnapshot, language: AppLanguage, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, claudeAttempt: ClaudeBackupAttempt? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleDays * 24, lowSpacePercent: Int = AppSettings.defaultLowSpacePercent, claudeLogPath: String = BackupLog.logURL.path, batteryRawPercent: Int? = nil, batteryPrefersRaw: Bool = false, now: Date = Date()) -> Assessment {
+    static func assess(report: FullReport, live: LiveSnapshot, language: AppLanguage, memPressure: MemoryPressureLevel? = nil, topApps: [AppMemory] = [], wakeHolders: [WakeHolder] = [], ignoredWakeHolders: [WakeHolderKey] = [], claudeBackup: ClaudeBackupStatus? = nil, claudeAttempt: ClaudeBackupAttempt? = nil, backupStaleHours: Int = AppSettings.defaultBackupStaleDays * 24, lowSpacePercent: Int = AppSettings.defaultLowSpacePercent, claudeLogPath: String = BackupLog.logURL.path, batteryRawPercent: Double? = nil, batteryPrefersRaw: Bool = false, now: Date = Date()) -> Assessment {
         var a = Assessment()
         var items: [AttentionItem] = []
         let S = language.strings
@@ -82,7 +82,7 @@ enum Assess {
         let shown = BatteryHealth.macShownPercent(apple: batt?.maxCapacity, raw: batteryRawPercent,
                                                   prefersRaw: batteryPrefersRaw)
         a.battShownPercent = shown
-        switch BatteryHealth.classify(healthPercent: shown, condition: batt?.condition) {
+        switch BatteryHealth.classify(precisePercent: shown?.percent, condition: batt?.condition) {
         case .service:
             let cond = (batt?.condition ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let action = AdviceAction.settingsPane(AdvicePanes.battery)
@@ -92,10 +92,11 @@ enum Assess {
                                        action: action, why: S.attnWhyBatteryService))
         case .worn:
             if let cap = shown {
+                let digits = cap.digits(language: language)
                 let action = AdviceAction.settingsPane(AdvicePanes.battery)
-                let text = S.assessBatteryCapacityWarn(cap)
+                let text = S.assessBatteryCapacityWarn(digits)
                 items.append(AttentionItem(kind: .batteryCapacity, sev: .warn, label: S.attnLabelBatteryCapacity,
-                                           detail: S.attnDetailBatteryCapacity(cap), fullText: text,
+                                           detail: S.attnDetailBatteryCapacity(digits), fullText: text,
                                            action: action, why: S.attnWhyBatteryWorn))
             }
         case .normal, .unknown:

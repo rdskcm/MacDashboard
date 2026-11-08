@@ -32,10 +32,27 @@ enum BatteryHealth {
         return p < Double(wornBelowPercent) ? .worn : .normal
     }
 
-    /// The Mac percentage every surface shows and judges (D2): Apple's «Maximum Capacity» (`system_profiler`), or —
-    /// with Settings › Monitoring › «Raw battery health» on — the ioreg AppleRawMaxCapacity / DesignCapacity ratio,
-    /// falling back to Apple's figure until an ioreg read exists.
-    static func macShownPercent(apple: Int?, raw: Int?, prefersRaw: Bool) -> Int? {
-        prefersRaw ? (raw ?? apple) : apple
+    /// The Mac percentage every surface shows and judges (D2): Apple's whole «Maximum Capacity» (`system_profiler`), or —
+    /// with Settings › Monitoring › «Raw battery health» on — the ioreg ratio at one decimal (fix wave 1), falling back to
+    /// Apple's figure until an ioreg read exists. `raw` is already at one decimal (`BatteryDetail.rawHealthOneDecimal`).
+    static func macShownPercent(apple: Int?, raw: Double?, prefersRaw: Bool) -> MacShownHealth? {
+        if prefersRaw, let raw { return MacShownHealth(percent: raw, isRaw: true) }
+        return apple.map { MacShownHealth(percent: Double($0), isRaw: false) }
+    }
+}
+
+/// BATTERY-HEALTH-UNIFY fix wave 1: the Mac health figure a surface shows and judges. `percent` is at the shown precision.
+struct MacShownHealth: Equatable, Sendable {
+    let percent: Double
+    let isRaw: Bool
+
+    /// "86" (Apple), or "85.8" (raw: always one decimal, comma in Russian). The caller adds the percent sign.
+    func digits(language: AppLanguage) -> String {
+        isRaw ? fmtFixed(percent, decimals: 1, language: language) : "\(Int(percent))"
+    }
+
+    /// The worn share at the same precision.
+    func wornDigits(language: AppLanguage) -> String {
+        isRaw ? fmtFixed((1000 - (percent * 10).rounded()) / 10, decimals: 1, language: language) : "\(100 - Int(percent))"
     }
 }

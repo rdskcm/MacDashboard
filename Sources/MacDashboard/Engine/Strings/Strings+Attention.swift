@@ -10,7 +10,7 @@ protocol AttentionStrings {
     func assessMemPressure(critical: Bool, apps: [String]) -> String
     func assessWakeHolders(_ entries: [String]) -> String
     func assessBatteryCapacityLow(_ cap: Int) -> String
-    func assessBatteryCapacityWarn(_ cap: Int) -> String
+    func assessBatteryCapacityWarn(_ cap: String) -> String
     func assessBatteryConditionBad(_ cond: String) -> String
     var assessFileVaultOff: String { get }
     var assessGatekeeperOff: String { get }
@@ -34,7 +34,7 @@ protocol AttentionStrings {
     var attnLabelSwapHigh: String { get }
     var attnDetailMemPressureCritical: String { get }
     var attnLabelBatteryCapacity: String { get }
-    func attnDetailBatteryCapacity(_ cap: Int) -> String
+    func attnDetailBatteryCapacity(_ cap: String) -> String
     var attnLabelBatteryCondition: String { get }
     func attnDetailBatteryCondition(_ cond: String) -> String
     var attnLabelFileVaultOff: String { get }
@@ -111,7 +111,7 @@ extension StringsEN: AttentionStrings {
         return "\(head): \(entries.joined(separator: ", "))."
     }
     func assessBatteryCapacityLow(_ cap: Int) -> String { "Battery health is \(cap)% of new — consider a replacement." }
-    func assessBatteryCapacityWarn(_ cap: Int) -> String { "Battery health is \(cap)% — nearing the service threshold (80%)." }
+    func assessBatteryCapacityWarn(_ cap: String) -> String { "Battery health is \(cap)% — nearing the service threshold (80%)." }
     func assessBatteryConditionBad(_ cond: String) -> String { "Battery condition: \(cond) — worth a service check." }
     var assessFileVaultOff: String { "FileVault is off — consider turning it on." }
     var assessGatekeeperOff: String { "Gatekeeper is off — consider turning it on." }
@@ -134,7 +134,7 @@ extension StringsEN: AttentionStrings {
     var attnLabelSwapHigh: String { "Memory" }
     var attnDetailMemPressureCritical: String { "running out" }
     var attnLabelBatteryCapacity: String { "Battery" }
-    func attnDetailBatteryCapacity(_ cap: Int) -> String { "health \(cap) %" }
+    func attnDetailBatteryCapacity(_ cap: String) -> String { "health \(cap) %" }
     var attnLabelBatteryCondition: String { "Battery" }
     func attnDetailBatteryCondition(_ cond: String) -> String { "condition: \(cond)" }
     var attnLabelFileVaultOff: String { "FileVault" }
@@ -210,7 +210,7 @@ extension StringsRU: AttentionStrings {
         return "\(n) \(ruPlural(n, "программа не даёт", "программы не дают", "программ не дают")) Mac уснуть: \(entries.joined(separator: ", "))."
     }
     func assessBatteryCapacityLow(_ cap: Int) -> String { "Здоровье батареи \(cap)% от новой — думайте о замене." }
-    func assessBatteryCapacityWarn(_ cap: Int) -> String { "Здоровье батареи \(cap)% — ресурс подходит к сервисному порогу (80%)." }
+    func assessBatteryCapacityWarn(_ cap: String) -> String { "Здоровье батареи \(cap)% — ресурс подходит к сервисному порогу (80%)." }
     func assessBatteryConditionBad(_ cond: String) -> String { "Состояние батареи: \(cond) — загляните в сервис." }
     var assessFileVaultOff: String { "FileVault выключен — стоит включить." }
     var assessGatekeeperOff: String { "Gatekeeper выключен — стоит включить." }
@@ -233,7 +233,7 @@ extension StringsRU: AttentionStrings {
     var attnLabelSwapHigh: String { "Память" }
     var attnDetailMemPressureCritical: String { "памяти не хватает" }
     var attnLabelBatteryCapacity: String { "Батарея" }
-    func attnDetailBatteryCapacity(_ cap: Int) -> String { "здоровье \(cap) %" }
+    func attnDetailBatteryCapacity(_ cap: String) -> String { "здоровье \(cap) %" }
     var attnLabelBatteryCondition: String { "Батарея" }
     func attnDetailBatteryCondition(_ cond: String) -> String { "состояние: \(cond)" }
     var attnLabelFileVaultOff: String { "FileVault" }

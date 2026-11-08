@@ -513,18 +513,18 @@ extension SerialTests {
             report.battery?.cycles = 100
             live.battery = report.battery
             let raw = Assess.assess(report: report, live: live, language: .en, memPressure: nil, batteryRawPercent: 78, batteryPrefersRaw: true)
-            #expect(raw.battShownPercent == 78)
+            #expect(raw.battShownPercent?.percent == 78)
             let rawTasks = HomeModel.tasks(raw, report: report, disk: live.disk, battery: live.battery)
-            #expect(rawTasks.first { $0.kind == .batteryCapacity }?.state == "22% worn")
+            #expect(rawTasks.first { $0.kind == .batteryCapacity }?.state == "22.0% worn")
             var input = homeInput(report, live, assessment: raw)
             input.batteryRawPercent = 78
             input.batteryPrefersRaw = true
             let cell = HomeModel.nowCells(input, tasks: rawTasks, memPressure: nil, socTempC: 48, gpuUtil: 23,
                                           cpu: CPUUsage(user: 20.2, sys: 5.5, idle: 74.3), short: false, narrow: false)[3]
-            #expect(cell.big == "78%" && cell.chipText == "worn" && cell.batteryBar?.fraction == 0.78)
+            #expect(cell.big == "78.0%" && cell.chipText == "worn" && cell.batteryBar?.fraction == 0.78)
 
             let apple = Assess.assess(report: report, live: live, language: .en, memPressure: nil, batteryRawPercent: 78, batteryPrefersRaw: false)
-            #expect(apple.battShownPercent == 82)
+            #expect(apple.battShownPercent?.percent == 82)
             #expect(!apple.items.contains { $0.kind == .batteryCapacity })
             var appleInput = homeInput(report, live, assessment: apple)
             appleInput.batteryRawPercent = 78

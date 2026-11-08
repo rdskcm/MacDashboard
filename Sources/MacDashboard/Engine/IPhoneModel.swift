@@ -715,7 +715,7 @@ final class IPhoneModel {
             if let b = snap.battery, b.healthPercent != nil || b.cycleCount != nil {
                 let point = BatteryPoint(day: IPhoneData.historyDay(now),
                                          cycles: b.cycleCount,
-                                         healthPercent: IPhoneData.historyHealthPercent(b),
+                                         healthPercent: IPhoneData.historyHealthPercent(b, points: record.battery),
                                          maxCapacityMAh: b.maxCapacityMAh,
                                          designCapacityMAh: b.designCapacityMAh,
                                          source: "live")

@@ -201,20 +201,11 @@ enum IPhoneData {
         return Double(maxMAh) / Double(designMAh) * 100
     }
 
-    /// BATTERY-HEALTH-UNIFY: the live health the iPhone shows, unrounded. Default = the figure iPhone Settings shows:
-    /// NominalChargeCapacity / design on iOS 27 (`settingsBasisMAh`), AppleRawMaxCapacity / design on iOS ≤ 26 (equal to
-    /// Settings, IPHONE-SPIKE C5). `prefersRaw` (Settings › Devices switch) = max (AppleRaw or FullChargeCapacity) / design.
-    /// nil when the pair of capacities is missing (the caller falls back to `healthPercent`).
-    static func preciseLiveHealth(_ b: BatteryDetail, prefersRaw: Bool) -> Double? {
-        guard let design = b.designCapacityMAh else { return nil }
-        let basis = prefersRaw ? b.maxCapacityMAh : (b.settingsBasisMAh ?? b.maxCapacityMAh)
-        return basis.flatMap { preciseHealth(maxMAh: $0, designMAh: design) }
-    }
-
-    /// The integer health a live read stores in history: always the Settings figure (D8), so live points match
-    /// imported `MaxCapacityPercent` points. Rounds half up, as Settings does (BH-C4).
-    static func historyHealthPercent(_ b: BatteryDetail) -> Int? {
-        preciseLiveHealth(b, prefersRaw: false).map { Int($0.rounded()) } ?? b.healthPercent
+    /// BATTERY-HEALTH-UNIFY: the live full-charge ratio (AppleRaw or FullChargeCapacity / design), unrounded: what the
+    /// Settings › Devices raw switch shows (D9). nil when the pair of capacities is missing.
+    static func preciseLiveHealth(_ b: BatteryDetail) -> Double? {
+        guard let design = b.designCapacityMAh, let max = b.maxCapacityMAh else { return nil }
+        return preciseHealth(maxMAh: max, designMAh: design)
     }
 
     /// Approximate energy for a capacity in mAh at `nominalVoltage`.
@@ -489,23 +480,40 @@ enum IPhoneData {
     /// nil for anything that is not a valid "yyyy-MM-dd" day.
     static func historyDate(_ day: String) -> Date? { historyDayFormatter.date(from: day) }
 
-    /// D7: one point per day; a live read replaces any point of its day (live wins over an
-    /// import, a later live read replaces an earlier one). Sorted by day.
+    /// D7, amended by BATTERY-HEALTH-UNIFY fix wave 1: one point per day. A live read replaces any point of its day; on a day
+    /// that holds an imported point the new point keeps source "import", so the day stays the anchor of the shown figure.
+    /// Sorted by day.
     static func upsertLive(_ points: [BatteryPoint], _ p: BatteryPoint) -> [BatteryPoint] {
+        var new = p
+        if points.contains(where: { $0.day == p.day && $0.source == "import" }) { new.source = "import" }
         var out = points.filter { $0.day != p.day }
-        out.append(p)
+        out.append(new)
         return out.sorted { $0.day < $1.day }
     }
 
-    /// Adds imported points only for days without a live point; a newer import replaces an
-    /// older import of the same day. When `imported` itself has several points for one day,
-    /// the last one wins. Sorted by day.
+    /// Fix wave 1: an imported Apple figure wins on its day (a live point of that day keeps its mAh values and adopts the imported
+    /// figure and source); a newer import replaces an older import of the same day; several points of one day in `imported`:
+    /// the last wins. Live points dated after the newest imported day that sit below its figure are raised to it, when that
+    /// import is at least as new as the stored imports: a new real Apple figure wins (D8 as amended 2026-11-08). Sorted by day.
     static func mergeImported(_ points: [BatteryPoint], _ imported: [BatteryPoint]) -> [BatteryPoint] {
+        let previousNewestImport = points.filter { $0.source == "import" && $0.healthPercent != nil }.map(\.day).max()
         var byDay: [String: BatteryPoint] = [:]
         for p in points { byDay[p.day] = p }
         for p in imported {
-            if let existing = byDay[p.day], existing.source == "live" { continue }
-            byDay[p.day] = p
+            var merged = p
+            if let existing = byDay[p.day], existing.source == "live" {
+                merged.maxCapacityMAh = existing.maxCapacityMAh
+                merged.designCapacityMAh = existing.designCapacityMAh
+                merged.cycles = p.cycles ?? existing.cycles
+            }
+            byDay[p.day] = merged
+        }
+        if let newest = imported.filter({ $0.healthPercent != nil }).max(by: { $0.day < $1.day }),
+           let figure = newest.healthPercent,
+           previousNewestImport.map({ newest.day >= $0 }) ?? true {
+            for (day, p) in byDay where p.source == "live" && day > newest.day {
+                if let h = p.healthPercent, h < figure { byDay[day]?.healthPercent = figure }
+            }
         }
         return byDay.values.sorted { $0.day < $1.day }
     }

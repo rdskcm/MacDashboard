@@ -68,10 +68,10 @@ extension SerialTests {
                 #expect(m.healthNote?.text.contains("71%") == true)
                 #expect(m.healthNote?.text.contains("74%") == false)
 
-                m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = 78 }, capacity: 82, raw: true))
+                m = BatteryPageModel.make(batInput(detail: batDetail { $0.maxCapacityMAh = 3980 }, capacity: 82, raw: true))
                 #expect(m.tag == .worn)
-                #expect(m.healthHero.value == "78%")
-                m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = nil }, capacity: 82, raw: true))
+                #expect(m.healthHero.value == "78.0%")
+                m = BatteryPageModel.make(batInput(detail: batDetail { $0.healthPercent = nil; $0.maxCapacityMAh = nil }, capacity: 82, raw: true))
                 #expect(m.tag == .healthy)
                 #expect(m.healthHero.value == "82%")
             }

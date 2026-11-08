@@ -34,14 +34,14 @@ extension SerialTests {
         @Test func batteryShowsRawMacReassesses() {
             let (m, s, cleanup) = makeModel(); defer { cleanup() }
             m.report.battery = BatteryInfo(source: nil, charge: nil, state: nil, cycles: 100, condition: "Normal", maxCapacity: 82)
-            var d = VisualFixture.batteryDetail; d.healthPercent = 78
+            var d = VisualFixture.batteryDetail; d.maxCapacityMAh = 3980   // 3980 / 5103 = 78.0
             m.applyFixtureBattery(d, block: BlockState(.battery))   // a detail exists, so the flip starts no ioreg read
             s.lowSpacePercent = 15   // first assessment
-            #expect(!kinds(m).contains(.batteryCapacity) && m.assessment.battShownPercent == 82, "Apple's 82 % is healthy")
+            #expect(!kinds(m).contains(.batteryCapacity) && m.assessment.battShownPercent?.percent == 82, "Apple's 82 % is healthy")
             s.batteryShowsRawMac = true
-            #expect(kinds(m).contains(.batteryCapacity) && m.assessment.battShownPercent == 78, "raw 78 % is judged (D5)")
+            #expect(kinds(m).contains(.batteryCapacity) && m.assessment.battShownPercent?.percent == 78, "raw 78 % is judged (D5)")
             Bindable(s).batteryShowsRawMac.wrappedValue = false
-            #expect(!kinds(m).contains(.batteryCapacity) && m.assessment.battShownPercent == 82)
+            #expect(!kinds(m).contains(.batteryCapacity) && m.assessment.battShownPercent?.percent == 82)
         }
 
         @Test func backupStaleDaysReassesses() {

@@ -337,6 +337,25 @@ extension SerialTests {
             let batWorn = battery()                                              // charging, 76 % → amber note
             let batSerial17 = battery { $0.serial = "SYNQ4213A7Q1MXQWM" }   // 17 chars, the longest seen; synthetic
             let batNormal = battery { $0.maxCapacityMAh = 4491; $0.currentCapacityMAh = 3683; $0.healthPercent = 88 }
+            // BATTERY-HEALTH-UNIFY fix wave 1: Mac raw switch on, one decimal, worn at 79.6 % while Apple's figure says 82 %.
+            // An isolated settings instance: this state must not write AppSettings.shared.
+            let (batRawDefaults, batRawSuite) = makeIsolatedDefaults()
+            let batRawDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("md-snap-batraw-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: batRawDir, withIntermediateDirectories: true)
+            defer { removeIsolatedDefaults(batRawDefaults, batRawSuite); try? FileManager.default.removeItem(at: batRawDir) }
+            let batRawSettings = AppSettings(defaults: batRawDefaults)
+            batRawSettings.batteryShowsRawMac = true
+            let batRaw = AppModel(dataDirectory: batRawDir, settings: batRawSettings)
+            batRaw.applyVisualFixture()
+            batRaw.report.battery?.maxCapacity = 82
+            batRaw.report.battery?.condition = "Normal"
+            batRaw.applyFixtureBattery({
+                var d = VisualFixture.batteryDetail
+                d.maxCapacityMAh = 4061   // 4061 / 5103 = 79.58 → shown 79.6 %, worn
+                d.currentCapacityMAh = 3683
+                return d
+            }(), block: batOKBlock)
             let batOnBattery = battery {
                 $0.externalConnected = false; $0.isCharging = false; $0.adapter = nil; $0.charger = nil
                 $0.percent = 64; $0.amperageMA = -604; $0.powerW = -7.9; $0.timeToFullMin = nil; $0.timeToEmptyMin = 380
@@ -769,6 +788,9 @@ extension SerialTests {
                 }
                 run.snap("content-battery-normal", mode, width: 1094) {
                     BatteryHealthCard(model: batNormal, narrow: false)
+                }
+                run.snap("content-battery-raw", mode, width: 1094) {
+                    BatteryHealthCard(model: batRaw, narrow: false)
                 }
                 run.snap("content-battery-on-battery", mode, width: 1094) {
                     VStack(spacing: 16) { BatteryNowCard(model: batOnBattery, narrow: false); BatteryChargingCard(model: batOnBattery) }
@@ -1243,10 +1265,16 @@ extension SerialTests {
                         r.battery = r.battery.map { var p = $0; p.healthPercent = 80; return p }
                         return r
                     }()
-                    HarnessSection(label: "iPhone tile health bar: 76 % amber / 80 % muted (remembered)") {
+                    let estimate: IPhoneDeviceRecord = {
+                        var r = samRecord
+                        r.battery = r.battery.map { var p = $0; p.source = "live"; return p }
+                        return r
+                    }()
+                    HarnessSection(label: "iPhone tile health bar: 76 % amber / 80 % muted / no import «≈» (remembered)") {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
                             IPhoneTileView(record: worn, status: .remembered, snapshot: nil, storage: nil) {}
                             IPhoneTileView(record: edge, status: .remembered, snapshot: nil, storage: nil) {}
+                            IPhoneTileView(record: estimate, status: .remembered, snapshot: nil, storage: nil) {}
                         }
                     }
                 }
@@ -1276,6 +1304,11 @@ extension SerialTests {
                         s.battery = nil
                         return s
                     }()
+                    let estimateRec: IPhoneDeviceRecord? = rec.map {
+                        var r = $0
+                        r.battery = r.battery.map { var p = $0; p.source = "live"; return p }
+                        return r
+                    }
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone battery: history hero (no connection)") {
                             IPhoneBatteryCard(record: rec, snapshot: nil)
@@ -1297,6 +1330,12 @@ extension SerialTests {
                         }
                         HarnessSection(label: "iPhone battery: charging, power note on State") {
                             IPhoneBatteryCard(record: rec, snapshot: ip.lastSnapshot[alex]!)
+                        }
+                        HarnessSection(label: "iPhone battery: live hero, estimate (nothing imported)") {
+                            IPhoneBatteryCard(record: estimateRec, snapshot: ip.lastSnapshot[alex]!)
+                        }
+                        HarnessSection(label: "iPhone battery: history hero, estimate (nothing imported)") {
+                            IPhoneBatteryCard(record: estimateRec, snapshot: nil)
                         }
                     }
                 }

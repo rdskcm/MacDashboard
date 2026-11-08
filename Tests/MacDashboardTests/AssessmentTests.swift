@@ -166,7 +166,7 @@ struct AssessmentTests {
             #expect(battery.count == 1 && battery[0].sev == .warn && battery[0].fullText.contains("Здоровье"),
                   "BATTERY-HEALTH-UNIFY: 65% is one warn item (no serious tier)")
             #expect(!a.items.contains { $0.sev == .serious }, "BATTERY-HEALTH-UNIFY: 65% raises no serious item")
-            #expect(a.battShownPercent == 65, "BATTERY-HEALTH-UNIFY: battShownPercent 65")
+            #expect(a.battShownPercent?.percent == 65, "BATTERY-HEALTH-UNIFY: battShownPercent 65")
         }
         do {
             for (cap, cycles) in [(78, Int?.none), (78, 350), (78, 900), (65, 900), (79, nil)] {
@@ -199,7 +199,7 @@ struct AssessmentTests {
             let a = Assess.assess(report: batteryReport(maxCapacity: 60, condition: "Replace Now"), live: LiveSnapshot(), language: .ru)
             let battery = a.items.filter { $0.kind == .batteryCondition || $0.kind == .batteryCapacity }
             #expect(battery.count == 1 && battery[0].kind == .batteryCondition, "BATTERY-HEALTH-UNIFY: service supersedes worn (one item)")
-            #expect(a.battShownPercent == 60, "BATTERY-HEALTH-UNIFY: battShownPercent 60")
+            #expect(a.battShownPercent?.percent == 60, "BATTERY-HEALTH-UNIFY: battShownPercent 60")
         }
         do {
             let a = Assess.assess(report: batteryReport(maxCapacity: 76, condition: " Normal "), live: LiveSnapshot(), language: .ru)
@@ -212,13 +212,13 @@ struct AssessmentTests {
         do {
             let r = batteryReport(maxCapacity: 82, condition: "Normal")
             let on = Assess.assess(report: r, live: LiveSnapshot(), language: .ru, batteryRawPercent: 78, batteryPrefersRaw: true)
-            #expect(on.items.contains { $0.kind == .batteryCapacity && $0.detail.contains("78") } && on.battShownPercent == 78,
+            #expect(on.items.contains { $0.kind == .batteryCapacity && $0.detail.contains("78") } && on.battShownPercent?.percent == 78,
                   "BATTERY-HEALTH-UNIFY: raw switch on judges the raw 78")
             let off = Assess.assess(report: r, live: LiveSnapshot(), language: .ru, batteryRawPercent: 78, batteryPrefersRaw: false)
-            #expect(!off.items.contains { $0.kind == .batteryCapacity } && off.battShownPercent == 82,
+            #expect(!off.items.contains { $0.kind == .batteryCapacity } && off.battShownPercent?.percent == 82,
                   "BATTERY-HEALTH-UNIFY: raw switch off judges Apple's 82")
             let noRaw = Assess.assess(report: r, live: LiveSnapshot(), language: .ru, batteryRawPercent: nil, batteryPrefersRaw: true)
-            #expect(noRaw.battShownPercent == 82, "BATTERY-HEALTH-UNIFY: raw on, no ioreg read: Apple's figure")
+            #expect(noRaw.battShownPercent?.percent == 82, "BATTERY-HEALTH-UNIFY: raw on, no ioreg read: Apple's figure")
         }
 
         do {

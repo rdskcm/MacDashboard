@@ -121,7 +121,7 @@ extension StringsEN: SettingsStrings {
     func settingsLowSpaceOption(_ percent: Int) -> String { "\(percent)%" }
     var settingsRawHealthLabel: String { "Raw battery health" }
     var settingsRawHealthMacSub: String { "Maximum ÷ design capacity as the battery reports it, instead of the macOS figure. History keeps the macOS figure." }
-    var settingsRawHealthIPhoneSub: String { "Full-charge ÷ design capacity instead of the iPhone Settings figure. Differs only on iOS 27 and later. History keeps Apple's figure." }
+    var settingsRawHealthIPhoneSub: String { "Full-charge ÷ design capacity instead of the iPhone Settings figure. History keeps Apple's figure." }
     func settingsWarnAfterDays(_ days: Int) -> String { "\(days) " + (days == 1 ? "day" : "days") }
     var settingsNotifyCaption: String { "Notify about attention items" }
     var settingsNotifyProtection: String { "Protection turned off" }
@@ -190,7 +190,7 @@ extension StringsRU: SettingsStrings {
     func settingsLowSpaceOption(_ percent: Int) -> String { "\(percent) %" }
     var settingsRawHealthLabel: String { "Здоровье батареи без пересчёта" }
     var settingsRawHealthMacSub: String { "Максимальная ёмкость ÷ проектная по данным батареи вместо цифры macOS. «История» хранит цифру macOS." }
-    var settingsRawHealthIPhoneSub: String { "Полная ёмкость ÷ проектная вместо цифры из настроек iPhone. Отличается только на iOS 27 и новее. История хранит цифру Apple." }
+    var settingsRawHealthIPhoneSub: String { "Полная ёмкость ÷ проектная вместо цифры из настроек iPhone. История хранит цифру Apple." }
     func settingsWarnAfterDays(_ days: Int) -> String { "\(days) " + ruPlural(days, "день", "дня", "дней") }
     var settingsNotifyCaption: String { "Уведомлять о проблемах" }
     var settingsNotifyProtection: String { "Защита выключена" }

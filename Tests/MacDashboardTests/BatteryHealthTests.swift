@@ -48,11 +48,32 @@ struct BatteryHealthTests {
     }
 
     @Test func macShownPercent() {
-        #expect(BatteryHealth.macShownPercent(apple: 82, raw: 78, prefersRaw: false) == 82)
-        #expect(BatteryHealth.macShownPercent(apple: 82, raw: 78, prefersRaw: true) == 78)
-        #expect(BatteryHealth.macShownPercent(apple: 82, raw: nil, prefersRaw: true) == 82)
-        #expect(BatteryHealth.macShownPercent(apple: nil, raw: 78, prefersRaw: false) == nil)
-        #expect(BatteryHealth.macShownPercent(apple: nil, raw: 78, prefersRaw: true) == 78)
+        #expect(BatteryHealth.macShownPercent(apple: 82, raw: 78.4, prefersRaw: false) == MacShownHealth(percent: 82, isRaw: false))
+        #expect(BatteryHealth.macShownPercent(apple: 82, raw: 78.4, prefersRaw: true) == MacShownHealth(percent: 78.4, isRaw: true))
+        #expect(BatteryHealth.macShownPercent(apple: 82, raw: nil, prefersRaw: true) == MacShownHealth(percent: 82, isRaw: false))
+        #expect(BatteryHealth.macShownPercent(apple: nil, raw: 78.4, prefersRaw: false) == nil)
+        #expect(BatteryHealth.macShownPercent(apple: nil, raw: 78.4, prefersRaw: true) == MacShownHealth(percent: 78.4, isRaw: true))
         #expect(BatteryHealth.macShownPercent(apple: nil, raw: nil, prefersRaw: true) == nil)
+    }
+
+    @Test func macShownFormat() {
+        let raw = MacShownHealth(percent: 85.8, isRaw: true), apple = MacShownHealth(percent: 86, isRaw: false)
+        #expect(raw.digits(language: .en) == "85.8" && raw.digits(language: .ru) == "85,8")
+        #expect(MacShownHealth(percent: 85, isRaw: true).digits(language: .en) == "85.0", "raw always shows one decimal")
+        #expect(apple.digits(language: .en) == "86")
+        #expect(raw.wornDigits(language: .en) == "14.2" && apple.wornDigits(language: .en) == "14")
+        #expect(MacShownHealth(percent: 79.6, isRaw: true).wornDigits(language: .en) == "20.4")
+        #expect(BatteryHealth.classify(precisePercent: 79.6, condition: "Normal") == .worn)
+    }
+
+    @Test func rawHealthOneDecimal() {
+        var d = VisualFixture.batteryDetail   // 3874 / 5103
+        #expect(d.rawHealthOneDecimal == 75.9)
+        d.maxCapacityMAh = 7996; d.designCapacityMAh = 10_000
+        #expect(d.rawHealthOneDecimal == 80.0, "79.96 is shown as 80.0 and is not worn")
+        d.maxCapacityMAh = nil; d.healthPercent = 76
+        #expect(d.rawHealthOneDecimal == 76)
+        d.healthPercent = nil
+        #expect(d.rawHealthOneDecimal == nil)
     }
 }
