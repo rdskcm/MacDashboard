@@ -167,7 +167,7 @@ enum WakeHolders {
         return (sorted(best), sorted(bestSystem))
     }
 
-    /// "caffeinate (from claude)" / "Zoom" in `language`.
+    /// "caffeinate (for claude)" / "Zoom" in `language`.
     static func label(for h: WakeHolder, language: AppLanguage) -> String { label(for: h.key, language: language) }
 
     /// Same label for a stored ignore-list key (Settings rows, context-menu entries).

@@ -59,8 +59,9 @@ private func hasCyrillic(_ s: String) -> Bool {
 }
 
 struct EnglishFirstTests {
-    /// Cyrillic is allowed in code outside the Russian tables only at these sites.
-    static let exceptions: [String: String] = ["L10n.swift": "AppLanguage.endonym: the Russian language's own name"]
+    /// Cyrillic is allowed in code outside the Russian tables only at this site: the Russian endonym line of
+    /// `AppLanguage.endonym` in `L10n.swift`, matched by its exact trimmed text.
+    static let endonymLine = "case .ru: return \"Русский\""
 
     // MARK: Moved tables
 
@@ -131,17 +132,36 @@ struct EnglishFirstTests {
 
     // MARK: R1
 
+    /// Cyrillic code is allowed only in the Russian section of a file under `Engine/Strings`, and on the endonym line.
+    /// The Russian section starts at a column-0 line beginning a `StringsRU` extension (`extension StringsRU`, or with
+    /// any access modifier, e.g. `private extension StringsRU`). It ends at the next column-0 declaration
+    /// (`extension`, `protocol`, `struct`, `enum`, `class`, `func`, `let`, `var`, with optional modifiers) that is
+    /// not a `StringsRU` extension and not a `private`/`fileprivate` `func` or `let` (Russian-grammar helpers).
+    /// Other lines (for example a `StringsEN` extension) are outside the section, so Cyrillic there is an offender.
     @Test func cyrillicOnlyInRussianTables() throws {
+        let modifier = "(?:(?:public|internal|private|fileprivate|final|static)\\s+)*"
+        let ruStart = try Regex("^\(modifier)extension\\s+StringsRU\\b")
+        let declaration = try Regex("^\(modifier)(?:extension|protocol|struct|enum|class|func|let|var)\\b")
+        let helper = try Regex("^(?:private|fileprivate)\\s+(?:func|let)\\b")
         var offenders: [String] = []
         for sub in ["", "Engine", "Engine/Strings", "Views"] {
             for file in try swiftFiles(sub) {
                 let all = try lines(of: file)
                 let name = file.lastPathComponent
                 let inStrings = sub == "Engine/Strings"
-                let ruStart = all.firstIndex { $0.hasPrefix("extension StringsRU") } ?? Int.max
-                for (i, line) in all.enumerated() where hasCyrillic(splitComment(line).code) {
-                    if inStrings && i >= ruStart { continue }
-                    if Self.exceptions[name] != nil { continue }
+                var inRussian = false
+                for (i, line) in all.enumerated() {
+                    if inStrings {
+                        if line.firstMatch(of: ruStart) != nil {
+                            inRussian = true
+                        } else if inRussian, line.firstMatch(of: declaration) != nil, line.firstMatch(of: helper) == nil {
+                            inRussian = false
+                        }
+                    }
+                    let code = splitComment(line).code
+                    guard hasCyrillic(code) else { continue }
+                    if inRussian { continue }
+                    if name == "L10n.swift", code.trimmingCharacters(in: .whitespaces) == Self.endonymLine { continue }
                     offenders.append("\(sub.isEmpty ? "" : sub + "/")\(name):\(i + 1)")
                 }
             }
