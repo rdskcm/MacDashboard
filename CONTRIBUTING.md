@@ -40,7 +40,7 @@ Tests live in `Tests/MacDashboardTests/` and reach the app's code through
 `fileprivate` helpers are not, so put a helper you want covered in a non-private
 declaration. Tests that touch process-wide state (the UI language, `UserDefaults`,
 wall-clock timing) go inside the `.serialized` root suite `SerialTests`
-(`TestSupport.swift`). Three opt-in probes: `MACDASH_LIVE=1 swift test --filter liveCanary`
+(`TestSupport.swift`). Tests start in English (`SerialTests` pins `.en`); a test that asserts Russian output through the global `L` puts `@Suite(.uiLanguage(.ru))` on its struct or compares against `StringsRU()`. Three opt-in probes: `MACDASH_LIVE=1 swift test --filter liveCanary`
 runs every parsed command for real; `MACDASH_LIVE=1 swift test --filter ipswLiveCanary`
 asks Apple's catalogue, ipsw.me and the Apple firmware CDN (a HEAD, no download) for
 `iPhone18,2` and checks they still match `Tests/APIFixtures`; `MACDASH_SYSDIAGNOSE_ARCHIVE=<archive.tar.gz> swift

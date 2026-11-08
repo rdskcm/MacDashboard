@@ -16,7 +16,7 @@ import AppKit
 import SwiftUI
 
 MainActor.assumeIsolated {
-    L10nStore.shared.language = .ru          // pin language FIRST
+    L10nStore.shared.language = .en          // pin language FIRST (.ru renders Russian)
 
     let m = AppModel()                  // init is side-effect-free; NEVER call start()
     m.report.brewStatus = .installed(version: "Homebrew 4.x")

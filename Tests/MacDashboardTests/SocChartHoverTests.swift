@@ -113,7 +113,7 @@ private let plot = CGRect(x: 0, y: 0, width: 1000, height: 160)
 }
 
 extension SerialTests {
-    @MainActor struct SocChartTooltipTextTests {
+    @Suite(.uiLanguage(.ru)) @MainActor struct SocChartTooltipTextTests {
         private func english(_ body: () -> Void) {
             let saved = L10nStore.shared.language
             defer { L10nStore.shared.language = saved }
@@ -144,7 +144,7 @@ extension SerialTests {
         @Test func russianUsesTheSpacedPercent() {
             let t = Date(timeIntervalSince1970: 1_800_000_000)
             let x = SocChartModel.tooltipText(SocChartSample(t: t, cpu: 14.2, gpu: 23))
-            #expect(x.cpu == "14,2 %" && x.gpu == "23 %")   // SerialTests starts in Russian
+            #expect(x.cpu == "14,2 %" && x.gpu == "23 %")   // the struct pins .ru
         }
     }
 }
