@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/perf/night.sh — night launcher: on an idle Mac it runs the perf gate on origin/main when main changed, then the
-# queued night jobs one at a time until 09:00, and writes one morning report for the whole night.
+# queued night jobs one at a time until 09:00 (or the one-night stop set by --stop-tonight), and writes one morning report for the whole night.
 #
 # Usage:
 #   tools/perf/night.sh --check [--dry-run]      LaunchAgent entry (every 60 s): start tonight's run if due and write a
@@ -15,6 +15,8 @@
 #                                                queue a night job: COMMAND runs in the foreground with bash -c in DIR; M = the
 #                                                minutes it needs before the 09:00 stop to be worth starting (1-540)
 #   tools/perf/night.sh --queue-list | --queue-remove ID
+#   tools/perf/night.sh --stop-tonight HH:MM     jobs of the coming night's automatic run stop at HH:MM instead of 09:00
+#                                                (after 03:00, before 13:00); that night only, later nights stop at 09:00
 #   tools/perf/night.sh --install | --uninstall  add / remove the user LaunchAgent com.rdskcm.macdashboard.night
 #   tools/perf/night.sh --restore-brightness     put back display / keyboard values a crashed run left saved
 # Test seams: NIGHT_OUT=<absolute dir> replaces tools/perf/out/night.noindex (state, queue, builds, reports) in every mode
@@ -40,11 +42,12 @@ fi
 
 # ---------------------------------------------------------------- argument parsing
 MODE=""; DRY=0; NOW=0; KEEP_DARK=0; LIST=""; N=""
-STOP=""; NO_GATE=0; JNAME=""; JMIN=""; JDIR=""; JCMD=""; JID=""
+STOP=""; NO_GATE=0; JNAME=""; JMIN=""; JDIR=""; JCMD=""; JID=""; STOP_TONIGHT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --check|--run|--install|--uninstall|--restore-brightness|--queue-add|--queue-list) MODE="$1"; shift ;;
     --queue-remove) [ $# -ge 2 ] || fatal 64 "--queue-remove needs a job id"; MODE="$1"; JID="$2"; shift 2 ;;
+    --stop-tonight) [ $# -ge 2 ] || fatal 64 "--stop-tonight needs HH:MM"; MODE="$1"; STOP_TONIGHT="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --now) NOW=1; shift ;;
     --keep-dark) KEEP_DARK=1; shift ;;
@@ -93,9 +96,13 @@ idle_threshold() {
   fi
   echo "$t"
 }
-# Claude Code at work (NIGHT-WORK-AWARE): a main or subagent transcript (*.jsonl at any depth under ~/.claude/projects)
-# written in the last WORK_QUIET_MIN minutes. HID idle alone let the 2026-10-26 run start while agents worked with the
-# user away. Test seams, honoured only with --dry-run or NIGHT_OUT: NIGHT_CLAUDE_PROJECTS (another folder), NIGHT_HOUR (--check) and
+# Claude Code at work (NIGHT-WORK-AWARE, NIGHT-QUIET-CHECK): a main or subagent transcript (*.jsonl at any depth under ~/.claude/projects)
+# modified in the last WORK_QUIET_MIN minutes whose newest work line (type user / assistant / attachment /
+# api-request) has a top-level timestamp inside that window. Service lines (artifact-autoreact-ledger, system notes,
+# queue-operation …) and lines without a timestamp never count: an idle open session appended ledger lines at 03:07
+# on 2026-11-08 and blocked the night. HID idle alone let the 2026-10-26 run start while agents worked with the user
+# away. Test seams, honoured only with --dry-run or NIGHT_OUT: NIGHT_CLAUDE_PROJECTS (another folder), NIGHT_HOUR
+# (--check) and
 # NIGHT_DATE (a night with no started marker).
 WORK_QUIET_MIN=15
 CLAUDE_PROJECTS="$HOME/.claude/projects"
@@ -106,13 +113,63 @@ HOLD_IDLE=""   # test seam (NIGHT-START-LOCK): the HID idle seconds the evening 
 if { [ "$DRY" = 1 ] || [ -n "${NIGHT_OUT:-}" ]; } && [ -n "${NIGHT_IDLE:-}" ]; then
   [[ "$NIGHT_IDLE" =~ ^[0-9]{1,6}$ ]] || fatal 64 "NIGHT_IDLE must be 0-999999 seconds"; HOLD_IDLE="$((10#$NIGHT_IDLE))"
 fi
-claude_working() {   # 0 + one-line reason on stdout when a transcript was written in the window; 1 when quiet or no folder
-  local list n last t f
-  list="$(find "$CLAUDE_PROJECTS" -type f -name '*.jsonl' -mmin -"$WORK_QUIET_MIN" -exec stat -f '%m %N' {} + 2>/dev/null | sort -n)"
+# argv: projects folder, window minutes -> one "<epoch> <relative path>" line per transcript whose newest work line lies in
+# the window; nothing when quiet or no folder; exit != 0 when the check itself failed (claude_working then says working)
+WORK_EVENTS_PY='
+import json, os, stat, sys, time
+from datetime import datetime
+WORK = {"user", "assistant", "attachment", "api-request"}
+root, cut = sys.argv[1], time.time() - int(sys.argv[2]) * 60
+CHUNK, CAP = 1 << 20, 64 << 20
+def event(raw):
+    try:
+        d = json.loads(raw)
+        ty, ts = d["type"], d["timestamp"]
+        if not isinstance(ty, str) or not isinstance(ts, str):
+            return None
+        return ty, datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+def newest_work(path):
+    with open(path, "rb") as f:
+        pos = f.seek(0, 2); rest = b""; done = 0
+        while pos > 0 and done < CAP:
+            n = min(CHUNK, pos); pos -= n; done += n
+            f.seek(pos); lines = (f.read(n) + rest).split(b"\n")
+            rest = lines.pop(0) if pos > 0 else b""
+            for raw in reversed(lines):
+                e = event(raw) if raw.strip() else None
+                if e is None or e[0] not in WORK:
+                    continue
+                return e[1] if e[1] >= cut else None
+    return None
+out = []
+for d, _, names in os.walk(root):
+    for nm in names:
+        if not nm.endswith(".jsonl"):
+            continue
+        p = os.path.join(d, nm)
+        try:
+            st = os.lstat(p)
+            if not stat.S_ISREG(st.st_mode) or st.st_mtime <= cut:
+                continue
+            t = newest_work(p)
+        except OSError:
+            continue
+        if t is not None:
+            out.append("%d %s" % (int(t), os.path.relpath(p, root)))
+if out:
+    print("\n".join(out))
+'
+claude_working() {   # 0 + one-line reason on stdout when a transcript holds a work event in the window, or when the check
+                     # failed; 1 when quiet or no folder
+  local list rc n last t f
+  list="$(python3 -I -c "$WORK_EVENTS_PY" "$CLAUDE_PROJECTS" "$WORK_QUIET_MIN" | sort -n)"; rc=$?
+  if [ "$rc" != 0 ]; then echo "Claude Code working: transcript check failed (python3 exit $rc)"; return 0; fi
   [ -n "$list" ] || return 1
-  n="$(find "$CLAUDE_PROJECTS" -type f -name '*.jsonl' -mmin -"$WORK_QUIET_MIN" -print0 2>/dev/null | tr -cd '\0' | wc -c | tr -d ' ')"
+  n="$(printf '%s\n' "$list" | wc -l | tr -d ' ')"
   last="${list##*$'\n'}"; t="${last%% *}"; f="${last#* }"
-  echo "Claude Code working: $n transcript(s) written in the last $WORK_QUIET_MIN min, newest at $(date -r "$t" +%H:%M): ${f#"$CLAUDE_PROJECTS"/}"
+  echo "Claude Code working: $n transcript(s) written in the last $WORK_QUIET_MIN min, newest at $(date -r "$t" +%H:%M): $f"
 }
 busy() {   # another night run or gate: a bash whose script argument is night.sh --run or gate.sh (same shape as gate.sh's
            # check), excluding this shell and its ancestors/children
@@ -189,6 +246,22 @@ end_light() {   # kind -> suffix for the report line (runs in $(…); the saved 
 
 # ---- queue: one file per job in $NIGHT/queue/<id>-<name>.job, "key: value" lines, never sourced
 jf() { sed -n "s/^$2: //p" "$1" | head -1; }
+# ---- one-night job stop (NIGHT-QUIET-CHECK): state/stop-tonight = "<night YYYYMMDD> <HH:MM>", written by --stop-tonight;
+# only the automatic --run of that night uses it (D10), every other night stops at DEFAULT_STOP
+DEFAULT_STOP="09:00"
+stop_night() {   # hour -> YYYYMMDD of the night whose automatic run comes next: today before 03:00, else tomorrow
+  if [ "$((10#$1))" -lt 3 ]; then echo "$DATE"; else date -j -v+1d -f '%Y%m%d' "$DATE" +%Y%m%d; fi
+}
+tonight_stop() {   # night -> that night's one-night stop HH:MM; empty when none is stored for it
+  local f="$NIGHT/state/stop-tonight" l
+  [ -f "$f" ] || return 0
+  l="$(head -1 "$f")"
+  [ "${l%% *}" = "$1" ] && [[ "${l#* }" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] && echo "${l#* }"
+  return 0
+}
+next_stop() {   # hour -> the job stop of the next automatic run as seen from that hour
+  local o; o="$(tonight_stop "$(stop_night "$1")")"; echo "${o:-$DEFAULT_STOP}"
+}
 requeue_hint() {
   printf 'tools/perf/night.sh --queue-add --name %q --minutes %q --dir %q --cmd %q' \
     "$(jf "$1" name)" "$(jf "$1" minutes)" "$(jf "$1" dir)" "$(jf "$1" cmd)"
@@ -204,6 +277,8 @@ queue_list() {
   done
   [ "$n" -gt 0 ] || echo "queue empty"
   [ ! -f "$NIGHT/state/last-measured-sha" ] || echo "gate: last full measurement $(cat "$NIGHT/state/last-measured-sha")"
+  l="$(tonight_stop "$(stop_night "$(date +%H)")")"
+  [ -z "$l" ] || echo "job stop for night $(stop_night "$(date +%H)"): $l (one-night override, later nights $DEFAULT_STOP)"
 }
 waiting_line() {   # -> REP += one "queue: …" line
   local f n=0 s=""
@@ -399,7 +474,7 @@ if [ "$MODE" = "--queue-add" ]; then
   { printf 'id: %s\nname: %s\nminutes: %s\ndir: %s\ncmd: %s\nadded: %s\n' "$id" "$JNAME" "$((10#$JMIN))" "$JDIR" "$JCMD" \
       "$(date '+%Y-%m-%d %H:%M')" > "$f.tmp" && mv "$f.tmp" "$f"; } || fatal 70 "cannot write $f"
   echo "$((10#$n + 1))" > "$NIGHT/state/next-job-id"
-  echo "queued #$id $JNAME (needs $((10#$JMIN)) min before 09:00)"; queue_list; exit 0
+  echo "queued #$id $JNAME (needs $((10#$JMIN)) min before $(next_stop "$(date +%H)"))"; queue_list; exit 0
 fi
 if [ "$MODE" = "--queue-list" ]; then queue_list; exit 0; fi
 if [ "$MODE" = "--queue-remove" ]; then
@@ -408,6 +483,18 @@ if [ "$MODE" = "--queue-remove" ]; then
   [ -n "$f" ] || fatal 64 "no queued job #$id"
   if grep -q '^started: ' "$f" && busy; then fatal 64 "job #$id is running; stop the night run first (Ctrl-C in its Terminal window)"; fi
   rm -f "$f"; echo "removed #$id"; queue_list; exit 0
+fi
+if [ "$MODE" = "--stop-tonight" ]; then
+  [[ "$STOP_TONIGHT" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || fatal 64 "--stop-tonight must be HH:MM"
+  m=$((10#${STOP_TONIGHT%%:*} * 60 + 10#${STOP_TONIGHT#*:}))
+  { [ "$m" -gt 180 ] && [ "$m" -lt 780 ]; } || fatal 64 "--stop-tonight must be after 03:00 and before 13:00"
+  n="$(stop_night "$(date +%H)")"
+  if [ "$n" = "$DATE" ] && [ -f "$NIGHT/runs/$DATE/started" ]; then
+    fatal 64 "tonight's run already started at $(cat "$NIGHT/runs/$DATE/started"); a started night keeps its stop"
+  fi
+  { echo "$n $STOP_TONIGHT" > "$NIGHT/state/stop-tonight.tmp" && mv "$NIGHT/state/stop-tonight.tmp" "$NIGHT/state/stop-tonight"; } \
+    || fatal 70 "cannot write $NIGHT/state/stop-tonight"
+  echo "night $n: jobs stop at $STOP_TONIGHT (this night only, later nights stop at $DEFAULT_STOP)"; queue_list; exit 0
 fi
 
 # ---------------------------------------------------------------- --check
@@ -430,6 +517,7 @@ if [ "$MODE" = "--check" ]; then
     pending_report "$(date -j -v-1d -f '%Y%m%d' "$DATE" +%Y%m%d)"
     [ "$H" -lt 3 ] || pending_report "$DATE"
   fi
+  if [ "$DRY" = 1 ]; then o="$(tonight_stop "$(stop_night "$H")")"; [ -z "$o" ] || echo "job stop for night $(stop_night "$H"): $o (one-night override)"; fi
   if [ "$H" -ge 3 ]; then decide "outside window (hour $H): nothing to do"; exit 0; fi
   if [ -f "$NIGHT/runs/$DATE/started" ]; then decide "run already started tonight"; exit 0; fi
   skip() {
@@ -442,7 +530,7 @@ if [ "$MODE" = "--check" ]; then
   IS="$(idle_secs)"; T="$(idle_threshold)"
   [ "${IS:-0}" -ge "$T" ] || skip "not idle: ${IS:-0} s < $T s"
   busy && skip "another gate or night run is running"
-  if [ "$DRY" = 1 ]; then echo "would start tonight's run (idle ${IS} s >= $T s); queue: $(ls -1 "$NIGHT"/queue/*.job 2>/dev/null | wc -l | tr -d ' ') job(s)"; exit 0; fi
+  if [ "$DRY" = 1 ]; then echo "would start tonight's run (idle ${IS} s >= $T s); queue: $(ls -1 "$NIGHT"/queue/*.job 2>/dev/null | wc -l | tr -d ' ') job(s); job stop $(next_stop "$H")"; exit 0; fi
   mkdir -p "$NIGHT/runs/$DATE"; date '+%H:%M' > "$NIGHT/runs/$DATE/started"
   decide "starting run in Terminal (idle $IS s >= $T s)"
   open -a Terminal "$PERF/night.command"
@@ -461,8 +549,9 @@ NDONE=0; NFAILED=0; NSTOPPED=0; NINT=0; NNOT=0
 JPID=""; JF=""; JOUT=""; JSTART=""; JRC=""; JSTOPPED=""; JLEFT=""
 CLOSE_LINES=(); CLOSE_WHY=""
 DISP_LINE="display: not attempted"; KBD_LINE="keyboard: not attempted"
-JOBS=1; STOP_HM="09:00"                                   # D12: a hand run runs jobs only with --stop
-if [ "$NOW" = 1 ]; then if [ -n "$STOP" ]; then STOP_HM="$STOP"; else JOBS=0; fi; fi
+JOBS=1; STOP_HM="$DEFAULT_STOP"; STOP_NOTE=""             # D12: a hand run runs jobs only with --stop
+if [ "$NOW" = 1 ]; then if [ -n "$STOP" ]; then STOP_HM="$STOP"; else JOBS=0; fi
+else o="$(tonight_stop "$DATE")"; [ -z "$o" ] || { STOP_HM="$o"; STOP_NOTE=" (one-night stop from --stop-tonight)"; }; fi
 STOP_EPOCH="$(date -j -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 [ "$STOP_EPOCH" -gt "$START_EPOCH" ] || STOP_EPOCH="$(date -j -v+1d -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 SOFT_HM="$(date -r $((STOP_EPOCH - 900)) +%H:%M)"        # D7: STOP_AT for self-stopping jobs
@@ -680,7 +769,7 @@ finish() {
   REP=("$first")
   case "$NIGHT_VERDICT" in
     SKIPPED*) ;;   # a skipped night stays a short report
-    *) REP+=("time: $START_HM - $(date +%H:%M), $(( ($(date +%s) - START_EPOCH) / 60 )) min; job stop $STOP_HM (jobs get STOP_AT=$SOFT_HM)")
+    *) REP+=("time: $START_HM - $(date +%H:%M), $(( ($(date +%s) - START_EPOCH) / 60 )) min; job stop $STOP_HM$STOP_NOTE (jobs get STOP_AT=$SOFT_HM)")
        REP+=("idle at start: $IDLE0 s, threshold $THR s$([ "$NOW" = 1 ] && echo ' (--now: window and idle checks skipped)')")
        REP+=("preconditions: AC power and Low Power Mode off, screen unlocked")
        REP+=("keep-awake: caffeinate pid ${CAF:-none}, assertion seen: $CAF_SEEN" "$DISP_LINE" "$KBD_LINE")
