@@ -1,12 +1,13 @@
 // Engine/L10n.swift
 // In-app localization core: the language enums, `AppStrings` (the composition of the per-feature string
 // protocols in Engine/Strings/), the StringsEN/StringsRU structs, `ruPlural`, `L10nStore` and `var L`.
+// The English table is the reference, the Russian table the translation.
 // Foundation-only: also covered by Tests/MacDashboardTests.
 import Foundation
 import Observation
 
 enum AppLanguage: String, CaseIterable {
-    case ru, en
+    case en, ru
 }
 
 extension AppLanguage {
@@ -50,8 +51,7 @@ struct StringsEN: AppStrings {}
 /// Russian string table, the translation of StringsEN. Its members are the `extension StringsRU` parts of Engine/Strings/.
 struct StringsRU: AppStrings {}
 
-/// Russian plural picker: ruPlural(1, ...)="цикл", (2)="цикла", (5)="циклов",
-/// (11)="циклов", (21)="цикл". Standard Russian plural-form rules.
+/// Russian plural picker: one / few / many form by the standard Russian rules (1 → one, 2-4 → few, 5-20 and 11-14 → many, 21 → one).
 func ruPlural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
     let m100 = abs(n) % 100, m10 = abs(n) % 10
     if (11...14).contains(m100) { return many }
@@ -66,6 +66,7 @@ func ruPlural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String 
 /// re-renders instantly on language change. Engine code never reads it (ARCH-TEXT-EDGE):
 /// parsers and collectors store values, text is made at the view / page-model edge or by
 /// functions that take `language:`.
+/// A language maps to a table only through `AppLanguage.strings`; English is the reference table.
 @Observable @MainActor
 final class L10nStore {
     static let shared = L10nStore()
@@ -95,7 +96,10 @@ final class L10nStore {
             initial = c
         } else if let raw = d.string(forKey: Self.defaultsKey), let lang = AppLanguage(rawValue: raw) {
             // An existing install: the stored language stays an explicit choice (D9).
-            initial = lang == .ru ? .ru : .en
+            switch lang {
+            case .en: initial = .en
+            case .ru: initial = .ru
+            }
         } else {
             initial = .system
         }
@@ -127,7 +131,20 @@ extension AppStrings {
 
 extension AppLanguage {
     /// The strings table of this language. The single place that maps a language to a table.
-    var strings: AppStrings { self == .en ? StringsEN() : StringsRU() }
+    var strings: AppStrings {
+        switch self {
+        case .en: return StringsEN()
+        case .ru: return StringsRU()
+        }
+    }
+
+    /// Locale for month names and dates rendered in the UI language (not the Region).
+    var localeIdentifier: String {
+        switch self {
+        case .en: return "en_US"
+        case .ru: return "ru_RU"
+        }
+    }
 }
 
 @MainActor var L: AppStrings { L10nStore.shared.language.strings }

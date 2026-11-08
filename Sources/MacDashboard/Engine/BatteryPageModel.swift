@@ -328,7 +328,7 @@ struct BatteryPageModel: Equatable {
         let cal = Calendar(identifier: .iso8601)
         guard let date = cal.date(from: comps) else { return nil }
         let df = DateFormatter()
-        df.locale = Locale(identifier: L10nStore.shared.language == .en ? "en_US" : "ru_RU")
+        df.locale = Locale(identifier: L10nStore.shared.language.localeIdentifier)
         df.dateFormat = "LLL yyyy"
         return df.string(from: date)
     }
@@ -403,12 +403,12 @@ struct BatteryPageModel: Equatable {
         var comps = DateComponents()
         comps.year = y; comps.month = m; comps.day = 1
         guard let date = Calendar.current.date(from: comps) else { return yyyyMM }
-        let df = L10nStore.shared.language == .en ? monthFormatterEN : monthFormatterRU
+        let df = Self.monthFormatters[L10nStore.shared.language]!
         return df.string(from: date)
     }
 
-    private static let monthFormatterEN = makeMonthFormatter("en_US")
-    private static let monthFormatterRU = makeMonthFormatter("ru_RU")
+    private static let monthFormatters: [AppLanguage: DateFormatter] =
+        Dictionary(uniqueKeysWithValues: AppLanguage.allCases.map { ($0, makeMonthFormatter($0.localeIdentifier)) })
 
     private static func makeMonthFormatter(_ locale: String) -> DateFormatter {
         let df = DateFormatter()

@@ -279,7 +279,7 @@ private struct ReportRenderer {
     private func formatDateTime(_ date: Date) -> String {
         let ru = language == .ru
         let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: ru ? "ru_RU" : "en_US")
+        fmt.locale = Locale(identifier: language.localeIdentifier)
         fmt.timeZone = .current
         fmt.dateFormat = ru ? "d MMM yyyy, HH:mm" : "MMM d, yyyy, HH:mm"
         return fmt.string(from: date)

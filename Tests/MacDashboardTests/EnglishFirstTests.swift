@@ -145,4 +145,31 @@ struct EnglishFirstTests {
         }
         #expect(offenders.isEmpty, "Cyrillic in code outside the Russian tables: \(offenders.joined(separator: ", "))")
     }
+
+    // MARK: R4, R7
+
+    @Test func tablesSelectByLanguage() {
+        #expect(AppLanguage.en.strings is StringsEN)
+        #expect(AppLanguage.ru.strings is StringsRU)
+        #expect(AppLanguage.allCases == [.en, .ru])
+        #expect(AppLanguage.en.localeIdentifier == "en_US")
+        #expect(AppLanguage.ru.localeIdentifier == "ru_RU")
+        #expect(LanguageChoice.allCases == [.system, .en, .ru])
+    }
+
+    @Test func tmBackupDateIsLocaleFree() {
+        // 1_784_197_800 = 2026-07-16 10:30:00 UTC
+        let date = Date(timeIntervalSince1970: 1_784_197_800)
+        #expect(Parsers.formatTMBackupDate(date, timeZone: TimeZone(identifier: "UTC")!) == "16.07.2026, 10:30")
+        #expect(Parsers.formatTMBackupDate(date, timeZone: TimeZone(identifier: "Europe/Moscow")!) == "16.07.2026, 13:30")
+    }
+
+    /// Opt-in: prints the Mac's first preferred language and what `.system` resolves to, and asserts the mapping.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
+    func liveCanaryFirstLaunchLanguage() {
+        let first = Locale.preferredLanguages.first ?? ""
+        let resolved = LanguageChoice.resolve(.system, preferredLanguages: Locale.preferredLanguages)
+        print("liveCanaryFirstLaunchLanguage preferred=\(first) resolved=\(resolved)")
+        #expect(resolved == (first.hasPrefix("ru") ? .ru : .en))
+    }
 }

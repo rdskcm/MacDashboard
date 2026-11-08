@@ -37,7 +37,7 @@ extension SerialTests {
 
                 // Round-trip: fmtCapacityParts must never diverge from fmtCapacity (V2-FIX-UNITS).
                 for (bytes, _, _, label) in cases {
-                    for lang in [AppLanguage.ru, .en] {
+                    for lang in AppLanguage.allCases {
                         L10nStore.shared.language = lang
                         let p = fmtCapacityParts(bytes)
                         #expect(fmtCapacity(bytes) == "\(p.value) \(p.unit)",
@@ -81,7 +81,7 @@ extension SerialTests {
                 ]
 
                 for bytes in byteCases {
-                    for lang in [AppLanguage.ru, .en] {
+                    for lang in AppLanguage.allCases {
                         L10nStore.shared.language = lang
                         let p = fmtBytesParts(bytes)
                         #expect(fmtBytes(bytes) == "\(p.value) \(p.unit ?? "")",
