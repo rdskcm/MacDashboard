@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/perf/night.sh — night launcher: on an idle Mac it runs the perf gate on origin/main when main changed, then the
-# queued night jobs one at a time, then the standing set (NIGHT-STANDING-JOBS), until 09:00 (or the one-night stop set by --stop-tonight), and writes one morning report for the whole night.
+# queued night jobs one at a time, then the standing set (NIGHT-STANDING-JOBS), and reads the night's results against the page budgets (tools/perf/budgets.tsv), until 09:00 (or the one-night stop set by --stop-tonight), and writes one morning report for the whole night.
 #
 # Usage:
 #   tools/perf/night.sh --check [--dry-run]      LaunchAgent entry (every 60 s): start tonight's run if due and write a
@@ -589,6 +589,7 @@ NIGHT_VERDICT=""   # only for a whole-night outcome (SKIPPED / ERROR); otherwise
 GATE_VERDICT=""; GATE_LINES=(); JOB_LINES=(); NOTES=(); REP=()
 NDONE=0; NFAILED=0; NSTOPPED=0; NINT=0; NNOT=0
 SDONE=0; SFAILED=0; SSTOPPED=0; SINT=0; SNOT=0; SSKIP=0; SCHANGED=0; STAND_LINES=(); STAND_REACHED=0
+BUDGET_HEAD=""; BUDGET_LINES=()
 RAN_NAMES=" "; HALT=""; WHY=""; JKIND=""; JSTOP_EPOCH=""; JSTOP_HM=""
 JPID=""; JF=""; JOUT=""; JSTART=""; JRC=""; JSTOPPED=""; JLEFT=""
 CLOSE_LINES=(); CLOSE_WHY=""
@@ -855,6 +856,20 @@ run_gate() {
   GATE_VERDICT="$VERDICT — main $SHA vs ${BASE_SHA:-no baseline}"
 }
 
+budget_lines() {   # PAGE-BUDGETS: BUDGET_HEAD = "budgets: …" for line 1, BUDGET_LINES = the ## budgets section (budgets.py read)
+  local sha l f d first=1 args=()
+  sha="$(git -C "$ROOT" rev-parse --short=10 origin/main 2>/dev/null)"
+  for f in "$NIGHT"/standing/last-*; do   # tonight's DONE standing outputs (standing_diff writes "<date>\t<out dir>")
+    [ -f "$f" ] && [ "$(cut -f1 "$f")" = "$DATE" ] || continue
+    d="$(cut -f2 "$f")"; [ -d "$d" ] && args+=(--run "$d")
+  done
+  while IFS= read -r l; do
+    if [ "$first" = 1 ]; then first=0; BUDGET_HEAD="budgets: ${l#BUDGETS }"
+    else BUDGET_LINES+=("$l"); fi
+  done < <(python3 -I "$PERF/budgets.py" read --sha "${sha:-unknown}" --gate-root "$PERF/out" ${args[@]+"${args[@]}"} 2>&1 | head -40)
+  [ "$first" = 0 ] || BUDGET_HEAD="budgets: budgets.py printed nothing"
+}
+
 finish() {
   local rc=$? first jobs standing hl
   [ "$FINISHED" = 0 ] || return; FINISHED=1
@@ -871,10 +886,11 @@ finish() {
   elif [ -z "$(ls "$NIGHT"/standing/*.job 2>/dev/null)" ]; then standing="standing: none defined"
   elif [ "$STAND_REACHED" = 0 ]; then standing="standing: not reached"
   else standing="standing: $SDONE done, $SFAILED failed, $SSTOPPED stopped at cap, $SINT interrupted, $SNOT not started, $SSKIP skipped, $SCHANGED changed"; fi
+  [ -n "$NIGHT_VERDICT" ] || budget_lines
   if [ -n "$SIGNAME" ] || { [ "$rc" != 0 ] && [ -z "$NIGHT_VERDICT" ]; }; then
-    first="NIGHT $DATE: INTERRUPTED — ${SIGNAME:-exit $rc}; ${GATE_VERDICT:-gate not reached}; $jobs; $standing"
+    first="NIGHT $DATE: INTERRUPTED — ${SIGNAME:-exit $rc}; ${GATE_VERDICT:-gate not reached}; $jobs; $standing${BUDGET_HEAD:+; $BUDGET_HEAD}"
   elif [ -n "$NIGHT_VERDICT" ]; then first="NIGHT $DATE: $NIGHT_VERDICT"
-  else first="NIGHT $DATE: ${GATE_VERDICT:-gate not reached}; $jobs; $standing"; fi
+  else first="NIGHT $DATE: ${GATE_VERDICT:-gate not reached}; $jobs; $standing${BUDGET_HEAD:+; $BUDGET_HEAD}"; fi
   REP=("$first")
   case "$NIGHT_VERDICT" in
     SKIPPED*) ;;   # a skipped night stays a short report
@@ -887,7 +903,8 @@ finish() {
        [ "${#NOTES[@]}" = 0 ] || REP+=("${NOTES[@]}")
        REP+=("## gate"); [ "${#GATE_LINES[@]}" = 0 ] || REP+=("${GATE_LINES[@]}")
        REP+=("## jobs"); [ "${#JOB_LINES[@]}" = 0 ] || REP+=("${JOB_LINES[@]}")
-       REP+=("## standing"); [ "${#STAND_LINES[@]}" = 0 ] || REP+=("${STAND_LINES[@]}") ;;
+       REP+=("## standing"); [ "${#STAND_LINES[@]}" = 0 ] || REP+=("${STAND_LINES[@]}")
+       [ -z "$BUDGET_HEAD" ] || { REP+=("## budgets"); [ "${#BUDGET_LINES[@]}" = 0 ] || REP+=("${BUDGET_LINES[@]}"); } ;;
   esac
   waiting_line
   write_report "$DATE" "${REP[@]}"

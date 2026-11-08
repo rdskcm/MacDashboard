@@ -16,7 +16,8 @@
       Mean app % and WindowServer % from the sampler output of gate.sh (first sample dropped), optionally
       restricted to the samples whose interval centre lies in [t0, t1).
       Exits 2 when no sample of <pid> falls in the window (ws_pct is printed only when WindowServer was sampled).
-  analyze.py verdict <out-dir> [--g1-max PCT] [--g9-max PCT]
+  analyze.py verdict <out-dir> --g1-max PCT --g9-max PCT
+      Both limits are required; gate.sh reads them from tools/perf/budgets.tsv.
       Reads <out-dir>/runs.tsv, writes summary.tsv, appends the per-scenario tables to report.md, prints
       `COUNTS pass=<k> fail=<m> noisy=<j>`.
       A scenario in runs.tsv whose candidate lacks a metric that has an absolute rule, or a regression rule with a
@@ -26,7 +27,7 @@
       `METRIC motion_s`, and `POS-INVALID <why>` when more than 5 % of the reads are within 3 pt of an end of the range
       or fewer than 50 % of the expected reads were logged. Exit 0 in both cases, 2 on a missing or headerless file.
   analyze.py selftest
-      Checks median(), the exact Mann-Whitney p-value, pos_eval(), and that tp, ca, top and verdict refuse missing data; prints `selftest ok`.
+      Checks median(), the exact Mann-Whitney p-value, pos_eval(), and that tp, ca, top and verdict refuse missing data and that verdict needs both limits; prints `selftest ok`.
 
 Marks in drv.txt: `t0 <epoch>` / `t1 <epoch>`, or `t0 <label> <epoch>` / `t1 <label> <epoch>`.
 Exit: 0 ok, 2 bad input / missing file.
@@ -35,6 +36,7 @@ import collections
 import contextlib
 import io
 import itertools
+import math
 import os
 import re
 import shutil
@@ -545,26 +547,27 @@ def cmd_selftest(args):
     ]
     # FIX-LEFTOVERS (GPU-RENDER-AUDIT m3): tp and verdict refuse missing data (inputs as in the hunter's m3/ set)
     tmp = tempfile.mkdtemp(prefix="analyze-selftest-")
+    lim = ["--g1-max", "1", "--g9-max", "1"]   # test limits, not budgets: no fixture has a G1 or G9 app_pct value
     try:
         main_label = "Main Thread (0x1) (MacDashboard, pid: 1)"
         ok_code, ok_out = _run(cmd_tp, [_tp_fixture(tmp, "valid", main_label, 10, True)])
         vm_code, vm_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vmissing", [
             ("G3", "cand", "1", "window_s", "10"), ("G4", "cand", "1", "window_s", "10"),
-            ("G6-page", "cand", "1", "window_s", "10")])])
+            ("G6-page", "cand", "1", "window_s", "10")])] + lim)
         with open(os.path.join(tmp, "vmissing", "summary.tsv")) as f:
             vm_summary = f.read()
         vz_code, vz_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vzero", [
             ("G3", "cand", "1", "main_busy_median_ms_s", "0"), ("G4", "cand", "1", "main_busy_median_ms_s", "0"),
-            ("G4", "cand", "1", "hitches_per_s", "0"), ("G4", "cand", "1", "hitches_total", "0")])])
+            ("G4", "cand", "1", "hitches_per_s", "0"), ("G4", "cand", "1", "hitches_total", "0")])] + lim)
         vb_code, vb_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vbase", [
-            ("G4", "base", "1", "hitches_per_s", "1"), ("G4", "cand", "1", "main_busy_median_ms_s", "10")])])
+            ("G4", "base", "1", "hitches_per_s", "1"), ("G4", "cand", "1", "main_busy_median_ms_s", "10")])] + lim)
         vi_code, vi_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vinfo", [   # the second hunter's verdict-info set
             ("G4", "cand", "1", "window_s", "20"), ("G4", "cand", "1", "main_busy_total", "0"),
             ("G3", "cand", "1", "app_pct", "1.0"), ("G1", "cand", "1", "ws_pct", "3.0"),
-            ("G9", "cand", "1", "ws_pct", "3.0")])])
+            ("G9", "cand", "1", "ws_pct", "3.0")])] + lim)
         vr_code, vr_out = _run(cmd_verdict, [_verdict_fixture(tmp, "vreg", [
             ("GP-system", "base", "1", "main_busy_total", "900"), ("GP-system", "base", "1", "hitches_total", "2"),
-            ("GP-system", "cand", "1", "hitches_total", "2")])])
+            ("GP-system", "cand", "1", "hitches_total", "2")])] + lim)
         sym_prefix = _tp_fixture(tmp, "named", main_label, 10, True)
         sym_code, sym_out = _run(cmd_tp, [sym_prefix, "rgba64_shade_conic"])
         addr_prefix = _tp_fixture(tmp, "addrs", main_label, 10, True, frame="0x18bbb6d80")
@@ -597,6 +600,7 @@ def cmd_selftest(args):
              _run(cmd_tp, [_tp_fixture(tmp, "nohitches", main_label, 10, False)])[0] == 2),
             ("verdict missing ABS metrics fail", vm_code == 0 and "COUNTS pass=0 fail=4 noisy=0" in vm_out
              and "G3\tcand\tagg\tmain_busy_median_ms_s\t-\t<= 25; missing for the candidate\tFAIL\n" in vm_summary),
+            ("verdict without the limit flags dies", _run(cmd_verdict, [os.path.join(tmp, "vzero")])[0] == 2),
             ("verdict present zeros pass", vz_code == 0 and "COUNTS pass=3 fail=0 noisy=0" in vz_out),
             ("verdict metric only in the baseline fails", vb_code == 0 and "COUNTS pass=1 fail=1 noisy=0" in vb_out),
         ]
@@ -652,15 +656,21 @@ def check(op, value, limit):
 
 
 def cmd_verdict(argv):
+    usage = ("usage: analyze.py verdict <out-dir> --g1-max PCT --g9-max PCT "
+             "(gate.sh passes the page budgets from tools/perf/budgets.tsv)")
     if not argv:
-        die("usage: analyze.py verdict <out-dir> [--g1-max PCT] [--g9-max PCT]")
+        die(usage)
     out = argv[0]
-    g1max = 5.6
-    if "--g1-max" in argv:
-        g1max = float(argv[argv.index("--g1-max") + 1])
-    g9max = 6.5
-    if "--g9-max" in argv:
-        g9max = float(argv[argv.index("--g9-max") + 1])
+    lim = {}
+    for flag in ("--g1-max", "--g9-max"):   # both limits come from the required flags, no default numbers
+        try:
+            v = float(argv[argv.index(flag) + 1])
+        except (ValueError, IndexError):
+            die(usage)
+        if not math.isfinite(v):
+            die(usage)
+        lim[flag] = v
+    g1max, g9max = lim["--g1-max"], lim["--g9-max"]
     rules = dict(ABS)
     rules[("G1", "app_pct")] = ("<=", g1max)
     rules[("G9", "app_pct")] = ("<=", g9max)
