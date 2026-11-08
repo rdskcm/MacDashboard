@@ -299,6 +299,7 @@ fi
 # Every precondition passed: now it is safe to create the run directory and
 # hand vbtool over to it (R7).
 mkdir -p "$OUT/raw" "$OUT/norm" "$OUT/diff" "$OUT/text" "$OUT/axtext" "$OUT/.bin"
+"$ROOT/tools/keep-latest.sh" --exclude "$OUT" "$ROOT/tools/visual/out" '^[0-9]{8}-[0-9]{6}$' 5 > "$OUT/prune.log" 2>&1 || true   # NIGHT-STANDING-JOBS retention
 mv "$TMPBIN/vbtool" "$OUT/.bin/vbtool"
 VBTOOL="$OUT/.bin/vbtool"
 mv "$TMPBIN/ax" "$OUT/.bin/ax"

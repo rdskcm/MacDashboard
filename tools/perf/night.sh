@@ -1,20 +1,26 @@
 #!/bin/bash
 # tools/perf/night.sh — night launcher: on an idle Mac it runs the perf gate on origin/main when main changed, then the
-# queued night jobs one at a time until 09:00 (or the one-night stop set by --stop-tonight), and writes one morning report for the whole night.
+# queued night jobs one at a time, then the standing set (NIGHT-STANDING-JOBS), until 09:00 (or the one-night stop set by --stop-tonight), and writes one morning report for the whole night.
 #
 # Usage:
 #   tools/perf/night.sh --check [--dry-run]      LaunchAgent entry (every 60 s): start tonight's run if due and write a
 #                                                pending morning report; --dry-run prints the decisions and changes nothing; from 21:00 until tonight's run starts (03:00 at the latest) it keeps the display awake so the screen cannot lock, dimmed while the user is away
-#   tools/perf/night.sh --run [--now] [--keep-dark] [--scenarios LIST] [--runs N] [--stop HH:MM] [--no-gate]
+#   tools/perf/night.sh --run [--now] [--keep-dark] [--scenarios LIST] [--runs N] [--stop HH:MM] [--no-gate] [--standing]
 #                                                the run (normally opened in Terminal by --check): gate, then jobs until
 #                                                09:00. --now skips the window and idle checks (hand run) and runs the gate
 #                                                only, unless --stop HH:MM is given (then jobs run until that time);
-#                                                --no-gate (with --now --stop) skips the gate; --keep-dark leaves display and
+#                                                --no-gate (with --now --stop) skips the gate;
+#                                                --standing (with --now --stop) also runs the standing set after the queued jobs; --keep-dark leaves display and
 #                                                keyboard dark; LIST/N pass to gate.sh (default all / 3), LIST != all is "partial"
 #   tools/perf/night.sh --queue-add --name NAME --minutes M --dir DIR --cmd 'COMMAND'
 #                                                queue a night job: COMMAND runs in the foreground with bash -c in DIR; M = the
 #                                                minutes it needs before the 09:00 stop to be worth starting (1-540)
 #   tools/perf/night.sh --queue-list | --queue-remove ID
+#   tools/perf/night.sh --standing-add --name NAME --minutes M --dir DIR --cmd 'COMMAND'
+#                                                add a standing job: every automatic night run starts it after the queued
+#                                                jobs, in the order added; M = the minutes it needs before the stop, and
+#                                                its cap (NIGHT_STOP_EPOCH = start + M, STOP_AT = that minus 15 min)
+#   tools/perf/night.sh --standing-list | --standing-remove NAME
 #   tools/perf/night.sh --stop-tonight HH:MM     jobs of the coming night's automatic run stop at HH:MM instead of 09:00
 #                                                (after 03:00, before 13:00); that night only, later nights stop at 09:00
 #   tools/perf/night.sh --install | --uninstall  add / remove the user LaunchAgent com.rdskcm.macdashboard.night
@@ -41,17 +47,19 @@ if [ -n "${NIGHT_OUT:-}" ]; then
 fi
 
 # ---------------------------------------------------------------- argument parsing
-MODE=""; DRY=0; NOW=0; KEEP_DARK=0; LIST=""; N=""
-STOP=""; NO_GATE=0; JNAME=""; JMIN=""; JDIR=""; JCMD=""; JID=""; STOP_TONIGHT=""
+MODE=""; DRY=0; NOW=0; KEEP_DARK=0; LIST=""; N=""; STANDING_FLAG=0
+STOP=""; NO_GATE=0; JNAME=""; JMIN=""; JDIR=""; JCMD=""; JID=""; STOP_TONIGHT=""; SNAME=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --check|--run|--install|--uninstall|--restore-brightness|--queue-add|--queue-list) MODE="$1"; shift ;;
+    --check|--run|--install|--uninstall|--restore-brightness|--queue-add|--queue-list|--standing-add|--standing-list) MODE="$1"; shift ;;
     --queue-remove) [ $# -ge 2 ] || fatal 64 "--queue-remove needs a job id"; MODE="$1"; JID="$2"; shift 2 ;;
+    --standing-remove) [ $# -ge 2 ] || fatal 64 "--standing-remove needs a name"; MODE="$1"; SNAME="$2"; shift 2 ;;
     --stop-tonight) [ $# -ge 2 ] || fatal 64 "--stop-tonight needs HH:MM"; MODE="$1"; STOP_TONIGHT="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --now) NOW=1; shift ;;
     --keep-dark) KEEP_DARK=1; shift ;;
     --no-gate) NO_GATE=1; shift ;;
+    --standing) STANDING_FLAG=1; shift ;;
     --scenarios) [ $# -ge 2 ] || fatal 64 "--scenarios needs a value"; LIST="$2"; shift 2 ;;
     --runs) [ $# -ge 2 ] || fatal 64 "--runs needs a value"; N="$2"; shift 2 ;;
     --stop) [ $# -ge 2 ] || fatal 64 "--stop needs a value"; STOP="$2"; shift 2 ;;
@@ -65,16 +73,17 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$MODE" ] || { usage >&2; exit 64; }
 [ "$DRY" = 0 ] || [ "$MODE" = "--check" ] || fatal 64 "--dry-run only with --check"
-{ [ "$NOW" = 0 ] && [ "$KEEP_DARK" = 0 ] && [ -z "$LIST" ] && [ -z "$N" ] && [ -z "$STOP" ] && [ "$NO_GATE" = 0 ]; } || [ "$MODE" = "--run" ] \
-  || fatal 64 "--now/--keep-dark/--scenarios/--runs/--stop/--no-gate only with --run"
+{ [ "$NOW" = 0 ] && [ "$KEEP_DARK" = 0 ] && [ -z "$LIST" ] && [ -z "$N" ] && [ -z "$STOP" ] && [ "$NO_GATE" = 0 ] && [ "$STANDING_FLAG" = 0 ]; } || [ "$MODE" = "--run" ] \
+  || fatal 64 "--now/--keep-dark/--scenarios/--runs/--stop/--no-gate/--standing only with --run"
 { [ -z "$STOP" ] && [ "$NO_GATE" = 0 ]; } || [ "$NOW" = 1 ] || fatal 64 "--stop/--no-gate only with --run --now"
 [ -z "$STOP" ] || [[ "$STOP" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || fatal 64 "--stop must be HH:MM"
 [ "$NO_GATE" = 0 ] || [ -n "$STOP" ] || fatal 64 "--no-gate needs --stop (a run with neither gate nor jobs does nothing)"
-{ [ -z "$JNAME$JMIN$JDIR$JCMD" ]; } || [ "$MODE" = "--queue-add" ] || fatal 64 "--name/--minutes/--dir/--cmd only with --queue-add"
+[ "$STANDING_FLAG" = 0 ] || [ -n "$STOP" ] || fatal 64 "--standing needs --now --stop HH:MM (the automatic night run always runs the standing set)"
+{ [ -z "$JNAME$JMIN$JDIR$JCMD" ]; } || [ "$MODE" = "--queue-add" ] || [ "$MODE" = "--standing-add" ] || fatal 64 "--name/--minutes/--dir/--cmd only with --queue-add or --standing-add"
 case "$MODE" in --install|--uninstall) [ -z "${NIGHT_OUT:-}" ] || fatal 64 "NIGHT_OUT is a test seam; unset it for $MODE" ;; esac
 
 if [ "$DRY" = 0 ]; then
-  mkdir -p "$NIGHT/builds" "$NIGHT/runs" "$NIGHT/reports" "$NIGHT/state" "$NIGHT/queue" "$NIGHT/.bin" || fatal 70 "cannot create $NIGHT"
+  mkdir -p "$NIGHT/builds" "$NIGHT/runs" "$NIGHT/reports" "$NIGHT/state" "$NIGHT/queue" "$NIGHT/standing" "$NIGHT/.bin" || fatal 70 "cannot create $NIGHT"
 fi
 # Time Machine exclusion of $NIGHT, once; synchronous (~10 s on first use). Only --install and --run call it: under --check
 # launchd killed the detached tmutil with the job's process group, after the marker had already been written.
@@ -280,6 +289,16 @@ queue_list() {
   l="$(tonight_stop "$(stop_night "$(date +%H)")")"
   [ -z "$l" ] || echo "job stop for night $(stop_night "$(date +%H)"): $l (one-night override, later nights $DEFAULT_STOP)"
 }
+standing_list() {   # NIGHT-STANDING-JOBS: the standing set in run order
+  local f n=0 l
+  for f in "$NIGHT"/standing/*.job; do
+    [ -f "$f" ] || continue; n=$((n + 1))
+    echo "$n. $(jf "$f" name) — $(jf "$f" minutes) min (start requirement and cap), added $(jf "$f" added), dir $(jf "$f" dir)"
+    echo "   cmd: $(jf "$f" cmd)"
+    l="$(cut -f1 "$NIGHT/standing/last-$(jf "$f" name)" 2>/dev/null)"; [ -z "$l" ] || echo "   last DONE: night $l"
+  done
+  [ "$n" -gt 0 ] || echo "standing set empty"
+}
 waiting_line() {   # -> REP += one "queue: …" line
   local f n=0 s=""
   for f in "$NIGHT"/queue/*.job; do
@@ -449,7 +468,7 @@ if [ "$MODE" = "--install" ]; then
 PL
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null
   launchctl bootstrap "gui/$(id -u)" "$PLIST" || fatal 70 "launchctl bootstrap failed"
-  echo "installed: checks every 60 s; between 00:00 and 03:00, when the Mac is idle and no Claude Code transcript was written for $WORK_QUIET_MIN min, it runs the gate (when main changed) and then the queued jobs until 09:00; from 21:00 until the run starts (03:00 at the latest) it keeps the display awake, dimmed while you are away, so the screen cannot lock; report: $NIGHT/latest.md"
+  echo "installed: checks every 60 s; between 00:00 and 03:00, when the Mac is idle and no Claude Code transcript was written for $WORK_QUIET_MIN min, it runs the gate (when main changed), then the queued jobs, then the standing set, until 09:00; from 21:00 until the run starts (03:00 at the latest) it keeps the display awake, dimmed while you are away, so the screen cannot lock; report: $NIGHT/latest.md"
   exit 0
 fi
 if [ "$MODE" = "--uninstall" ]; then
@@ -461,7 +480,7 @@ if [ "$MODE" = "--uninstall" ]; then
 fi
 
 # ---------------------------------------------------------------- --queue-add / --queue-list / --queue-remove
-if [ "$MODE" = "--queue-add" ]; then
+check_job_args() {   # --name/--minutes/--dir/--cmd of --queue-add and --standing-add; exit 64 on bad input
   [[ "$JNAME" =~ ^[A-Za-z0-9._-]{1,40}$ ]] || fatal 64 "--name: 1-40 characters from A-Z a-z 0-9 . _ -"
   { [[ "$JMIN" =~ ^[0-9]{1,3}$ ]] && [ "$((10#$JMIN))" -ge 1 ] && [ "$((10#$JMIN))" -le 540 ]; } || fatal 64 "--minutes: 1-540"
   case "$JDIR" in /*) ;; *) fatal 64 "--dir must be an absolute path" ;; esac
@@ -469,6 +488,9 @@ if [ "$MODE" = "--queue-add" ]; then
   [ -d "$JDIR" ] || fatal 64 "--dir does not exist: $JDIR"
   [ -n "$JCMD" ] || fatal 64 "--cmd is empty"
   case "$JCMD" in *$'\n'*) fatal 64 "--cmd must be one line" ;; esac
+}
+if [ "$MODE" = "--queue-add" ]; then
+  check_job_args
   n="$(cat "$NIGHT/state/next-job-id" 2>/dev/null)"; [[ "$n" =~ ^[0-9]+$ ]] || n=1
   id="$(printf '%04d' "$((10#$n))")"; f="$NIGHT/queue/$id-$JNAME.job"
   { printf 'id: %s\nname: %s\nminutes: %s\ndir: %s\ncmd: %s\nadded: %s\n' "$id" "$JNAME" "$((10#$JMIN))" "$JDIR" "$JCMD" \
@@ -483,6 +505,26 @@ if [ "$MODE" = "--queue-remove" ]; then
   [ -n "$f" ] || fatal 64 "no queued job #$id"
   if grep -q '^started: ' "$f" && busy; then fatal 64 "job #$id is running; stop the night run first (Ctrl-C in its Terminal window)"; fi
   rm -f "$f"; echo "removed #$id"; queue_list; exit 0
+fi
+if [ "$MODE" = "--standing-add" ]; then
+  check_job_args
+  for c in "$NIGHT"/standing/*.job; do
+    [ -f "$c" ] && [ "$(jf "$c" name)" = "$JNAME" ] && fatal 64 "standing job $JNAME exists; --standing-remove $JNAME first"
+  done
+  n="$(cat "$NIGHT/state/next-standing-id" 2>/dev/null)"; [[ "$n" =~ ^[0-9]+$ ]] || n=1
+  id="$(printf '%03d' "$((10#$n))")"; f="$NIGHT/standing/$id-$JNAME.job"
+  { printf 'id: %s\nname: %s\nminutes: %s\ndir: %s\ncmd: %s\nadded: %s\n' "$id" "$JNAME" "$((10#$JMIN))" "$JDIR" "$JCMD" \
+      "$(date '+%Y-%m-%d %H:%M')" > "$f.tmp" && mv "$f.tmp" "$f"; } || fatal 70 "cannot write $f"
+  echo "$((10#$n + 1))" > "$NIGHT/state/next-standing-id"
+  echo "standing job $JNAME added: every automatic night after the queued jobs, needs and is capped at $((10#$JMIN)) min"; standing_list; exit 0
+fi
+if [ "$MODE" = "--standing-list" ]; then standing_list; exit 0; fi
+if [ "$MODE" = "--standing-remove" ]; then
+  [[ "$SNAME" =~ ^[A-Za-z0-9._-]{1,40}$ ]] || fatal 64 "standing job name: the name shown by --standing-list"
+  busy && fatal 64 "a night run is running; remove the standing job after it ends"
+  f=""; for c in "$NIGHT"/standing/*.job; do [ -f "$c" ] && [ "$(jf "$c" name)" = "$SNAME" ] && f="$c"; done
+  [ -n "$f" ] || fatal 64 "no standing job named $SNAME"
+  rm -f "$f" "$NIGHT/standing/last-$SNAME"; echo "removed standing job $SNAME"; standing_list; exit 0
 fi
 if [ "$MODE" = "--stop-tonight" ]; then
   [[ "$STOP_TONIGHT" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || fatal 64 "--stop-tonight must be HH:MM"
@@ -530,7 +572,7 @@ if [ "$MODE" = "--check" ]; then
   IS="$(idle_secs)"; T="$(idle_threshold)"
   [ "${IS:-0}" -ge "$T" ] || skip "not idle: ${IS:-0} s < $T s"
   busy && skip "another gate or night run is running"
-  if [ "$DRY" = 1 ]; then echo "would start tonight's run (idle ${IS} s >= $T s); queue: $(ls -1 "$NIGHT"/queue/*.job 2>/dev/null | wc -l | tr -d ' ') job(s); job stop $(next_stop "$H")"; exit 0; fi
+  if [ "$DRY" = 1 ]; then echo "would start tonight's run (idle ${IS} s >= $T s); queue: $(ls -1 "$NIGHT"/queue/*.job 2>/dev/null | wc -l | tr -d ' ') job(s); standing set: $(ls -1 "$NIGHT"/standing/*.job 2>/dev/null | wc -l | tr -d ' ') job(s); job stop $(next_stop "$H")"; exit 0; fi
   mkdir -p "$NIGHT/runs/$DATE"; date '+%H:%M' > "$NIGHT/runs/$DATE/started"
   decide "starting run in Terminal (idle $IS s >= $T s)"
   open -a Terminal "$PERF/night.command"
@@ -546,6 +588,8 @@ SRC=""; SIGNAME=""; FINISHED=0; CAF=""; CAF_SEEN="no"; IDLE0="?"; THR="?" HOLD_N
 NIGHT_VERDICT=""   # only for a whole-night outcome (SKIPPED / ERROR); otherwise line 1 = gate verdict + job counts
 GATE_VERDICT=""; GATE_LINES=(); JOB_LINES=(); NOTES=(); REP=()
 NDONE=0; NFAILED=0; NSTOPPED=0; NINT=0; NNOT=0
+SDONE=0; SFAILED=0; SSTOPPED=0; SINT=0; SNOT=0; SSKIP=0; SCHANGED=0; STAND_LINES=(); STAND_REACHED=0
+RAN_NAMES=" "; HALT=""; WHY=""; JKIND=""; JSTOP_EPOCH=""; JSTOP_HM=""
 JPID=""; JF=""; JOUT=""; JSTART=""; JRC=""; JSTOPPED=""; JLEFT=""
 CLOSE_LINES=(); CLOSE_WHY=""
 DISP_LINE="display: not attempted"; KBD_LINE="keyboard: not attempted"
@@ -555,6 +599,7 @@ else o="$(tonight_stop "$DATE")"; [ -z "$o" ] || { STOP_HM="$o"; STOP_NOTE=" (on
 STOP_EPOCH="$(date -j -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 [ "$STOP_EPOCH" -gt "$START_EPOCH" ] || STOP_EPOCH="$(date -j -v+1d -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 SOFT_HM="$(date -r $((STOP_EPOCH - 900)) +%H:%M)"        # D7: STOP_AT for self-stopping jobs
+STANDING=0; { [ "$NOW" = 0 ] || [ "$STANDING_FLAG" = 1 ]; } && STANDING=1   # NIGHT-STANDING-JOBS: automatic runs always, hand runs with --standing
 
 # GATE-AX-MISS: every MacDashboard process is closed before the gate and before each job (tools/perf/foreign-copies.sh:
 # copies SIGTERM then SIGKILL, the installed app by a polite AppleScript quit, never killed).
@@ -584,24 +629,92 @@ stop_job() {   # reason grace -> TERM the job's process group, KILL after grace.
   wait "$JPID" 2>/dev/null; JRC=$?
   JSTOPPED="$1|$how"
 }
-job_done() {   # records the finished/stopped job: report lines, result line, file moved to runs/<date>/
-  local id name res l
+job_done() {   # records the finished/stopped job: report lines and result. A queued job's file moves to runs/<date>/; a
+               # standing job's file stays, and a DONE standing run is diffed against the previous DONE one (NIGHT-STANDING-JOBS)
+  local id name res st l
   id="$(jf "$JF" id)"; name="$(jf "$JF" name)"
   case "$JSTOPPED" in
-    stopped\|*)     res="STOPPED AT $STOP_HM (${JSTOPPED#*|})"; NSTOPPED=$((NSTOPPED + 1)) ;;
-    interrupted\|*) res="INTERRUPTED — ${SIGNAME:-the night run ended} (${JSTOPPED#*|})"; NINT=$((NINT + 1)) ;;
-    *) if [ "$JRC" = 0 ]; then res="DONE"; NDONE=$((NDONE + 1)); else res="FAILED exit $JRC"; NFAILED=$((NFAILED + 1)); fi ;;
+    stopped\|*)     st=STOPPED; res="STOPPED AT $JSTOP_HM (${JSTOPPED#*|})" ;;
+    interrupted\|*) st=INTERRUPTED; res="INTERRUPTED — ${SIGNAME:-the night run ended} (${JSTOPPED#*|})" ;;
+    *) if [ "$JRC" = 0 ]; then st=DONE; res="DONE"; else st=FAILED; res="FAILED exit $JRC"; fi ;;
   esac
   [ -z "$JLEFT" ] || res="$res; $JLEFT"
-  JOB_LINES+=("- #$id $name: $res, $(date -r "$JSTART" +%H:%M)-$(date +%H:%M) ($(( ($(date +%s) - JSTART) / 60 )) min); log runs/$DATE/job-$id-$name.out")
-  while IFS= read -r l; do JOB_LINES+=("    | $l"); done < <(tail -3 "$JOUT" 2>/dev/null | cut -c1-200)
-  [ "$res" = DONE ] || JOB_LINES+=("    re-queue: $(requeue_hint "$JF")")
-  echo "result: $res" >> "$JF"
-  mv "$JF" "$NIGHT/runs/$DATE/job-$(basename "$JF")"
-  JPID=""; JF=""; JSTOPPED=""; JLEFT=""
+  if [ "$JKIND" = standing ]; then
+    case "$st" in DONE) SDONE=$((SDONE + 1)) ;; FAILED) SFAILED=$((SFAILED + 1)) ;; STOPPED) SSTOPPED=$((SSTOPPED + 1)) ;; *) SINT=$((SINT + 1)) ;; esac
+    STAND_LINES+=("- $name: $res, $(date -r "$JSTART" +%H:%M)-$(date +%H:%M) ($(( ($(date +%s) - JSTART) / 60 )) min, cap $JSTOP_HM); log runs/$DATE/standing-$name.out")
+    while IFS= read -r l; do STAND_LINES+=("    | $l"); done < <(tail -3 "$JOUT" 2>/dev/null | cut -c1-200)
+    [ "$st" != DONE ] || standing_diff "$name"
+  else
+    case "$st" in DONE) NDONE=$((NDONE + 1)) ;; FAILED) NFAILED=$((NFAILED + 1)) ;; STOPPED) NSTOPPED=$((NSTOPPED + 1)) ;; *) NINT=$((NINT + 1)) ;; esac
+    RAN_NAMES="$RAN_NAMES$name "
+    JOB_LINES+=("- #$id $name: $res, $(date -r "$JSTART" +%H:%M)-$(date +%H:%M) ($(( ($(date +%s) - JSTART) / 60 )) min); log runs/$DATE/job-$id-$name.out")
+    while IFS= read -r l; do JOB_LINES+=("    | $l"); done < <(tail -3 "$JOUT" 2>/dev/null | cut -c1-200)
+    [ "$res" = DONE ] || JOB_LINES+=("    re-queue: $(requeue_hint "$JF")")
+    echo "result: $res" >> "$JF"
+    mv "$JF" "$NIGHT/runs/$DATE/job-$(basename "$JF")"
+  fi
+  JPID=""; JF=""; JSTOPPED=""; JLEFT=""; JKIND=""
+}
+standing_diff() {   # name -> STAND_LINES += the diff of tonight's DONE run against the last DONE one; updates standing/last-<name>
+  local name="$1" out prev pdate l first=1
+  out="$(sed -n 's/^out: //p' "$JOUT" | tail -1)"
+  if [ -z "$out" ] || [ ! -d "$out" ]; then
+    STAND_LINES+=("    diff: none — the log has no \"out: <dir>\" line naming an existing directory"); return
+  fi
+  pdate="$(cut -f1 "$NIGHT/standing/last-$name" 2>/dev/null)"; prev="$(cut -f2 "$NIGHT/standing/last-$name" 2>/dev/null)"
+  if [ -z "$prev" ] || [ ! -d "$prev" ]; then prev="-"; pdate=""; fi
+  while IFS= read -r l; do
+    if [ "$first" = 1 ]; then
+      first=0; STAND_LINES+=("    diff vs ${pdate:+night }${pdate:-no earlier run}: $l")
+      case "$l" in CHANGED*) SCHANGED=$((SCHANGED + 1)) ;; esac
+    else STAND_LINES+=("      $l"); fi
+  done < <(python3 -I "$PERF/standing-diff.py" "$name" "$prev" "$out" 2>&1 | head -20)
+  [ "$first" = 0 ] || STAND_LINES+=("    diff: standing-diff.py printed nothing")
+  printf '%s\t%s\n' "$DATE" "$out" > "$NIGHT/standing/last-$name"
+}
+job_check() {   # file -> WHY = "" when the job may start now, else why not (D4-D9); a run-wide reason is kept in HALT
+  local min now
+  min="$(jf "$1" minutes)"; now="$(date +%s)"; WHY="$HALT"
+  [ -z "$WHY" ] || return 0
+  if [ $((now + min * 60)) -gt "$STOP_EPOCH" ]; then WHY="needs $min min, $(( (STOP_EPOCH - now) / 60 )) min left before $STOP_HM"
+  elif CC="$(claude_working)"; then HALT="$CC"; WHY="$HALT"
+  elif ! power_ok; then HALT="on battery or Low Power Mode on"; WHY="$HALT"
+  elif ! unlocked; then HALT="screen locked"; WHY="$HALT"; fi
+  return 0
+}
+run_one() {   # file kind stop-epoch -> runs one job in the foreground in its own process group until it exits or the stop
+              # epoch (SIGTERM, SIGKILL 120 s later), then job_done. kind: queue | standing
+  local f="$1" id name dir cmd jid t
+  id="$(jf "$f" id)"; name="$(jf "$f" name)"; dir="$(jf "$f" dir)"; cmd="$(jf "$f" cmd)"
+  JF="$f"; JKIND="$2"; JSTOP_EPOCH="$3"; JSTOP_HM="$(date -r "$3" +%H:%M)"
+  if [ "$JKIND" = queue ]; then
+    jid="$id"; echo "started: $DATE $(date +%H:%M)" >> "$f"; JOUT="$NIGHT/runs/$DATE/job-$id-$name.out"
+  else
+    jid="s$id"; JOUT="$NIGHT/runs/$DATE/standing-$name.out"
+  fi
+  JSTART="$(date +%s)"; JSTOPPED=""; JLEFT=""
+  if [ ! -d "$dir" ]; then echo "night.sh: job directory missing: $dir" > "$JOUT"; JRC=66; job_done; return; fi
+  ( cd "$dir" || exit 66
+    export STOP_AT="$(date -r $((JSTOP_EPOCH - 900)) +%H:%M)" NIGHT_STOP_EPOCH="$JSTOP_EPOCH" NIGHT_JOB_DATE="$DATE" NIGHT_JOB_ID="$jid"
+    exec /usr/bin/perl -e 'setpgrp(0,0) or die "setpgrp: $!\n"; exec @ARGV or die "exec: $!\n"' /bin/bash -c "$cmd"
+  ) < /dev/null > "$JOUT" 2>&1 &
+  JPID=$!
+  while kill -0 "$JPID" 2>/dev/null; do
+    if [ "$(date +%s)" -ge "$JSTOP_EPOCH" ]; then stop_job stopped 120; break; fi
+    sleep 5
+  done
+  if [ -z "$JSTOPPED" ]; then
+    wait "$JPID"; JRC=$?
+    t=0; while kill -0 -- "-$JPID" 2>/dev/null && [ "$t" -lt 10 ]; do sleep 2; t=$((t + 2)); done
+    if kill -0 -- "-$JPID" 2>/dev/null; then   # a job must run in the foreground; whatever it left behind is ended
+      kill -TERM -- "-$JPID" 2>/dev/null; sleep 3; kill -KILL -- "-$JPID" 2>/dev/null
+      JLEFT="left processes behind after its exit: killed"
+    fi
+  fi
+  job_done
 }
 run_jobs() {   # D4-D10: queue order, fit check, re-checks, one at a time
-  local f c tried=" " id name min dir cmd now why halt="" t
+  local f c tried=" " id name
   while :; do
     f=""
     for c in "$NIGHT"/queue/*.job; do
@@ -609,44 +722,35 @@ run_jobs() {   # D4-D10: queue order, fit check, re-checks, one at a time
     done
     [ -n "$f" ] || break
     tried="$tried$f "
-    id="$(jf "$f" id)"; name="$(jf "$f" name)"; min="$(jf "$f" minutes)"; dir="$(jf "$f" dir)"; cmd="$(jf "$f" cmd)"
-    now="$(date +%s)"; why="$halt"
-    if [ -z "$why" ]; then
-      if [ $((now + min * 60)) -gt "$STOP_EPOCH" ]; then why="needs $min min, $(( (STOP_EPOCH - now) / 60 )) min left before $STOP_HM"
-      elif CC="$(claude_working)"; then halt="$CC"; why="$halt"
-      elif ! power_ok; then halt="on battery or Low Power Mode on"; why="$halt"
-      elif ! unlocked; then halt="screen locked"; why="$halt"; fi
-    fi
-    if [ -z "$why" ]; then
-      close_copies "job #$id $name" || why="$CLOSE_WHY"
+    id="$(jf "$f" id)"; name="$(jf "$f" name)"
+    job_check "$f"
+    if [ -z "$WHY" ]; then
+      close_copies "job #$id $name" || WHY="$CLOSE_WHY"
       [ "${#CLOSE_LINES[@]}" = 0 ] || JOB_LINES+=("${CLOSE_LINES[@]}")
     fi
-    if [ -n "$why" ]; then
-      NNOT=$((NNOT + 1)); JOB_LINES+=("- #$id $name: NOT STARTED — $why; stays queued")
-      sed -i '' '/^last: /d' "$f"; echo "last: $DATE not started, $why" >> "$f"
+    if [ -n "$WHY" ]; then
+      NNOT=$((NNOT + 1)); JOB_LINES+=("- #$id $name: NOT STARTED — $WHY; stays queued")
+      sed -i '' '/^last: /d' "$f"; echo "last: $DATE not started, $WHY" >> "$f"
       continue
     fi
-    echo "started: $DATE $(date +%H:%M)" >> "$f"
-    JF="$f"; JOUT="$NIGHT/runs/$DATE/job-$id-$name.out"; JSTART="$(date +%s)"; JSTOPPED=""; JLEFT=""
-    if [ ! -d "$dir" ]; then echo "night.sh: job directory missing: $dir" > "$JOUT"; JRC=66; job_done; continue; fi
-    ( cd "$dir" || exit 66
-      export STOP_AT="$SOFT_HM" NIGHT_STOP_EPOCH="$STOP_EPOCH" NIGHT_JOB_DATE="$DATE" NIGHT_JOB_ID="$id"
-      exec /usr/bin/perl -e 'setpgrp(0,0) or die "setpgrp: $!\n"; exec @ARGV or die "exec: $!\n"' /bin/bash -c "$cmd"
-    ) < /dev/null > "$JOUT" 2>&1 &
-    JPID=$!
-    while kill -0 "$JPID" 2>/dev/null; do
-      if [ "$(date +%s)" -ge "$STOP_EPOCH" ]; then stop_job stopped 120; break; fi
-      sleep 5
-    done
-    if [ -z "$JSTOPPED" ]; then
-      wait "$JPID"; JRC=$?
-      t=0; while kill -0 -- "-$JPID" 2>/dev/null && [ "$t" -lt 10 ]; do sleep 2; t=$((t + 2)); done
-      if kill -0 -- "-$JPID" 2>/dev/null; then   # a job must run in the foreground; whatever it left behind is ended
-        kill -TERM -- "-$JPID" 2>/dev/null; sleep 3; kill -KILL -- "-$JPID" 2>/dev/null
-        JLEFT="left processes behind after its exit: killed"
-      fi
+    run_one "$f" queue "$STOP_EPOCH"
+  done
+}
+run_standing() {   # NIGHT-STANDING-JOBS: every standing job in file order after the queue, each capped at its minutes (D3)
+  local f name min cap
+  STAND_REACHED=1
+  for f in "$NIGHT"/standing/*.job; do
+    [ -f "$f" ] || continue
+    name="$(jf "$f" name)"; min="$(jf "$f" minutes)"
+    case "$RAN_NAMES" in *" $name "*) SSKIP=$((SSKIP + 1)); STAND_LINES+=("- $name: SKIPPED — ran tonight as a queued job (see ## jobs)"); continue ;; esac
+    job_check "$f"
+    if [ -z "$WHY" ]; then
+      close_copies "standing job $name" || WHY="$CLOSE_WHY"
+      [ "${#CLOSE_LINES[@]}" = 0 ] || STAND_LINES+=("${CLOSE_LINES[@]}")
     fi
-    job_done
+    if [ -n "$WHY" ]; then SNOT=$((SNOT + 1)); STAND_LINES+=("- $name: NOT STARTED — $WHY"); continue; fi
+    cap=$(( $(date +%s) + min * 60 )); [ "$cap" -le "$STOP_EPOCH" ] || cap="$STOP_EPOCH"
+    run_one "$f" standing "$cap"
   done
 }
 
@@ -695,6 +799,7 @@ run_gate() {
   env -u GATE_TEST_ALLOW_FOREIGN -u GATE_TEST_RANGE_SCALE -u GATE_TEST_CAND_POS_HZ "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MacDashboardBench.app" ${BASE:+--baseline "$BASE"} \
     --scenarios "${LIST:-all}" --runs "${N:-3}" --out "$GOUT" > "$NIGHT/runs/$DATE/gate.out" 2>&1
   GRC=$?
+  "$ROOT/tools/keep-latest.sh" --exclude "$GOUT" "$PERF/out" '^night-[0-9]{8}(-[0-9]{6})?$' 5 >> "$NIGHT/runs/$DATE/prune.log" 2>&1 || true   # NIGHT-STANDING-JOBS retention
   GLINE="$(grep '^GATE:' "$NIGHT/runs/$DATE/gate.out" | tail -1)"
   NOISY="$(echo "$GLINE" | sed -n 's/.*noisy=\([0-9]*\).*/\1/p')"
   NFAILG="$(echo "$GLINE" | sed -n 's/.*fail=\([0-9]*\).*/\1/p')"
@@ -751,7 +856,7 @@ run_gate() {
 }
 
 finish() {
-  local rc=$? first jobs hl
+  local rc=$? first jobs standing hl
   [ "$FINISHED" = 0 ] || return; FINISHED=1
   if [ -n "$JPID" ]; then
     stop_job interrupted 30
@@ -762,10 +867,14 @@ finish() {
   DISP_LINE="$DISP_LINE$(end_light display)"; KBD_LINE="$KBD_LINE$(end_light kbd)"   # D18: before the report
   if [ "$JOBS" = 1 ]; then jobs="jobs: $NDONE done, $NFAILED failed, $NSTOPPED stopped at $STOP_HM, $NINT interrupted, $NNOT not started"
   else jobs="jobs: not run (hand run without --stop)"; fi
+  if [ "$STANDING" = 0 ]; then standing="standing: not run (hand run without --standing)"
+  elif [ -z "$(ls "$NIGHT"/standing/*.job 2>/dev/null)" ]; then standing="standing: none defined"
+  elif [ "$STAND_REACHED" = 0 ]; then standing="standing: not reached"
+  else standing="standing: $SDONE done, $SFAILED failed, $SSTOPPED stopped at cap, $SINT interrupted, $SNOT not started, $SSKIP skipped, $SCHANGED changed"; fi
   if [ -n "$SIGNAME" ] || { [ "$rc" != 0 ] && [ -z "$NIGHT_VERDICT" ]; }; then
-    first="NIGHT $DATE: INTERRUPTED — ${SIGNAME:-exit $rc}; ${GATE_VERDICT:-gate not reached}; $jobs"
+    first="NIGHT $DATE: INTERRUPTED — ${SIGNAME:-exit $rc}; ${GATE_VERDICT:-gate not reached}; $jobs; $standing"
   elif [ -n "$NIGHT_VERDICT" ]; then first="NIGHT $DATE: $NIGHT_VERDICT"
-  else first="NIGHT $DATE: ${GATE_VERDICT:-gate not reached}; $jobs"; fi
+  else first="NIGHT $DATE: ${GATE_VERDICT:-gate not reached}; $jobs; $standing"; fi
   REP=("$first")
   case "$NIGHT_VERDICT" in
     SKIPPED*) ;;   # a skipped night stays a short report
@@ -777,7 +886,8 @@ finish() {
        [ "${HOLD_NIGHT:-$DATE}" != "$DATE" ] || rm -f "$(hold_events "$DATE")"
        [ "${#NOTES[@]}" = 0 ] || REP+=("${NOTES[@]}")
        REP+=("## gate"); [ "${#GATE_LINES[@]}" = 0 ] || REP+=("${GATE_LINES[@]}")
-       REP+=("## jobs"); [ "${#JOB_LINES[@]}" = 0 ] || REP+=("${JOB_LINES[@]}") ;;
+       REP+=("## jobs"); [ "${#JOB_LINES[@]}" = 0 ] || REP+=("${JOB_LINES[@]}")
+       REP+=("## standing"); [ "${#STAND_LINES[@]}" = 0 ] || REP+=("${STAND_LINES[@]}") ;;
   esac
   waiting_line
   write_report "$DATE" "${REP[@]}"
@@ -810,4 +920,5 @@ dim_light kbd keyboard; KBD_LINE="$LIGHT_LINE"
 REP=(); interrupted_jobs '[0-9]{8}'; [ "${#REP[@]}" = 0 ] || JOB_LINES+=("${REP[@]}")   # jobs a dead earlier run left "started"
 if [ "$NO_GATE" = 1 ]; then GATE_VERDICT="gate not run (--no-gate)"; else run_gate; fi
 [ "$JOBS" = 1 ] && run_jobs
+[ "$STANDING" = 1 ] && run_standing
 exit 0
