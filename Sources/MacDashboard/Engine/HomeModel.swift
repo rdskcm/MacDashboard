@@ -118,6 +118,10 @@ struct HomeInput {
     var hasBattery: Bool
     var battery: BatteryInfo?
     var batteryMaxMAh: Int? = nil   // BatteryDetail.maxCapacityMAh; nil until a battery read landed
+    /// BATTERY-HEALTH-UNIFY: the ioreg raw ratio (`BatteryDetail.healthPercent`) and the Monitoring switch; with the
+    /// defaults Home shows Apple's figure exactly as before.
+    var batteryRawPercent: Double? = nil
+    var batteryPrefersRaw: Bool = false
     var system: SystemInfo?
     var claudeBackup: ClaudeBackupStatus?
     var backupStaleHours: Int
@@ -213,10 +217,10 @@ enum HomeModel {
     /// One task per assessment item, same order (already crit > serious > warn, stable).
     /// `disk` = `model.disk`, `battery` = `model.battery` — the same values Assessment used.
     @MainActor static func tasks(_ a: Assessment, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?) -> [HomeTask] {
-        a.items.map { task($0, report: report, disk: disk, battery: battery) }
+        a.items.map { task($0, report: report, disk: disk, battery: battery, battShownPercent: a.battShownPercent) }
     }
 
-    @MainActor private static func task(_ item: AttentionItem, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?) -> HomeTask {
+    @MainActor private static func task(_ item: AttentionItem, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?, battShownPercent: MacShownHealth?) -> HomeTask {
         let tone: HomeTone = (item.sev == .crit || item.sev == .serious) ? .hot : .amber
         var section: Page = .system
         var focus: CardID? = nil
@@ -249,10 +253,9 @@ enum HomeModel {
             (object, state, verb, tag) = (keys.count > 1 ? "\(first) +\(keys.count - 1)" : first,
                                           L.homeStateKeepsAwake, L.commonShow, L.commonMacCantSleep)
         case .batteryCapacity:
-            // Same merge rule as Assess.assess, so the task's percentage is the one that raised the item.
-            let cap = BatteryInfo.merged(live: battery, report: report.battery)?.maxCapacity ?? 100
+            // The number the verdict judged (Assess.assess → battShownPercent), so the task shows what raised the item.
             (section, focus) = (.battery, .bathero)
-            (object, state, verb, tag) = (L.commonBattery, L.homeStateWorn(100 - cap), L.homeVerbDetails, L.homeTagWorn)
+            (object, state, verb, tag) = (L.commonBattery, L.homeStateWorn(battShownPercent?.wornDigits(language: L10nStore.shared.language) ?? "0"), L.homeVerbDetails, L.homeTagWorn)
         case .updates:
             let n = report.updates?.count ?? 0
             (section, focus) = (.security, .updates)
@@ -765,7 +768,8 @@ extension HomeModel {
         // Battery
         if input.hasBattery {
             let battDest = Destination(.battery, focus: .bathero)
-            if let b = BatteryInfo.merged(live: input.battery, report: input.report.battery), let cap = b.maxCapacity {
+            if let b = BatteryInfo.merged(live: input.battery, report: input.report.battery),
+               let shown = BatteryHealth.macShownPercent(apple: b.maxCapacity, raw: input.batteryRawPercent, prefersRaw: input.batteryPrefersRaw) {
                 let svc = task(.batteryCondition), worn = task(.batteryCapacity)
                 let tone: HomeTone
                 let chipTone: HomeTone, chipText: String
@@ -775,8 +779,8 @@ extension HomeModel {
                 else { tone = .neutral; (chipTone, chipText) = (.green, L.homeChipHealthy); fill = .green }
                 cells.append(HomeNowCell(
                     kind: .battery, label: L.commonBattery, tone: tone, chipTone: chipTone, chipText: chipText,
-                    big: L.homePercent("\(cap)"), of: L.homeOfNew, figures: [], loading: false, segments: [],
-                    batteryBar: HomeBatteryBar(fraction: Double(cap) / 100, fill: fill, tick: 0.8, tickLabel: L.homePercent("80"),
+                    big: L.homePercent(shown.digits(language: L10nStore.shared.language)), of: L.homeOfNew, figures: [], loading: false, segments: [],
+                    batteryBar: HomeBatteryBar(fraction: shown.percent / 100, fill: fill, tick: Double(BatteryHealth.wornBelowPercent) / 100, tickLabel: L.homePercent("\(BatteryHealth.wornBelowPercent)"),
                                                spoken: L.homeWearThreshold, help: L.homeWearThresholdHelp),
                     legend: [],
                     foot: L.homeBatteryFoot(cycles: b.cycles, charge: b.charge, state: b.state?.localizedText, short: short),

@@ -553,6 +553,8 @@ Severity colours: warn = amber, serious = red. "Category" is the notification ca
 | smartErrors (T15) | Critical Warning bits 0, 2, 3, 4 or 5 set (bit 1, temperature, alone is not failing), or media errors > 0; an unparseable value counts as failing | serious | none |
 | smartWear (T17) | Percentage Used >= 80 | warn | none |
 | wakeHolders (T20) | a non-OS program has held a sleep-preventing assertion for 300 s or more and is not on the ignore list | warn | none |
+| batteryCondition (BATTERY-HEALTH-UNIFY) | `system_profiler` Condition non-empty and != "Normal" (trimmed): macOS's own service flag; supersedes batteryCapacity (one item) | serious | battery |
+| batteryCapacity (BATTERY-HEALTH-UNIFY) | shown health < 80 %, any cycle count (support.apple.com/102888, /100170); shown = Apple's «Maximum Capacity», or ioreg AppleRawMaxCapacity / DesignCapacity with Settings › Monitoring › «Raw battery health» on (`BatteryHealth.classify` / `macShownPercent`, `Engine/BatteryHealth.swift`, shared with the Battery page and the iPhone tile) | warn | battery |
 
 Not attention rules: outdated Homebrew packages (T10) are a "You can" chip only. Downloads (> 10 GiB) and Caches (> 3 GiB)
 tips and capsules (T21), and the local-snapshots chip (T22), appear only while the disk level is low or critical; Trash

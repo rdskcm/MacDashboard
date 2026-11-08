@@ -56,7 +56,7 @@ extension SerialTests {
             do {
                 // diskFull and diskFullSoon share one `if/else if` on the same live.disk.pct
                 // (Assessment.swift), so no single report can trip both; two fixtures that
-                // differ only in disk% cover all 17 kinds between them.
+                // differ only in disk% cover all 17 kinds between them; batteryCapacity and batteryCondition no longer co-occur either.
                 let originalLang = L10nStore.shared.language
                 defer { L10nStore.shared.language = originalLang }
 
@@ -68,6 +68,7 @@ extension SerialTests {
                     var dest = TMDestination(name: "Backup", kind: "Local", mountPoint: "/Volumes/B", quotaBytes: nil, lastBackup: nil)
                     dest.lastBackupDate = Date().addingTimeInterval(-10 * 86_400)
                     reportSoon.tmDest = .some(.some(dest))
+                    reportSoon.battery?.condition = "Normal"   // service supersedes worn (BATTERY-HEALTH-UNIFY): this pass raises batteryCapacity
                     let itemsFull = Assess.assess(report: reportFull, live: liveFull, language: L10nStore.shared.language, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
                     let itemsSoon = Assess.assess(report: reportSoon, live: liveSoon, language: L10nStore.shared.language, memPressure: .critical, wakeHolders: [WakeHolder(owner: "caffeinate", requester: "claude", ageSeconds: 4902)], claudeBackup: .noSuccessFound).items
                     let allItems = itemsFull + itemsSoon

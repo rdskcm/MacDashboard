@@ -162,43 +162,63 @@ struct AssessmentTests {
 
         do {
             let a = Assess.assess(report: batteryReport(maxCapacity: 65), live: LiveSnapshot(), language: .ru)
-            #expect(a.items.contains { $0.sev == .serious && $0.fullText.contains("Ёмкость") }, "assess battery 65%: serious")
+            let battery = a.items.filter { $0.kind == .batteryCapacity }
+            #expect(battery.count == 1 && battery[0].sev == .warn && battery[0].fullText.contains("Здоровье"),
+                  "BATTERY-HEALTH-UNIFY: 65% is one warn item (no serious tier)")
+            #expect(!a.items.contains { $0.sev == .serious }, "BATTERY-HEALTH-UNIFY: 65% raises no serious item")
+            #expect(a.battShownPercent?.percent == 65, "BATTERY-HEALTH-UNIFY: battShownPercent 65")
         }
         do {
-            let a = Assess.assess(report: batteryReport(maxCapacity: 78), live: LiveSnapshot(), language: .ru)
-            #expect(a.items.contains { $0.sev == .warn && $0.fullText.contains("Ёмкость") } && a.items.contains { $0.kind == .batteryCapacity && $0.sev == .warn },
-                  "assess battery 78%, cycles == nil: warn item (still warns)")
+            for (cap, cycles) in [(78, Int?.none), (78, 350), (78, 900), (65, 900), (79, nil)] {
+                let a = Assess.assess(report: batteryReport(maxCapacity: cap, cycles: cycles), live: LiveSnapshot(), language: .ru)
+                #expect(a.items.contains { $0.kind == .batteryCapacity && $0.sev == .warn && $0.fullText.contains("Здоровье") },
+                      "BATTERY-HEALTH-UNIFY: \(cap)%, cycles \(String(describing: cycles)): warn whatever the cycle count")
+            }
+            let atLine = Assess.assess(report: batteryReport(maxCapacity: 80, cycles: 2000), live: LiveSnapshot(), language: .ru)
+            #expect(!atLine.items.contains { $0.kind == .batteryCapacity || $0.kind == .batteryCondition },
+                  "BATTERY-HEALTH-UNIFY: 80%, cycles 2000: no battery item")
         }
         do {
             let worn = Assess.assess(report: batteryReport(maxCapacity: 76, condition: "Normal"), live: LiveSnapshot(), language: .ru)
-            #expect(worn.items.first { $0.kind == .batteryCapacity }?.why == StringsRU().attnWhyBatteryWorn, "battery worn: why line")
+            #expect(worn.items.first { $0.kind == .batteryCapacity }?.why == StringsRU().attnWhyBatteryWorn, "BATTERY-HEALTH-UNIFY: worn why line")
             let service = Assess.assess(report: batteryReport(maxCapacity: 90, condition: "Service Recommended"), live: LiveSnapshot(), language: .ru)
-            #expect(service.items.first { $0.kind == .batteryCondition }?.why == StringsRU().attnWhyBatteryService, "battery service: why line")
+            #expect(service.items.first { $0.kind == .batteryCondition }?.why == StringsRU().attnWhyBatteryService, "BATTERY-HEALTH-UNIFY: service why line")
         }
         do {
             let a = Assess.assess(report: batteryReport(maxCapacity: 90), live: LiveSnapshot(), language: .ru)
-            #expect(!a.items.contains { $0.fullText.contains("Ёмкость") },
-                  "assess battery 90%: nothing")
+            #expect(!a.items.contains { $0.kind == .batteryCapacity || $0.kind == .batteryCondition || $0.fullText.contains("Здоровье") },
+                  "BATTERY-HEALTH-UNIFY: 90%: nothing")
         }
         do {
             let a = Assess.assess(report: batteryReport(maxCapacity: 90, condition: "Replace Soon"), live: LiveSnapshot(), language: .ru)
-            #expect(a.items.contains { $0.sev == .serious && $0.fullText.contains("Состояние батареи") },
-                  "assess battery condition 'Replace Soon': serious")
+            #expect(a.items.contains { $0.kind == .batteryCondition && $0.sev == .serious && $0.fullText.contains("Состояние батареи") },
+                  "BATTERY-HEALTH-UNIFY: condition 'Replace Soon': serious")
+            #expect(!a.items.contains { $0.kind == .batteryCapacity }, "BATTERY-HEALTH-UNIFY: no capacity item beside it")
         }
         do {
-            let a = Assess.assess(report: batteryReport(maxCapacity: 78, cycles: 350), live: LiveSnapshot(), language: .ru)
-            #expect(a.items.contains { $0.sev == .warn && $0.fullText.contains("Ёмкость") } && a.items.contains { $0.kind == .batteryCapacity && $0.sev == .warn },
-                  "assess battery 78%, cycles 350: warn item (early wear, R8)")
+            let a = Assess.assess(report: batteryReport(maxCapacity: 60, condition: "Replace Now"), live: LiveSnapshot(), language: .ru)
+            let battery = a.items.filter { $0.kind == .batteryCondition || $0.kind == .batteryCapacity }
+            #expect(battery.count == 1 && battery[0].kind == .batteryCondition, "BATTERY-HEALTH-UNIFY: service supersedes worn (one item)")
+            #expect(a.battShownPercent?.percent == 60, "BATTERY-HEALTH-UNIFY: battShownPercent 60")
         }
         do {
-            let a = Assess.assess(report: batteryReport(maxCapacity: 78, cycles: 900), live: LiveSnapshot(), language: .ru)
-            #expect(!a.items.contains { $0.fullText.contains("Ёмкость") },
-                  "assess battery 78%, cycles 900: nothing (on-spec wear, R8)")
+            let a = Assess.assess(report: batteryReport(maxCapacity: 76, condition: " Normal "), live: LiveSnapshot(), language: .ru)
+            #expect(a.items.contains { $0.kind == .batteryCapacity } && !a.items.contains { $0.kind == .batteryCondition },
+                  "BATTERY-HEALTH-UNIFY: ' Normal ' is not a service flag")
+            let none = Assess.assess(report: batteryReport(maxCapacity: nil, condition: "Normal"), live: LiveSnapshot(), language: .ru)
+            #expect(!none.items.contains { $0.kind == .batteryCapacity || $0.kind == .batteryCondition } && none.battShownPercent == nil,
+                  "BATTERY-HEALTH-UNIFY: no maxCapacity: no battery item, battShownPercent nil")
         }
         do {
-            let a = Assess.assess(report: batteryReport(maxCapacity: 65, cycles: 900), live: LiveSnapshot(), language: .ru)
-            #expect(a.items.contains { $0.sev == .serious && $0.fullText.contains("Ёмкость") },
-                  "assess battery 65%, cycles 900: serious (level rule survives any cycle count, R8)")
+            let r = batteryReport(maxCapacity: 82, condition: "Normal")
+            let on = Assess.assess(report: r, live: LiveSnapshot(), language: .ru, batteryRawPercent: 78, batteryPrefersRaw: true)
+            #expect(on.items.contains { $0.kind == .batteryCapacity && $0.detail.contains("78") } && on.battShownPercent?.percent == 78,
+                  "BATTERY-HEALTH-UNIFY: raw switch on judges the raw 78")
+            let off = Assess.assess(report: r, live: LiveSnapshot(), language: .ru, batteryRawPercent: 78, batteryPrefersRaw: false)
+            #expect(!off.items.contains { $0.kind == .batteryCapacity } && off.battShownPercent?.percent == 82,
+                  "BATTERY-HEALTH-UNIFY: raw switch off judges Apple's 82")
+            let noRaw = Assess.assess(report: r, live: LiveSnapshot(), language: .ru, batteryRawPercent: nil, batteryPrefersRaw: true)
+            #expect(noRaw.battShownPercent?.percent == 82, "BATTERY-HEALTH-UNIFY: raw on, no ioreg read: Apple's figure")
         }
 
         do {

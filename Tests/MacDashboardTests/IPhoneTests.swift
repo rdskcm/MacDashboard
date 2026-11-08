@@ -58,16 +58,17 @@ extension SerialTests {
             }
             let live = IPhoneData.upsertLive([pt("2026-10-10", "import", cycles: 5), pt("2026-10-12", "live")],
                                              pt("2026-10-10", "live", cycles: 9))
-            #expect(live.count == 2 && live[0].source == "live" && live[0].cycles == 9, "iPhone: upsertLive replaces an import on the same day")
+            #expect(live.count == 2 && live[0].source == "import" && live[0].cycles == 9, "iPhone: upsertLive keeps an imported day's source")
             #expect(live.map(\.day) == ["2026-10-10", "2026-10-12"], "iPhone: upsertLive result is sorted by day")
             let live2 = IPhoneData.upsertLive(live, pt("2026-10-10", "live", cycles: 11))
             #expect(live2.count == 2 && live2[0].cycles == 11, "iPhone: second live read on the same day replaces the first")
             let merged = IPhoneData.mergeImported([pt("2026-10-10", "live", cycles: 9), pt("2026-10-09", "import", cycles: 3)],
                                                   [pt("2026-10-10", "import", cycles: 1), pt("2026-10-09", "import", cycles: 4),
                                                    pt("2026-10-01", "import", cycles: 2)])
-            #expect(merged.first(where: { $0.day == "2026-10-10" })?.source == "live" &&
-                  merged.first(where: { $0.day == "2026-10-10" })?.cycles == 9,
-                  "iPhone: mergeImported does not replace a live point")
+            #expect(merged.first(where: { $0.day == "2026-10-10" })?.source == "import" &&
+                  merged.first(where: { $0.day == "2026-10-10" })?.cycles == 1 &&
+                  merged.first(where: { $0.day == "2026-10-10" })?.maxCapacityMAh == 4933,
+                  "an imported figure wins on its day, keeping the live mAh")
             #expect(merged.first(where: { $0.day == "2026-10-09" })?.cycles == 4, "iPhone: mergeImported newer import replaces older import")
             #expect(merged.map(\.day) == ["2026-10-01", "2026-10-09", "2026-10-10"], "iPhone: mergeImported result is sorted by day")
 
@@ -108,15 +109,17 @@ extension SerialTests {
             #expect(b.temperatureC == 30.89, "iPhone: parse(dict:) temperature 30.89 C")
             #expect(b.externalConnected && !b.isCharging && b.maxCapacityMAh == 4933 && b.designCapacityMAh == 5030,
                   "iPhone: parse(dict:) power state and capacities")
+            #expect(b.nominalChargeMAh == nil, "iPhone: parse(dict:) top-level AppleRawMaxCapacity -> no separate Settings basis")
 
             // iOS 26.x shape: top-level AppleRawMaxCapacity wins even when BatteryData carries
-            // NominalChargeCapacity (Nominal would give 97; Apple's Settings shows 98).
+            // NominalChargeCapacity.
             let shape26: [String: Any] = ["CycleCount": 269, "CurrentCapacity": 79, "AppleRawMaxCapacity": 4915,
                                           "DesignCapacity": 5030,
                                           "BatteryData": ["DesignCapacity": 5030, "NominalChargeCapacity": 4865] as [String: Any]]
             let b26 = BatteryInspector.parse(dict: shape26)
             #expect(b26.healthPercent == 98 && b26.maxCapacityMAh == 4915 && b26.designCapacityMAh == 5030,
                   "iPhone: parse(dict:) 26.x shape keeps the AppleRawMaxCapacity basis (got \(String(describing: b26.healthPercent)))")
+            #expect(b26.nominalChargeMAh == 4865, "26.x shape carries NominalChargeCapacity")
 
             // iOS 27.0 shape: no top-level capacities, no children; capacities in BatteryData.
             let shape27: [String: Any] = ["CycleCount": 666, "CurrentCapacity": 86, "MaxCapacity": 100,
@@ -129,6 +132,7 @@ extension SerialTests {
                   "iPhone: parse(dict:) iOS 27 health 86% from FullChargeCapacity 3771/4395 (got \(String(describing: b27.healthPercent)))")
             #expect(b27.designCapacityMAh == 4395 && b27.cycleCount == 666 && b27.percent == 86,
                   "iPhone: parse(dict:) iOS 27 design capacity, cycles, charge")
+            #expect(b27.nominalChargeMAh == 3732, "iPhone: parse(dict:) iOS 27 Settings basis = NominalChargeCapacity")
             #expect(b27.currentCapacityMAh == nil,
                   "iPhone: parse(dict:) iOS 27 RemainingCapacity is not mapped")
 
@@ -136,6 +140,7 @@ extension SerialTests {
             let b27nominal = BatteryInspector.parse(dict: ["BatteryData": ["DesignCapacity": 4395, "NominalChargeCapacity": 3732] as [String: Any]])
             #expect(b27nominal.healthPercent == 85 && b27nominal.maxCapacityMAh == nil,
                   "iPhone: parse(dict:) iOS 27 without FullChargeCapacity -> Nominal basis 85%")
+            #expect(b27nominal.nominalChargeMAh == 3732, "iPhone: parse(dict:) iOS 27 Nominal-only reply keeps the Settings basis")
 
             // Nothing to compute from: no crash, nil health and capacities.
             let none = [BatteryInspector.parse(dict: [:]),
@@ -422,6 +427,41 @@ extension SerialTests {
         #expect(IPhoneData.temperatureTone(44.9) == .amber)
         #expect(IPhoneData.temperatureTone(45) == .hot)
         #expect(IPhoneData.temperatureTone(nil) == nil)
+    }
+
+    @Test func healthToneBoundaries() {
+        #expect(IPhoneData.healthTone(shown: 79.9) == .amber)
+        #expect(IPhoneData.healthTone(shown: 80.0) == nil)
+        #expect(IPhoneData.healthTone(shown: 76) == .amber)
+        #expect(IPhoneData.healthTone(shown: 100) == nil)
+        #expect(IPhoneData.healthTone(shown: nil) == nil)
+        #expect(IPhoneData.healthTone(shown: .nan) == nil)
+    }
+
+    @Test func liveHealthBasis() {
+        let fixture: [String: Any] = ["CycleCount": 268, "DesignCapacity": 5030, "AppleRawMaxCapacity": 4933,
+                                      "CurrentCapacity": 80, "Temperature": 3089, "Voltage": 4234,
+                                      "IsCharging": false, "ExternalConnected": true]
+        let shape26: [String: Any] = ["CycleCount": 269, "CurrentCapacity": 79, "AppleRawMaxCapacity": 4915,
+                                      "DesignCapacity": 5030,
+                                      "BatteryData": ["DesignCapacity": 5030, "NominalChargeCapacity": 4865] as [String: Any]]
+        let shape27: [String: Any] = ["CycleCount": 666, "CurrentCapacity": 86, "MaxCapacity": 100,
+                                      "BatteryData": ["DesignCapacity": 4395, "FullChargeCapacity": 3771,
+                                                      "NominalChargeCapacity": 3732, "AbsoluteCapacity": 3282,
+                                                      "RemainingCapacity": 3222, "CurrentCapacity": 86,
+                                                      "MaxCapacity": 100] as [String: Any]]
+        let nominalOnly: [String: Any] = ["BatteryData": ["DesignCapacity": 4395, "NominalChargeCapacity": 3732] as [String: Any]]
+        let b = BatteryInspector.parse(dict: fixture), b26 = BatteryInspector.parse(dict: shape26)
+        let b27 = BatteryInspector.parse(dict: shape27), b27nominal = BatteryInspector.parse(dict: nominalOnly)
+        func close(_ v: Double?, _ x: Double) -> Bool { v.map { abs($0 - x) < 0.001 } ?? false }
+        #expect(close(IPhoneData.preciseLiveHealth(b27), 85.802))
+        #expect(close(IPhoneData.preciseLiveHealth(b26), 97.714))
+        #expect(IPhoneData.preciseLiveHealth(b27nominal) == nil, "no full-charge capacity")
+        #expect(IPhoneData.estimatedHealthPercent(b27) == 85, "ceil(3732 / 4395 = 84.915)")
+        #expect(IPhoneData.estimatedHealthPercent(b26) == 97, "ceil(4865 / 5030 = 96.72), the 17 Pro Max Settings value on 2026-11-08")
+        #expect(IPhoneData.estimatedHealthPercent(b27nominal) == 85)
+        #expect(IPhoneData.estimatedHealthPercent(b) == 98, "no Nominal: the raw healthPercent")
+        #expect(IPhoneData.historyHealthPercent(BatteryInspector.parse(dict: [:]), points: []) == nil)
     }
 
     @Test func cyclesBoundaries() {

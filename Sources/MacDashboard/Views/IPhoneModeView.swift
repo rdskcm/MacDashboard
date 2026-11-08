@@ -175,7 +175,8 @@ struct IPhoneModeView: View {
                                    snapshot: model.lastSnapshot[r.id],
                                    storage: model.identityRows(r.id)?.first { $0.label == .storage && !$0.isPending }?.value,
                                    menuOpen: menuKey == r.id, unlinkAllowed: model.canUnlink(r.id),
-                                   onMenu: { openMenu(r.id, asking: $0) }) {
+                                   onMenu: { openMenu(r.id, asking: $0) },
+                                   prefersRawHealth: model.prefersRawHealth) {
                         model.selectedDeviceKey = r.id
                     }
                     .accessibilityIdentifier("iphone-tile-\(i)")
@@ -252,6 +253,7 @@ struct IPhoneTileView: View {
     var menuOpen = false
     var unlinkAllowed = true
     var onMenu: ((_ asking: Bool) -> Void)? = nil
+    var prefersRawHealth = false   // BATTERY-HEALTH-UNIFY D9
     let onOpen: () -> Void
 
     private var connected: Bool { status == .connected }
@@ -354,15 +356,14 @@ struct IPhoneTileView: View {
     // MARK: Metrics
 
     private var healthValue: Double { health.value }
-    private var health: (value: Double, text: String) {
-        if connected, let b = snapshot?.battery, let max = b.maxCapacityMAh, let design = b.designCapacityMAh,
-           let h = IPhoneData.preciseHealth(maxMAh: max, designMAh: design) {
-            return (h, iphoneOneDecimal(h) + " %")
+    private var health: (value: Double, text: String, shown: Double?) {
+        if prefersRawHealth, connected, let b = snapshot?.battery, let h = IPhoneData.preciseLiveHealth(b) {
+            return (h, iphoneOneDecimal(h) + " %", (h * 10).rounded() / 10)
         }
-        if let hp = latestPoint(where: { $0.healthPercent != nil })?.healthPercent {
-            return (Double(hp), "\(hp) %")
+        if let f = IPhoneData.shownHealth(points: record.battery, live: connected ? snapshot?.battery : nil) {
+            return (Double(f.percent), f.text, Double(f.percent))
         }
-        return (0, "—")
+        return (0, "—", nil)
     }
 
     private var cyclesText: String {
@@ -409,7 +410,7 @@ struct IPhoneTileView: View {
                 .truncationMode(.tail)
             if bar {
                 DS3Bar(fraction: healthValue / 100, height: 5,
-                       fill: AnyShapeStyle(connected ? DS3.accent : DS3.muted))
+                       fill: AnyShapeStyle(IPhoneData.healthTone(shown: health.shown)?.base ?? (connected ? DS3.accent : DS3.muted)))
             } else {
                 // Reserves the bar's slot so the values of a row sit on one line.
                 Color.clear.frame(height: 5).accessibilityHidden(true)

@@ -30,7 +30,7 @@ protocol HomeStrings {
     func homeStateDiskFull(_ pct: Int) -> String
     var homeStateNotSetUp: String { get }
     var homeStateKeepsAwake: String { get }
-    func homeStateWorn(_ pct: Int) -> String
+    func homeStateWorn(_ pct: String) -> String
     var homeStateUpdateAvailable: String { get }
     func homeStateUpdatesAvailable(_ n: Int) -> String
     var homeMemoryObject: String { get }
@@ -139,7 +139,7 @@ extension StringsEN: HomeStrings {
     func homeStateDiskFull(_ pct: Int) -> String { "\(pct)% full" }
     var homeStateNotSetUp: String { "not set up" }
     var homeStateKeepsAwake: String { "keeps the Mac awake" }
-    func homeStateWorn(_ pct: Int) -> String { "\(pct)% worn" }
+    func homeStateWorn(_ pct: String) -> String { "\(pct)% worn" }
     var homeStateUpdateAvailable: String { "update available" }
     func homeStateUpdatesAvailable(_ n: Int) -> String { "\(n) updates available" }
     var homeMemoryObject: String { "Memory" }
@@ -184,7 +184,7 @@ extension StringsEN: HomeStrings {
     var homeKVProcesses: String { "Processes" }
     var homeKVFailing: String { "failing" }
     func homeKVWorn(_ pct: Int) -> String { "\(pct)% worn" }
-    var homeKVCapacity: String { "Capacity" }
+    var homeKVCapacity: String { "Health" }
     func homeKVProtection(_ on: Int) -> String { "\(on) of 4" }
     var homeKVNone: String { "none" }
     var homeKVSnapshots: String { "Snapshots" }
@@ -255,7 +255,7 @@ extension StringsRU: HomeStrings {
     func homeStateDiskFull(_ pct: Int) -> String { "заполнен на \(pct) %" }
     var homeStateNotSetUp: String { "не настроена" }
     var homeStateKeepsAwake: String { "не даёт уснуть" }
-    func homeStateWorn(_ pct: Int) -> String { "износ \(pct) %" }
+    func homeStateWorn(_ pct: String) -> String { "износ \(pct) %" }
     var homeStateUpdateAvailable: String { "доступно обновление" }
     func homeStateUpdatesAvailable(_ n: Int) -> String { "доступно обновлений: \(n)" }
     var homeMemoryObject: String { "Памяти" }
@@ -300,7 +300,7 @@ extension StringsRU: HomeStrings {
     var homeKVProcesses: String { "Процессов" }
     var homeKVFailing: String { "сбой диска" }
     func homeKVWorn(_ pct: Int) -> String { "износ \(pct) %" }
-    var homeKVCapacity: String { "Ёмкость" }
+    var homeKVCapacity: String { "Здоровье" }
     func homeKVProtection(_ on: Int) -> String { "\(on) из 4" }
     var homeKVNone: String { "нет" }
     var homeKVSnapshots: String { "Снимки" }

@@ -92,6 +92,8 @@ protocol IPhoneLogsStrings {
 
     var iphoneBatteryMeasuredNow: String { get }
     var iphoneHealthNote: String { get }
+    var iphoneHealthAppleNote: String { get }
+    var iphoneHealthEstimateNote: String { get }
     func iphoneHealthHistoryNote(cycles: Int?) -> String
     var iphoneLiveReadings: String { get }
     var iphoneLiveReadingsConnect: String { get }
@@ -318,6 +320,8 @@ extension StringsEN: IPhoneLogsStrings {
     var iphoneRestartingBanner: String { "Restarting the connection service. Devices reconnect in a few seconds." }
     var iphoneBatteryMeasuredNow: String { "Measured now" }
     var iphoneHealthNote: String { "Maximum capacity vs design capacity" }
+    var iphoneHealthAppleNote: String { "Apple's figure from imported logs" }
+    var iphoneHealthEstimateNote: String { "Estimate. Import a sysdiagnose for Apple's figure." }
     func iphoneHealthHistoryNote(cycles: Int?) -> String {
         guard let n = cycles else { return "last value from history" }
         return "\(n) \(n == 1 ? "cycle" : "cycles") · last value from history"
@@ -559,6 +563,8 @@ extension StringsRU: IPhoneLogsStrings {
     var iphoneRestartingBanner: String { "Служба подключения перезапускается. Устройства переподключатся через несколько секунд." }
     var iphoneBatteryMeasuredNow: String { "Измерено сейчас" }
     var iphoneHealthNote: String { "Текущая ёмкость к проектной" }
+    var iphoneHealthAppleNote: String { "Цифра Apple из импортированных логов" }
+    var iphoneHealthEstimateNote: String { "Оценка. Импорт sysdiagnose покажет цифру Apple." }
     func iphoneHealthHistoryNote(cycles: Int?) -> String {
         guard let n = cycles else { return "последнее значение из истории" }
         return "\(n) \(ruPlural(n, "цикл", "цикла", "циклов")) · последнее значение из истории"

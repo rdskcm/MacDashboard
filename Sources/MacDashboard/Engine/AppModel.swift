@@ -112,7 +112,7 @@ final class AppModel {
             cpu: cpu, load: load, ncpu: ncpu, socTempC: socTempC,
             thermal: thermal,
             mem: mem, memPressure: memPressure, swap: swap, disk: disk,
-            hasBattery: merged != nil, battery: merged,
+            hasBattery: merged != nil, battery: merged, batteryShown: assessment.battShownPercent,
             security: report.security, claudeBackup: claudeBackup, claudeAttempt: claudeRun.attempt, snapshotCount: report.snapshots?.count,
             now: fixtureNow ?? Date(), parseFailures: report.parseFailures + live.parseFailures,
             details: ReportDetails(report: report, live: live))
@@ -345,6 +345,11 @@ final class AppModel {
     /// a test). Re-assesses now, rather than on the next fast tick (which does not run while paused). A new Claude
     /// log path is re-read first, so the assessment never pairs the new path with the old file's status.
     private func assessmentSettingsChanged(from old: AssessmentSettings) {
+        // BATTERY-HEALTH-UNIFY D5: the raw switch turned on with no ioreg read yet starts one; its result re-assesses
+        // (readBatteryNow). Never under the visual fixture (the fixture detail must stay).
+        if settings.assessmentSettings.batteryShowsRawMac, !old.batteryShowsRawMac, batteryDetail == nil, !VisualFixture.isRequested {
+            Task { await readBatteryNow() }
+        }
         if settings.assessmentSettings.claudeLogPath != old.claudeLogPath {
             Task { await refreshClaudeBackup(); reassessCommitted() }
             return
@@ -763,6 +768,9 @@ final class AppModel {
             if let sys = final.system { self.lastKnownSystem = sys }
             self.hasCompletedPass = true
             self.setAssessment(self.assessed(final))
+            // BATTERY-HEALTH-UNIFY: with the raw switch on, Home needs a fresh ioreg read once per pass (the Battery page
+            // reads on its own every 3 s while open; readBatteryNow drops a call that overlaps a read in flight).
+            if self.settings.assessmentSettings.batteryShowsRawMac, !VisualFixture.isRequested { Task { await self.readBatteryNow() } }
             // A pass whose system section came back empty (scan block failed, D7) keeps the previous report:
             // the sheet shows «not updated · showing the HH:MM report» over the old text (02-home §4 failed).
             if final.system?.modelName != nil {
@@ -835,7 +843,12 @@ final class AppModel {
         let result = await BatteryInspector.read()
         switch result {
         case .detail(let d):
-            if batteryDetail != d { batteryDetail = d }
+            if batteryDetail != d {
+                let rawMoved = batteryDetail?.rawHealthOneDecimal != d.rawHealthOneDecimal
+                batteryDetail = d
+                // BATTERY-HEALTH-UNIFY D5: with the raw switch on the verdict depends on this read.
+                if rawMoved, settings.assessmentSettings.batteryShowsRawMac { reassessCommitted() }
+            }
             succeedBlock(.battery)
         case .timedOut:
             failBlock(.battery, .timedOut)
@@ -968,6 +981,7 @@ final class AppModel {
                              claudeBackup: claudeBackup, claudeAttempt: claudeRun.attempt, backupStaleHours: s.backupStaleHours,
                              lowSpacePercent: s.lowSpacePercent,
                              claudeLogPath: BackupLog.resolvedURLs(custom: s.claudeLogPath).log.path,
+                             batteryRawPercent: batteryDetail?.rawHealthOneDecimal, batteryPrefersRaw: s.batteryShowsRawMac,
                              now: fixtureNow ?? Date())
     }
 

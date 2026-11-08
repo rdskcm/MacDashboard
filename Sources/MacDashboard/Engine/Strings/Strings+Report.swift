@@ -136,7 +136,7 @@ extension StringsEN: ReportStrings {
     var reportKeyUptime: String { "UPTIME" }
     func reportStorageFree(_ free: String, _ total: String) -> String { "\(free) of \(total) free" }
     func reportPurgeable(_ v: String) -> String { "purgeable \(v)" }
-    func reportCapacity(_ v: String) -> String { "capacity \(v)" }
+    func reportCapacity(_ v: String) -> String { "health \(v)" }
     func reportCycles(_ n: Int) -> String { n == 1 ? "1 cycle" : "\(n) cycles" }
     var reportFirewall: String { "Firewall" }
     var reportOff: String { "off" }
@@ -259,7 +259,7 @@ extension StringsRU: ReportStrings {
     var reportKeyUptime: String { "АПТАЙМ" }
     func reportStorageFree(_ free: String, _ total: String) -> String { "свободно \(free) из \(total)" }
     func reportPurgeable(_ v: String) -> String { "очищаемое \(v)" }
-    func reportCapacity(_ v: String) -> String { "ёмкость \(v)" }
+    func reportCapacity(_ v: String) -> String { "здоровье \(v)" }
     func reportCycles(_ n: Int) -> String { "\(n) " + ruPlural(n, "цикл", "цикла", "циклов") }
     var reportFirewall: String { "брандмауэр" }
     var reportOff: String { "выкл." }

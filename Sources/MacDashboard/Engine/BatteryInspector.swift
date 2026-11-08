@@ -81,6 +81,16 @@ struct BatteryDetail: Equatable {
     var mfgWeek: Int? = nil                 // 1...53
     var mfgCode: String? = nil              // raw 4-digit code, e.g. "2213"
     var lowPowerMode: Bool? = nil           // set by collect() only, never by parse()
+    var nominalChargeMAh: Int? = nil        // BatteryData.NominalChargeCapacity when the reply carries it (iPhones, some Macs); the estimate's basis (IPhoneData.estimatedHealthPercent)
+}
+
+extension BatteryDetail {
+    /// BATTERY-HEALTH-UNIFY fix wave 1: the raw ratio rounded to one decimal, what the raw switch shows and judges.
+    /// Falls back to `healthPercent` when the capacity pair is missing.
+    var rawHealthOneDecimal: Double? {
+        guard let m = maxCapacityMAh, let d = designCapacityMAh, d > 0 else { return healthPercent.map(Double.init) }
+        return (Double(m) / Double(d) * 1000).rounded() / 10
+    }
 }
 
 enum BatteryInspector {
@@ -130,7 +140,7 @@ enum BatteryInspector {
             ?? (batteryData?["FullChargeCapacity"] as? Int)
         let designCapacityMAh = (dict["DesignCapacity"] as? Int) ?? (packData?["DesignCapacity"] as? Int)
             ?? (batteryData?["DesignCapacity"] as? Int)
-        // iOS 27 diagnostics_relay reply: no AppleRawMaxCapacity and no children; the capacities
+        // iOS 27 diagnostics_relay reply: no top-level AppleRawMaxCapacity and no children (iOS 27.2 carries one inside BatteryData, equal to FullChargeCapacity); the capacities
         // sit in the top-level BatteryData. FullChargeCapacity is the raw max capacity there (same
         // value as the Pack's AppleRawMaxCapacity on macOS 27); NominalChargeCapacity is the health
         // basis only when FullChargeCapacity is absent. Mac and pre-27 iPhone results are unchanged.
@@ -166,6 +176,7 @@ enum BatteryInspector {
         )
 
         detail.serial = dict["Serial"] as? String
+        detail.nominalChargeMAh = batteryData?["NominalChargeCapacity"] as? Int
         if let md = dict["ManufacturerData"] as? Data {
             let (mfgCode, manufacturerCode) = decodeManufacturerData(md)
             detail.mfgCode = mfgCode

@@ -199,6 +199,40 @@ extension SerialTests {
             #expect(free != nil && total != nil && free! > 0 && free! < total!)
         }
 
+        /// BATTERY-HEALTH-UNIFY fix wave 1: MACDASH_LIVE=1 swift test --filter liveCanaryIPhoneHealth (a phone attached).
+        /// Prints the reply's capacities and the rule-P1 estimate. Reads only; no stores, no identifiers.
+        @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
+        @MainActor
+        func liveCanaryIPhoneHealth() async {
+            let transport = MobileDeviceTransport.shared
+            let box = Self.liveBox
+            transport.start { event in
+                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+            }
+            guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
+                Issue.record("attach an unlocked, trusted iPhone over USB")
+                return
+            }
+            var read: Result<IPhoneSnapshot, IPhoneReadError>?
+            transport.readSnapshot(h, includeBattery: true) { read = $0 }
+            guard await Self.wait(30, until: { read != nil }), case .success(let snap)? = read, let b = snap.battery else {
+                Issue.record("battery snapshot failed: \(String(describing: read))")
+                return
+            }
+            let estimate = IPhoneData.estimatedHealthPercent(b)
+            print("liveCanary iphone productType=\(snap.productType ?? "nil") os=\(snap.osVersion ?? "nil") nominalChargeMAh=\(String(describing: b.nominalChargeMAh)) designCapacityMAh=\(String(describing: b.designCapacityMAh)) maxCapacityMAh=\(String(describing: b.maxCapacityMAh))")
+            print("liveCanary iphone estimate=\(String(describing: estimate)) rawRatio=\(String(describing: IPhoneData.preciseLiveHealth(b))) healthPercent=\(String(describing: b.healthPercent))")
+            guard let nom = b.nominalChargeMAh, let design = b.designCapacityMAh, design > 0, let e = estimate else {
+                Issue.record("the reply carries no NominalChargeCapacity + DesignCapacity")
+                return
+            }
+            #expect(e == min(100, (nom * 100 + design - 1) / design), "estimate = ceil(Nominal / Design) in integer arithmetic")
+            #expect(nom <= design + design / 10, "nominal capacity is at most 10 % above design")
+            if let raw = IPhoneData.preciseLiveHealth(b) {
+                #expect(abs(Double(e) - raw) <= 5, "the estimate is within 5 points of the raw ratio from the same reply")
+            }
+        }
+
         @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
         @MainActor
         func liveCanarySysdiagnoseDir() async {

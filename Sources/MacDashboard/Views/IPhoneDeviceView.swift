@@ -17,7 +17,7 @@ struct IPhoneDeviceView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                IPhoneBatteryCard(record: record, snapshot: model.lastSnapshot[deviceKey])
+                IPhoneBatteryCard(record: record, snapshot: model.lastSnapshot[deviceKey], prefersRawHealth: model.prefersRawHealth)
                     .ds3Appear(delay: DS3Motion.cardDelays[0])
                 IPhoneBatteryHistoryCard(points: record?.battery ?? [])
                     .ds3Appear(delay: DS3Motion.cardDelays[1])

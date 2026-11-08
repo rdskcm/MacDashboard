@@ -7,6 +7,7 @@ import SwiftUI
 struct IPhoneBatteryCard: View {
     let record: IPhoneDeviceRecord?
     let snapshot: IPhoneSnapshot?
+    var prefersRawHealth = false   // BATTERY-HEALTH-UNIFY D9: IPhoneModel.prefersRawHealth, passed by IPhoneDeviceView
     @AppStorage("iphoneCapacityUnit") private var unit = "mAh"
 
     var body: some View {
@@ -19,15 +20,16 @@ struct IPhoneBatteryCard: View {
 
     @ViewBuilder private var content: some View {
         if let b = snapshot?.battery {
+            let h = liveHero(b)
             IPhoneRatioRow(spacing: 12) {
-                hero(value: health(b), fraction: (healthNumber(b) ?? 0) / 100, note: L.iphoneHealthNote)
+                hero(value: h.value, fraction: h.fraction, note: h.note)
                 liveTiles(b)
             }
         } else if snapshot != nil {
             IPhoneMessagePanel(text: snapshot?.batteryRead == false ? L.iphoneBatteryAutoReadOff : L.iphoneBatteryNoData)
         } else if let p = lastPoint {
             VStack(alignment: .leading, spacing: 12) {
-                hero(value: p.healthPercent.map { "\($0) %" }, fraction: Double(p.healthPercent ?? 0) / 100,
+                hero(value: p.healthPercent.map { IPhoneShownHealth(percent: $0, isEstimate: IPhoneData.healthIsEstimate(record?.battery ?? [])).text }, fraction: Double(p.healthPercent ?? 0) / 100,
                      note: L.iphoneHealthHistoryNote(cycles: p.cycles))
                 liveReadingsBox
             }
@@ -56,21 +58,15 @@ struct IPhoneBatteryCard: View {
                            groupLabel: L.iphoneCapacityUnitA11y) { $0 == "mAh" ? L.iphoneUnitMAh : L.iphoneUnitWh }
     }
 
-    /// One decimal, half-up, when both capacities are known; the integer value otherwise.
-    private func health(_ b: BatteryDetail) -> String? {
-        if let max = b.maxCapacityMAh, let design = b.designCapacityMAh,
-           let h = IPhoneData.preciseHealth(maxMAh: max, designMAh: design) {
-            return oneDecimal(h) + " %"
+    /// Live hero: the raw switch shows the one-decimal ratio (D9); otherwise the shown figure (fix wave 1).
+    private func liveHero(_ b: BatteryDetail) -> (value: String?, fraction: Double, note: String) {
+        if prefersRawHealth, let h = IPhoneData.preciseLiveHealth(b) {
+            return (oneDecimal(h) + " %", h / 100, L.iphoneHealthNote)
         }
-        return b.healthPercent.map { "\($0) %" }
-    }
-
-    private func healthNumber(_ b: BatteryDetail) -> Double? {
-        if let max = b.maxCapacityMAh, let design = b.designCapacityMAh,
-           let h = IPhoneData.preciseHealth(maxMAh: max, designMAh: design) {
-            return h
+        guard let f = IPhoneData.shownHealth(points: record?.battery ?? [], live: b) else {
+            return (b.healthPercent.map { "\($0) %" }, Double(b.healthPercent ?? 0) / 100, L.iphoneHealthNote)
         }
-        return b.healthPercent.map(Double.init)
+        return (f.text, Double(f.percent) / 100, f.isEstimate ? L.iphoneHealthEstimateNote : L.iphoneHealthAppleNote)
     }
 
     private func oneDecimal(_ v: Double) -> String {

@@ -348,6 +348,8 @@ struct FullReport {
 
 struct Assessment: Equatable {
     var items: [AttentionItem] = []   // sorted crit > serious > warn
+    /// BATTERY-HEALTH-UNIFY: the battery figure the verdict judged (`BatteryHealth.macShownPercent`); nil = none.
+    var battShownPercent: MacShownHealth? = nil
 }
 
 // ---- History (schema-compatible with legacy mac_check_state.json) ----

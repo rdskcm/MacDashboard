@@ -64,6 +64,7 @@ extension SerialTests {
                 var (report, live) = homeBadFixture(diskPct: pct)
                 // No report holds both TM kinds: the 0.87 pass carries the overdue one (D7).
                 if pct == 0.87 { report.tmDest = .some(.some(tmLate)) }
+                if pct == 0.87 { report.battery?.condition = "Normal" }   // service supersedes worn (BATTERY-HEALTH-UNIFY): this pass raises batteryCapacity
                 let a = homeAssess(report, live)
                 let tasks = HomeModel.tasks(a, report: report, disk: live.disk, battery: live.battery)
                 #expect(tasks.map(\.id) == a.items.map(\.id), "tasks keep assessment order")
@@ -493,7 +494,7 @@ extension SerialTests {
             var live = LiveSnapshot()
             live.battery = BatteryInfo(source: nil, charge: 50, state: nil, cycles: nil, condition: nil, maxCapacity: 65)
             var a = Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: nil)
-            #expect(a.items.contains { $0.kind == .batteryCapacity && $0.sev == .serious }, "live capacity raises the item")
+            #expect(a.items.contains { $0.kind == .batteryCapacity && $0.sev == .warn }, "live capacity raises the item")
             var t = HomeModel.tasks(a, report: report, disk: nil, battery: live.battery).first { $0.kind == .batteryCapacity }
             #expect(t?.state == "35% worn", "fallback state \(String(describing: t?.state))")
             // Both carry it: the report value wins.
@@ -501,6 +502,36 @@ extension SerialTests {
             a = Assess.assess(report: report, live: live, language: L10nStore.shared.language, memPressure: nil)
             t = HomeModel.tasks(a, report: report, disk: nil, battery: live.battery).first { $0.kind == .batteryCapacity }
             #expect(t?.state == "40% worn", "report state \(String(describing: t?.state))")
+        }
+
+        @Test func batteryRawSwitchOnHome() {
+            let saved = L10nStore.shared.language
+            defer { L10nStore.shared.language = saved }
+            L10nStore.shared.language = .en
+            var (report, live) = nowFixture()
+            report.battery?.maxCapacity = 82
+            report.battery?.cycles = 100
+            live.battery = report.battery
+            let raw = Assess.assess(report: report, live: live, language: .en, memPressure: nil, batteryRawPercent: 78, batteryPrefersRaw: true)
+            #expect(raw.battShownPercent?.percent == 78)
+            let rawTasks = HomeModel.tasks(raw, report: report, disk: live.disk, battery: live.battery)
+            #expect(rawTasks.first { $0.kind == .batteryCapacity }?.state == "22.0% worn")
+            var input = homeInput(report, live, assessment: raw)
+            input.batteryRawPercent = 78
+            input.batteryPrefersRaw = true
+            let cell = HomeModel.nowCells(input, tasks: rawTasks, memPressure: nil, socTempC: 48, gpuUtil: 23,
+                                          cpu: CPUUsage(user: 20.2, sys: 5.5, idle: 74.3), short: false, narrow: false)[3]
+            #expect(cell.big == "78.0%" && cell.chipText == "worn" && cell.batteryBar?.fraction == 0.78)
+
+            let apple = Assess.assess(report: report, live: live, language: .en, memPressure: nil, batteryRawPercent: 78, batteryPrefersRaw: false)
+            #expect(apple.battShownPercent?.percent == 82)
+            #expect(!apple.items.contains { $0.kind == .batteryCapacity })
+            var appleInput = homeInput(report, live, assessment: apple)
+            appleInput.batteryRawPercent = 78
+            let appleCell = HomeModel.nowCells(appleInput, tasks: HomeModel.tasks(apple, report: report, disk: live.disk, battery: live.battery),
+                                               memPressure: nil, socTempC: 48, gpuUtil: 23,
+                                               cpu: CPUUsage(user: 20.2, sys: 5.5, idle: 74.3), short: false, narrow: false)[3]
+            #expect(appleCell.big == "82%" && appleCell.chipText == "healthy")
         }
 
         @Test func nowCellsTones() {

@@ -298,7 +298,7 @@ extension SerialTests {
             withLanguage(.en) {
                 let e = entries(500)
                 #expect(make(input(e, metric: .disk)).title == "Disk: used")
-                #expect(make(input(e, metric: .battery)).title == "Battery: maximum capacity")
+                #expect(make(input(e, metric: .battery)).title == "Battery health")
                 #expect(make(input(e, metric: .cycles)).title == "Battery: charge cycles")
                 #expect(make(input(e, metric: .swap)).title == "Swap: used")
                 let t = make(input(e, view: .table))

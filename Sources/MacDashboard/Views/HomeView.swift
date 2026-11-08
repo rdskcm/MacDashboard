@@ -50,6 +50,7 @@ extension HomeInput {
                          mem: model.mem, swap: model.swap, disk: model.disk,
                          hasBattery: battery != nil, battery: model.battery,
                          batteryMaxMAh: model.batteryDetail?.maxCapacityMAh,
+                         batteryRawPercent: model.batteryDetail?.rawHealthOneDecimal, batteryPrefersRaw: model.settings.batteryShowsRawMac,
                          system: model.headerSystem, claudeBackup: model.claudeBackup,
                          backupStaleHours: model.settings.backupStaleHours, lowSpacePercent: model.settings.lowSpacePercent,
                          history: [], now: model.now(),

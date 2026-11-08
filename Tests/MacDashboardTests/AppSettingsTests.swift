@@ -50,9 +50,10 @@ extension SerialTests {
             a.lowSpacePercent = 15
             a.backupStaleDays = 7
             a.claudeLogPath = "/tmp/md-test/claude-backup.log"
+            a.batteryShowsRawMac = true
             a.setWakeHolderIgnored(k, ignored: true, now: Date(timeIntervalSince1970: 1_000_000))
             let b = AppSettings(defaults: d)
-            #expect(b.assessmentSettings == a.assessmentSettings, "a second instance reloads all four assessment settings")
+            #expect(b.assessmentSettings == a.assessmentSettings, "a second instance reloads all five assessment settings")
             a.claudeLogPath = ""
             #expect(a.claudeLogPath == nil, "empty log path is stored as nil")
             #expect(d.object(forKey: AppSettings.claudeLogPathKey) == nil, "empty log path removes the key")
@@ -62,6 +63,7 @@ extension SerialTests {
             #expect(a.backupStaleDays == 7 && a.lowSpacePercent == 15, "out-of-range writes are ignored")
             #expect(d.integer(forKey: AppSettings.backupStaleDaysKey) == 7)
             #expect(d.integer(forKey: AppSettings.lowSpacePercentKey) == 15)
+            #expect(d.bool(forKey: AppSettings.batteryShowsRawMacKey))
         }
 
         @MainActor @Test func assessmentHookFiresOncePerChange() {
@@ -76,6 +78,7 @@ extension SerialTests {
                 ("backupStaleDays", { s.backupStaleDays = 5 }),
                 ("claudeLogPath", { s.claudeLogPath = "/tmp/x.log" }),
                 ("wakeHolder", { s.setWakeHolderIgnored(k, ignored: true) }),
+                ("batteryShowsRawMac", { s.batteryShowsRawMac = true }),
             ]
             for (label, write) in writes {
                 let before = s.assessmentSettings
@@ -92,6 +95,7 @@ extension SerialTests {
                 ("backupStaleDays 31", { s.backupStaleDays = 31 }),
                 ("wake holder again", { s.setWakeHolderIgnored(k, ignored: true) }),
                 ("fastIntervalSeconds", { s.fastIntervalSeconds = 5 }),
+                ("same batteryShowsRawMac", { s.batteryShowsRawMac = true }),
             ]
             for (label, write) in noOps {
                 let n = box.calls.count
@@ -103,7 +107,7 @@ extension SerialTests {
         @Test func assessmentSettingsFieldsAreCovered() {
             let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
             let labels = Mirror(reflecting: AppSettings(defaults: d).assessmentSettings).children.compactMap(\.label)
-            #expect(labels == ["ignoredWakeHolderEntries", "backupStaleDays", "lowSpacePercent", "claudeLogPath"],
+            #expect(labels == ["ignoredWakeHolderEntries", "backupStaleDays", "lowSpacePercent", "claudeLogPath", "batteryShowsRawMac"],
                     "a new AssessmentSettings field needs a persistence line, a load line, and cases in assessmentSettingsPersistAndReload, assessmentHookFiresOncePerChange and SettingsPathTests")
         }
 
@@ -217,6 +221,16 @@ extension SerialTests {
             let s = AppSettings(defaults: d)
             s.iphoneKeepRequestedOnPhone = true
             #expect(AppSettings(defaults: d).iphoneKeepRequestedOnPhone, "the toggle persists through the injected suite")
+        }
+
+        @Test func batteryRawSwitchesDefaultOff() {
+            let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }
+            let s = AppSettings(defaults: d)
+            #expect(!s.batteryShowsRawMac && !s.batteryShowsRawIPhone, "both raw battery switches default off (D2)")
+            #expect(AppSettings.batteryShowsRawMacKey == "batteryShowsRawMac")
+            #expect(AppSettings.batteryShowsRawIPhoneKey == "batteryShowsRawIPhone")
+            s.batteryShowsRawIPhone = true
+            #expect(AppSettings(defaults: d).batteryShowsRawIPhone, "the iPhone switch persists through the injected suite")
         }
 
         @Test func iphoneAutoReadDefault() {
