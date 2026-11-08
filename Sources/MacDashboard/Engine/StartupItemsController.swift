@@ -1,5 +1,5 @@
 // Engine/StartupItemsController.swift
-// ARCH-MODEL-SPLIT block 3: the System page's Startup items (Автозагрузка) state, moved out of the coordinator
+// ARCH-MODEL-SPLIT block 3: the System page's Startup items ("Startup items") state, moved out of the coordinator
 // unchanged in behaviour. Owns «Check for stale» (REDESIGN-SYSTEM), the single and bulk orphan-plist deletes
 // (V2-DESTRUCTIVE-UX) and their Task handles.
 import Foundation

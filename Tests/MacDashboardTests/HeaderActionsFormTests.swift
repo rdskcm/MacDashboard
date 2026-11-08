@@ -29,7 +29,7 @@ struct HeaderActionsFormTests {
     }
 
     @Test func russianBandChangesOncePerCrossing() {
-        // fit 1083 (RU, Требует внимания): compact below 1107 (first at 1106), back up → full only from 1115.
+        // fit 1083 (RU, Needs attention): compact below 1107 (first at 1106), back up → full only from 1115.
         var compact = HeaderActionsForm.compact(width: 1150, tier: .mid, fitWidth: 1083, previousCompact: nil)
         var seen = [compact]
         for w: CGFloat in [1107, 1106, 1110, 1114, 1115, 1106] {

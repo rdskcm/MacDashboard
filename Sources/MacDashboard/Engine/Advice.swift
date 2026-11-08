@@ -1,5 +1,5 @@
 // Engine/Advice.swift
-// A clickable follow-up for an assessment row: what the Рекомендации card should DO
+// A clickable follow-up for an assessment row: what the Recommendations card should DO
 // when the user clicks the recommendation. Foundation-only — covered by Tests/MacDashboardTests.
 import Foundation
 

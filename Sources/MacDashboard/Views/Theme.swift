@@ -26,7 +26,7 @@ extension Color {
     }
 }
 
-// Russian number/byte formatting (fmtNum, fmtBytes) lives in Engine/Formatting.swift
+// Number/byte formatting (fmtNum, fmtBytes) lives in Engine/Formatting.swift
 // now — Foundation-only so Tests/MacDashboardTests can unit-test it.
 
 // MARK: - Design System (v2.0) token namespace

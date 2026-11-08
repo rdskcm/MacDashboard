@@ -1,6 +1,6 @@
 // Engine/HistorySeries.swift
-// Block H: pure series extraction for the История chart's metric picker
-// (Диск / Батарея / Циклы / Swap). Also the single source of truth for
+// Block H: pure series extraction for the History chart's metric picker
+// (Disk / Battery / Cycles / Swap). Also the single source of truth for
 // swap-string parsing, shared by the chart series path and
 // HistoryPageModel.table — no duplicated parsing logic between the two.
 // HISTORY-RANGE: also the chart's range window (HistoryRange) and point cap.
@@ -14,12 +14,12 @@ enum HistoryMetric: CaseIterable {
     case disk, battery, cycles, swap
 }
 
-/// The История chart's range switch (Месяц · 3 мес · Год · Всё). Case order
+/// The History chart's range switch (Month · 3 months · Year · All). Case order
 /// IS the segment order. Pure — covered by Tests/MacDashboardTests.
 enum HistoryRange: CaseIterable {
     case month, quarter, year, all
 
-    /// Calendar days in the window, counting the end day; nil = no window (Всё).
+    /// Calendar days in the window, counting the end day; nil = no window (All).
     var days: Int? {
         switch self {
         case .month: return 30
@@ -114,8 +114,8 @@ enum HistorySeries {
         return "\(fmtFixed(used, decimals: 2)) / \(fmtGrouped(Int(total))) \(L.byteUnitGB)"
     }
 
-    /// Most points the chart plots. ≥ the most a Год window can hold (one entry
-    /// per day, 365 days), so only Всё is ever thinned.
+    /// Most points the chart plots. ≥ the most a Year window can hold (one entry
+    /// per day, 365 days), so only All is ever thinned.
     static let maxChartPoints = 365
 
     /// Even-stride subsample to at most `maxCount` items, order preserved, first

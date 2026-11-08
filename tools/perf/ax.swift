@@ -9,7 +9,7 @@ import AppKit
 // usage: ax <pid> <kind> [value]          (trusted and focused ignore pid; pass 0)
 //   id <AXIdentifier>[|alt...]       press (AXPress) the first AXButton / AXRadioButton of window 1 whose AXIdentifier is a value
 //   title <text>[|alt...]            press the first AXButton / AXRadioButton whose AXTitle or AXDescription is a value
-//                                    (pass both languages: "Таблица|Table")
+//                                    (pass both languages' titles, e.g. the Table segment)
 //   frame <AXIdentifier>[|alt...]    "x y w h" (integers, global top-left points) of the first element with that identifier
 //   exists <AXIdentifier>[|alt...]   "present" | "absent"
 //   enabled <AXIdentifier>[|alt...]  "enabled" | "disabled" for the first element with that identifier, else "absent"

@@ -167,7 +167,7 @@ enum WakeHolders {
         return (sorted(best), sorted(bestSystem))
     }
 
-    /// "caffeinate (от claude)" / "Zoom" in `language`.
+    /// "caffeinate (from claude)" / "Zoom" in `language`.
     static func label(for h: WakeHolder, language: AppLanguage) -> String { label(for: h.key, language: language) }
 
     /// Same label for a stored ignore-list key (Settings rows, context-menu entries).
@@ -182,7 +182,7 @@ enum WakeHolders {
         return holders.filter { !ignoredSet.contains($0.key) }
     }
 
-    /// pmset's own age, floored to minutes: "21 мин", "1 ч 21 мин".
+    /// pmset's own age, floored to minutes: "21 min", "1 h 21 min".
     static func ageText(_ seconds: Int, language: AppLanguage) -> String {
         let S = language.strings
         let totalMinutes = max(0, seconds) / 60

@@ -12,6 +12,9 @@ private let sourcesRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()   // package root
     .appendingPathComponent("Sources/MacDashboard", isDirectory: true)
 
+/// The package root (the directory holding `Package.swift`).
+private let packageRootURL = sourcesRoot.deletingLastPathComponent().deletingLastPathComponent()
+
 /// Swift files directly inside `Sources/MacDashboard/<subdir>` ("" = the top-level files), sorted by name.
 private func swiftFiles(_ subdir: String) throws -> [URL] {
     let dir = subdir.isEmpty ? sourcesRoot : sourcesRoot.appendingPathComponent(subdir, isDirectory: true)
@@ -171,5 +174,115 @@ struct EnglishFirstTests {
         let resolved = LanguageChoice.resolve(.system, preferredLanguages: Locale.preferredLanguages)
         print("liveCanaryFirstLaunchLanguage preferred=\(first) resolved=\(resolved)")
         #expect(resolved == (first.hasPrefix("ru") ? .ru : .en))
+    }
+
+    // MARK: R2 (Stage 3)
+
+    /// Every `.swift` under `Sources/MacDashboard`, `Tests/MacDashboardTests` and `tools`, and every `.sh` under `tools`,
+    /// skipping the gitignored run output `tools/perf/out/` and `tools/visual/out/`.
+    private static func commentScanFiles() -> [URL] {
+        let root = packageRootURL
+        let skipped = [root.appendingPathComponent("tools/perf/out").path, root.appendingPathComponent("tools/visual/out").path]
+        var result: [URL] = []
+        for sub in ["Sources/MacDashboard", "Tests/MacDashboardTests", "tools"] {
+            let base = root.appendingPathComponent(sub, isDirectory: true)
+            guard let walker = FileManager.default.enumerator(at: base, includingPropertiesForKeys: nil) else { continue }
+            for case let url as URL in walker {
+                if skipped.contains(where: { url.path.hasPrefix($0) }) { continue }
+                let ext = url.pathExtension
+                if ext == "swift" || (ext == "sh" && sub == "tools") { result.append(url) }
+            }
+        }
+        return result.sorted { $0.path < $1.path }
+    }
+
+    /// Splits one shell line at the first `#` outside `"..."` and `'...'` and not part of `$#` or `${#...}`.
+    private static func splitShellComment(_ line: Substring) -> String {
+        var quote: Character?
+        var prev: Character?
+        var prev2: Character?
+        var idx = line.startIndex
+        while idx < line.endIndex {
+            let ch = line[idx]
+            if let q = quote {
+                if ch == q { quote = nil }
+            } else if ch == "\"" || ch == "'" {
+                quote = ch
+            } else if ch == "#" && prev != "$" && !(prev == "{" && prev2 == "$") {
+                return String(line[idx...])
+            }
+            prev2 = prev
+            prev = ch
+            idx = line.index(after: idx)
+        }
+        return ""
+    }
+
+    @Test func noCyrillicComments() throws {
+        var offenders: [String] = []
+        let prefix = packageRootURL.path + "/"
+        for file in Self.commentScanFiles() {
+            let isShell = file.pathExtension == "sh"
+            for (i, line) in try lines(of: file).enumerated() {
+                let comment = isShell ? Self.splitShellComment(line) : splitComment(line).comment
+                if hasCyrillic(comment) {
+                    offenders.append("\(file.path.hasPrefix(prefix) ? String(file.path.dropFirst(prefix.count)) : file.path):\(i + 1)")
+                }
+            }
+        }
+        #expect(offenders.isEmpty, "Cyrillic in comments: \(offenders.joined(separator: ", "))")
+    }
+
+    // MARK: R3 (Stage 3)
+
+    /// Per `Engine/Strings/Strings+*.swift`: the protocol, the EN table and the RU table declare the same members,
+    /// none of them empty. A Russian-grammar helper in the RU extension must be `private` (it is then not counted).
+    /// The counts are printed in the failure/diagnostic message only, never asserted.
+    @Test func stringTablesComplete() throws {
+        let memberPattern = try NSRegularExpression(pattern: #"^    (?:var|func) (\w+)"#)
+        let emptyPatterns = try [#"\{\s*""\s*\}"#, #"^\s*""\s*$"#, #"^\s*return\s+""\s*$"#].map { try NSRegularExpression(pattern: $0) }
+        func matches(_ re: NSRegularExpression, _ s: String) -> Bool {
+            re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
+        }
+        var problems: [String] = []
+        var counts: [(String, Int)] = []
+        let dir = sourcesRoot.appendingPathComponent("Engine/Strings", isDirectory: true)
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("Strings+") && $0.pathExtension == "swift" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        for file in files {
+            let name = file.lastPathComponent
+            var names: [String: [String]] = ["protocol": [], "EN": [], "RU": []]
+            var section: String?
+            for (i, raw) in try lines(of: file).enumerated() {
+                let line = String(raw)
+                if line.hasPrefix("protocol ") { section = "protocol"; continue }
+                if line.hasPrefix("extension StringsEN") { section = "EN"; continue }
+                if line.hasPrefix("extension StringsRU") { section = "RU"; continue }
+                guard let sec = section else { continue }
+                let code = splitComment(raw).code
+                guard let m = memberPattern.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)),
+                      let r = Range(m.range(at: 1), in: code) else {
+                    if sec != "protocol", emptyPatterns.dropFirst().contains(where: { matches($0, code) }) {
+                        problems.append("\(name):\(i + 1) empty value")
+                    }
+                    continue
+                }
+                names[sec]?.append(String(code[r]))
+                if sec != "protocol", matches(emptyPatterns[0], code) || emptyPatterns.dropFirst().contains(where: { matches($0, code) }) {
+                    problems.append("\(name):\(i + 1) empty value")
+                }
+            }
+            let p = Set(names["protocol"]!), e = Set(names["EN"]!), r = Set(names["RU"]!)
+            if p.isEmpty { problems.append("\(name): no protocol members") }
+            if p != e { problems.append("\(name): protocol vs EN differ: \(p.symmetricDifference(e).sorted())") }
+            if p != r { problems.append("\(name): protocol vs RU differ: \(p.symmetricDifference(r).sorted())") }
+            counts.append((name.replacingOccurrences(of: "Strings+", with: "").replacingOccurrences(of: ".swift", with: ""), p.count))
+        }
+        let total = counts.reduce(0) { $0 + $1.1 }
+        let printout = counts.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0 < $1.0 }.map { "\($0.0) \($0.1)" }.joined(separator: ", ")
+        print("stringTablesComplete keys per table: \(printout); total \(total) per table (expected 1330 at Stage 1)")
+        #expect(problems.isEmpty, "\(problems.joined(separator: "; ")). Keys per table: \(printout); total \(total)")
+        #expect(!counts.isEmpty)
     }
 }

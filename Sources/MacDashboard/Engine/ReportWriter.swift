@@ -75,7 +75,7 @@ enum ReportWriter {
         fmtFixed(max(0, s), decimals: 1, language: language) + " " + language.strings.uptimeUnitSecond
     }
 
-    /// Human byte size, "96,4 ГБ" style: comma decimal, КБ/МБ/ГБ/ТБ, base 1024, one
+    /// Human byte size, "96.4 GB" style (comma decimal in Russian): KB/MB/GB/TB, base 1024, one
     /// fixed decimal once above the smallest unit. Deterministic regardless of the
     /// user's system locale — String(format:) without an explicit locale always uses
     /// "." internally, which is then replaced with ",".
@@ -275,7 +275,7 @@ private struct ReportRenderer {
         return parts.isEmpty ? dash : parts.joined(separator: " · ")
     }
 
-    /// "Oct 17, 2026, 10:30" / "17 окт. 2026, 10:30" in the app language and the local time zone.
+    /// "Oct 17, 2026, 10:30" in the app language and the local time zone.
     private func formatDateTime(_ date: Date) -> String {
         let ru = language == .ru
         let fmt = DateFormatter()
@@ -285,7 +285,7 @@ private struct ReportRenderer {
         return fmt.string(from: date)
     }
 
-    // MARK: - СИСТЕМА
+    // MARK: - SYSTEM
 
     private func renderSystem(_ system: SystemInfo?) -> [String] {
         guard let s = system else { return [S.sharedUnavailable] }
@@ -302,7 +302,7 @@ private struct ReportRenderer {
         return lines.isEmpty ? [S.sharedUnavailable] : lines
     }
 
-    // MARK: - ДИСК
+    // MARK: - DISK
 
     /// df-like table. LiveSnapshot only carries a single DiskInfo (per SPEC §5.1, no
     /// `df` subprocess — volume resource-value APIs only), so dataUsed/sysUsed are
@@ -369,7 +369,7 @@ private struct ReportRenderer {
         return lines
     }
 
-    // MARK: - ПАМЯТЬ
+    // MARK: - MEMORY
 
     private func renderMemory(_ mem: MemSnapshot?, _ swap: SwapInfo?) -> [String] {
         if mem == nil && swap == nil { return [S.sharedUnavailable] }
@@ -405,7 +405,7 @@ private struct ReportRenderer {
         return ReportWriter.padRight(label + ":", 32) + ReportWriter.padLeft("\(pages).", 10)
     }
 
-    // MARK: - ТОП-10 процессов
+    // MARK: - TOP-10 processes
 
     private enum ProcPrimary { case mem, cpu }
 
@@ -432,7 +432,7 @@ private struct ReportRenderer {
         return lines
     }
 
-    // MARK: - АВТОЗАГРУЗКА
+    // MARK: - AUTOSTART
 
     private func renderLoginItems(_ autostart: AutostartInfo?) -> [String] {
         guard let a = autostart else { return [S.sharedUnavailable] }
@@ -465,7 +465,7 @@ private struct ReportRenderer {
         return lines
     }
 
-    // MARK: - БАТАРЕЯ
+    // MARK: - BATTERY
 
     private func renderBattery(_ battery: BatteryInfo?) -> [String] {
         guard let b = battery else { return [S.reportNoBattery] }
@@ -479,7 +479,7 @@ private struct ReportRenderer {
         return lines
     }
 
-    // MARK: - НАСТРОЙКИ ЭНЕРГИИ
+    // MARK: - ENERGY SETTINGS
 
     private func renderEnergy(_ energy: EnergySettings?) -> [String] {
         guard let e = energy else { return [S.sharedUnavailable] }
@@ -490,7 +490,7 @@ private struct ReportRenderer {
         return lines
     }
 
-    // MARK: - БЕЗОПАСНОСТЬ
+    // MARK: - SECURITY
 
     private func renderSecurity(_ security: SecurityState?) -> [String] {
         guard let s = security else { return [S.sharedUnavailable] }
@@ -530,7 +530,7 @@ private struct ReportRenderer {
         return [s.text(S)]
     }
 
-    // MARK: - КРАШИ
+    // MARK: - CRASHES
 
     private func renderCrashes(_ crashes: [CrashGroup]?) -> [String] {
         guard let c = crashes else { return [S.sharedUnavailable] }
@@ -558,7 +558,7 @@ private struct ReportRenderer {
         }
     }
 
-    // MARK: - ОБНОВЛЕНИЯ macOS
+    // MARK: - macOS UPDATES
 
     private func renderUpdates(_ updates: [SoftwareUpdate]?, checkedAt: Date?) -> [String] {
         guard let u = updates else { return [S.reportNotChecked] }

@@ -13,7 +13,7 @@
 
 import Foundation
 
-/// Who asked for a report pass (COLLECT-FASTPATH). Only the «Обновить отчёт» button is
+/// Who asked for a report pass (COLLECT-FASTPATH). Only the "Refresh report" button is
 /// `.button`; everything else (launch, language switch, coalesced follow-ups) is automatic.
 enum CollectTrigger: Sendable, Equatable {
     case button, automatic
@@ -581,8 +581,8 @@ final class ReportCollector: Sendable {
     ///      up to, and never falls back to a bare "—" either.
     ///
     /// Known limitation: if FDA is granted AND the disk is unmounted, step 3 can
-    /// still succeed with a (necessarily stale) cached date, so the honest "diск
-    /// не подключён" message in step 4 never fires in that specific combination.
+    /// still succeed with a (necessarily stale) cached date, so the honest "disk
+    /// not connected" message in step 4 never fires in that specific combination.
     /// This is judged acceptable — a stale-but-real date is more useful than a
     /// unmounted-disk notice once the user already trusts the app with FDA — and
     /// is moot in the common no-FDA deployment, where the plist is gated identically
@@ -1099,7 +1099,7 @@ final class ReportCollector: Sendable {
         // 'AC Power'", which batteryPmset parses into a source-only BatteryInfo. An AC
         // line is NOT evidence of a battery (desktops run on AC too), so drop anything
         // lacking real battery data — otherwise a Mac mini/Studio/Pro would show a
-        // phantom Батарея tile. A laptop always has an InternalBattery line (charge/
+        // phantom Battery tile. A laptop always has an InternalBattery line (charge/
         // state) and/or a power profile, so this never strips a real battery.
         if let batt = b,
            batt.charge == nil, batt.maxCapacity == nil,

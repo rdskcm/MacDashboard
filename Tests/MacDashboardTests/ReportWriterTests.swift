@@ -172,7 +172,7 @@ extension SerialTests {
             let rows = out.components(separatedBy: "\n")
             let k = { (s: String) in pad(s, 16) }
             #expect(rows[0] == "Отчёт MacDashboard — MacBook Air (Apple M3)", "renderRU title (got \(rows[0]))")
-            // The month word comes from the system CLDR data: «июл.» or «июля» depending on the macOS version.
+            // The month word comes from the system CLDR data: the abbreviated or the genitive July form depending on the macOS version.
             #expect(rows[1].hasPrefix("Создан 3 июл") && rows[1].contains(" 2026, 18:37 · macOS 26.1 (25B78)"),
                     "renderRU generated line (got \(rows[1]))")
             for key in ["СОСТОЯНИЕ", "ПРОЦЕССОР", "ПАМЯТЬ", "ХРАНИЛИЩЕ", "БАТАРЕЯ", "ЗАЩИТА", "КОПИИ", "АПТАЙМ"] {

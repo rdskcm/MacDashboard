@@ -1,5 +1,5 @@
 // Views/AdviceActionRunner.swift
-// Executes the system-facing AdviceActions for the Рекомендации card. UI-owned
+// Executes the system-facing AdviceActions for the Recommendations card. UI-owned
 // confirmations happen BEFORE these calls; model-owned actions (enableFirewall,
 // enableGatekeeper) never reach here.
 import AppKit

@@ -1,7 +1,7 @@
 // Engine/SmartToolsController.swift
 // ARCH-MODEL-SPLIT block 5: the Storage page's disk-health (SMART) feature, moved out of the coordinator unchanged in
 // behaviour. Owns the 300 s SMART sampler (SPEC Block H), the on-demand re-check, the in-app smartmontools install
-// (Block N8), the smartctl/brew availability state, the Диски card's «updated HH:MM» stamp and their Task handles.
+// (Block N8), the smartctl/brew availability state, the Disks card's "updated HH:MM" stamp and their Task handles.
 import Foundation
 import Observation
 
@@ -104,8 +104,8 @@ final class SmartToolsController {
 
     // MARK: - Re-check, install
 
-    /// On-demand SMART re-check, run by `installNow()` right after smartmontools is installed (the Диски card's
-    /// «Обновить» button was removed in REFRESH-BUTTONS-AUDIT: the sampler re-reads the same data).
+    /// On-demand SMART re-check, run by `installNow()` right after smartmontools is installed (the Disks card's
+    /// "Refresh" button was removed in REFRESH-BUTTONS-AUDIT: the sampler re-reads the same data).
     func refreshNow() {
         guard !refreshing else { return }
         refreshing = true
@@ -133,7 +133,7 @@ final class SmartToolsController {
         }
     }
 
-    /// In-app smartmontools install (Block N8), from the Диски card when Homebrew is present but smartctl isn't.
+    /// In-app smartmontools install (Block N8), from the Disks card when Homebrew is present but smartctl isn't.
     /// Unprivileged — brew runs as the user, never via PrivilegedRunner. Success = smartctl is found afterwards:
     /// `.installed` and a SMART re-check; otherwise a typed failure (exit code, 300 s timeout, no brew).
     /// Mirrors `brew.upgradeNow()`.

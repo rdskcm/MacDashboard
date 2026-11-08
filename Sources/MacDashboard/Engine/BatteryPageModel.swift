@@ -319,7 +319,7 @@ struct BatteryPageModel: Equatable {
         return out
     }
 
-    /// ISO-8601 week → Monday → "Mar 2024" / "март 2024"; nil when the date cannot be built.
+    /// ISO-8601 week → Monday → "Mar 2024" (or the Russian equivalent); nil when the date cannot be built.
     @MainActor static func mfgMonth(year: Int, week: Int) -> String? {
         var comps = DateComponents()
         comps.weekOfYear = week

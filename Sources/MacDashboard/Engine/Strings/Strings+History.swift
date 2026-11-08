@@ -8,7 +8,7 @@ protocol HistoryStrings {
     func historySub(_ samples: Int) -> String                 // "500 daily samples · mac_check_state.json"
     var historyTagUnreadable: String { get }                   // "file unreadable"
     var historyTagReading: String { get }                      // "reading…"
-    func historySince(day: Int, month: Int, year: Int?) -> String   // "since Sep 2, 2025" / "с 2 сентября 2025"
+    func historySince(day: Int, month: Int, year: Int?) -> String   // "since Sep 2, 2025"
     func historyChartSinceA11y(_ since: String) -> String      // "Chart shows data since Oct 3"
     var historyTitleDisk: String { get }                       // "Disk: used"
     var historyTitleBattery: String { get }                    // "Battery: maximum capacity"
@@ -50,7 +50,7 @@ protocol HistoryStrings {
     var historyRefreshA11y: String { get }                     // "Reload history from disk"
     func historyShortDate(day: Int, month: Int, year: Int?) -> String            // "Oct 14" · "Sep 2, 2025"
     func historyTooltipDate(weekday: Int, day: Int, month: Int, year: Int) -> String   // "Fri, Oct 17, 2026"
-    func historyMonthLabel(_ month: Int) -> String             // "Jun" / "июнь" (standalone form)
+    func historyMonthLabel(_ month: Int) -> String             // "Jun" (standalone form)
     var historyRestartTitle: String { get }                    // kept
     func historyRestartDetail(_ file: String) -> String        // kept
     var historyRestartReveal: String { get }                   // kept

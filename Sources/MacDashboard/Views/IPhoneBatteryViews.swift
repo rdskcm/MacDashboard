@@ -541,7 +541,7 @@ private struct IPhoneHealthChart: View {
                     .monospacedDigit()
                     .foregroundStyle(DS3.ink)
                 // spacing 0 + Spacer(minLength: 4): an HStack(spacing: 8) would add the gap on both sides of the Spacer (16 pt)
-                // Worst RU case: «150 циклов» + «sysdiagnose» = 142 pt of 144 pt with the 4 pt minimum gap.
+                // Worst RU case: "150 cycles" + "sysdiagnose" = 142 pt of 144 pt with the 4 pt minimum gap.
                 HStack(spacing: 0) {
                     Text(p.cycles.map { L.iphoneChartCycles($0) } ?? "")
                         .layoutPriority(1)

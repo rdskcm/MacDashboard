@@ -249,7 +249,7 @@ struct ProcessListCard: View {
             .animation(reduceMotion ? nil : processRowMotion, value: rowOrder)
             // …but a metric switch replaces `rows` wholesale, and animating
             // THAT churns the whole list for 0.45 s after every tap on the
-            // CPU|Память control. A fresh identity per metric drops the old
+            // CPU|Memory control. A fresh identity per metric drops the old
             // subtree instead of interpolating into the new one, so the
             // switch is instant while tick-to-tick re-sorts keep the curve.
             // The list length is folded into the same identity via `rows.count`: the list is

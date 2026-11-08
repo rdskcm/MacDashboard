@@ -219,7 +219,7 @@ enum Parsers {
             if firstClause == "AC attached", clauses.count > 1, clauses[1] == "not charging" {
                 // Real pmset output splits this state across TWO semicolon clauses
                 // ("...; AC attached; not charging; ...") — legacy's single-clause
-                // regex can't reach its own "не заряжается" dict entry for this
+                // regex can't reach its own "not charging" dict entry (the Russian text for it) for this
                 // exact reason; special-cased here so it actually triggers.
                 state = .notCharging
             } else if !firstClause.isEmpty {

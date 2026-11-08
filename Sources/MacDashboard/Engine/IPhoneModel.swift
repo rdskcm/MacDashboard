@@ -222,7 +222,7 @@ final class IPhoneModel {
         identity[key].map { IPhoneData.identityRows($0, storage: storage[key]) }
     }
 
-    /// «Найти iPhone» → restart of the connection service (Stage 7).
+    /// "Find iPhone" → restart of the connection service (Stage 7).
     var restartingService = false
     var restartError: String?
     /// The open device page (nil = tiles). Memory only; survives a Mac↔iPhone switch.
@@ -425,7 +425,7 @@ final class IPhoneModel {
         }
     }
 
-    /// The page's «Обновить».
+    /// The page's "Refresh".
     func refresh(deviceKey: String) {
         guard let h = connected[deviceKey] else { return }
         refresh(handle: h)
@@ -502,7 +502,7 @@ final class IPhoneModel {
         }
     }
 
-    /// Runs one import. `keep` = «Разобрать и сохранить». Merges the derived battery points
+    /// Runs one import. `keep` = "Parse and keep". Merges the derived battery points
     /// into the stored history and fills `archiveLogs` only on success. One import per
     /// device at a time.
     func importArchive(deviceKey: String, source: SysdiagnoseImporter.Source, keep: Bool,

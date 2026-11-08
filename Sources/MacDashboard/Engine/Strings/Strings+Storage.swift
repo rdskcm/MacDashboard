@@ -15,7 +15,7 @@ protocol StorageStrings {
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String
 
-    // MARK: Storage — Диски (SMART)
+    // MARK: Storage — Disks (SMART)
     func storageSmartUpdatedCaption(_ time: String) -> String
 
     // MARK: Storage page (REDESIGN-STORAGE)
@@ -145,7 +145,7 @@ extension StringsEN: StorageStrings {
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String { "Not measured in time: \(folders)." }
 
-    // MARK: Storage — Диски (SMART)
+    // MARK: Storage — Disks (SMART)
     func storageSmartUpdatedCaption(_ time: String) -> String { "updated \(time)" }
 
     // MARK: Storage page (REDESIGN-STORAGE)
@@ -274,7 +274,7 @@ extension StringsRU: StorageStrings {
     // MARK: Storage — folders the count did not reach before its deadline (SERVICE-DIRS-TIMEOUT)
     func storageFoldersNotMeasured(_ folders: String) -> String { "Не успели измерить: \(folders)." }
 
-    // MARK: Storage — Диски (SMART)
+    // MARK: Storage — Disks (SMART)
     func storageSmartUpdatedCaption(_ time: String) -> String { "обновлено \(time)" }
 
     // MARK: Storage page (REDESIGN-STORAGE)
