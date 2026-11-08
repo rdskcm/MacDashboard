@@ -183,7 +183,7 @@ final class AppModel {
 
     /// Timestamp of the report currently shown in the Report sheet: the on-disk file's
     /// mtime when a cached report was loaded at launch, or the completion time of the
-    /// last successful collect(). Drives the «обновлено HH:MM» staleness caption.
+    /// last successful collect(). Drives the "updated HH:MM" staleness caption.
     var reportUpdatedAt: Date? = nil
 
     var reportURL: URL                // fixed file path
@@ -597,7 +597,7 @@ final class AppModel {
     /// Cold-launch disk cache (Block N5): if a report from a previous run exists on
     /// disk, show it in the Report sheet (ReportSheet) immediately (with a staleness caption) while
     /// the background collect() refreshes it. Raw text only — FullReport is not
-    /// serialized, so the Обзор cards still fill in progressively from the live
+    /// serialized, so the Overview cards still fill in progressively from the live
     /// collect. Synchronous by design: the file is tens of KB and this runs once,
     /// before the first collect() is kicked off.
     private func loadCachedReportFromDisk() {
@@ -650,7 +650,7 @@ final class AppModel {
         if thermal != level { thermal = level }
     }
 
-    /// Public entry. `.button` only from the «Обновить отчёт» button.
+    /// Public entry. `.button` only from the "Refresh report" button.
     func refreshReport(trigger: CollectTrigger) {
         // Fixture mode shows a fixed dataset and must write nothing: no pass, no update check,
         // no size count (the same predicate MacDashboardApp uses to skip start()).
@@ -836,7 +836,7 @@ final class AppModel {
 
     /// Manual, on-demand process-list re-sample (V2-SETTINGS-PROCLIMIT follow-up).
     /// Its caller is the Processes card's Quit flow (REDESIGN-CPU); the CPU and Memory «Try again» callers were removed in REFRESH-BUTTONS-AUDIT, and
-    /// the «Применить» button of the retired process-limit setting was removed in
+    /// the "Apply" button of the retired process-limit setting was removed in
     /// REDESIGN-FOUNDATION. One-shot, independent of the periodic slowTask sampler — a fresh
     /// LiveCollector instance is created per call, never shared with a concurrent
     /// sampler pass (see the fastBox/procBox comment in start()). Because

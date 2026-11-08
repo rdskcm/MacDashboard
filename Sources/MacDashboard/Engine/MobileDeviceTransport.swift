@@ -244,7 +244,7 @@ final class MobileDeviceTransport: @unchecked Sendable {
     func start(onEvent: @escaping @MainActor (IPhoneTransportEvent) -> Void) {
         onThread { [self] in
             guard !started, let s = syms else { return }
-            // Stays true even when subscribe fails: restartDiscovery («Искать снова») is the retry and needs it.
+            // Stays true even when subscribe fails: restartDiscovery ("Search again") is the retry and needs it.
             started = true
             eventHandler = onEvent
             notification = subscribe(s)

@@ -1,5 +1,5 @@
 // Engine/Formatting.swift
-// Deterministic Russian number/byte formatting — relocated out of Views/Theme.swift
+// Deterministic number/byte formatting — relocated out of Views/Theme.swift
 // (Block H) so it's Foundation-only and can be unit-tested by Tests/MacDashboardTests;
 // HistorySeries.swift's formattedSwap needs it and Checks must stay SwiftUI-free.
 // Views/Theme.swift keeps the Color/palette helpers; this file owns the numeric
@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Comma-decimal Russian number formatting, trims trailing zeros
+/// Number formatting in the UI language (comma decimal in Russian), trims trailing zeros
 /// ("12,0" -> "12", "12,34" @ decimals:1 -> "12,3").
 @MainActor func fmtNum(_ v: Double, decimals: Int = 1) -> String { fmtNum(v, decimals: decimals, language: L10nStore.shared.language) }
 func fmtNum(_ v: Double, decimals: Int = 1, language: AppLanguage) -> String {
@@ -44,12 +44,12 @@ func fmtTB(dataUnits: UInt64, language: AppLanguage) -> String {
     fmtFixed(Double(dataUnits) * 512_000 / 1e12, decimals: 1, language: language) + " " + language.strings.byteUnitTB
 }
 
-/// Deterministic decimal capacity formatter: ГБ/ТБ (GB/TB), matching how macOS
+/// Deterministic decimal capacity formatter: GB/TB, matching how macOS
 /// reports disk sizes (decimal, 10^9/10^12) — unlike `fmtBytes`, which is binary
 /// and used for memory/swap. One decimal place under 1000 GB; two decimals from
 /// 1 TB up to (not including) 10 TB, one decimal at/above 10 TB; trailing zeros
-/// trimmed, comma as decimal separator. Used by the disk tile value, «из N»
-/// slot, and footer sizes ("2,24 ТБ из 4 ТБ").
+/// trimmed, comma as decimal separator. Used by the disk tile value, "of N"
+/// slot, and footer sizes ("2.24 TB of 4 TB").
 @MainActor func fmtCapacity(_ bytes: Int64) -> String { fmtCapacity(bytes, language: L10nStore.shared.language) }
 func fmtCapacity(_ bytes: Int64, language: AppLanguage) -> String {
     let p = fmtCapacityParts(bytes, language: language)
@@ -65,7 +65,7 @@ func fmtCapacityParts(_ bytes: Int64, language: AppLanguage) -> (value: String, 
     let gb = Double(bytes) / 1_000_000_000
     // Decide the unit using the value AFTER rounding to the digits it will be
     // displayed with, so e.g. 999.95 GB (which rounds to "1000.0") reports as
-    // TB instead of the misleading "1000,0 ГБ".
+    // TB instead of the misleading "1000.0 GB".
     if (gb * 10).rounded() / 10 >= 1000 {
         let tb = Double(bytes) / 1_000_000_000_000
         let decimals = (tb * 100).rounded() / 100 >= 10 ? 1 : 2
@@ -82,7 +82,7 @@ func fmtCapacityParts(_ bytes: Int64, language: AppLanguage) -> (value: String, 
     return (fmtNum(bytes > 0 ? max(mb, 0.1) : 0, decimals: 1), L.byteUnitMB)
 }
 
-/// Deterministic Russian byte formatter: КБ/МБ/ГБ/ТБ, one decimal place
+/// Deterministic byte formatter in the UI language: KB/MB/GB/TB, one decimal place
 /// (trimmed), comma as decimal separator. Intentionally NOT ByteCountFormatter,
 /// which is locale-dependent and uses Latin unit abbreviations.
 @MainActor func fmtBytes(_ n: Int64?) -> String { fmtBytes(n, language: L10nStore.shared.language) }

@@ -8,19 +8,23 @@ import Testing
 /// Root of every ported check. `.serialized` runs this whole subtree one test at a time:
 /// the checks share process-wide state (L10nStore.shared.language, AppSettings.shared,
 /// UserDefaults.standard, pid-named temp markers) and assert wall-clock bounds.
-/// `.russianUI` starts every test in this subtree with the UI language set to Russian.
+/// `.uiLanguage(.en)` starts every test in this subtree with the UI language set to English.
 /// A new test that touches any process-wide state goes inside this suite.
-@Suite(.serialized, .russianUI)
+@Suite(.serialized, .uiLanguage(.en))
 struct SerialTests {}
 
-/// Sets `L10nStore.shared.language = .ru` before each test case in its scope and restores
-/// the previous value afterwards, so a test that switches to `.en` cannot leak into the next.
-struct RussianUITrait: SuiteTrait, TestTrait, TestScoping {
+/// Sets `L10nStore.shared.language` to `language` before each test case in its scope and restores the previous
+/// value afterwards, so a test that switches the language cannot leak into the next. The root suite pins `.en`;
+/// a file that asserts Russian output through the global `L` puts `@Suite(.uiLanguage(.ru))` on its own struct
+/// (the inner scope runs inside the outer one, so it wins).
+struct UILanguageTrait: SuiteTrait, TestTrait, TestScoping {
+    let language: AppLanguage
     var isRecursive: Bool { true }
 
     func provideScope(for test: Test, testCase: Test.Case?,
                       performing function: @Sendable () async throws -> Void) async throws {
-        let saved = await MainActor.run { let s = L10nStore.shared.language; L10nStore.shared.language = .ru; return s }
+        let language = self.language
+        let saved = await MainActor.run { let s = L10nStore.shared.language; L10nStore.shared.language = language; return s }
         do { try await function() } catch {
             await MainActor.run { L10nStore.shared.language = saved }
             throw error
@@ -29,8 +33,8 @@ struct RussianUITrait: SuiteTrait, TestTrait, TestScoping {
     }
 }
 
-extension Trait where Self == RussianUITrait {
-    static var russianUI: Self { RussianUITrait() }
+extension Trait where Self == UILanguageTrait {
+    static func uiLanguage(_ language: AppLanguage) -> Self { UILanguageTrait(language: language) }
 }
 
 /// <package>/Tests/Fixtures, found from this file's own location.

@@ -65,11 +65,6 @@ extension SerialTests {
 
                 L10nStore.shared.language = .ru
                 #expect(ReportWriter.fmtBytes(1_073_741_824, language: .ru).contains("ГБ"), "L10nStore: switch back .ru, fmtBytes(1GiB) contains ГБ")
-
-                // launchLanguage is a lazily-initialized static: since it's touched here for
-                // the first time (after the .ru pin at file top), it captures .ru — matching
-                // the pinned language regardless of the switches above.
-                #expect(L10nStore.launchLanguage == .ru, "L10nStore: launchLanguage == .ru (matches pinned launch language)")
             }
         }
 
@@ -104,7 +99,7 @@ extension SerialTests {
                 #expect(smartLocalizedLabel("", language: .ru) == "", "smartLocalizedLabel: RU empty string passes through unchanged")
 
                 // Already-localized status strings (baked at collection time by ReportCollector,
-                // e.g. "SMART: в норме (проверено)") are not in the lookup table and pass through too.
+                // e.g. "SMART: OK (checked)" in Russian) are not in the lookup table and pass through too.
                 #expect(smartLocalizedLabel(L.reportCollectorSmartOkVerified, language: .ru) == L.reportCollectorSmartOkVerified,
                       "smartLocalizedLabel: RU already-localized status word passes through unchanged")
             }

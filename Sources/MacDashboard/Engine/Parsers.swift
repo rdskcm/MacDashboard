@@ -219,7 +219,7 @@ enum Parsers {
             if firstClause == "AC attached", clauses.count > 1, clauses[1] == "not charging" {
                 // Real pmset output splits this state across TWO semicolon clauses
                 // ("...; AC attached; not charging; ...") — legacy's single-clause
-                // regex can't reach its own "не заряжается" dict entry for this
+                // regex can't reach its own "not charging" dict entry (the Russian text for it) for this
                 // exact reason; special-cased here so it actually triggers.
                 state = .notCharging
             } else if !firstClause.isEmpty {
@@ -523,12 +523,10 @@ enum Parsers {
         return .automatic(intervalSeconds: interval > 0 ? interval : 3600)
     }
 
-    /// "16.07.2026, 10:50" — Russian-locale day.month.year + 24h time, used for the
-    /// TM card's "Последний бэкап" value regardless of which source (tmutil path
-    /// timestamp vs plist `SnapshotDates`) produced the `Date`.
+    /// "16.07.2026, 10:50" — fixed day.month.year + 24 h time (en_US_POSIX, so the digits never follow a locale), used for the Time Machine "last backup" value whatever source produced the Date.
     static func formatTMBackupDate(_ date: Date, timeZone: TimeZone = .current) -> String {
         let fmt = DateFormatter()
-        fmt.locale = Locale(identifier: "ru_RU")
+        fmt.locale = Locale(identifier: "en_US_POSIX")
         fmt.timeZone = timeZone
         fmt.dateFormat = "dd.MM.yyyy, HH:mm"
         return fmt.string(from: date)

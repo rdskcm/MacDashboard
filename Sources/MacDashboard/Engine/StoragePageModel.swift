@@ -32,22 +32,24 @@ enum StorageSpace {
 /// smartmontools install failure, typed so the page model words it in the current language.
 enum SmartInstallFailure: Equatable, Sendable { case exitCode(Int32), timedOut, noBrew }
 
+/// The app a Full-Disk-Access-protected home location belongs to; the name is a string-table key (`storageProtectedAppName`).
+enum ProtectedApp: Equatable, Sendable, CaseIterable { case mail, messages, safari, contacts, calendar, notes, home }
+
 struct ProtectedLocation: Equatable, Sendable {
     let relativePath: String
-    let nameEN: String
-    let nameRU: String
+    let app: ProtectedApp
 }
 
 /// Home-relative locations macOS protects behind Full Disk Access, with the app each belongs to.
 enum ProtectedLocations {
     static let table: [ProtectedLocation] = [
-        ProtectedLocation(relativePath: "Library/Mail", nameEN: "Mail", nameRU: "Почта"),
-        ProtectedLocation(relativePath: "Library/Messages", nameEN: "Messages", nameRU: "Сообщения"),
-        ProtectedLocation(relativePath: "Library/Safari", nameEN: "Safari", nameRU: "Safari"),
-        ProtectedLocation(relativePath: "Library/Application Support/AddressBook", nameEN: "Contacts", nameRU: "Контакты"),
-        ProtectedLocation(relativePath: "Library/Calendars", nameEN: "Calendar", nameRU: "Календарь"),
-        ProtectedLocation(relativePath: "Library/Group Containers/group.com.apple.notes", nameEN: "Notes", nameRU: "Заметки"),
-        ProtectedLocation(relativePath: "Library/HomeKit", nameEN: "Home", nameRU: "Дом"),
+        ProtectedLocation(relativePath: "Library/Mail", app: .mail),
+        ProtectedLocation(relativePath: "Library/Messages", app: .messages),
+        ProtectedLocation(relativePath: "Library/Safari", app: .safari),
+        ProtectedLocation(relativePath: "Library/Application Support/AddressBook", app: .contacts),
+        ProtectedLocation(relativePath: "Library/Calendars", app: .calendar),
+        ProtectedLocation(relativePath: "Library/Group Containers/group.com.apple.notes", app: .notes),
+        ProtectedLocation(relativePath: "Library/HomeKit", app: .home),
     ]
 
     /// Table order; only `.denied` entries (missing and readable ones are dropped). `probe` gets the absolute path.
@@ -259,9 +261,10 @@ enum StoragePageModel {
     // MARK: Full Disk Access
 
     /// App names first (table order), then `~/<name>` of each unreadable home folder; duplicates removed.
-    static func hiddenNames(denied: [ProtectedLocation], unreadableHome: [String], russian: Bool) -> [String] {
+    static func hiddenNames(denied: [ProtectedLocation], unreadableHome: [String], language: AppLanguage) -> [String] {
+        let S = language.strings
         var out: [String] = []
-        for n in denied.map({ russian ? $0.nameRU : $0.nameEN }) + unreadableHome.map({ "~/" + ($0 as NSString).lastPathComponent }) where !out.contains(n) {
+        for n in denied.map({ S.storageProtectedAppName($0.app) }) + unreadableHome.map({ "~/" + ($0 as NSString).lastPathComponent }) where !out.contains(n) {
             out.append(n)
         }
         return out

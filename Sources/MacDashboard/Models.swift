@@ -27,7 +27,7 @@ struct MemSnapshot: Equatable {
     var free: Int64; var active: Int64; var inactive: Int64; var speculative: Int64
     var wired: Int64; var compressor: Int64; var purgeable: Int64; var fileBacked: Int64
     var usedBytes: Int64 { active + wired + compressor }   // ~Activity Monitor
-    var otherBytes: Int64 {                                 // legacy dashboard "Прочее"
+    var otherBytes: Int64 {                                 // legacy dashboard "Other"
         let known = active + wired + inactive + speculative + free + compressor
         return Swift.max(0, total - known) + compressor
     }
@@ -112,7 +112,7 @@ struct LiveSnapshot {
     var parseFailures: [ParseFailure] = []   // ps/top output the parser rejected, last process sample (R3-FIXTURES)
 }
 
-// ---- Full report (sections nil until collected; nil ⇒ "недоступно") ----
+// ---- Full report (sections nil until collected; nil ⇒ "unavailable") ----
 struct SystemInfo: Equatable, Sendable {
     var osName: String?; var osVersion: String?; var osBuild: String?
     var modelName: String?; var modelId: String?

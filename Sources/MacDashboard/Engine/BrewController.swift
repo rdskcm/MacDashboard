@@ -42,7 +42,7 @@ final class BrewController {
     private(set) var refreshing = false
 
     /// Session cache (Block N5): the last good snapshot. Reused by the report pass within
-    /// `ReportCollector.brewCacheWindow`, so a manual «Обновить отчёт» does not pay `brew update` + `brew outdated`
+    /// `ReportCollector.brewCacheWindow`, so a manual "Refresh report" does not pay `brew update` + `brew outdated`
     /// every time. In-memory only.
     @ObservationIgnored private var cache: BrewSnapshot?
     /// The whole upgrade flow (brew step + re-check); `stop()` cancels it. Tests await it.
@@ -83,7 +83,7 @@ final class BrewController {
 
     // MARK: - Upgrade
 
-    /// In-app Homebrew package upgrade («Обновить пакеты…» after its confirmation, or the advice chip). Runs
+    /// In-app Homebrew package upgrade ("Update packages…" after its confirmation, or the advice chip). Runs
     /// `brew upgrade`, then re-collects a fresh snapshot so the card reflects the outcome whether it succeeded or not.
     /// The brew step runs in its own Task so Stop (`stopUpgrade()`) can end just that process; the re-check still runs.
     func upgradeNow() {

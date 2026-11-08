@@ -1,7 +1,7 @@
 // Views/AdviceActionDispatch.swift
 // Stateful counterpart to `AdviceActionRunner` (stateless system calls, reused
 // as-is): confirmations, busy/done bookkeeping and the `AdviceAction` switch,
-// moved verbatim out of the legacy Рекомендации card (Block V2-SUMMARY) so the
+// moved verbatim out of the legacy Recommendations card (Block V2-SUMMARY) so the
 // Home attention card (HomeAttentionCard) owns no dialog logic of its own; Home's instance is owned by
 // `AppModel.homeAdviceDispatch` (HIDDEN-CONTENT-WORK).
 //
@@ -58,7 +58,7 @@ final class AdviceActionDispatch {
     private(set) var trashCounting = false
     private(set) var trashItemCount: Int?
 
-    /// An advice id can embed the formatted value (`"Корзина|1,4 ГБ"`), which changes when a
+    /// An advice id can embed the formatted value (`"Trash|1.4 GB"`), which changes when a
     /// report refresh lands while Finder is still working — the captured id would then match
     /// no row and the ✓ would never appear. The object part is stable and unique per
     /// advice item, so completion is tracked by that.
@@ -176,7 +176,7 @@ final class AdviceActionDispatch {
 }
 
 /// Attaches the trash-empty and enable-firewall confirmation dialogs — moved
-/// verbatim (behavior-identical) from the legacy Рекомендации card.
+/// verbatim (behavior-identical) from the legacy Recommendations card.
 private struct AdviceActionDialogs: ViewModifier {
     let dispatch: AdviceActionDispatch
 

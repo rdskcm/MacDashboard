@@ -19,8 +19,8 @@ extension SerialTests {
                     (Int64(228.3 * 1e9), "228,3 ГБ", "228.3 GB", "228.3 GB"),
                     (Int64(999.9 * 1e9), "999,9 ГБ", "999.9 GB", "999.9 GB"),
                     // Rounding-before-thresholding trap: 999.95 GB rounds to "1000.0" at
-                    // one decimal, which must NOT render as "1000,0 ГБ" — the unit switch
-                    // has to happen before formatting, giving "1 ТБ" instead.
+                    // one decimal, which must NOT render as "1000.0 GB" — the unit switch
+                    // has to happen before formatting, giving "1 TB" instead.
                     (Int64(999.95 * 1e9), "1 ТБ", "1 TB", "999.95 GB (rounding trap)"),
                     (1_000_000_000_000, "1 ТБ", "1 TB", "1 TB"),
                     (Int64(2.24 * 1e12), "2,24 ТБ", "2.24 TB", "2.24 TB"),
@@ -37,7 +37,7 @@ extension SerialTests {
 
                 // Round-trip: fmtCapacityParts must never diverge from fmtCapacity (V2-FIX-UNITS).
                 for (bytes, _, _, label) in cases {
-                    for lang in [AppLanguage.ru, .en] {
+                    for lang in AppLanguage.allCases {
                         L10nStore.shared.language = lang
                         let p = fmtCapacityParts(bytes)
                         #expect(fmtCapacity(bytes) == "\(p.value) \(p.unit)",
@@ -81,7 +81,7 @@ extension SerialTests {
                 ]
 
                 for bytes in byteCases {
-                    for lang in [AppLanguage.ru, .en] {
+                    for lang in AppLanguage.allCases {
                         L10nStore.shared.language = lang
                         let p = fmtBytesParts(bytes)
                         #expect(fmtBytes(bytes) == "\(p.value) \(p.unit ?? "")",

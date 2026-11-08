@@ -182,10 +182,10 @@ extension SerialTests {
                 default: return .readable
                 }
             }
-            #expect(denied.map(\.nameEN) == ["Mail", "Safari"])
-            #expect(StoragePageModel.hiddenNames(denied: denied, unreadableHome: [home + "/Documents", home + "/Documents"], russian: false)
+            #expect(denied.map(\.app) == [.mail, .safari])
+            #expect(StoragePageModel.hiddenNames(denied: denied, unreadableHome: [home + "/Documents", home + "/Documents"], language: .en)
                     == ["Mail", "Safari", "~/Documents"])
-            #expect(StoragePageModel.hiddenNames(denied: denied, unreadableHome: [], russian: true) == ["Почта", "Safari"])
+            #expect(StoragePageModel.hiddenNames(denied: denied, unreadableHome: [], language: .ru) == ["Почта", "Safari"])
             #expect(StoragePageModel.fdaNote([]) == nil)
             withLang(.en) {
                 #expect(StoragePageModel.fdaNote(["Mail", "Messages", "Safari"])

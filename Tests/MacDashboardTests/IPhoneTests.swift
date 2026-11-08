@@ -530,9 +530,9 @@ extension SerialTests {
     }
 }
 
-// IPHONE-BATTERY-DETAILS: note and tooltip texts (language state → SerialTests, which starts in Russian).
+// IPHONE-BATTERY-DETAILS: note and tooltip texts (Russian output → this struct pins .ru).
 extension SerialTests {
-    @MainActor struct IPhoneBatteryDetailsTextTests {
+    @Suite(.uiLanguage(.ru)) @MainActor struct IPhoneBatteryDetailsTextTests {
         private func detail(powerW: Double?, v: Int?, a: Int?, charging: Bool,
                             chargerMW: Int? = nil, eff: Int? = nil, adapterW: Int? = nil) -> BatteryDetail {
             var d = BatteryInspector.parse(dict: [:])

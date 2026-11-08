@@ -174,7 +174,7 @@ struct DSSlidingSegmented<T: Hashable>: View {
     @Binding var selection: T
     let label: (T) -> String
     let size: DSSegmentedSize
-    /// Group name for the whole control (e.g. «Период графика истории»), set on
+    /// Group name for the whole control (e.g. "History chart period"), set on
     /// an `.accessibilityElement(children: .contain)` container. Pass it here,
     /// never as `.accessibilityLabel` on the control from outside: that label
     /// would replace every segment's own name. `nil` = no container element.

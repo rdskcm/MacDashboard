@@ -62,7 +62,7 @@ struct SocSplitPanel: View, Equatable {
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(DS3.inkSoft)
                                 .lineLimit(1)
-                                // "Пользователь" is within a point of the 108 pt column at the 900 pt minimum.
+                                // The Russian label for "User" is within a point of the 108 pt column at the 900 pt minimum.
                                 .minimumScaleFactor(0.85)
                         }
                         Text(part.value)

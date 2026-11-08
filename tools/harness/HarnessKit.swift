@@ -14,8 +14,8 @@
 //   implicitly isolated).
 // - `AppModel()` init is side-effect-free (loops start via `start()` —
 //   never call it in a harness); inject state directly on fresh instances.
-// - Pin the language first (`L10nStore.shared.language = .ru`) or an EN-first
-//   system locale will render EN strings.
+// - Pin the language first (`L10nStore.shared.language = .en`; `.ru` to render the Russian table);
+//   an unpinned run follows the system language.
 // - Theme is unpinned by default (follows the system). Pin it per call with
 //   `appearance: .light/.dark`, or per run with render.sh's third argument
 //   (`light|dark|both`, passed in as HARNESS_APPEARANCE). Explicit argument wins.

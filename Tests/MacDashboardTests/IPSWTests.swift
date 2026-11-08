@@ -781,7 +781,7 @@ extension SerialTests {
         ]
 
         @Test func messagesInBothLanguages() {
-            for lang in [AppLanguage.ru, .en] {
+            for lang in AppLanguage.allCases {
                 L10nStore.shared.language = lang
                 for e in Self.allErrors {
                     let m = IPSWData.message(for: e)

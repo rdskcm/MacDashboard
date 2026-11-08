@@ -1,6 +1,6 @@
 // Views/BrewUpgradeConfirm.swift
 // Confirmation gate for `brew upgrade` (SPEC §1.6 row 5, block V2-ACTION-GATES).
-// The action has TWO entry points — the Обслуживание системы card button and the
+// The action has TWO entry points — the System maintenance card button and the
 // Homebrew attention item on the Home attention card — so the dialog and its message builder live
 // here once and both sites attach the modifier. Shaped like `AdviceActionDialogs`
 // in AdviceActionDispatch.swift: private ViewModifier + an `extension View` verb.
@@ -15,7 +15,7 @@ enum BrewUpgradeConfirm {
     /// still bounding the alert's height on a 900 pt window.
     static let listCap = 10
 
-    /// "pkg1, pkg2, …" plus "и ещё N" / "and N more" once the list exceeds `listCap`.
+    /// "pkg1, pkg2, …" plus "and N more" once the list exceeds `listCap`.
     @MainActor static func message(_ outdated: [String]) -> String {
         let shown = outdated.prefix(listCap)
         let rest = outdated.count - shown.count

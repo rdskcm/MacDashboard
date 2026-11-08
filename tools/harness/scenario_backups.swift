@@ -1,6 +1,6 @@
 // tools/harness/scenario_backups.swift
 // REDESIGN-BACKUPS render scenario: the Time Machine card in its states (A–J), the Claude card in its states
-// (K–O, Q–Z) and the page bar (P). Russian by default; BACKUPS_LANG=en renders English; BACKUPS_VIEW=narrow renders
+// (K–O, Q–Z) and the page bar (P). English by default; BACKUPS_LANG=ru renders Russian; BACKUPS_VIEW=narrow renders
 // the narrow layout (width 904) for B and D only. See tools/harness/README.md (render.sh).
 
 import AppKit
@@ -8,7 +8,7 @@ import SwiftUI
 
 MainActor.assumeIsolated {
     let env = ProcessInfo.processInfo.environment
-    L10nStore.shared.language = env["BACKUPS_LANG"] == "en" ? .en : .ru
+    L10nStore.shared.language = env["BACKUPS_LANG"] == "ru" ? .ru : .en
 
     @MainActor func model(_ tweak: (AppModel) -> Void) -> AppModel {
         let m = AppModel()

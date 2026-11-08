@@ -34,6 +34,13 @@ protocol MaintenanceStrings {
     /// Detail for `autostartDeleteError` when a bulk delete had more than one failure:
     /// how many of how many, plus the first failure's own (already localized) message.
     func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String
+    /// Curated one-line descriptions of well-known launchd labels, keyed by `Label` (System page). Both tables hold
+    /// the same 29 keys; `EnglishFirstTests.launchdTablesHaveTheSameKeys` checks it.
+    var autostartCuratedDescriptions: [String: String] { get }
+    /// Heuristic description when the label has no vendor segment.
+    var autostartBackgroundProcess: String { get }
+    /// Heuristic description "<Vendor> — background process".
+    func autostartVendorBackgroundProcess(_ vendor: String) -> String
 }
 
 extension StringsEN: MaintenanceStrings {
@@ -70,6 +77,9 @@ extension StringsEN: MaintenanceStrings {
     func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String {
         "\(failed) of \(total): \(detail)"
     }
+    var autostartCuratedDescriptions: [String: String] { Self.autostartCuratedEN }
+    var autostartBackgroundProcess: String { "Background process" }
+    func autostartVendorBackgroundProcess(_ vendor: String) -> String { "\(vendor) — background process" }
 }
 
 extension StringsRU: MaintenanceStrings {
@@ -108,4 +118,79 @@ extension StringsRU: MaintenanceStrings {
     func autostartDeleteBulkFailure(_ failed: Int, _ total: Int, _ detail: String) -> String {
         "\(failed) из \(total): \(detail)"
     }
+    var autostartCuratedDescriptions: [String: String] { Self.autostartCuratedRU }
+    var autostartBackgroundProcess: String { "Фоновый процесс" }
+    func autostartVendorBackgroundProcess(_ vendor: String) -> String { "\(vendor) — фоновый процесс" }
+}
+
+private extension StringsEN {
+    static let autostartCuratedEN: [String: String] = [
+    // Apple system agents/daemons
+    "com.apple.cloudd": "iCloud — data sync",
+    "com.apple.bird": "iCloud Drive — file sync",
+    "com.apple.suggestd": "Spotlight — suggestions",
+    "com.apple.AirPlayXPCHelper": "AirPlay — helper process",
+    "com.apple.security.pboxd": "Sandbox — app privacy boxing",
+    "com.apple.spindump": "Hang/crash diagnostics",
+    "com.apple.softwareupdated": "macOS software updates",
+    "com.apple.coreduetd": "CoreDuet — app usage prediction",
+    "com.apple.photoanalysisd": "Photos — on-device analysis",
+    "com.apple.mediaanalysisd": "Media analysis (photos/video)",
+    "com.apple.corespotlightd": "Spotlight — indexing",
+    "com.apple.spotlight.Siri": "Spotlight — Siri integration",
+    "com.apple.familycircled": "Family Sharing",
+    "com.apple.notificationcenterui.agent": "Notification Center",
+    "com.apple.rapportd": "Handoff / Continuity",
+    "com.apple.sharingd": "AirDrop / Sharing",
+    "com.apple.parsecd": "Maps/Weather background data",
+    "com.apple.commerce": "App Store — commerce background service",
+    // Common third-party vendor agents
+    "com.google.keystone.agent": "Google Keystone — Google app auto-update",
+    "com.google.keystone.daemon": "Google Keystone — Google app auto-update",
+    "com.microsoft.autoupdate.helper": "Microsoft AutoUpdate — Microsoft app updates",
+    "com.microsoft.update.agent": "Microsoft AutoUpdate — Microsoft app updates",
+    "com.docker.helper": "Docker Desktop — privileged helper",
+    "com.docker.vmnetd": "Docker Desktop — VM networking daemon",
+    "com.spotify.webhelper": "Spotify — web helper",
+    "com.adobe.acc.installer.v2": "Adobe Creative Cloud — update installer",
+    "com.adobe.ARMDC.Communicator": "Adobe — update service (ARM)",
+    "com.valvesoftware.steamclean": "Steam — cache cleanup",
+    "com.dropbox.DropboxMacUpdate.agent": "Dropbox — auto-update",
+    ]
+}
+
+private extension StringsRU {
+    static let autostartCuratedRU: [String: String] = [
+    // Apple system agents/daemons
+    "com.apple.cloudd": "iCloud — синхронизация данных",
+    "com.apple.bird": "iCloud Drive — синхронизация файлов",
+    "com.apple.suggestd": "Spotlight — предложения и рекомендации",
+    "com.apple.AirPlayXPCHelper": "AirPlay — вспомогательный процесс",
+    "com.apple.security.pboxd": "Sandbox — изоляция приложений (Privacy Sandbox)",
+    "com.apple.spindump": "Диагностика зависаний процессов",
+    "com.apple.softwareupdated": "Обновления macOS",
+    "com.apple.coreduetd": "CoreDuet — предсказание использования приложений",
+    "com.apple.photoanalysisd": "Фото — анализ и распознавание объектов",
+    "com.apple.mediaanalysisd": "Медиа — анализ фото/видео",
+    "com.apple.corespotlightd": "Spotlight — индексация",
+    "com.apple.spotlight.Siri": "Spotlight — интеграция с Siri",
+    "com.apple.familycircled": "Семейный доступ",
+    "com.apple.notificationcenterui.agent": "Центр уведомлений",
+    "com.apple.rapportd": "Handoff / Continuity",
+    "com.apple.sharingd": "AirDrop / Общий доступ",
+    "com.apple.parsecd": "Карты/погода — фоновые данные",
+    "com.apple.commerce": "App Store — фоновая служба покупок",
+    // Common third-party vendor agents
+    "com.google.keystone.agent": "Google Keystone — автообновление Google-приложений",
+    "com.google.keystone.daemon": "Google Keystone — автообновление Google-приложений",
+    "com.microsoft.autoupdate.helper": "Microsoft AutoUpdate — обновление приложений Microsoft",
+    "com.microsoft.update.agent": "Microsoft AutoUpdate — обновление приложений Microsoft",
+    "com.docker.helper": "Docker Desktop — системный помощник",
+    "com.docker.vmnetd": "Docker Desktop — сетевой демон виртуальных машин",
+    "com.spotify.webhelper": "Spotify — веб-помощник",
+    "com.adobe.acc.installer.v2": "Adobe Creative Cloud — установщик обновлений",
+    "com.adobe.ARMDC.Communicator": "Adobe — служба обновлений (ARM)",
+    "com.valvesoftware.steamclean": "Steam — очистка кэша",
+    "com.dropbox.DropboxMacUpdate.agent": "Dropbox — автообновление",
+    ]
 }

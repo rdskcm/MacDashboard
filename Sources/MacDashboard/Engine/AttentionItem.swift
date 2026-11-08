@@ -19,12 +19,12 @@ enum AttentionKind: String, CaseIterable {
 struct AttentionItem: Identifiable, Equatable {
     var kind: AttentionKind
     var sev: Severity
-    var label: String       // short chip form, e.g. "Диск"
-    var detail: String      // e.g. "заполнен на 92 %"
+    var label: String       // short chip form, e.g. "Disk"
+    var detail: String      // e.g. "92 % full"
     var fullText: String    // the existing assessment sentence (tooltip / list body)
     var action: AdviceAction? = nil
     /// `.wakeHolders` only: the holders this item names, in its order — the targets of the
-    /// plate's per-app «Не предупреждать» menu (SLEEP-IGNORE-APP). Empty for every other kind.
+    /// plate's per-app "Don’t warn" menu (SLEEP-IGNORE-APP). Empty for every other kind.
     var wakeHolderKeys: [WakeHolderKey] = []
     /// TRIAGE-THRESHOLDS-REVIEW: one or two plain sentences on why this matters to the user; every kind built by
     /// `Assess.assess` sets it. Optional only so existing memberwise calls compile. Not part of `id`.

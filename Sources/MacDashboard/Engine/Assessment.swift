@@ -154,7 +154,7 @@ enum Assess {
         //      is always news the user should see (user correction 2026-08-17).
         // A system/third-party process merely crashing (diffscore,
         // activatehelper…) is something the user cannot act on, and a permanent
-        // «Требует внимания» item for it is exactly what trains the indicator to
+        // "Needs attention" item for it is exactly what trains the indicator to
         // be ignored. Those groups stay visible in the card and the text report.
         // The predicate lives in ReportCollector.crashRaisesAttention: the group cap
         // in crashGroups protects exactly these groups, and the two must not drift

@@ -40,7 +40,7 @@ Tests live in `Tests/MacDashboardTests/` and reach the app's code through
 `fileprivate` helpers are not, so put a helper you want covered in a non-private
 declaration. Tests that touch process-wide state (the UI language, `UserDefaults`,
 wall-clock timing) go inside the `.serialized` root suite `SerialTests`
-(`TestSupport.swift`). Three opt-in probes: `MACDASH_LIVE=1 swift test --filter liveCanary`
+(`TestSupport.swift`). Tests start in English (`SerialTests` pins `.en`); a test that asserts Russian output through the global `L` puts `@Suite(.uiLanguage(.ru))` on its struct or compares against `StringsRU()`. Three opt-in probes: `MACDASH_LIVE=1 swift test --filter liveCanary`
 runs every parsed command for real; `MACDASH_LIVE=1 swift test --filter ipswLiveCanary`
 asks Apple's catalogue, ipsw.me and the Apple firmware CDN (a HEAD, no download) for
 `iPhone18,2` and checks they still match `Tests/APIFixtures`; `MACDASH_SYSDIAGNOSE_ARCHIVE=<archive.tar.gz> swift
@@ -57,7 +57,7 @@ request rejects the generic forms of these.
 
 ## Code style
 
-Code and comments: English only, regardless of UI language.
+Code, comments and commit messages: English only, regardless of UI language. A fix to Russian text is described in English, subject prefix `Russian localization:` (for example `Russian localization: fix the plural of snapshot in the Backups card`). CI (`english-only`) rejects Cyrillic in a PR title, body or commit message; `EnglishFirstTests` rejects it in comments.
 
 ## Localization
 
@@ -67,6 +67,8 @@ feature's protocol, the English table (`extension StringsEN`, the reference) and
 Russian table (`extension StringsRU`, the translation); a new key goes into all three
 parts of the same file, and a key missing from either table does not compile. No
 English-only UI text is accepted, since the app is bilingual and switchable in Settings.
+
+Write the English value first; the Russian value is its translation and sits in the same file. English is the reference and the fallback for any language added later (`LanguageChoice.resolve` maps an unknown system language to English). Russian grammar helpers (`ruPlural`, the attention number words) live next to the Russian tables.
 
 ## A note on expectations
 

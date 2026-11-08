@@ -158,7 +158,7 @@ struct SocCoresCardModel: Equatable {
         }
     }
 
-    /// The two names the system gives every Apple silicon chip are translated (design 9: "Производительные ·
+    /// The two names the system gives every Apple silicon chip are translated (design 9: "Performance ·
     /// 4"); any other name is shown as the system gives it (3.1), nil is a group of unknown type.
     @MainActor static func typeName(_ name: String?) -> String {
         guard let name else { return L.socCoresUnknown }
