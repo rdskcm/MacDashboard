@@ -4,7 +4,7 @@
 #
 # Usage:
 #   tools/perf/night.sh --check [--dry-run]      LaunchAgent entry (every 60 s): start tonight's run if due and write a
-#                                                pending morning report; --dry-run prints the decisions and changes nothing; from 21:00 until tonight's run starts (03:00 at the latest) it keeps the display awake so the screen cannot lock, dimmed while the user is away
+#                                                pending morning report; --dry-run prints the decisions and changes nothing; from 21:00 until tonight's run starts (03:00 at the latest) it keeps the display awake so the screen cannot lock, dimmed from 00:00 while the user is away
 #   tools/perf/night.sh --run [--now] [--keep-dark] [--scenarios LIST] [--runs N] [--stop HH:MM] [--no-gate] [--standing]
 #                                                the run (normally opened in Terminal by --check): gate, then jobs until
 #                                                09:00. --now skips the window and idle checks (hand run) and runs the gate
@@ -344,7 +344,7 @@ decide() {   # --check decision: stdout with --dry-run; otherwise agent.log, onl
 
 # ---- evening hold (NIGHT-START-LOCK): from 21:00 until tonight's run starts or 03:00, --check keeps the display awake so
 # the console cannot lock while the run waits for its start conditions (2026-10-31: locked at 02:06, one minute before
-# the Claude-quiet wait ended), and dims the lights while the user is away. One caffeinate per evening, in its own process
+# the Claude-quiet wait ended), and from 00:00 dims the lights while the user is away. One caffeinate per evening, in its own process
 # group (launchd kills what is left in the job's group) and bounded by -t to 03:00; --run ends it once its own is verified.
 HOLD="$NIGHT/state/hold"              # "pid start-HH:MM night-date" of the live hold caffeinate
 HOLD_DIM="$NIGHT/state/hold-dimmed"   # present while the hold owns the dimmed lights (values in brightness-saved / kbd-saved)
@@ -418,7 +418,8 @@ hold_tick() {   # hour night -> keeps, starts or ends the evening hold; dims / r
   if p="$(hold_live)"; then [ "$DRY" = 0 ] || echo "hold: caffeinate pid $p is holding"
   else busy && return 0; hold_start "$night" "$h" || return 0; fi
   is="${HOLD_IDLE:-$(idle_secs)}"; is="${is:-0}"; t="$(idle_threshold)"
-  if [ "$is" -lt "$t" ]; then
+  # The lights dim only from 00:00 (user 2026-11-08); from 21:00 to midnight the hold keeps the display awake at normal brightness.
+  if [ "$is" -lt "$t" ] || [ "$h" -ge 21 ]; then
     [ -f "$HOLD_DIM" ] || return 0
     if [ "$DRY" = 1 ]; then echo "hold: would restore the lights (idle $is s < $t s)"; return 0; fi
     out=""; for k in display kbd; do restore_light "$k"; out="$out; $k $LIGHT_NOTE"; done
