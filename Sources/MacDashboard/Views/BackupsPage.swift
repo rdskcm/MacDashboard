@@ -197,31 +197,15 @@ struct BackupsTimeMachineCard: View {
                                 if t.id == "purgeable" { BackupsPurgeableTile(model: model) } else { backupsTileView(t) }
                             }
                         }
-                        if let e = m.tmSnapshotsExplanation { snapshotsExplanation(e) }
+                        let lines = m.tmDestinationFacts
+                            + (m.tmSnapshotsExplanation.map { [SectionFactLine(label: L.commonLocalSnapshots, text: $0)] } ?? [])
+                        if !lines.isEmpty { SectionFactLines(rows: lines) }
                     }
                 }
                 .animation(curve, value: m.tmDeleteConfirm != nil)
             }
         })
         .onChange(of: m.tmDeleteConfirm != nil, initial: true) { _, open in router?.isInlineConfirmOpen = open }
-    }
-
-    /// The line under the tiles that says what the «Local snapshots» tile counts. Not a tile note: the note is one line
-    /// and a taller tile would stretch its whole row. Horizontal padding lines it up with the tiles' text.
-    private func snapshotsExplanation(_ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(L.commonLocalSnapshots)
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(DS3.inkSoft)
-                .lineLimit(1)
-                .layoutPriority(1)
-            Text(text)
-                .font(.system(size: 12.5))
-                .foregroundStyle(DS3.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, 16)
-        .accessibilityElement(children: .combine)
     }
 
     /// A disabled macOS button shows no help tag, so the tooltip sits on a clear layer over it. The layer exists only

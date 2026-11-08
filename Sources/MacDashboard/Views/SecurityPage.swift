@@ -136,12 +136,18 @@ struct SecurityProtectionCard: View {
     let model: AppModel
     let narrow: Bool
     @State private var fileVaultOpened: Bool
+    /// The protection whose explanation line is open under the tiles; one at a time (`SystemEnergyCard.infoKey`).
+    @State private var infoKey: SecurityProtection?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(model: AppModel, narrow: Bool, initialFileVaultOpened: Bool = false) {
+    init(model: AppModel, narrow: Bool, initialFileVaultOpened: Bool = false, initialInfoKey: SecurityProtection? = nil) {
         self.model = model
         self.narrow = narrow
         _fileVaultOpened = State(initialValue: initialFileVaultOpened)
+        _infoKey = State(initialValue: initialInfoKey)
     }
+
+    private var curve: Animation { sectionRowAnimation(reduceMotion: reduceMotion) }
 
     var body: some View {
         let m = SecurityPageModel.make(securityInput(model, fileVaultOpened: fileVaultOpened))
@@ -150,9 +156,18 @@ struct SecurityProtectionCard: View {
                 SectionWait(text: L.commonCollectingData)
             } else {
                 VStack(alignment: .leading, spacing: 16) {
-                    EqualColumnsLayout(columns: narrow ? 2 : 4, spacing: 8) {
-                        ForEach(m.tiles, id: \.protection) { t in
-                            ProtectionTile(tile: t) { run(t) }
+                    VStack(alignment: .leading, spacing: 10) {
+                        EqualColumnsLayout(columns: narrow ? 2 : 4, spacing: 8) {
+                            ForEach(m.tiles, id: \.protection) { t in
+                                let open = infoKey == t.protection
+                                ProtectionTile(tile: t, infoOpen: open,
+                                               onInfo: { withAnimation(curve) { infoKey = open ? nil : t.protection } }) { run(t) }
+                            }
+                        }
+                        // No `.id`: switching tiles swaps the text in place instead of stacking two lines mid-transition (D17).
+                        if let line = SecurityPageModel.explanationLine(tiles: m.tiles, open: infoKey) {
+                            SectionFactLines(rows: [line])
+                                .transition(.opacity)
                         }
                     }
                     if let b = m.banner {
@@ -180,6 +195,8 @@ struct SecurityProtectionCard: View {
 
 private struct ProtectionTile: View {
     let tile: SecurityTileModel
+    let infoOpen: Bool
+    let onInfo: () -> Void
     let action: () -> Void
 
     var body: some View {
@@ -198,6 +215,7 @@ private struct ProtectionTile: View {
                     .foregroundStyle(DS3.inkSoft)
                     .lineLimit(1)
             }
+            .padding(.trailing, 19)
             Text(tile.value)
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(toneInk(tile.valueTone))
@@ -234,7 +252,25 @@ private struct ProtectionTile: View {
                     .ds3InsetRims(RoundedRectangle(cornerRadius: 20, style: .continuous), top: DS3.rimLo, ring: DS3.line)
             }
         }
+        // Concentric with the 20 pt corner: 22 pt circle, centre 20 pt in from the top and right edges (D15).
+        .overlay(alignment: .topTrailing) { infoButton.padding(.top, 9).padding(.trailing, 9) }
         .accessibilityElement(children: .contain)
+    }
+
+    /// `SystemEnergyCard.infoButton` without its table-cell chrome: 22 pt circle, italic serif «i», lens fill when open.
+    private var infoButton: some View {
+        Button(action: onInfo) {
+            Text("i")
+                .font(.custom("Georgia-BoldItalic", size: 11))
+                .foregroundStyle(DS3.muted)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(infoOpen ? DS3.infoOpen : Color.clear))
+                .ds3InsetRims(Circle(), ring: DS3.lineStrong)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L.commonExplainA11y(tile.label))
+        .accessibilityIdentifier("security-info-\(tile.protection.rawValue)")
     }
 
     private func buttonTitle(_ b: SecurityTileButton) -> String {

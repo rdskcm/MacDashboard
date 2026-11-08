@@ -20,6 +20,7 @@ enum SecurityTileButton: Equatable { case enable, openSettings }
 struct SecurityTileModel: Equatable {
     var protection: SecurityProtection
     var label: String
+    var explanation: String      // the protection's one-line tip (securityFileVaultTip …), the same in every state
     var value: String            // on / off / Enabling… / —
     var valueTone: SecurityTone? // nil ink, .hot hotInk, .neutral muted
     var dot: SecurityTone?       // .green / .amber / .hot / nil
@@ -256,16 +257,22 @@ struct SecurityPageModel: Equatable {
         return m
     }
 
+    /// The one explanation line under the Protection tiles: the tile whose «i» is open, nil when none is (or it is not shown).
+    static func explanationLine(tiles: [SecurityTileModel], open: SecurityProtection?) -> SectionFactLine? {
+        guard let open, let t = tiles.first(where: { $0.protection == open }) else { return nil }
+        return SectionFactLine(label: t.label, text: t.explanation)
+    }
+
     @MainActor private static func tile(_ p: SecurityProtection, _ s: SecurityState, _ i: Input) -> SecurityTileModel {
-        let label: String
+        let label: String, explanation: String
         switch p {
-        case .fileVault: label = L.securityFileVault
-        case .gatekeeper: label = L.securityGatekeeper
-        case .sip: label = L.securitySip
-        case .firewall: label = L.commonFirewall
+        case .fileVault: (label, explanation) = (L.securityFileVault, L.securityFileVaultTip)
+        case .gatekeeper: (label, explanation) = (L.securityGatekeeper, L.securityGatekeeperTip)
+        case .sip: (label, explanation) = (L.securitySip, L.securitySipTip)
+        case .firewall: (label, explanation) = (L.commonFirewall, L.securityFirewallTip)
         }
-        var t = SecurityTileModel(protection: p, label: label, value: L.secValueOn, valueTone: nil, dot: .green,
-                                  note: nil, noteTone: nil, button: nil, busy: false, error: false)
+        var t = SecurityTileModel(protection: p, label: label, explanation: explanation, value: L.secValueOn, valueTone: nil, dot: .green,
+                            note: nil, noteTone: nil, button: nil, busy: false, error: false)
         switch value(p, s) {
         case true?:
             break

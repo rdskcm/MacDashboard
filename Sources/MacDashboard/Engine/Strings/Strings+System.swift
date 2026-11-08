@@ -93,7 +93,6 @@ protocol SystemStrings {
     var sysEnergyInfoLidwake: String { get }
     var sysEnergyOn: String { get }
     var sysEnergyOff: String { get }
-    func sysEnergyInfoA11y(_ row: String) -> String
     func sysEnergyApply(_ n: Int) -> String
     var sysEnergyCancel: String { get }
     var sysEnergyReset: String { get }
@@ -212,7 +211,6 @@ extension StringsEN: SystemStrings {
     var sysEnergyInfoLidwake: String { "Wakes the Mac when the lid opens. Read-only." }
     var sysEnergyOn: String { "on" }
     var sysEnergyOff: String { "off" }
-    func sysEnergyInfoA11y(_ row: String) -> String { "Explain \(row)" }
     func sysEnergyApply(_ n: Int) -> String { "Apply (\(n))" }
     var sysEnergyCancel: String { "Cancel" }
     var sysEnergyReset: String { "Reset to defaults" }
@@ -330,7 +328,6 @@ extension StringsRU: SystemStrings {
     var sysEnergyInfoLidwake: String { "Пробуждение при открытии крышки. Только для чтения." }
     var sysEnergyOn: String { "вкл" }
     var sysEnergyOff: String { "выкл" }
-    func sysEnergyInfoA11y(_ row: String) -> String { "Пояснение: \(row)" }
     func sysEnergyApply(_ n: Int) -> String { "Применить (\(n))" }
     var sysEnergyCancel: String { "Отменить" }
     var sysEnergyReset: String { "Сбросить к стандартным" }

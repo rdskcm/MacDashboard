@@ -87,6 +87,10 @@ extension AppModel {
         // SOC-DETAILS: launch-argument variants of the SoC page (`-fixtureCores`, `-fixtureTemp`, ...).
         let socOptions = VisualFixture.SocFixtureOptions.fromLaunchArguments()
         if socOptions != VisualFixture.SocFixtureOptions() { applySocFixture(socOptions) }
+        // REDESIGN-INFO-RESTORE: `-fixtureTM` / `-fixtureSecurity` variants of the Backups and Security pages.
+        let edge = VisualFixture.EdgeOptions.fromLaunchArguments()
+        if let d = VisualFixture.edgeTMDestination(edge.tm) { report.tmDest = .some(d) }
+        if edge.security == .mixed { report.security = VisualFixture.mixedSecurity }
     }
 
     /// SOC-DETAILS §2.7: one SoC page variant on top of the reference fixture (`applyVisualFixture` first). Each option

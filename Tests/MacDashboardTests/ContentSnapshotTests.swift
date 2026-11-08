@@ -411,6 +411,10 @@ extension SerialTests {
                 $0.report.snapshots = ["com.apple.TimeMachine.2026-01-15-090000.local"]
             }
             let bkUnread = backups { $0.report.tmDest = .some(bkDest(last: homeRef - 50 * 60, mounted: true)); $0.report.snapshots = nil }
+            // REDESIGN-INFO-RESTORE: destination type and quota lines (network + quota, unknown kind) and every explanation state.
+            let bkNetwork = backups { $0.report.tmDest = .some(VisualFixture.edgeTMDestination(.network)!) }
+            let bkUnknownKind = backups { $0.report.tmDest = .some(VisualFixture.edgeTMDestination(.unknownKind)!) }
+            let secMixed = security { $0.report.security = VisualFixture.mixedSecurity }
             @MainActor func bkDelete(confirm: Bool = false, state: SnapshotDeleteState = .idle) -> AppModel {
                 backups {
                     $0.report.tmDest = .some(bkDest(last: homeRef - 50 * 60, mounted: true))
@@ -823,6 +827,18 @@ extension SerialTests {
                 run.snap("content-security-narrow", mode, width: 904) {
                     SecurityProtectionCard(model: secFirewallOff, narrow: true)
                 }
+                run.snap("content-security-mixed", mode, width: 1094) {
+                    VStack(spacing: 16) {
+                        SecurityProtectionCard(model: secMixed, narrow: false, initialInfoKey: .fileVault)
+                        SecurityProtectionCard(model: secMixed, narrow: false, initialInfoKey: .firewall)
+                    }
+                }
+                run.snap("content-security-narrowest", mode, width: 844) {
+                    VStack(spacing: 16) {
+                        SecurityProtectionCard(model: secMixed, narrow: true, initialInfoKey: .gatekeeper)
+                        SecurityProtectionCard(model: secMixed, narrow: true)
+                    }
+                }
                 run.snap("content-security-bars", mode, width: 1150) {
                     VStack(spacing: 12) {
                         SecurityPageBar(model: secAllOn) {}; SecurityPageBar(model: secFirewallOff) {}; SecurityPageBar(model: secEnabling) {}
@@ -877,6 +893,12 @@ extension SerialTests {
                 }
                 run.snap("content-backups-narrowest", mode, width: 844) {
                     BackupsTimeMachineCard(model: bkOk, narrow: true)
+                }
+                run.snap("content-backups-dest-facts", mode, width: 1094) {
+                    VStack(spacing: 16) { BackupsTimeMachineCard(model: bkNetwork, narrow: false); BackupsTimeMachineCard(model: bkUnknownKind, narrow: false) }
+                }
+                run.snap("content-backups-dest-facts-narrowest", mode, width: 844) {
+                    BackupsTimeMachineCard(model: bkNetwork, narrow: true)
                 }
                 run.snap("content-backups-delete-enabled", mode, width: 1094) {
                     VStack(spacing: 16) {

@@ -403,6 +403,47 @@ extension VisualFixture {
         }
     }
 
+    /// REDESIGN-INFO-RESTORE: launch-argument variants of the Backups and Security pages, read only under `-visualFixture`
+    /// (pattern `SocFixtureOptions`): `-fixtureTM local | network | unknownkind`, `-fixtureSecurity mixed`. The snapshot
+    /// suite uses `edgeTMDestination(_:)` / `mixedSecurity` directly. The Home assessment stays the reference one.
+    struct EdgeOptions: Equatable {
+        enum TM: String { case reference, local, network, unknownKind = "unknownkind" }
+        enum Security: String { case reference, mixed }
+        var tm: TM = .reference
+        var security: Security = .reference
+
+        /// Unknown or missing values keep the reference state.
+        static func fromLaunchArguments(_ args: [String] = ProcessInfo.processInfo.arguments) -> EdgeOptions {
+            func value(_ flag: String) -> String? {
+                guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+                return args[i + 1]
+            }
+            var o = EdgeOptions()
+            if let v = value("-fixtureTM").flatMap(TM.init(rawValue:)) { o.tm = v }
+            if let v = value("-fixtureSecurity").flatMap(Security.init(rawValue:)) { o.security = v }
+            return o
+        }
+    }
+
+    /// A connected destination backed up 50 min before the reference time; nil for `.reference` (the fixture's «not set up»).
+    static func edgeTMDestination(_ v: EdgeOptions.TM) -> TMDestination? {
+        let last = referenceDate.addingTimeInterval(-50 * 60)
+        func dest(_ name: String, kind: String?, quota: Int64?) -> TMDestination {
+            TMDestination(name: name, kind: kind, mountPoint: "/Volumes/" + name, quotaBytes: quota,
+                          lastBackup: Parsers.formatTMBackupDate(last), lastBackupDate: last, freeBytes: GB(612),
+                          schedule: .automatic(intervalSeconds: 3600))
+        }
+        switch v {
+        case .reference: return nil
+        case .local: return dest("Backup SSD", kind: "Local", quota: nil)
+        case .network: return dest("Office NAS", kind: "Network", quota: GB(500))
+        case .unknownKind: return dest("Backup SSD", kind: nil, quota: nil)
+        }
+    }
+
+    /// FileVault and SIP on, Gatekeeper unknown, Firewall off: one tile per explanation state on one page.
+    static let mixedSecurity = SecurityState(fileVault: true, gatekeeper: nil, sip: true, firewall: false)
+
     /// Launch-argument variants (read only under `-visualFixture`, pattern `gpuUnavailableRequested`) and the same
     /// values the snapshot suite sets directly. `AppModel.applySocFixture(_:)` applies them.
     struct SocFixtureOptions: Equatable {

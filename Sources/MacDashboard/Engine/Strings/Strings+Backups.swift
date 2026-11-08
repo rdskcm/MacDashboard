@@ -51,6 +51,8 @@ protocol BackupsStrings {
     var bkNextAutoOff: String { get }
     func bkFree(_ s: String) -> String
     var bkNotConnected: String { get }
+    var bkKindLocal: String { get }
+    var bkKindNetwork: String { get }
     var bkPurgeable: String { get }
     var bkPurgeableNote: String { get }
     func bkLatestSnapshotToday(_ t: String) -> String
@@ -187,6 +189,8 @@ extension StringsEN: BackupsStrings {
     var bkNextAutoOff: String { "automatic backups are off" }
     func bkFree(_ s: String) -> String { "\(s) free" }
     var bkNotConnected: String { "not connected" }
+    var bkKindLocal: String { "Local disk" }
+    var bkKindNetwork: String { "Network disk" }
     var bkPurgeable: String { "Purgeable" }
     var bkPurgeableNote: String { "snapshots and caches" }
     func bkLatestSnapshotToday(_ t: String) -> String { "latest today at \(t)" }
@@ -323,6 +327,8 @@ extension StringsRU: BackupsStrings {
     var bkNextAutoOff: String { "автоматические копии выключены" }
     func bkFree(_ s: String) -> String { "свободно \(s)" }
     var bkNotConnected: String { "не подключён" }
+    var bkKindLocal: String { "Локальный диск" }
+    var bkKindNetwork: String { "Сетевой диск" }
     var bkPurgeable: String { "Очищаемое место" }
     var bkPurgeableNote: String { "снимки и кэши" }
     func bkLatestSnapshotToday(_ t: String) -> String { "последний сегодня в \(t)" }
