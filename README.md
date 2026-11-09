@@ -43,9 +43,11 @@ feedback and comments. Hope you like it!
   `~/Library/Application Support/MacDashboard/mac_report.txt` — always a
   single file, each run overwrites the previous one.
 - Live metrics (CPU, memory, swap, disk, battery) refresh every 2 seconds by
-  default; the interval is configurable — 1/2/3/5/10 s — in Settings → Monitoring.
+  default; the interval is configurable — 2/5/10 s — in Settings → Monitoring.
   The process lists refresh every 6 seconds. Switching a card between "Chart" and
   "Table" view doesn't stop the updates — both views read from the same live data.
+  Sampling pauses while the app is not in front or no window of the app is on screen (covered, minimised or hidden)
+  and resumes at once when you come back; the daily History point and the checks that feed notifications keep running.
 - History (disk usage over time, battery cycles) accumulates in
   `~/Library/Application Support/MacDashboard/mac_check_state.json`
   (compatible with the old file format).

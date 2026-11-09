@@ -29,9 +29,17 @@ All notable changes to this project are documented in this file.
 - [major] Serial numbers show only their last 4 characters (`•••• A1B2`) and an IMEI only its first 8 digits, the model's type code (`12345678 •••••••`), until you click «Show»: every serial, part number and IMEI on the iPhone «Device and parts» card, and the Mac battery serial on the Battery page, which now also has «Show» and a copy button. Leaving the page masks them again.
 - [minor] History: the Russian range labels are now the short «1М · 3М · 1Г · Всё», the same as on the iPhone battery history.
 - [major] Battery health is judged by one rule everywhere: below 80 % the battery is worn (amber) whatever its cycle count, and a battery macOS flags for service shows only the service item. Home, the Battery page and the report now agree and show Apple's figure (the Mac's «Maximum Capacity»; on iPhones the latest figure from imported logs, or a marked estimate when nothing was imported), and every surface calls it «health» rather than «capacity»; an iPhone tile's health bar turns amber below 80 %. New switches in Settings › Monitoring and Settings › Devices show the battery's raw maximum ÷ design capacity instead.
+- [minor] Energy: while the app is not in front or no window of it is on screen (covered, minimised, hidden), the
+  live samplers stop ticking instead of waking to check a flag, and the Battery page no longer runs `ioreg` in the
+  background. They resume the moment you come back, with no averaged values on the SoC chart.
 
 ### Fixed
 
+- Notifications now fire while the app is in the background: one quiet check per minute keeps the attention
+  items current while nobody is looking (before, an item that appeared while you were away was only noticed when you
+  came back, when banners are suppressed).
+- The daily History point is recorded at its scheduled time even when
+  no report refresh runs that day (before, an app left running for days took no new point until Refresh).
 - A command that had already finished could be reported as timed out, with its output lost, while all of the system's shared worker threads were busy. Command output no longer waits for those threads.
 - For contributors: test copies made by `tools/bench-app.sh` are named `MacDashboardBench.app`, and `tools/ls-prune.sh` also removes their LaunchServices registrations (including ones whose folder is already deleted), so opening the app by name (`open -a MacDashboard`, AppleScript) starts the installed copy instead of an old test copy. `tools/visual/smoke.sh` now runs the prune at exit, as `tools/perf/gate.sh` already did.
 - [major] History: with less than a month of data, the tooltip on a greyed-out range said «Only 0 months of data»; it now gives the days.

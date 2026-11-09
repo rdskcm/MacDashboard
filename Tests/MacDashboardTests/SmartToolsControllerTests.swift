@@ -22,6 +22,7 @@ import Testing
     var holdCollect = false
     var holdInstall = false
     private(set) var collectCalls = 0
+    private(set) var tmDestCalls = 0
     private(set) var installs: [String] = []
     private(set) var recorded: [TMDestination??] = []
     private(set) var installParked = false
@@ -38,6 +39,7 @@ import Testing
                 if self.holdCollect { await withCheckedContinuation { self.collectGates.append($0) } }
                 return (self.disks, self.tmDest)
             },
+            collectTMDest: { self.tmDestCalls += 1; return self.tmDest },
             install: { brew in
                 self.installs.append(brew)
                 if self.holdInstall { await withCheckedContinuation { self.installGate = $0; self.installParked = true } }
@@ -85,16 +87,27 @@ extension SerialTests {
             #expect(host.claudeRefreshCalls == 1 && host.reassessCalls == 0)
             #expect(c.updatedAt == clock.base.addingTimeInterval(300) && c.samplerTask == nil)
         }
-        // 3 (R3, R12): paused → nothing spawns; 2 s, then the full interval again
-        @Test func samplerSpawnsNothingWhilePaused() async {
+        // 3 (R3, R12, SAMPLER-OCCLUSION-GATE D4): paused → only the backup inputs are read, nothing else spawns
+        @Test func samplerReadsOnlyTheBackupInputsWhilePaused() async {
             let (c, host, fake, clock) = make()
             host.paused = true
-            clock.onSleep = { n in if n == 4 { c.stop() } }
+            clock.onSleep = { n in if n == 3 { c.stop() } }
             c.startSampling()
             let sampler = c.samplerTask
             await sampler?.value
-            #expect(fake.collectCalls == 0 && fake.recorded.isEmpty && c.updatedAt == nil)
-            #expect(clock.sleeps == [.seconds(300), .seconds(2), .seconds(300), .seconds(2)])
+            #expect(fake.collectCalls == 0 && fake.tmDestCalls == 2)
+            #expect(fake.recorded == [.some(nil), .some(nil)])
+            #expect(host.claudeRefreshCalls == 2 && c.updatedAt == nil)
+            #expect(clock.sleeps == [.seconds(300), .seconds(300), .seconds(300)] && host.updateCalls == 0)
+            // a failed destination read (outer nil) keeps the old value
+            let (c2, host2, fake2, clock2) = make()
+            host2.paused = true
+            fake2.tmDest = nil
+            clock2.onSleep = { n in if n == 2 { c2.stop() } }
+            c2.startSampling()
+            let sampler2 = c2.samplerTask
+            await sampler2?.value
+            #expect(fake2.recorded.isEmpty)
         }
         // 4 (R3): an unchanged SMART read costs no report mutation; the TM record and the stamp still happen
         @Test func samplerWritesOnlyAChangedSmartSection() async {

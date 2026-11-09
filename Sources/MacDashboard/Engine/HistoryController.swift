@@ -1,6 +1,7 @@
 // Engine/HistoryController.swift
 // ARCH-MODEL-SPLIT block 8: the History feature, moved out of the coordinator unchanged in behaviour — the day-by-day
-// history file (`mac_check_state.json`, HistoryStore), the daily snapshot a completed report pass writes
+// history file (`mac_check_state.json`, HistoryStore), the daily snapshot a completed report
+// pass or the coordinator's 60 s scheduler writes (SAMPLER-OCCLUSION-GATE)
 // (REDESIGN-SETTINGS schedule), the History page's Refresh / Try again, the «History started over» notice
 // (HISTORY-UNREADABLE-NOTICE) and the Home History tile's digest. Owns no Task: every operation is synchronous
 // main-actor work on a ~50 KB file, as before. Reaches the coordinator only through ReportHost.reportError.
@@ -62,17 +63,29 @@ final class HistoryController {
     // MARK: - Report pass (coordinator → controller)
 
     /// A report pass committed `report`: writes today's snapshot when the daily schedule is due, then republishes the
-    /// store's state. A failed write is reported and the schedule is stamped anyway (unchanged behaviour); the next
-    /// successful save persists the in-memory entry.
+    /// store's state (a pass may also have renamed an unreadable file aside). A failed write is reported and the schedule
+    /// is stamped anyway (unchanged behaviour); the next successful save persists the in-memory entry.
     func passCommitted(_ report: FullReport, live: LiveSnapshot) {
-        let now = time.now()
-        if SnapshotSchedule.isDue(now: now, last: deps.lastSnapshotAt(), minutesAfterMidnight: deps.snapshotMinutes()) {
-            store.upsertToday(from: report, live: live)
-            do { try store.save() } catch { host.reportError(L.errorHistorySaveFailed(error.localizedDescription)) }
-            deps.setLastSnapshotAt(now)
-        }
+        snapshotIfDue(report, live: live)
         state = store.state
         unreadable = store.fileUnreadable
+    }
+
+    /// SAMPLER-OCCLUSION-GATE D5: the one writer of the daily History point. The pass commit calls it with its final
+    /// report; the coordinator's 60 s scheduler calls it with the committed report, so a Mac that runs for days gets its
+    /// point at the chosen time whether or not a pass ever runs again and whatever the window state. `lastSnapshotAt`
+    /// makes the two callers exclusive for the day. Republishes `state` only when it wrote (a tick that writes nothing
+    /// costs no observation mutation). Returns true when it wrote.
+    @discardableResult
+    func snapshotIfDue(_ report: FullReport, live: LiveSnapshot) -> Bool {
+        let now = time.now()
+        guard SnapshotSchedule.isDue(now: now, last: deps.lastSnapshotAt(), minutesAfterMidnight: deps.snapshotMinutes()) else { return false }
+        store.upsertToday(from: report, live: live)
+        do { try store.save() } catch { host.reportError(L.errorHistorySaveFailed(error.localizedDescription)) }
+        deps.setLastSnapshotAt(now)
+        state = store.state
+        unreadable = store.fileUnreadable
+        return true
     }
 
     // MARK: - History page

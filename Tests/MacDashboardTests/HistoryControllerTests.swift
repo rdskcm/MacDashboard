@@ -82,6 +82,22 @@ extension SerialTests {
             #expect(c.state.mac_history.isEmpty)
         }
 
+        // SAMPLER-OCCLUSION-GATE D5: the scheduler's path writes only when due and says so
+        @Test func snapshotIfDueWritesOnlyWhenDueAndReportsIt() {
+            let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent(fileName)
+            let host = FakeHost(), clock = VirtualClock(), sched = FakeHistorySchedule()
+            sched.minutes = 0; sched.last = clock.now
+            let c = make(url, host, clock, sched)
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == false)
+            #expect(!FileManager.default.fileExists(atPath: url.path) && sched.stamps.isEmpty)
+            sched.last = nil                                   // due again
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == true)
+            #expect(c.state.mac_history.count == 1 && sched.stamps == [clock.now] && host.errors.isEmpty)
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == false)   // stamped: exclusive for the day
+            #expect(c.state.mac_history.count == 1)
+        }
+
         @Test func passSaveFailureReportsTheErrorAndStillStamps() {
             let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
             let blocker = dir.appendingPathComponent("blocker")
