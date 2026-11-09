@@ -87,7 +87,8 @@ final class IPhoneModel {
     @ObservationIgnored private var requestTasks: [String: Task<Void, Never>] = [:]
     /// Devices whose import card is mounted (`IPhoneImportCard` onAppear/onDisappear).
     @ObservationIgnored private var requestPanelShown: Set<String> = []
-    /// `AppActivityMonitor`'s verdict, mirrored from `AppModel.setPaused` (AppShell.swift). Starts false: the
+    /// The gate's verdict
+    /// (`AppModel.isPaused`, SAMPLER-OCCLUSION-GATE), handed over by AppShell.swift. Starts false: the
     /// monitor reports the first change; under -visualFixture it never exists and nothing polls anyway.
     @ObservationIgnored private var windowPaused = false
     /// Devices whose running import paused on the «another phone» question (Decision 3).

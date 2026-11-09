@@ -25,6 +25,10 @@ final class ProcessSampler {
     /// Top apps by summed footprint, from the most recent `sample()` (TIPS-MEMORY).
     private(set) var lastTopApps: [AppMemory] = []
 
+    /// SAMPLER-OCCLUSION-GATE D6a: the next sample() primes again (two ps runs, primingWindow apart) instead of
+    /// reporting a delta over however long the sampler was parked.
+    func resetBaseline() { previousCPUSeconds = [:]; previousAt = nil }
+
     /// One `/bin/ps` invocation, parsed. No sleep, and no per-pid work of any kind: the
     /// memory footprints come from ONE separate `/usr/bin/top` snapshot per tick
     /// (`memoryFootprintsReporting()`), never from a call per process.

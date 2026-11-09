@@ -15,8 +15,9 @@ extension AppActions {
 }
 
 /// The AppKit side of AppModel's pause/resume (SPEC §1.4). Observes app activate/resign and window
-/// close/miniaturize/deminiaturize/occlusion and tells the models two Foundation-only facts: `setPaused(_:)` (to
-/// AppModel and to IPhoneModel, for the sysdiagnose request poll) and `appDidBecomeActive()`. `NSPanel`s (HoverTip's tooltip panels) never keep the app un-paused. Created once per
+/// close/miniaturize/deminiaturize/occlusion and hands the models Foundation-only facts: `[WindowFacts]` + `NSApp.isActive` to
+/// `AppModel.applyVisibility` (the gate, SAMPLER-OCCLUSION-GATE), the gate's verdict to `IPhoneModel.setPaused` (the
+/// sysdiagnose request poll), and `appDidBecomeActive()`. `NSPanel`s (HoverTip's tooltip panels) never keep the app un-paused. Created once per
 /// process by MacDashboardApp right after `model.start()`, never under -visualFixture; lives as long as the process.
 @MainActor
 final class AppActivityMonitor {
@@ -51,18 +52,25 @@ final class AppActivityMonitor {
                 Task { @MainActor [weak self] in self?.recompute() }
             },
         ]
+        // SAMPLER-OCCLUSION-GATE D15: a known first state (the gate defaults to .visible).
+        recompute()
     }
 
     isolated deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 
-    /// Paused = not (app active AND at least one non-panel window that is visible and not fully occluded).
+    /// Hidden = not (app active AND at least one non-panel window that is visible and not fully occluded) — resolved by
+    /// the gate (VisibilityGate.resolve, D1/D7). This is the only reader of NSApp.isActive / occlusionState for sampling (D9).
     private func recompute() {
-        let hasVisibleWindow = NSApp.windows.contains { window in
-            !(window is NSPanel) && window.isVisible && window.occlusionState.contains(.visible)
-        }
-        let paused = !(NSApp.isActive && hasVisibleWindow)
-        model.setPaused(paused)
-        IPhoneModel.shared.setPaused(paused)   // DEVICE-ARCHIVE-CLEANUP Decision 7: the request poll pauses with the app
+        let windows = NSApp.windows.map { WindowFacts($0) }
+        model.applyVisibility(windows: windows, appActive: NSApp.isActive)
+        IPhoneModel.shared.setPaused(model.isPaused)   // DEVICE-ARCHIVE-CLEANUP Decision 7: the request poll pauses with the app
+    }
+}
+
+extension WindowFacts {
+    /// SAMPLER-OCCLUSION-GATE: the three AppKit facts the gate resolves on, read here and nowhere else (D9).
+    @MainActor init(_ w: NSWindow) {
+        self.init(isPanel: w is NSPanel, isVisible: w.isVisible, isOnScreen: w.occlusionState.contains(.visible))
     }
 }
 

@@ -13,6 +13,8 @@ import Observation
 final class AppModel {
     /// Fast-task history window: the last 61 samples (SOC-DETAILS D5).
     nonisolated static let historyLimit = 61
+    /// SAMPLER-OCCLUSION-GATE D3/D5: the one slow clock — the hidden assessment tick and the daily History point.
+    nonisolated static let schedulerIntervalSeconds = 60
 
     /// Appends one sample and keeps only the last `historyLimit`.
     nonisolated static func appendTrimmed<V>(_ history: inout [(Date, V)], _ sample: (Date, V)) {
@@ -196,6 +198,7 @@ final class AppModel {
     private var fastTask: Task<Void, Never>?
     private var slowTask: Task<Void, Never>?
     private var reportTask: Task<Void, Never>?
+    private var schedulerTask: Task<Void, Never>?   // SAMPLER-OCCLUSION-GATE: the 60 s scheduler
     /// One watchdog per armed block (`beginBlock`); cancelled when the block gets a verdict.
     @ObservationIgnored private var blockWatchdogs: [BlockID: Task<Void, Never>] = [:]
 
@@ -210,11 +213,13 @@ final class AppModel {
     /// runs them after its commit; a cancelled pass and `stop()` drop them.
     @ObservationIgnored private var afterPassQueue: [@MainActor () -> Void] = []
 
-    /// Set by `AppActivityMonitor` (AppShell.swift) through `setPaused(_:)` whenever there is no effectively visible,
-    /// non-panel window on a frontmost app, so the live loop can skip the (relatively heavy — spawns `top` twice)
-    /// collect() call and just keep sleeping, per SPEC §1.4. Read only inside this model (the collector loops skip
-    /// their work while it is true).
-    private(set) var isPaused = false
+    /// SAMPLER-OCCLUSION-GATE: the one owner of window visibility (AppActivityMonitor feeds it through
+    /// `applyVisibility`). The fast, slow and Battery loops park on it; everything else reads `isPaused`.
+    let gate = VisibilityGate()
+    /// True while the gate is hidden: the app is not frontmost or has no visible, non-panel window on screen. The
+    /// controllers read it through ReportHost.isPaused, the SoC sampler through its closure, the banner rule (D13)
+    /// and BackupsPage directly. Computed, so every reader follows the gate (D13 of SAMPLER-OCCLUSION-GATE).
+    var isPaused: Bool { gate.state == .hidden }
     /// ARCH-SETTINGS-PATH: the settings this model assesses with and its pages read (`model.settings`).
     /// The app passes `.shared`; tests pass an isolated instance.
     let settings: AppSettings
@@ -469,7 +474,8 @@ final class AppModel {
     func start() {
         guard fastTask == nil else { return }
         observeThermalState()
-        // REDESIGN-NOTIFY: banners only while the app is not frontmost (D13); a click parks a destination for the view (R5).
+        gate.logsTransitions = ProcessInfo.processInfo.arguments.contains("-visibilityProbe")   // D11
+        // REDESIGN-NOTIFY: banners only while the gate is hidden — the app not frontmost or no window on screen (D13 of REDESIGN-NOTIFY; `isPaused` mirrors the gate); a click parks a destination for the view (R5).
         NotificationCenterClient.shared.shouldPresentBanner = { [weak self] in self?.isPaused ?? true }
         NotificationCenterClient.shared.onOpen = { [weak self] page in self?.requestNavigation(to: Destination(page)) }
         NotificationCenterClient.shared.install()
@@ -490,9 +496,17 @@ final class AppModel {
             while !Task.isCancelled {
                 guard let self else { return }
 
-                if self.isPaused {
-                    try? await Task.sleep(for: .seconds(self.settings.fastIntervalSeconds))
-                    continue
+                // SAMPLER-OCCLUSION-GATE: park with no wake-ups while hidden; on resume sample at once (D6). After a
+                // gap over 30 s the CPU delta is an average nobody watched: forget the baseline and let this sample
+                // prime again (D6a) — `fastSamplePrimed = false` turns its nil CPU into "no verdict".
+                let reprime: Bool
+                if self.gate.state == .hidden {
+                    let hiddenFor = await self.gate.waitUntilVisible()
+                    guard !Task.isCancelled else { return }
+                    reprime = ResumePolicy.reprimesDeltas(hiddenFor: hiddenFor)
+                    if reprime { self.fastSamplePrimed = false }
+                } else {
+                    reprime = false
                 }
 
                 // collectFast() blocks briefly on syscalls — hop off the main actor for
@@ -503,6 +517,7 @@ final class AppModel {
                 let (snap, socTempC, gpuUtil, pressure): (LiveSnapshot, Int?, Int?, MemoryPressureLevel?) = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .userInitiated).async {
                         let sp = PerfSignposts.begin(PerfSignposts.liveFastRead)
+                        if reprime { fastBox.value.resetDeltaBaselines() }
                         let s = fastBox.value.collectFast()
                         // Block N7: same background hop — one HID pass costs ~50 ms.
                         let soc = ThermalSensors.socTemperature(
@@ -565,16 +580,24 @@ final class AppModel {
             while !Task.isCancelled {
                 guard let self else { return }
 
-                if self.isPaused {
-                    try? await Task.sleep(for: .seconds(6))
-                    continue
+                // SAMPLER-OCCLUSION-GATE: park while hidden; the process delta is re-primed after a gap over 30 s (D6a)
+                let reprime: Bool
+                if self.gate.state == .hidden {
+                    let hiddenFor = await self.gate.waitUntilVisible()
+                    guard !Task.isCancelled else { return }
+                    reprime = ResumePolicy.reprimesDeltas(hiddenFor: hiddenFor)
+                } else {
+                    reprime = false
                 }
 
                 // sampleProcesses() is async and suspends while `/bin/ps` and `/usr/bin/top`
                 // run (and, on the FIRST tick only, while it sleeps 0.6 s to prime its CPU
                 // baseline) — it runs on the global executor, not the main thread.
                 let procsSp = PerfSignposts.begin(PerfSignposts.liveSlowProcs)
-                let procs = await CommandRunner.$qos.withValue(.utility) { await procBox.value.sampleProcesses(limit: LiveCollector.topProcessCount) }
+                let procs = await CommandRunner.$qos.withValue(.utility) {
+                    if reprime { procBox.value.resetDeltaBaselines() }
+                    return await procBox.value.sampleProcesses(limit: LiveCollector.topProcessCount)
+                }
                 procsSp.end()
                 guard !Task.isCancelled else { return }
                 let wakeSp = PerfSignposts.begin(PerfSignposts.liveSlowWake)
@@ -609,6 +632,20 @@ final class AppModel {
 
         // Hourly folder-size count (SIZES-BACKGROUND): StorageController owns the 60 s poll; skipped while paused.
         storage.startSizeSchedule()
+
+        // SAMPLER-OCCLUSION-GATE: the one slow clock. Hidden: the assessment tick for notifications (D3). Always, once a
+        // pass has completed: the daily History point (D5), whether or not another pass ever runs. Own LiveCollector
+        // (one instance per task, see the fastBox/procBox comment above); it never reads CPU (collectFast(readsCPU: false)).
+        let bgBox = UncheckedSendableBox(LiveCollector())
+        schedulerTask = Task(priority: .utility) { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Self.schedulerIntervalSeconds))
+                guard let self, !Task.isCancelled else { return }
+                if self.gate.state == .hidden { await self.backgroundTick(using: bgBox) }
+                guard !Task.isCancelled, self.hasCompletedPass, self.homeReport.system != nil else { continue }
+                self.history.snapshotIfDue(self.homeReport, live: self.live)
+            }
+        }
     }
 
     /// Cold-launch disk cache (Block N5): if a report from a previous run exists on
@@ -636,6 +673,8 @@ final class AppModel {
         slowTask = nil
         reportTask?.cancel()
         reportTask = nil
+        schedulerTask?.cancel()
+        schedulerTask = nil
         afterPassQueue.removeAll()   // PASS-WAIT-PARTIAL: queued landings never run after stop()
         smart.stop()
         brew.stop()
@@ -821,10 +860,15 @@ final class AppModel {
 
     /// REDESIGN-BATTERY: the Battery page's ioreg loop, awaited by the page's `.task` and cancelled by SwiftUI when the
     /// page unmounts. Never under the visual fixture: it would overwrite the fixture detail with live data
-    /// (HIDDEN-CONTENT-WORK; the guard used to sit in BatteryPage).
+    /// (HIDDEN-CONTENT-WORK; the guard used to sit in BatteryPage). Parked on the gate while the window is hidden
+    /// (SAMPLER-OCCLUSION-GATE): no `ioreg` spawns with nobody watching; the first read after resume is immediate.
     func runBatteryLoop() async {
         guard !VisualFixture.isRequested else { return }
         while !Task.isCancelled {
+            if gate.state == .hidden {               // SAMPLER-OCCLUSION-GATE: no ioreg while the window is hidden
+                _ = await gate.waitUntilVisible()
+                guard !Task.isCancelled else { return }
+            }
             let read = PerfSignposts.begin(PerfSignposts.batteryRead)
             await readBatteryNow()
             read.end()
@@ -898,13 +942,12 @@ final class AppModel {
         }
     }
 
-    // MARK: - App-activity pause/resume (SPEC §1.4) — fed by AppActivityMonitor (AppShell.swift)
+    // MARK: - Window visibility (SAMPLER-OCCLUSION-GATE) — fed by AppActivityMonitor (AppShell.swift)
 
-    /// The monitor's verdict: true when the app is not frontmost or has no effectively visible non-panel window.
-    func setPaused(_ paused: Bool) {
-        guard isPaused != paused else { return }
-        isPaused = paused
-        if !paused { smart.resumeVolumeRead() }
+    /// The monitor's facts go to the gate; a hidden → visible transition runs the one resume hook that is not a
+    /// loop's own: the SMART controller's deferred volume read (DISK-MOUNT-LIVE).
+    func applyVisibility(windows: [WindowFacts], appActive: Bool) {
+        if gate.update(windows: windows, appActive: appActive) != nil { smart.resumeVolumeRead() }
     }
 
     /// App became active: the storage controller ends the Full Disk Access wait and re-probes the protected locations (REDESIGN-STORAGE D14).
@@ -932,6 +975,28 @@ final class AppModel {
     private final class UncheckedSendableBox<T>: @unchecked Sendable {
         let value: T
         init(_ value: T) { self.value = value }
+    }
+
+    /// SAMPLER-OCCLUSION-GATE D3: while the gate is hidden, one native read per minute keeps the assessment current for
+    /// REDESIGN-NOTIFY (disk, swap, battery and memory pressure are its live inputs). No CPU % (this collector's delta
+    /// would span 60 s), no thermal pass, no GPU read, no block verdict, no history point: those belong to the visible
+    /// cadence. Assesses `homeReport`, never a partial (assessment-complete-collect).
+    private func backgroundTick(using box: UncheckedSendableBox<LiveCollector>) async {
+        let (snap, pressure): (LiveSnapshot, MemoryPressureLevel?) = await withCheckedContinuation { c in
+            DispatchQueue.global(qos: .utility).async {
+                c.resume(returning: (box.value.collectFast(readsCPU: false), LiveCollector.readMemoryPressure()))
+            }
+        }
+        guard !Task.isCancelled else { return }
+        if load != snap.load { load = snap.load }
+        if let mem = snap.mem, self.mem != mem { self.mem = mem }
+        if swap != snap.swap { swap = snap.swap }
+        if disk != snap.disk { disk = snap.disk }
+        if battery != snap.battery { battery = snap.battery }
+        if memPressure != pressure { memPressure = pressure }
+        lastSampleAt = snap.t
+        setAssessment(assessed(homeReport))
+        if gate.logsTransitions { print("gate: tick hidden at \(snap.t)") }
     }
 
     /// Suppresses redundant @Observable notifications when the new assessment

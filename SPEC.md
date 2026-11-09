@@ -48,10 +48,14 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
 3. **Report on launch**: app start triggers full report generation in background.
    Report is written to ONE fixed path, atomically overwritten each run — reports must
    not accumulate.
-4. **Live metrics**: refresh every 3 s while app is frontmost/visible (pause timer when
-   window closed / app hidden to save energy). Chart AND table representations render
-   from the SAME observable state — switching a card to table view must keep updating
-   (this fixes the old dashboard's bug).
+4. **Live metrics**: refresh every 2 s (Settings: 2/5/10) while the app is frontmost and a window of the app is on
+   screen — `NSWindow.occlusionState` contains `.visible`, not minimised, app not hidden. Otherwise (another app in
+   front, window covered, minimised, hidden or closed) the live samplers and the Battery page's `ioreg` loop are parked
+   with no wake-ups (`Engine/VisibilityGate.swift` owns that decision; `AppShell.swift` feeds it), except three slow
+   clocks: one native read per 60 s that keeps the assessment current for notifications, the 5-min Time Machine
+   destination / backup-log check, and the daily History snapshot, which is taken at the chosen time whether or not a
+   report pass runs (SAMPLER-OCCLUSION-GATE, 2026-11). Chart AND table representations render from the SAME observable
+   state — switching a card to table view must keep updating (this fixes the old dashboard's bug).
 5. UI language: **bilingual (English/Russian)**, switchable in Settings, via the
    `AppStrings` protocol, split into per-feature files under `Engine/Strings/` that each
    hold the feature protocol and its `StringsEN`/`StringsRU` witnesses (see §8). Code +

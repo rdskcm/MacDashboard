@@ -12,6 +12,9 @@ final class SmartToolsController {
         /// The SMART disks (`collectSmartDisks`) and the Time Machine destination (`collectTMDestInfo`; nil = tmutil
         /// failed), read through one fresh ReportCollector never shared with another reader.
         var collect: @MainActor () async -> (disks: [SmartDisk], tmDest: TMDestination??)
+        /// SAMPLER-OCCLUSION-GATE D4: the Time Machine destination alone (`collectTMDestInfo`; nil = tmutil failed), for
+        /// the hidden tick — the backup notification's input keeps its cadence while SMART waits for a visible tick.
+        var collectTMDest: @MainActor () async -> TMDestination?? = { nil }
         /// `brew install smartmontools` with Homebrew's environment, 300 s timeout; the argument is brew's path.
         var install: @MainActor (_ brew: String) async -> CommandOutcome
         /// `ReportCollector.findSmartctl()` / `findBrew()`: `isExecutableFile` probes, no process spawn.
@@ -29,6 +32,7 @@ final class SmartToolsController {
                     let tmDest = await collector.collectTMDestInfo()
                     return (disks, tmDest)
                 },
+                collectTMDest: { await ReportCollector().collectTMDestInfo() },
                 install: { brew in
                     // brew is a Homebrew-prefix script that shells out to its own helper binaries (ruby, git, curl, …)
                     // inside that prefix — same reason BrewUpgrader.upgradeAll and collectBrewInfo() build this env
@@ -82,7 +86,8 @@ final class SmartToolsController {
 
     // MARK: - Sampler
 
-    /// Called by the coordinator's `start()`. Sleeps first: the launch pass has just collected SMART.
+    /// Called by the coordinator's `start()`. Sleeps first: the launch pass has just collected SMART. While the app is
+    /// hidden the tick reads the destination and the backup log only (D4).
     func startSampling() {
         samplerTask?.cancel()                                   // one sampler at a time
         samplerTask = Task(priority: .utility) { [weak self] in await self?.sample() }
@@ -92,8 +97,14 @@ final class SmartToolsController {
         while !Task.isCancelled {
             await time.sleep(Self.samplerInterval)
             guard !Task.isCancelled else { return }
-            if host.isPaused() {                                // no-unseen-work: nothing spawns while paused
-                await time.sleep(.seconds(2))
+            if host.isPaused() {
+                // SAMPLER-OCCLUSION-GATE D4: hidden → the backup inputs only (destination + log), no diskutil/smartctl.
+                // A failed destination read keeps the old value, as the volume-event path does.
+                let tmDest = await CommandRunner.$qos.withValue(.utility) { await self.deps.collectTMDest() }
+                guard !Task.isCancelled else { return }
+                await host.refreshClaudeBackup()
+                guard !Task.isCancelled else { return }
+                if tmDest != nil { host.afterPass { [weak self] in self?.deps.markTMUpdated(tmDest) } }
                 continue
             }
             let collectSp = PerfSignposts.begin(PerfSignposts.smartCollect)
@@ -179,7 +190,7 @@ final class SmartToolsController {
         startVolumeReads(debounce: true)
     }
 
-    /// The app resumed (`AppModel.setPaused(false)`): one plan if an event arrived meanwhile, with no debounce.
+    /// The app resumed (`AppModel.applyVisibility`): one plan if an event arrived meanwhile, with no debounce.
     func resumeVolumeRead() {
         guard volumeReadPending else { return }
         startVolumeReads(debounce: false)

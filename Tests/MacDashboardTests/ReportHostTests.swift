@@ -184,8 +184,10 @@ extension SerialTests {
             }
             defer { cleanup() }
             #expect(m.reportHost.isPaused() == false)
-            m.setPaused(true)
+            m.applyVisibility(windows: [], appActive: false)
             #expect(m.reportHost.isPaused() == true)
+            m.applyVisibility(windows: [WindowFacts(isPanel: false, isVisible: true, isOnScreen: true)], appActive: true)
+            #expect(m.reportHost.isPaused() == false && m.isPaused == false)
             #expect(m.claudeBackup == nil)                        // no log file yet
             try Data().write(to: log)                             // present, no successful run in it
             await m.reportHost.refreshClaudeBackup()

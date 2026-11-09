@@ -27,16 +27,25 @@ final class LiveCollector {
     // method OWNS the prevTicks CPU-delta state (only readCPU touches it), so the
     // first collectFast() returns cpu == nil to prime the baseline, exactly as before.
     // topCPU/topMem are left at their empty defaults — fill them via sampleProcesses().
-    func collectFast() -> LiveSnapshot {
+    /// readsCPU false (the hidden tick): no CPU read at all, so this collector never competes with the fast loop for host_statistics, which repeats its previous value when read several times within about a second.
+    func collectFast(readsCPU: Bool = true) -> LiveSnapshot {
         var snap = LiveSnapshot()
         snap.load = readLoad()
-        snap.cpu = readCPU()
+        snap.cpu = readsCPU ? readCPU() : nil
         snap.mem = readMemory()
         snap.swap = readSwap()
         snap.disk = readDisk()
         snap.battery = readBattery()
         snap.t = Date()
         return snap
+    }
+
+    /// SAMPLER-OCCLUSION-GATE D6a: forget both delta baselines so the next collectFast() primes CPU again (cpu == nil)
+    /// and the next sampleProcesses() primes over its 0.6 s window. Called by the owner task on resume, on the same
+    /// background context that calls collect — this type is still not thread-safe.
+    func resetDeltaBaselines() {
+        prevTicks = nil
+        procSampler.resetBaseline()
     }
 
     /// Rows in each process table (CPU- and memory-sorted): a fixed top 8 (handoff 03:22-23;
