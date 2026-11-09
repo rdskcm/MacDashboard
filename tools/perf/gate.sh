@@ -330,7 +330,8 @@ ax_frame() {   # kind value -> "x y w h" (global points, top-left origin) | 1 af
 # Honest scroll (PERF-GATE-RETARGET, SCROLL-BENCH-EDGES): no bar under (500,450) means the content fits the window: the run is
 # an idle-page measurement (scrollable 0), never a scroll. No scroll area is retried once, then ERROR (diagnostics written).
 # S_WAVE items then read the real range with `drv probe` (before xctrace attaches, so its short legs are not measured)
-# and get the SCROLL_* variables the scenario's `drv wave` needs. G3 (S_WAVE 0) only records scrollable.
+# and get the SCROLL_* variables the scenario's `drv wave` needs. G3 (S_PROBE_ONLY) reads the range the same way for its `drv goto`,
+# but has no position log and no range check, because its window has no scrolling.
 probe_scroll() {   # buf tag arm -> 0 (for S_SCROLL items "scrollable 1|0" appended to buf) | 1 missed twice
   unset SCROLL_RANGE_PT SCROLL_PPE SCROLL_COAST_PT SCROLL_X SCROLL_Y SCROLL_INNER SCROLL_POSLOG SCROLL_POS_HZ SCROLL_SHORT
   POS_CHECK=0
@@ -345,10 +346,11 @@ probe_scroll() {   # buf tag arm -> 0 (for S_SCROLL items "scrollable 1|0" appen
     bar)   ;;
     nobar) [ "$S_MUSTSCROLL" = 1 ] && { ax_miss "$2: no scroll bar under (500,450) on a scenario that must scroll"; return 1; }
            echo "scrollable 0" >> "$1"
+           [ "$S_WAVE" = 1 ] && export SCROLL_SHORT=1   # idle page: the scenario takes its quiet window, no events
            log "$2: nothing to scroll under (500,450): recorded as an idle-page measurement (scrollable 0)"; return 0 ;;
     *)     ax_miss "AX vscroll found no scroll area under (500,450) after one retry (got: $out)"; return 1 ;;
   esac
-  [ "$S_WAVE" = 1 ] || { echo "scrollable 1" >> "$1"; return 0; }
+  [ "$S_WAVE" = 1 ] || [ "$S_PROBE_ONLY" = 1 ] || { echo "scrollable 1" >> "$1"; return 0; }
   out="$("$BIN/drv" probe "$PID" 500 450 $S_PROBE_MODE 2>&1)"
   case "$out" in
     range=*short=1*)
@@ -370,7 +372,7 @@ probe_scroll() {   # buf tag arm -> 0 (for S_SCROLL items "scrollable 1|0" appen
       SCROLL_POSLOG="$CUR_PREFIX-pos.log"; SCROLL_POS_HZ=10
       if [ "$3" = cand ] && [ -n "${GATE_TEST_CAND_POS_HZ:-}" ]; then SCROLL_POS_HZ="$GATE_TEST_CAND_POS_HZ"; fi
       export SCROLL_RANGE_PT SCROLL_PPE SCROLL_COAST_PT SCROLL_X SCROLL_Y SCROLL_INNER SCROLL_POSLOG SCROLL_POS_HZ
-      POS_CHECK=1
+      [ "$S_WAVE" = 1 ] && POS_CHECK=1
       log "$2: $out" ;;
     *) ax_miss "$2: drv probe could not read the scroll range (got: $out)"; return 1 ;;
   esac
@@ -477,14 +479,14 @@ TP_INSTR=(--instrument 'Time Profiler' --instrument Hitches)
 CA_INSTR=(--instrument 'Core Animation Commits' --instrument 'Core Animation Server' --instrument 'Time Profiler')
 define_item() {
   S_ROUTE=mac; S_PRE=3; S_ARGS=""; S_TABLES="time-profile hitches"; S_INSTR=("${TP_INSTR[@]}"); S_SCROLL=0
-  S_WAVE=0; S_MUSTSCROLL=0; S_PROBE_MODE=""
+  S_WAVE=0; S_PROBE_ONLY=0; S_MUSTSCROLL=0; S_PROBE_MODE=""
   case "$1" in
     G1) S_PRE=22 ;;
     G9) S_ROUTE=cpu; S_PRE=22 ;;
     G5-top) S_ROUTE=report; S_PRE=22 ;;
     G2) S_PRE=30; S_SECS=20; S_SCEN=scen-idle.sh; S_ARGS=15
         S_TABLES="coreanimation-commit-interval coreanimation-server-interval"; S_INSTR=("${CA_INSTR[@]}") ;;
-    G3) S_PRE=5; S_SECS=22; S_SCEN=scen-idle-bottom.sh; S_SCROLL=1 ;;
+    G3) S_PRE=5; S_SECS=22; S_SCEN=scen-idle-bottom.sh; S_SCROLL=1; S_PROBE_ONLY=1 ;;
     G4) S_ROUTE=hist; S_PRE=0; S_SECS=22; S_SCEN=scen-hist-all.sh ;;
     G5) S_ROUTE=report; S_PRE=22; S_SECS=22; S_SCEN=scen-rainbow.sh
         S_TABLES="coreanimation-commit-interval coreanimation-server-interval"

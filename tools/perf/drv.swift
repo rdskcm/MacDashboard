@@ -3,7 +3,6 @@ import CoreGraphics
 import ApplicationServices
 // tools/perf helper, compiled by gate.sh into $OUT/.bin/drv (never run from here). Marks are epoch seconds.
 // usage: drv winfo <pid>            -> prints window frame
-//        drv scroll x y secs dy [gap] [phase]  -> trackpad-like gesture (began/changed/ended), prints t0
 //        drv move x y secs         -> sweep pointer horizontally around x,y for secs
 //        drv resize <pid> <w0> <w1> <secs> [cycles] -> AX-set the first window's width w0 -> w1 -> w0 ... at 60 Hz
 //                                                  (height unchanged), prints t0 / t1; exit 1 + "drv-error resize: ..." on stderr when an AX
@@ -11,7 +10,7 @@ import ApplicationServices
 //        drv probe <pid> <x> <y> [inner]  -> real scroll range of the AXScrollArea under (x,y) (position change / bar change at rest),
 //                                                  points per event and coast; one line "range=.. ppe=.. coast=.. x=.. y=.. inner=0|1 short=0|1"
 //                                                  (exit 3 + reason on stdout when the area or its movement is not readable). No trace is attached.
-//        drv goto <pid> <x> <y> start  -> move the page to the lower turn point; env as for wave
+//        drv goto <pid> <x> <y> start|end  -> move the page to the lower (start) or upper (end) turn point of the range; env as for wave
 //        drv wave <pid> <x,y,events,gap>...  -> triangle wave of wheel events inside the range (env SCROLL_RANGE_PT, SCROLL_PPE,
 //                                                  SCROLL_COAST_PT, SCROLL_POSLOG; optional SCROLL_POS_HZ, SCROLL_INNER, SCROLL_END_FRAC);
 //                                                  prints t0 after its AX lookup and t1 at the end, logs the bar value at 10 Hz
@@ -134,29 +133,6 @@ if a[1] == "winfo" {
     for w in l where (w[kCGWindowOwnerPID as String] as? Int32) == pid {
         print(w[kCGWindowBounds as String]!, w[kCGWindowLayer as String]!, w[kCGWindowName as String] ?? "")
     }
-} else if a[1] == "scroll" {
-    let x = Double(a[2])!, y = Double(a[3])!, secs = Double(a[4])!, dy = Double(a[5])!
-    let hz = 60.0
-    CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
-    CGAssociateMouseAndMouseCursorPosition(1)
-    let mv = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: x, y: y), mouseButton: .left)!
-    mv.post(tap: .cghidEventTap)
-    Thread.sleep(forTimeInterval: 0.3)
-    print("t0 \(now())"); fflush(stdout)
-    let n = Int(secs * hz)
-    for i in 0..<n {
-        let e = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: Int32(dy), wheel2: Int32(a.count > 6 ? Int(a[6])! : 0), wheel3: 0)!
-        e.location = CGPoint(x: x, y: y)
-        e.setIntegerValueField(CGEventField(rawValue: 99)!, value: i == 0 ? 1 : 2)   // scrollPhase began/changed
-        e.setIntegerValueField(CGEventField(rawValue: 137)!, value: 1)  // isContinuous
-        e.post(tap: .cghidEventTap)
-        Thread.sleep(forTimeInterval: 1.0 / hz)
-    }
-    let e = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 0, wheel2: 0, wheel3: 0)!
-    e.setIntegerValueField(CGEventField(rawValue: 99)!, value: 4)
-    e.setIntegerValueField(CGEventField(rawValue: 137)!, value: 1)
-    e.post(tap: .cghidEventTap)
-    print("t1 \(now())")
 } else if a[1] == "move" {
     let x = Double(a[2])!, y = Double(a[3])!, secs = Double(a[4])!
     print("t0 \(now())"); fflush(stdout)
@@ -233,7 +209,7 @@ if a[1] == "winfo" {
         }
         guard !segs.isEmpty else { bad("no segment") }
     } else {
-        guard a.count > 5, let gx = Double(a[3]), let gy = Double(a[4]) else { bad("usage: goto <pid> <x> <y> start") }
+        guard a.count > 5, let gx = Double(a[3]), let gy = Double(a[4]) else { bad("usage: goto <pid> <x> <y> start|end") }
         segs = [Seg(x: gx, y: gy, events: 0, gap: 0)]
     }
     guard let R = envD("SCROLL_RANGE_PT"), let ppe = envD("SCROLL_PPE"), let coast = envD("SCROLL_COAST_PT"), R > 0, ppe > 0 else { bad("SCROLL_RANGE_PT / SCROLL_PPE / SCROLL_COAST_PT missing") }
@@ -247,7 +223,7 @@ if a[1] == "winfo" {
     let m = coast + marginExtra, lo = m, hi = R - m
     if !isWave {
         warp(segs[0].x, segs[0].y)
-        gotoPos(lo, segs[0].x, segs[0].y, bar, R, ppe, coast)
+        gotoPos(a[5] == "end" ? hi : lo, segs[0].x, segs[0].y, bar, R, ppe, coast)
         exit(0)
     }
     guard let logPath = env["SCROLL_POSLOG"], !logPath.isEmpty else { bad("SCROLL_POSLOG missing") }
