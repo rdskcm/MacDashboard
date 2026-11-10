@@ -26,6 +26,9 @@ struct ReportHost {
     var isPaused: @MainActor () -> Bool
     /// Re-reads the Claude backup log (`AppModel.refreshClaudeBackup()`); the Backups page shows both backups.
     var refreshClaudeBackup: @MainActor () async -> Void
+    /// IDLE-WORK-TRIM: the next fast tick re-reads free space (`AppModel.requestDiskRead()`); a controller calls it after
+    /// an action of its own changed free space (TimeMachineController's snapshot deletion).
+    var requestDiskRead: @MainActor () -> Void
 
     /// Re-applies the background overlays (update check, folder sizes) to the shown report — and, mid-pass, to the
     /// committed one — and re-assesses the committed report (`AppModel.mergeBackgroundIntoCommitted()`, V2-HEADER-CHURN).

@@ -32,6 +32,8 @@ final class AppModel {
     var mem: MemSnapshot? = nil
     var swap: SwapInfo? = nil
     var disk: DiskInfo? = nil
+    /// IDLE-WORK-TRIM: when `disk` was last read (visible or hidden tick); the Storage disk card's caption. nil until the first read.
+    var diskSampledAt: Date? = nil
     var battery: BatteryInfo? = nil   // Home battery tile / Now cell (falls back to report.battery)
     /// Block N7: rounded SOC die temperature (°C), max over valid PMU tdie sensors,
     /// sampled by the fast task via ThermalHIDReader (app-only private API). nil =
@@ -201,6 +203,8 @@ final class AppModel {
     private var schedulerTask: Task<Void, Never>?   // SAMPLER-OCCLUSION-GATE: the 60 s scheduler
     /// One watchdog per armed block (`beginBlock`); cancelled when the block gets a verdict.
     @ObservationIgnored private var blockWatchdogs: [BlockID: Task<Void, Never>] = [:]
+    /// IDLE-WORK-TRIM: decides per fast tick whether the collector reads disk (`DiskReadSchedule`).
+    @ObservationIgnored private var diskSchedule = DiskReadSchedule()
 
     /// Set when refreshReport() is requested while a collect is already in flight
     /// (e.g. a language switch during the launch collect). The in-flight pass kicks
@@ -297,6 +301,7 @@ final class AppModel {
             reassess: { link.model?.reassessCommitted() },
             isPaused: { link.model?.isPaused ?? true },
             refreshClaudeBackup: { await link.model?.refreshClaudeBackup() },
+            requestDiskRead: { link.model?.requestDiskRead() },
             mergeBackgroundIntoCommitted: { link.model?.mergeBackgroundIntoCommitted() },
             beginBlock: { id, showsLoading, armsWatchdog in
                 link.model?.beginBlock(id, showsLoading: showsLoading, armsWatchdog: armsWatchdog) },
@@ -472,6 +477,8 @@ final class AppModel {
     // MARK: - Lifecycle (SPEC §4 contract)
 
     func start() {
+        // A restart builds a new collector with no cached disk value, so its first tick must read.
+        diskSchedule.requestRead()
         guard fastTask == nil else { return }
         observeThermalState()
         gate.logsTransitions = ProcessInfo.processInfo.arguments.contains("-visibilityProbe")   // D11
@@ -491,6 +498,7 @@ final class AppModel {
 
         // Fast task (~2s cadence, user-configurable — default 2 s, see AppSettings):
         // all-native gauges only. Never touches topCPU/topMem.
+        // Disk is read every 30 s or on request (`DiskReadSchedule`, IDLE-WORK-TRIM).
         fastSamplePrimed = false   // a new fastBox collector primes again
         fastTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -505,6 +513,7 @@ final class AppModel {
                     guard !Task.isCancelled else { return }
                     reprime = ResumePolicy.reprimesDeltas(hiddenFor: hiddenFor)
                     if reprime { self.fastSamplePrimed = false }
+                    self.diskSchedule.requestRead()   // IDLE-WORK-TRIM: a resumed window reads at once (R2)
                 } else {
                     reprime = false
                 }
@@ -512,13 +521,14 @@ final class AppModel {
                 // collectFast() blocks briefly on syscalls — hop off the main actor for
                 // it, then resume back on the main actor (this Task inherited MainActor
                 // isolation from start(), so resuming the continuation lands here).
+                let readsDisk = self.diskSchedule.shouldRead(now: self.time.now())
                 self.beginBlock(.cpu)
                 self.beginBlock(.memory)
                 let (snap, socTempC, gpuUtil, pressure): (LiveSnapshot, Int?, Int?, MemoryPressureLevel?) = await withCheckedContinuation { continuation in
                     DispatchQueue.global(qos: .userInitiated).async {
                         let sp = PerfSignposts.begin(PerfSignposts.liveFastRead)
                         if reprime { fastBox.value.resetDeltaBaselines() }
-                        let s = fastBox.value.collectFast()
+                        let s = fastBox.value.collectFast(readsDisk: readsDisk)
                         // Block N7: same background hop — one HID pass costs ~50 ms.
                         let soc = ThermalSensors.socTemperature(
                             from: ThermalHIDReader.readTemperatureSensors())
@@ -546,6 +556,7 @@ final class AppModel {
                 if let mem = snap.mem, self.mem != mem { self.mem = mem }
                 if self.swap    != snap.swap    { self.swap    = snap.swap }
                 if self.disk    != snap.disk    { self.disk    = snap.disk }
+                if readsDisk { self.diskSampledAt = snap.t; if self.gate.logsTransitions { print("disk: read at \(snap.t)") } }
                 if self.battery != snap.battery { self.battery = snap.battery }
                 if self.socTempC != socTempC { self.socTempC = socTempC }
                 if self.gpuUtil != gpuUtil { self.gpuUtil = gpuUtil }
@@ -992,6 +1003,7 @@ final class AppModel {
         if let mem = snap.mem, self.mem != mem { self.mem = mem }
         if swap != snap.swap { swap = snap.swap }
         if disk != snap.disk { disk = snap.disk }
+        diskSampledAt = snap.t
         if battery != snap.battery { battery = snap.battery }
         if memPressure != pressure { memPressure = pressure }
         lastSampleAt = snap.t
@@ -1029,6 +1041,10 @@ final class AppModel {
     }
 
     /// REDESIGN-NOTIFY: called by the notification client on a click (R5); the view navigates and consumes it.
+    /// IDLE-WORK-TRIM: the next fast tick re-reads free space. Called after the app itself changed it (snapshot deletion
+    /// through ReportHost, Trash emptied by AdviceActionDispatch) and on a relevant volume mount/unmount (VolumeMountMonitor).
+    func requestDiskRead() { diskSchedule.requestRead() }
+
     func requestNavigation(to destination: Destination) {
         externalDestination = destination
         externalDestinationSerial += 1

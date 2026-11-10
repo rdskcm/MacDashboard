@@ -26,6 +26,9 @@ extension SerialTests {
                 #expect(snap2.disk?.purgeable.map { $0 > 0 } ?? true, "smoke LiveCollector: purgeable, when known, is > 0")
                 #expect(snap2.disk.map { d in (d.purgeable ?? 0) < d.size } ?? false, "smoke LiveCollector: purgeable < volume size")
                 #expect(snap2.load != nil, "smoke LiveCollector: load != nil")
+                let snap3 = collector.collectFast(readsDisk: false)
+                #expect(snap3.disk == snap2.disk, "smoke LiveCollector: a skipped read returns the cached disk value")
+                #expect(LiveCollector().collectFast(readsDisk: false).disk == nil, "smoke LiveCollector: no read yet ⇒ nil")
                 // Exercises the REAL `/bin/ps -axww -o pid=,rss=,time=,comm=` output on this
                 // machine end-to-end through the ProcessSampler ps-snapshot path (a synthetic
                 // fixture only proves the parser handles an assumed format, not that the real

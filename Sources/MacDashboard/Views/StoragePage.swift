@@ -121,7 +121,7 @@ struct StorageDiskCard: View {
     var body: some View {
         let disk = model.disk
         DS3Card(title: L.storageDiskTitle,
-                caption: disk == nil ? nil : L.storageSmartUpdatedCaption(HomeModel.hhmm(model.lastSampleAt))) {
+                caption: disk == nil ? nil : L.storageSmartUpdatedCaption(HomeModel.hhmm(model.diskSampledAt ?? model.lastSampleAt))) {
             if let disk {
                 content(disk)
             } else {

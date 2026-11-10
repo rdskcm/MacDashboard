@@ -189,6 +189,7 @@ final class TimeMachineController {
             guard let self else { return }
             let result = await self.runSnapshotDelete(confirmed: names)
             guard !Task.isCancelled else { return }
+            if result.deleted > 0 { self.host.requestDiskRead() }   // IDLE-WORK-TRIM R2
             await self.refreshTask?.value                 // an earlier re-read would make `refreshNow()` return without reading
             guard !Task.isCancelled else { return }
             self.refreshNow()

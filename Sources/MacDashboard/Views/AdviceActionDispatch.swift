@@ -129,6 +129,7 @@ final class AdviceActionDispatch {
                 self.trashError = nil
                 self.trashErrorPane = nil
                 self.model.storage.trashWasEmptied()
+                self.model.requestDiskRead()   // IDLE-WORK-TRIM R2
             case .cancelled:
                 // Backing out is not a failure: leave the plate on its verb, say nothing.
                 self.trashError = nil

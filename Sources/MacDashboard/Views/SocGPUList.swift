@@ -4,28 +4,15 @@
 // States keep the 218: wait line, "No process is using the GPU.", "Not available on this Mac". Fewer than five rows
 // leave empty slots, so the card never has a hole.
 //
-// Rows are identified by pid (`live-list-identity`). A re-sort moves rows with one explicit `withAnimation` on the
-// shown list, with the same curve as the gauge. The gauge itself is a `BarFillLayer` with no SwiftUI animation on it.
+// Rows are identified by pid (`live-list-identity`). A re-sort places rows at once, with no animation (IDLE-WORK-TRIM,
+// user decision 2026-11-10). The gauge itself is a `BarFillLayer` with no SwiftUI animation on it.
 
 import SwiftUI
-
-/// The bar curve shared by the gauge and the row re-sort (`processRowMotion` in ProcessCards.swift is private).
-private let socGPURowMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.45)
 
 /// Internal: the visual fixture renders it through `SoCCards`.
 @MainActor
 struct SocGPUList: View {
     let model: AppModel
-
-    /// The pids on screen, in order. Committed from `.onChange` so that a re-sort can ride one explicit
-    /// `withAnimation`. Stage 5a: only the order lives here; each row's values are read by its own `SocGPUSlotRow`.
-    @State private var shown: [Int32]
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    init(model: AppModel) {
-        self.model = model
-        _shown = State(initialValue: model.socLive.gpuShape.pids)
-    }
 
     var body: some View {
         // The container reads only the shape (state and pid order); the row slots are looked up untracked.
@@ -42,19 +29,11 @@ struct SocGPUList: View {
                 message(L.gpuNotAvailable)
             case .rows(let pids):
                 VStack(spacing: 4) {
-                    ForEach(shown.isEmpty ? pids : shown, id: \.self) { pid in
+                    ForEach(pids, id: \.self) { pid in
                         if let slot = model.socLive.gpuRowSlots[pid] { SocGPUSlotRow(slot: slot) }
                     }
                     Spacer(minLength: 0)
                 }
-            }
-        }
-        // Fires only when the pid order changed, so a value change never passes through this container.
-        .onChange(of: shape.pids) { _, new in
-            if !reduceMotion {
-                withAnimation(socGPURowMotion) { shown = new }
-            } else {
-                shown = new
             }
         }
     }

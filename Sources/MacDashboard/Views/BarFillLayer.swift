@@ -128,8 +128,8 @@ struct BarFillLayer: NSViewRepresentable {
 
 final class BarFillLayerView: NSView {
     /// The app-wide bar curve, `cubic-bezier(0.22, 0.61, 0.36, 1)`, shortened to
-    /// 0.45 s (V2-RELAYOUT-RESIDUAL, CPU cost is ~linear in duration) — kept in
-    /// sync with `processRowMotion` in `ProcessCards.swift`.
+    /// 0.45 s (V2-RELAYOUT-RESIDUAL, CPU cost is ~linear in duration) — the former
+    /// `processRowMotion` of ProcessCards.swift (removed, IDLE-WORK-TRIM).
     private static let barCurve = CAMediaTimingFunction(controlPoints: 0.22, 0.61, 0.36, 1)
     private static let barDuration: CFTimeInterval = 0.45
     /// The memory card's hover dim, matching `.easeOut(duration: 0.12)`.

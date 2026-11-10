@@ -48,7 +48,7 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
 3. **Report on launch**: app start triggers full report generation in background.
    Report is written to ONE fixed path, atomically overwritten each run — reports must
    not accumulate.
-4. **Live metrics**: refresh every 2 s (Settings: 2/5/10) while the app is frontmost and a window of the app is on
+4. **Live metrics**: refresh every 2 s (Settings: 2/5/10; disk free space every 30 s) while the app is frontmost and a window of the app is on
    screen — `NSWindow.occlusionState` contains `.visible`, not minimised, app not hidden. Otherwise (another app in
    front, window covered, minimised, hidden or closed) the live samplers and the Battery page's `ioreg` loop are parked
    with no wake-ups (`Engine/VisibilityGate.swift` owns that decision; `AppShell.swift` feeds it), except three slow

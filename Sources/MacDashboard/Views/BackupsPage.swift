@@ -361,7 +361,7 @@ private struct BackupsProgressBlock: View {
     }
 }
 
-/// Reads the live `model.disk` itself, so the ~2 s live tick invalidates only this tile and not the whole card (D13).
+/// Reads the live `model.disk` itself, so a disk read (every 30 s or on request, IDLE-WORK-TRIM) invalidates only this tile and not the whole card (D13).
 private struct BackupsPurgeableTile: View {
     let model: AppModel
 

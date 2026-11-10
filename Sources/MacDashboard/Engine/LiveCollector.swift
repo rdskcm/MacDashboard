@@ -21,6 +21,8 @@ import IOKit.ps
 final class LiveCollector {
 
     private var prevTicks: (user: UInt64, sys: UInt64, idle: UInt64, nice: UInt64)?
+    /// IDLE-WORK-TRIM: the last disk read, returned when a tick skips the read (`readsDisk: false`).
+    private var lastDisk: DiskInfo? = nil
     private let procSampler = ProcessSampler()
 
     // Fast, all-native sample (no subprocess): load/cpu/mem/swap/disk/battery. This
@@ -28,13 +30,15 @@ final class LiveCollector {
     // first collectFast() returns cpu == nil to prime the baseline, exactly as before.
     // topCPU/topMem are left at their empty defaults — fill them via sampleProcesses().
     /// readsCPU false (the hidden tick): no CPU read at all, so this collector never competes with the fast loop for host_statistics, which repeats its previous value when read several times within about a second.
-    func collectFast(readsCPU: Bool = true) -> LiveSnapshot {
+    /// `readsDisk` false: no volume read; `snap.disk` is the last read value (nil before the first read).
+    func collectFast(readsCPU: Bool = true, readsDisk: Bool = true) -> LiveSnapshot {
         var snap = LiveSnapshot()
         snap.load = readLoad()
         snap.cpu = readsCPU ? readCPU() : nil
         snap.mem = readMemory()
         snap.swap = readSwap()
-        snap.disk = readDisk()
+        if readsDisk { lastDisk = readDisk() }
+        snap.disk = lastDisk
         snap.battery = readBattery()
         snap.t = Date()
         return snap
