@@ -231,8 +231,9 @@ struct ProcessListCard: View {
                 }
             }
             // IDLE-WORK-TRIM (user decision B, 2026-11-10): no reorder animation. The 0.45 s SwiftUI
-            // frame animation cost about 1766 ms of CPU per 60 s on the CPU page (29-34 frames of graph
-            // update, hosting-view layout and glyph re-raster per re-sort); no CA route kept the look
+            // frame animation cost 1766 to 3509 ms of CPU per 60 s on the CPU page in two bench runs:
+            // 29-34 frames of graph update, hosting-view layout and glyph re-raster per re-sort. No CA
+            // route kept the look
             // (GPU-RENDER-AUDIT C7b, APPEAR-CA-ENTRANCE). Rows take their new slot at once; the bars
             // still glide (BarFillLayer).
             // A metric switch replaces `rows` wholesale. A fresh identity per metric drops the old

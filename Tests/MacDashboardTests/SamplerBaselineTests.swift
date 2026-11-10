@@ -10,7 +10,8 @@ extension SerialTests {
         @Test func collectorResetPrimesCPUAgain() async throws {
             let c = LiveCollector()
             #expect(c.collectFast().cpu == nil)
-            try await Task.sleep(for: .milliseconds(300))
+            // Same wait as below: a second host_statistics read after 300 ms sometimes returned the previous value.
+            try await Task.sleep(for: .milliseconds(1200))
             #expect(c.collectFast().cpu != nil)
             c.resetDeltaBaselines()
             #expect(c.collectFast().cpu == nil)
