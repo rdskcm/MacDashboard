@@ -9,7 +9,7 @@
 
 import SwiftUI
 
-/// The bar curve shared by the gauge and the row re-sort (`processRowMotion` in ProcessCards.swift is private).
+/// The bar curve shared by the gauge and the row re-sort (same curve as the former `processRowMotion` of ProcessCards.swift, removed in IDLE-WORK-TRIM).
 private let socGPURowMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.45)
 
 /// Internal: the visual fixture renders it through `SoCCards`.

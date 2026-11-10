@@ -340,7 +340,7 @@ extension SerialTests {
         }
 
         @Test func noDeleteWithoutTheConfirmation() async {
-            let (c, _, fake, _) = make()
+            let (c, host, fake, _) = make()
             fake.currentSnapshots = [snap("043250")]
             c.confirmSnapshotDelete(names: [snap("043250")])
             await c.deleteTask?.value
@@ -351,6 +351,7 @@ extension SerialTests {
             c.confirmSnapshotDelete(names: [snap("043250")])
             await c.deleteTask?.value
             #expect(fake.deletes.isEmpty && c.deleteState == .idle, "a cancelled panel deletes nothing")
+            #expect(host.diskReadRequests == 0)
         }
 
         @Test func deletesEachDateInOrderThenReReads() async {
@@ -367,6 +368,7 @@ extension SerialTests {
             #expect(c.deleteState == .finished(SnapshotDeleteResult(deleted: 2, failed: 0, failure: nil)))
             #expect(fake.statusCalls == 1, "one status read at the click, no polling")
             #expect(fake.collectCalls == 1 && host.report.snapshots == [] && host.reassessCalls == 1)
+            #expect(host.diskReadRequests == 1, "a deletion that removed snapshots asks for a disk read")
         }
 
         @Test func anEarlierReReadDoesNotSwallowTheOneAfterTheRun() async {

@@ -10,13 +10,6 @@ import AppKit
 
 // `Metric` (cpu | mem) lives in Engine/CPUPageModel.swift.
 
-/// Shared curve for the row gauge width transition AND row-reorder movement —
-/// deliberately the SAME `Animation` value for both, so a row and its own
-/// gauge move as one object when a live tick both re-sorts and re-values the
-/// list (prototype's `cubic-bezier(0.22, 0.61, 0.36, 1)`, shortened to 0.45 s
-/// — V2-RELAYOUT-RESIDUAL, CPU cost is ~linear in duration).
-private let processRowMotion = Animation.timingCurve(0.22, 0.61, 0.36, 1, duration: 0.45)
-
 // MARK: - Shared list card
 
 /// Visual fixture only (Tests/MacDashboardTests/ContentSnapshotTests.swift):
@@ -67,13 +60,13 @@ struct ProcessListCard: View {
     // snapshot is exactly the one the user just clicked.
     @State private var frozenOrder: [Int32] = []
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     private var rows: [ProcEntry] {
         let base = procMetric == .cpu ? model.topCPU : model.topMem
         return frozenOrder.isEmpty ? base : base.stableOrdered(matching: frozenOrder)
     }
 
+    /// Since IDLE-WORK-TRIM no animation is keyed on it; `.onChange(of: rowOrder)` (the stuck-freeze guard) still reads it, and it stays as the definition of a re-sort and for its history below.
+    ///
     /// V2-FIX-PROCESS-ROWS wave 2: the ONLY thing `:144`'s reorder animation
     /// needs to react to is the row SEQUENCE changing — `rows` itself changes
     /// on every live tick (CPU%/mem values drift a little each sample even
@@ -200,6 +193,9 @@ struct ProcessListCard: View {
                                 onConfirmShown: onConfirmShown,
                                 onSignalSent: { model.refreshProcessesNow() }
                             )
+                                // IDLE-WORK-TRIM removed the reorder animation, so the
+                                // ambient reorder transaction described below no longer
+                                // exists; the note is history.
                                 // V2-FIX-PROCESS-ROWS wave 2 (`rowOrder` doc comment
                                 // above has the full writeup, INCLUDING the NEEDS-HUMAN
                                 // note — this does not fully resolve the defect either):
@@ -234,30 +230,17 @@ struct ProcessListCard: View {
                     )
                 }
             }
-            // Row reordering (a live tick re-sorting `rows`) moves with the
-            // SAME curve/duration as the gauge width transition below, so a
-            // row and its own gauge travel together instead of the row
-            // snapping to its new slot while the gauge is still animating —
-            // that mismatch is what let the gauge fill visibly detach from
-            // its row. `nil` under Reduce Motion: reordering is instant.
-            // Keyed on `rowOrder` (row IDENTITY sequence), NOT `rows` itself
-            // — see `rowOrder`'s doc comment above for why keying on the
-            // full array (which changes on every value-only tick too) kept
-            // this ambient transaction open almost continuously and fought
-            // each row's own permanently-mounted `ProcessDetailView`
-            // disclosure animation (V2-FIX-PROCESS-ROWS wave 2).
-            .animation(reduceMotion ? nil : processRowMotion, value: rowOrder)
-            // …but a metric switch replaces `rows` wholesale, and animating
-            // THAT churns the whole list for 0.45 s after every tap on the
-            // CPU|Memory control. A fresh identity per metric drops the old
-            // subtree instead of interpolating into the new one, so the
-            // switch is instant while tick-to-tick re-sorts keep the curve.
+            // IDLE-WORK-TRIM (user decision B, 2026-11-10): no reorder animation. The 0.45 s SwiftUI
+            // frame animation cost about 1766 ms of CPU per 60 s on the CPU page (29-34 frames of graph
+            // update, hosting-view layout and glyph re-raster per re-sort); no CA route kept the look
+            // (GPU-RENDER-AUDIT C7b, APPEAR-CA-ENTRANCE). Rows take their new slot at once; the bars
+            // still glide (BarFillLayer).
+            // A metric switch replaces `rows` wholesale. A fresh identity per metric drops the old
+            // subtree instead of interpolating into the new one, so the switch is instant.
             // The list length is folded into the same identity via `rows.count`: the list is
             // fixed at `LiveCollector.topProcessCount` rows, but it is shorter while the
             // first samples arrive or processes exit. Keying off the count remounts exactly
-            // when the array actually changes length (so rows appearing or leaving never ride
-            // the 0.45 s `processRowMotion` reorder curve), while ordinary tick-to-tick
-            // re-sorts at a constant length still keep `processRowMotion` exactly as today.
+            // when the array actually changes length.
             .id("\(procMetric)-\(rows.count)")
             .padding(6)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(DS3.row))

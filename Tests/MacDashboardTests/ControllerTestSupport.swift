@@ -39,6 +39,7 @@ import Testing
     private(set) var updateCalls = 0
     private(set) var reassessCalls = 0
     private(set) var claudeRefreshCalls = 0
+    private(set) var diskReadRequests = 0
     /// One block-API call, in order.
     enum BlockCall: Equatable {
         case begin(BlockID, showsLoading: Bool, armsWatchdog: Bool)
@@ -56,6 +57,7 @@ import Testing
                    reassess: { self.reassessCalls += 1 },
                    isPaused: { self.paused },
                    refreshClaudeBackup: { self.claudeRefreshCalls += 1; await self.onClaudeRefresh() },
+                   requestDiskRead: { self.diskReadRequests += 1 },
                    mergeBackgroundIntoCommitted: { self.mergeCalls += 1 },
                    beginBlock: { id, loading, watchdog in self.blockCalls.append(.begin(id, showsLoading: loading, armsWatchdog: watchdog)) },
                    succeedBlock: { self.blockCalls.append(.succeed($0)) },

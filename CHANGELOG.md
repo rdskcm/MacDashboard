@@ -22,6 +22,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- [major] SoC page: rows of the process list take their new place at once instead of sliding for half a second, which saves about 2.9 % of one core while the page is open. The bars still glide.
+- [major] Energy: disk free space is read every 30 seconds instead of every 2, and at once after the app frees space or a volume mounts.
 - [major] Numbers: the report's process table and every remaining decimal now use the app language's separator (comma in Russian, point in English).
 - [major] Colours: orange now marks only things that need attention. The charge hero on battery, discharge values, CPU and folder share bars and the «other» part of the disk bar no longer use it; crashes of other apps are grey. The memory bar has a new legend: bright colours for memory in use, grey for memory that can be reclaimed.
 - [major] Home: the section tiles no longer repeat what the Now card shows — CPU shows the 15-minute load, Memory purgeable and file cache, Storage the Trash, Battery its condition and maximum capacity.
