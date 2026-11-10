@@ -52,6 +52,32 @@ struct SocChartLegend: View {
     }
 }
 
+/// The three time labels under the plot, placed as in `mockups/SoC.dc.html:138,432`: left edge at 0, centred at the
+/// plot's middle, right edge at the plot's end. Static text: `Equatable`, so a sample tick does not run this body. The
+/// strip spans the plot, not the Y axis gutter: the Y labels are hard-sized to `gutter`, so the plot ends exactly there.
+private struct SocChartTimeLabels: View, Equatable {
+    let labels: [String]
+
+    var body: some View {
+        Group {
+            if labels.count == 3 {
+                CentredToolbarLayout(spacing: 8) {
+                    label(labels[0])
+                    label(labels[1])
+                    label(labels[2])
+                }
+                .padding(.top, SocLoadChart.timeLabelTop)
+                .padding(.trailing, SocLoadChart.gutter)
+            }
+        }
+        .frame(height: SocLoadChart.stripHeight, alignment: .top)
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text).font(.system(size: 11.5)).foregroundStyle(DS3.muted).lineLimit(1)
+    }
+}
+
 /// The chart itself. Takes the already computed series; nothing in the `Chart` depends on the pointer.
 struct SocLoadChart: View {
     let series: SocChartSeries
@@ -60,9 +86,12 @@ struct SocLoadChart: View {
     /// Right gutter for the y labels, design 7.6.
     static let gutter: CGFloat = 40
     static let plotHeight: CGFloat = 160
-    /// Height Swift Charts gives the x axis labels (11.5 pt text); the rest of the 26 pt strip is `stripSpacing`.
-    static let labelHeight: CGFloat = 18
-    static let stripSpacing: CGFloat = 8
+    /// The axis strip under the plot (design 7.6: plot 160 + strip 26).
+    static let stripHeight: CGFloat = 26
+    /// The top of the time labels below the plot (`mockups/SoC.dc.html:138`: top 166 on a 160 plot).
+    static let timeLabelTop: CGFloat = 6
+    /// How far the hover view reaches below the plot, so the pointer keeps hovering over the labels.
+    static let hoverReachBelowPlot: CGFloat = 18
     private static let gridValues: [Double] = [0, 25, 50, 75, 100]
     private static let labelledValues: Set<Double> = [0, 50, 100]
 
@@ -76,7 +105,7 @@ struct SocLoadChart: View {
     }
 
     /// Total chart body height: 160 plot + 26 axis strip.
-    static let bodyHeight: CGFloat = plotHeight + labelHeight + stripSpacing
+    static let bodyHeight: CGFloat = plotHeight + stripHeight
 
     /// Fade between the wait / unavailable line and the drawn chart. Fires only when `drawsMarks` flips (the value
     /// below), never on a data tick (D8). Opacity only; Reduce Motion keeps it (`reduce-motion`).
@@ -98,6 +127,13 @@ struct SocLoadChart: View {
     }
 
     private var chart: some View {
+        VStack(spacing: 0) {
+            plot
+            SocChartTimeLabels(labels: series.xLabels).equatable()
+        }
+    }
+
+    private var plot: some View {
         Chart {
             // Areas first, then lines, GPU under CPU in each (mockup order).
             ForEach(gpuLines) { seg in area(seg, DS3.s6) }
@@ -126,21 +162,11 @@ struct SocLoadChart: View {
                 }
             }
         }
-        .chartXAxis {
-            // −2 min leading, −1 min centred, now trailing, so none clips (design 7.6).
-            AxisMarks(values: xTicks.map(\.date)) { v in
-                if let d = v.as(Date.self), let t = xTicks.first(where: { $0.date == d }) {
-                    AxisValueLabel(anchor: t.anchor) {
-                        Text(t.label).font(.system(size: 11.5)).foregroundStyle(DS3.muted)
-                    }
-                }
-            }
-        }
+        // No Swift Charts X axis on purpose. The tick dates here change with every sample, and Charts kept the objects of
+        // every old tick until the app quit (about 30 KB/s while the page was open). The labels are `SocChartTimeLabels`.
+        .chartXAxis(.hidden)
         .chartOverlay { proxy in Hover(proxy: proxy, samples: series.hoverSamples, initialHover: initialHover) }
-        // The x axis labels take 18 pt under the plot, so 178 gives a 160 pt plot; the 8 pt below make the 26 pt strip
-        // (design 7.6: plot 160 + strip 26). A fixed split, not a measurement.
-        .frame(height: Self.plotHeight + Self.labelHeight)
-        .padding(.bottom, Self.stripSpacing)
+        .frame(height: Self.plotHeight)
     }
 
     // MARK: Marks
@@ -166,23 +192,6 @@ struct SocLoadChart: View {
                 .foregroundStyle(color)
                 .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
         }
-    }
-
-    // MARK: x axis
-
-    private struct XTick {
-        let date: Date
-        let label: String
-        let anchor: UnitPoint
-    }
-
-    private var xTicks: [XTick] {
-        let labels = series.xLabels
-        guard labels.count == 3 else { return [] }
-        let mid = series.windowStart.addingTimeInterval(series.windowEnd.timeIntervalSince(series.windowStart) / 2)
-        return [XTick(date: series.windowStart, label: labels[0], anchor: .topLeading),
-                XTick(date: mid, label: labels[1], anchor: .top),
-                XTick(date: series.windowEnd, label: labels[2], anchor: .topTrailing)]
     }
 
     // MARK: Empty states
@@ -218,7 +227,9 @@ struct SocLoadChart: View {
 
         var body: some View {
             GeometryReader { geo in
+                // The label strip is a sibling below the Chart, so the view reaches past the Chart: the pointer keeps hovering there.
                 SocChartHoverLayer(frame: frame(geo), samples: samples, reduceMotion: reduceMotion, initialHover: initialHover)
+                    .padding(.bottom, -SocLoadChart.hoverReachBelowPlot)
             }
         }
 
