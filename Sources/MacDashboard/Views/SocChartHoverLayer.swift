@@ -243,6 +243,8 @@ final class SocChartHoverView: NSView {
     private let markerGPU = CALayer()
 
     private var frameData: SocChartHoverFrame?
+    /// The plot rectangle last received, read by `SocChartLayoutTests`.
+    var plotRect: CGRect? { frameData?.plot }
     private var samples: [SocChartSample] = []
     private var reduceMotion = false
     private var initialHover: Int?
