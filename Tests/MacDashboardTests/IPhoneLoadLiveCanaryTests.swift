@@ -233,6 +233,49 @@ extension SerialTests {
             }
         }
 
+        /// IPHONE-LIVE-BATTERY: MACDASH_LIVE=1 swift test --filter liveCanaryIPhoneLiveBattery (a phone attached).
+        /// Reads only; no stores, no identifiers.
+        @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
+        @MainActor
+        func liveCanaryIPhoneLiveBattery() async {
+            let transport = MobileDeviceTransport.shared
+            let box = Self.liveBox
+            transport.start { event in
+                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+            }
+            guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
+                Issue.record("attach an unlocked, trusted iPhone over USB")
+                return
+            }
+            var snapRead: Result<IPhoneSnapshot, IPhoneReadError>?
+            transport.readSnapshot(h, includeBattery: true) { snapRead = $0 }
+            guard await Self.wait(30, until: { snapRead != nil }), case .success(let snap)? = snapRead, let ref = snap.battery else {
+                Issue.record("reference snapshot failed: \(String(describing: snapRead))"); return
+            }
+            var times: [Int] = []
+            for i in 0..<3 {
+                if i > 0 { try? await Task.sleep(for: .seconds(2)) }
+                var read: Result<BatteryDetail?, IPhoneReadError>?
+                let t0 = ContinuousClock.now
+                transport.readBattery(h) { read = $0 }
+                guard await Self.wait(30, until: { read != nil }), case .success(let b?)? = read else {
+                    Issue.record("live battery read \(i) failed: \(String(describing: read))"); return
+                }
+                let ms = Self.ms(t0)
+                times.append(ms)
+                print("liveCanary liveBattery i=\(i) ms=\(ms) percent=\(String(describing: b.percent)) charging=\(b.isCharging) external=\(b.externalConnected) mV=\(String(describing: b.voltageMV)) tempC=\(String(describing: b.temperatureC)) cycles=\(String(describing: b.cycleCount)) design=\(String(describing: b.designCapacityMAh))")
+                #expect(b.percent.map { (0...100).contains($0) } == true, "charge is a percentage")
+                #expect(abs((b.percent ?? -99) - (ref.percent ?? 99)) <= 2, "charge within 2 points of the snapshot read seconds earlier")
+                #expect(b.cycleCount == ref.cycleCount, "cycle count equals the snapshot's")
+                #expect(b.designCapacityMAh == ref.designCapacityMAh, "design capacity equals the snapshot's")
+                #expect(b.voltageMV.map { (3000...4600).contains($0) } == true, "Li-ion cell voltage range")
+                #expect(b.temperatureC.map { $0 > 0 && $0 < 60 } == true, "battery temperature 0-60 °C")
+                #expect(!b.isCharging || b.externalConnected, "charging implies external power")
+            }
+            print("liveCanary liveBattery msSorted=\(times.sorted())")
+            #expect(times.allSatisfy { $0 < 2000 }, "a lone battery read takes well under 2 s (measured 105-230 ms, findings C2)")
+        }
+
         @Test(.enabled(if: ProcessInfo.processInfo.environment["MACDASH_LIVE"] == "1"))
         @MainActor
         func liveCanarySysdiagnoseDir() async {
