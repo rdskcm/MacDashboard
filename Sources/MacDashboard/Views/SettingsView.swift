@@ -639,7 +639,11 @@ struct SettingsView: View {
 
     private var iphoneGroup: some View {
         SettingsGroup {
-            SettingsRow(label: L.settingsAutoReadLabel, sub: L.settingsAutoReadSub, separator: false) {
+            SettingsRow(label: L.settingsWifiLabel, sub: L.settingsWifiSub, separator: false) {
+                DS3Switch(isOn: Binding(get: { settings.iphoneWifi }, set: { iphone.setWifiEnabled($0) }),
+                          label: L.settingsWifiLabel, metrics: .settings)
+            }
+            SettingsRow(label: L.settingsAutoReadLabel, sub: L.settingsAutoReadSub) {
                 DS3Switch(isOn: $settings.iphoneAutoRead, label: L.settingsAutoReadLabel, metrics: .settings)
             }
             SettingsRow(label: L.settingsKeepArchivesLabel) {

@@ -87,6 +87,8 @@ final class AppSettings {
     static let keepImportedArchivesKey = "keepImportedArchives"
     /// REDESIGN-IPHONE: read battery and crash logs on attach (true) or identify the phone only (false).
     static let iphoneAutoReadKey = "iphoneAutoRead"
+    /// IPHONE-WIFI: report a paired iPhone reached over Wi-Fi (true, default) or the cable only (false).
+    static let iphoneWifiKey = "iphoneWifi"
     /// REDESIGN-IPHONE: folder for kept sysdiagnose archives; absent or empty = `IPhoneStore.defaultArchiveRoot()`.
     static let iphoneArchiveFolderKey = "iphoneArchiveFolder"
     /// DEVICE-ARCHIVE-CLEANUP: when true, an archive the app requested stays on the iPhone after its import (C5).
@@ -242,6 +244,7 @@ final class AppSettings {
     var iphoneAutoRead: Bool {
         didSet { defaults.set(iphoneAutoRead, forKey: Self.iphoneAutoReadKey) }
     }
+    var iphoneWifi: Bool { didSet { defaults.set(iphoneWifi, forKey: Self.iphoneWifiKey) } }
     /// BATTERY-HEALTH-UNIFY D8/D9: live iPhone health as FullChargeCapacity / design instead of the Settings figure
     /// (differs on iOS 27 and later only). Read by the iPhone tile and battery card through IPhoneModel; no assessment.
     var batteryShowsRawIPhone: Bool {
@@ -289,6 +292,7 @@ final class AppSettings {
         keepImportedArchives = d.object(forKey: Self.keepImportedArchivesKey) as? Bool ?? true
         iphoneKeepRequestedOnPhone = d.object(forKey: Self.iphoneKeepRequestedOnPhoneKey) as? Bool ?? false
         iphoneAutoRead = d.object(forKey: Self.iphoneAutoReadKey) as? Bool ?? true
+        iphoneWifi = d.object(forKey: Self.iphoneWifiKey) as? Bool ?? true
         batteryShowsRawIPhone = d.object(forKey: Self.batteryShowsRawIPhoneKey) as? Bool ?? false
         let storedFolder = d.string(forKey: Self.iphoneArchiveFolderKey)
         iphoneArchiveFolder = (storedFolder?.isEmpty ?? true) ? nil : storedFolder

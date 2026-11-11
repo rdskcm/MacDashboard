@@ -45,13 +45,27 @@ final class IPhoneModel {
     }
 
     var devices: [IPhoneDeviceRecord] = []
-    /// deviceKey → handle of the phone currently attached over USB.
+    /// deviceKey → handle of the phone's current connection (USB preferred, IPHONE-WIFI).
     var connected: [String: IPhoneHandle] = [:]
+    /// Link of every attached handle (IPHONE-WIFI). Observed: the tile and page labels read it.
+    var links: [IPhoneHandle: IPhoneLink] = [:]
+    /// deviceKey → the Wi-Fi handle of a phone that is connected by USB at the same time (D4). Memory only.
+    @ObservationIgnored private var standby: [String: IPhoneHandle] = [:]
+    /// IPHONE-WIFI D15: device keys whose Wi-Fi connection dropped and did not come back within `wifiStallDelay`.
+    /// Memory only. The device page shows the stall note for these.
+    var wifiStalled: Set<String> = []
+    /// D15: seconds after a Wi-Fi detach before the note shows (D15). Tests shorten it.
+    /// 300 s (user 2026-11-11): a locked, sleeping phone drops off usbmuxd and comes back by itself within 9-164 s
+    /// (6 drops in 12 min, V4), while a phone whose Wi-Fi was switched off and on never comes back without a restart.
+    @ObservationIgnored var wifiStallDelay: TimeInterval = 300
+    @ObservationIgnored private var wifiStallTasks: [String: Task<Void, Never>] = [:]
+    /// D15: true while `applyWifiSetting(false)` drops handles. The user's own «off» arms no note.
+    @ObservationIgnored private var droppingWifiBySetting = false
     var status: [String: DeviceStatus] = [:]
     /// Attached handles not yet identified (waiting for trust, or the read failed).
     var pendingHandles: Set<IPhoneHandle> = []
     /// True while the Devices list shows its empty notice, which carries its own «Search again».
-    var listShowsEmptyNotice: Bool { transportAvailable && devices.isEmpty && pendingHandles.isEmpty }
+    var listShowsEmptyNotice: Bool { transportAvailable && devices.isEmpty && visiblePending.isEmpty }
     /// Status of each pending handle (`.needsTrust` or `.readFailed`).
     var pendingStatus: [IPhoneHandle: DeviceStatus] = [:]
     var lastSnapshot: [String: IPhoneSnapshot] = [:]
@@ -304,7 +318,27 @@ final class IPhoneModel {
         migrateLegacyArchivesIfNeeded()
         transportAvailable = transport.isAvailable
         guard transportAvailable else { return }
-        transport.start { [weak self] event in self?.handle(event) }
+        transport.start(networkEnabled: AppSettings.shared.iphoneWifi) { [weak self] event in self?.handle(event) }
+    }
+
+    /// Settings › iPhone › «Connect over Wi-Fi» (the view's Binding setter, D10).
+    func setWifiEnabled(_ on: Bool) {
+        AppSettings.shared.iphoneWifi = on
+        applyWifiSetting(on)
+    }
+
+    /// Off: every Wi-Fi handle is detached here at once (the transport's own detach events then find nothing); then the
+    /// transport is told. Internal for tests (the model is not started there, so the transport is not called).
+    func applyWifiSetting(_ on: Bool) {
+        if !on {
+            droppingWifiBySetting = true
+            for (h, link) in links where link == .wifi { handle(.detached(h)) }
+            droppingWifiBySetting = false
+            for t in wifiStallTasks.values { t.cancel() }
+            wifiStallTasks = [:]
+            wifiStalled = []
+        }
+        if started, transportAvailable { transport.setNetworkEnabled(on) }
     }
 
     /// One-time move of archives kept before REDESIGN-IPHONE (Decision 5). Cheap when there is nothing to do:
@@ -405,36 +439,94 @@ final class IPhoneModel {
         pendingHandles.sorted { $0.raw < $1.raw }
     }
 
+    /// The link of a device's current connection; nil when not connected.
+    func link(_ key: String) -> IPhoneLink? { connected[key].flatMap { links[$0] } }
+    /// The link of a pending handle (USB when unknown).
+    func pendingLink(_ h: IPhoneHandle) -> IPhoneLink { links[h] ?? .usb }
+    /// Tests: the Wi-Fi handle kept for `key` while it is connected by USB.
+    func standbyHandle(_ key: String) -> IPhoneHandle? { standby[key] }
+    /// Pending tiles to show: a Wi-Fi handle is hidden while any device is connected by USB (D9).
+    var visiblePending: [IPhoneHandle] {
+        let usbConnected = connected.values.contains { links[$0] == .usb }
+        return sortedPending.filter { !(usbConnected && links[$0] == .wifi) }
+    }
+
     func handle(_ event: IPhoneTransportEvent) {
         switch event {
-        case .attached(let h):
+        case .attached(let h, let link):
             attached.insert(h)
+            links[h] = link
             guard !ignoredHandles.contains(h) else { return }
             restartError = nil
             refresh(handle: h, trigger: .attach)
         case .detached(let h):
+            guard attached.contains(h) || links[h] != nil || ignoredHandles.contains(h) else { return }   // already dropped (setting off) or unknown
+            let link = links.removeValue(forKey: h)
             ignoredHandles.remove(h)
             attached.remove(h)
+            let key = connected.first(where: { $0.value == h })?.key
+            // Reads in flight over `h` for its device, measured before `detach` clears them (D5).
+            let hadLogs = key.map { logsLoading.contains($0) } ?? false
+            let hadIdentity = key.map { identityLoading.contains($0) || storageLoading.contains($0) } ?? false
             logsLoading.detach(h)
             identityLoading.detach(h)
             storageLoading.detach(h)
             pendingHandles.remove(h)
             pendingStatus[h] = nil
-            for (key, handle) in connected where handle == h {
-                connected[key] = nil
-                updatePolling(key)
-                status[key] = .remembered
-                identity[key] = nil
-                storage[key] = nil
-                identityFailed.remove(key)
-                lastSnapshot[key] = nil
-                batteryCheckedAt[key] = nil
-                updateLiveBattery(key)          // connected and snapshot are gone: the loop stops
-                logs[key] = nil
-                logsFailed.remove(key)
-                for k in logAction.keys where k.hasPrefix(key + "|live|") { logAction[k] = nil }
+            for (k, s) in standby where s == h { standby[k] = nil }
+            guard let key else { return }
+            if let next = standby.removeValue(forKey: key), attached.contains(next), !ignoredHandles.contains(next) {
+                promote(key, to: next,
+                        reloadLogs: hadLogs && !logsLoading.contains(key),
+                        reloadIdentity: hadIdentity && !identityLoading.contains(key) && !storageLoading.contains(key))
+                return
+            }
+            connected[key] = nil
+            updatePolling(key)
+            status[key] = .remembered
+            identity[key] = nil
+            storage[key] = nil
+            identityFailed.remove(key)
+            lastSnapshot[key] = nil
+            batteryCheckedAt[key] = nil
+            updateLiveBattery(key)          // connected and snapshot are gone: the loop stops
+            logs[key] = nil
+            logsFailed.remove(key)
+            for k in logAction.keys where k.hasPrefix(key + "|live|") { logAction[k] = nil }
+            if link == .wifi, !droppingWifiBySetting { armWifiStall(key) }
+            if link == .usb {
+                for p in pendingHandles where links[p] == .wifi { refresh(handle: p, trigger: .attach) }   // R4
             }
         }
+    }
+
+    /// The cable went and the phone is still reachable over Wi-Fi: the Wi-Fi handle becomes the connection; memory-only
+    /// page state stays (R3, D5).
+    private func promote(_ key: String, to next: IPhoneHandle, reloadLogs: Bool, reloadIdentity: Bool) {
+        connected[key] = next
+        clearWifiStall(key)
+        status[key] = .connected
+        updatePolling(key)
+        updateLiveBattery(key)
+        if reloadLogs { loadLogs(deviceKey: key) }
+        if reloadIdentity { loadIdentity(deviceKey: key) }
+    }
+
+    /// D15: one check per drop. The note shows if the key has no connection when the delay ends.
+    private func armWifiStall(_ key: String) {
+        wifiStallTasks[key]?.cancel()
+        let delay = wifiStallDelay
+        wifiStallTasks[key] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            wifiStallTasks[key] = nil
+            if connected[key] == nil { wifiStalled.insert(key) }
+        }
+    }
+
+    private func clearWifiStall(_ key: String) {
+        wifiStallTasks.removeValue(forKey: key)?.cancel()
+        wifiStalled.remove(key)
     }
 
     func refresh(handle h: IPhoneHandle, trigger: ReadTrigger = .user) {
@@ -508,8 +600,10 @@ final class IPhoneModel {
     }
 
     /// The storage value in its own last-priority read (R5); the card shows «…» until it lands or
-    /// 2 s after the read started on the transport thread.
+    /// 2 s after the read started on the transport thread. A value already held for this connection
+    /// is kept (R19: page opens do not repeat the read); detach clears it.
     private func loadStorage(deviceKey: String, handle h: IPhoneHandle) {
+        if case .value = storage[deviceKey] { return }
         // A stalled read is still in flight: keep its state; its late result still lands.
         guard let id = storageLoading.begin(deviceKey, handle: h) else { return }
         storage[deviceKey] = .waiting
@@ -563,7 +657,7 @@ final class IPhoneModel {
         updatePolling(deviceKey)   // the list watch returns after the import
         switch result {
         case .failure(let e):
-            // A copy cut by a detach (cable today, Wi-Fi once IPHONE-WIFI lands) is named as such; the importer has
+            // A copy cut by a detach (cable pulled, Wi-Fi lost or switched off) is named as such; the importer has
             // already removed its temp folder, so nothing partial is kept.
             if e == .copyFailed, case .phone(let h, _, _) = source, !attached.contains(h) {
                 importResult[deviceKey] = .failure(.interrupted)
@@ -673,6 +767,8 @@ final class IPhoneModel {
             identityLoading.detach(h)
             storageLoading.detach(h)
         }
+        if let s = standby.removeValue(forKey: key) { ignoredHandles.insert(s) }
+        clearWifiStall(key)
         connected[key] = nil
         updatePolling(key)                                 // the list watch stops with the connection
         status[key] = nil
@@ -723,11 +819,21 @@ final class IPhoneModel {
         }
     }
 
-    private func apply(_ result: Result<IPhoneSnapshot, IPhoneReadError>, for h: IPhoneHandle, trigger: ReadTrigger) {
+    /// Internal for tests (IPHONE-WIFI).
+    func apply(_ result: Result<IPhoneSnapshot, IPhoneReadError>, for h: IPhoneHandle, trigger: ReadTrigger) {
         guard attached.contains(h), !ignoredHandles.contains(h) else { return }
         switch result {
         case .success(let snap):
             let key = IPhoneData.deviceKey(udid: snap.udid)
+            if let current = connected[key], current != h, attached.contains(current) {
+                guard IPhoneLinkPolicy.replaces(links[h] ?? .usb, links[current] ?? .usb) else {
+                    standby[key] = links[h] == .wifi ? h : standby[key]   // only a Wi-Fi handle waits as standby
+                    pendingHandles.remove(h)
+                    pendingStatus[h] = nil
+                    return
+                }
+                standby[key] = current   // the USB handle takes over; the Wi-Fi one waits for the cable to go
+            }
             let now = Date()
             var record = devices.first(where: { $0.id == key })
                 ?? IPhoneDeviceRecord(id: key, name: snap.name, marketingName: nil, productType: nil,
@@ -751,6 +857,7 @@ final class IPhoneModel {
             pendingHandles.remove(h)
             pendingStatus[h] = nil
             connected[key] = h
+            clearWifiStall(key)
             status[key] = .connected
             updatePolling(key)
             lastSnapshot[key] = snap
@@ -761,6 +868,7 @@ final class IPhoneModel {
                 autoReadAt[key] = now
                 loadLogs(deviceKey: key)
             }
+            if trigger == .attach { loadStorage(deviceKey: key, handle: h) }   // R19: the tile's storage total is read at attach
         case .failure(let err):
             if let key = connected.first(where: { $0.value == h })?.key {
                 // An already-identified phone keeps its tile; show the failure on it.
@@ -957,13 +1065,14 @@ final class IPhoneModel {
             liveBatteryTasks[key] = Task { [weak self] in
                 while !Task.isCancelled {
                     guard let self else { return }
+                    let every = IPhoneLiveBattery.interval(for: self.link(key) ?? .usb)
                     let wait = IPhoneLiveBattery.wait(lastChecked: batteryCheckedAt[key], now: Date(),
-                                                      inFlight: liveBatteryInFlight.contains(key))
+                                                      inFlight: liveBatteryInFlight.contains(key), interval: every)
                     if wait > 0 {
                         try? await Task.sleep(for: .seconds(wait))
                     } else if !(await readLiveBattery(key)) {
                         // Nothing was read (state changed under the loop): never spin.
-                        try? await Task.sleep(for: .seconds(IPhoneLiveBattery.interval))
+                        try? await Task.sleep(for: .seconds(every))
                     }
                 }
             }

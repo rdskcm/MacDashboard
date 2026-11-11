@@ -68,6 +68,8 @@ protocol SettingsStrings {
     var settingsNotifyOpen: String { get }
     var settingsNotifyOpenA11y: String { get }
     var settingsAutoReadLabel: String { get }
+    var settingsWifiLabel: String { get }
+    var settingsWifiSub: String { get }
     var settingsAutoReadSub: String { get }
     var settingsArchiveFolderLabel: String { get }
     func settingsArchiveFolderMoveFailed(_ n: Int) -> String
@@ -135,6 +137,8 @@ extension StringsEN: SettingsStrings {
     var settingsNotifyOpenA11y: String { "Open System Settings › Notifications" }
     var settingsWindowTitle: String { "Settings" }
     var settingsAutoReadLabel: String { "Auto-read on connect" }
+    var settingsWifiLabel: String { "Connect over Wi-Fi" }
+    var settingsWifiSub: String { "A paired iPhone on the same Wi-Fi appears by itself. It needs “Show this iPhone when on Wi-Fi” turned on in Finder." }
     var settingsAutoReadSub: String { "Battery and crash logs" }
     var settingsArchiveFolderLabel: String { "Archive folder" }
     func settingsArchiveFolderMoveFailed(_ n: Int) -> String {
@@ -204,6 +208,8 @@ extension StringsRU: SettingsStrings {
     var settingsNotifyOpenA11y: String { "Открыть Системные настройки › Уведомления" }
     var settingsWindowTitle: String { "Настройки" }
     var settingsAutoReadLabel: String { "Читать при подключении" }
+    var settingsWifiLabel: String { "Подключение по Wi-Fi" }
+    var settingsWifiSub: String { "Сопряжённый iPhone в той же сети Wi-Fi появится сам. Для этого в Finder должно быть включено «Показывать этот iPhone, если он подключен к Wi-Fi»." }
     var settingsAutoReadSub: String { "Батарея и журналы сбоев" }
     var settingsArchiveFolderLabel: String { "Папка архивов" }
     func settingsArchiveFolderMoveFailed(_ n: Int) -> String {

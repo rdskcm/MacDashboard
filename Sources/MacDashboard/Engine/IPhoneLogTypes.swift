@@ -16,6 +16,13 @@ struct IPhoneLogHeader: Codable, Equatable {
     var timestamp: Date? = nil
 }
 
+/// IPHONE-WIFI D18: why one crash-log header read failed: the AFC step ("open", "read", "limit") and the framework's
+/// return code. Memory only (never stored, logged or shown); the live test prints it.
+struct IPhoneHeaderReadFailure: Error, Equatable, Sendable {
+    let step: String
+    let code: Int32
+}
+
 /// Result of one type-read batch: cache key → parsed header (`IPhoneLogHeader()` = header has no JSON line),
 /// and keys whose
 /// header read failed (or could not be attempted because the job failed). Every key handed to a
@@ -23,6 +30,10 @@ struct IPhoneLogHeader: Codable, Equatable {
 struct IPhoneLogTypeBatch: Equatable {
     var read: [String: IPhoneLogHeader] = [:]
     var failed: Set<String> = []
+    /// D18: step and code of each key in `failed` that a read attempt produced.
+    var failures: [String: IPhoneHeaderReadFailure] = [:]
+    /// D18: keys read on the retry.
+    var recovered: Set<String> = []
     var isEmpty: Bool { read.isEmpty && failed.isEmpty }
 }
 

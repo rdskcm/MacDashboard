@@ -13,8 +13,12 @@ struct IPhoneModeView: View {
     @State private var menuAsking = false
     @AccessibilityFocusState private var voTile: String?
 
-    init(model: IPhoneModel, initialMenuKey: String? = nil, initialMenuAsking: Bool = false) {
+    private let onAskRestart: () -> Void
+
+    init(model: IPhoneModel, initialMenuKey: String? = nil, initialMenuAsking: Bool = false,
+         onAskRestart: @escaping () -> Void = {}) {
         self.model = model
+        self.onAskRestart = onAskRestart
         _menuKey = State(initialValue: initialMenuKey)
         _menuAsking = State(initialValue: initialMenuAsking)
     }
@@ -36,7 +40,7 @@ struct IPhoneModeView: View {
         Group {
             if let key = model.selectedDeviceKey {
                 IPhoneDeviceView(model: model, deviceKey: key, wide: windowWidth >= 1200,
-                                 onBack: { model.selectedDeviceKey = nil })
+                                 onBack: { model.selectedDeviceKey = nil }, onAskRestart: onAskRestart)
             } else {
                 listPage
             }
@@ -172,8 +176,11 @@ struct IPhoneModeView: View {
                       alignment: .leading, spacing: 16) {
                 ForEach(Array(model.sortedDevices.enumerated()), id: \.element.id) { i, r in
                     IPhoneTileView(record: r, status: model.status[r.id] ?? .remembered,
+                                   link: model.link(r.id) ?? .usb,
                                    snapshot: model.lastSnapshot[r.id],
-                                   storage: model.identityRows(r.id)?.first { $0.label == .storage && !$0.isPending }?.value,
+                                   // R19: straight from the storage read, which runs at attach; the identity rows
+                                   // exist only after the device page opened.
+                                   storage: { if case .value(let s)? = model.storage[r.id] { s } else { nil } }(),
                                    menuOpen: menuKey == r.id, unlinkAllowed: model.canUnlink(r.id),
                                    onMenu: { openMenu(r.id, asking: $0) },
                                    prefersRawHealth: model.prefersRawHealth) {
@@ -185,8 +192,9 @@ struct IPhoneModeView: View {
                     .preference(key: IPhoneTileMountedKey.self, value: [r.id])
                     .ds3Appear(delay: DS3Motion.tileStagger * Double(i))
                 }
-                ForEach(Array(model.sortedPending.enumerated()), id: \.element.raw) { j, h in
-                    IPhonePendingTileView(status: model.pendingStatus[h] ?? .needsTrust) {
+                ForEach(Array(model.visiblePending.enumerated()), id: \.element.raw) { j, h in
+                    IPhonePendingTileView(status: model.pendingStatus[h] ?? .needsTrust,
+                                          link: model.pendingLink(h)) {
                         model.refresh(handle: h, trigger: .attach)
                     }
                     .ds3Appear(delay: DS3Motion.tileStagger * Double(model.devices.count + j))
@@ -248,6 +256,7 @@ struct IPhoneListBanner: View {
 struct IPhoneTileView: View {
     let record: IPhoneDeviceRecord
     let status: IPhoneModel.DeviceStatus
+    var link: IPhoneLink = .usb
     let snapshot: IPhoneSnapshot?
     let storage: String?
     var menuOpen = false
@@ -331,7 +340,7 @@ struct IPhoneTileView: View {
 
     private var tagText: String {
         switch status {
-        case .connected: return L.iphoneStatusConnected
+        case .connected: return link == .wifi ? L.iphoneStatusConnectedWifi : L.iphoneStatusConnected
         case .reading: return L.iphoneStatusReading
         case .needsTrust: return L.iphoneTagTrustNeeded
         case .readFailed: return L.iphoneTagReadFailed
@@ -348,7 +357,7 @@ struct IPhoneTileView: View {
             return b.percent.map { L.iphoneSubCharge($0, state) } ?? state
         case .reading: return ""
         case .needsTrust: return L.iphoneSubTrust
-        case .readFailed: return L.iphoneSubReconnect
+        case .readFailed: return link == .wifi ? L.iphoneSubRetryWifi : L.iphoneSubReconnect
         case .remembered: return L.iphoneSubLastSeen(fmtShortDay(record.lastSeen))
         }
     }
@@ -426,6 +435,7 @@ struct IPhoneTileView: View {
 /// An attached phone that could not be identified (no device key yet): trust or read error.
 struct IPhonePendingTileView: View {
     let status: IPhoneModel.DeviceStatus
+    var link: IPhoneLink = .usb
     let onRetry: () -> Void
 
     private var trust: Bool { status == .needsTrust }
@@ -448,7 +458,7 @@ struct IPhonePendingTileView: View {
             }
             DS3Tag(tone: trust ? .amber : .hot, text: trust ? L.iphoneTagTrustNeeded : L.iphoneTagReadFailed)
             VStack(alignment: .leading, spacing: 12) {
-                Text(trust ? L.iphonePendingTrustText : L.iphonePendingFailedText)
+                Text(trust ? L.iphonePendingTrustText : (link == .wifi ? L.iphonePendingFailedWifiText : L.iphonePendingFailedText))
                     .font(.system(size: 14))
                     .foregroundStyle(DS3.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)

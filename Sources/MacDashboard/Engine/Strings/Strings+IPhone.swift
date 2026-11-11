@@ -9,6 +9,7 @@ protocol IPhoneStrings {
     var mainModeDevices: String { get }
     var iphoneKickerDevices: String { get }
     var iphoneStatusConnected: String { get }
+    var iphoneStatusConnectedWifi: String { get }
     var iphoneStatusNeedsTrust: String { get }
     var iphoneStatusReading: String { get }
     var iphoneStatusFailed: String { get }
@@ -17,6 +18,7 @@ protocol IPhoneStrings {
     var iphoneSearchAgain: String { get }
     var iphoneUnlockFirstHint: String { get }
     var iphoneRestartService: String { get }
+    var iphoneWifiStallNote: String { get }
     var iphoneRestartConfirmTitle: String { get }
     var iphoneRestartConfirmBody: String { get }
     var iphoneRestartConfirm: String { get }
@@ -96,6 +98,7 @@ extension StringsEN: IPhoneStrings {
     var mainModeDevices: String { "Devices" }
     var iphoneKickerDevices: String { "Devices" }
     var iphoneStatusConnected: String { "Connected by cable" }
+    var iphoneStatusConnectedWifi: String { "Connected over Wi-Fi" }
     var iphoneStatusNeedsTrust: String { "Trust needed: unlock the iPhone and tap “Trust”" }
     var iphoneStatusReading: String { "Reading…" }
     var iphoneStatusFailed: String { "Could not read the iPhone" }
@@ -104,6 +107,7 @@ extension StringsEN: IPhoneStrings {
     var iphoneSearchAgain: String { "Search again" }
     var iphoneUnlockFirstHint: String { "After a restart or a long lock, an iPhone does not connect until you unlock it. Unlock it, and it appears here." }
     var iphoneRestartService: String { "Restart connection service…" }
+    var iphoneWifiStallNote: String { "This iPhone was lost over Wi-Fi. If it is back on this Wi-Fi, restart the connection service to find it." }
     var iphoneRestartConfirmTitle: String { "Restart the connection service?" }
     var iphoneRestartConfirmBody: String { "The service briefly interrupts every iPhone and iPad connected to this Mac, including Finder sync. It needs an administrator password or Touch ID." }
     var iphoneRestartConfirm: String { "Restart" }
@@ -190,6 +194,7 @@ extension StringsRU: IPhoneStrings {
     var mainModeDevices: String { "Устройства" }
     var iphoneKickerDevices: String { "Устройства" }
     var iphoneStatusConnected: String { "Подключён по кабелю" }
+    var iphoneStatusConnectedWifi: String { "Подключён по Wi-Fi" }
     var iphoneStatusNeedsTrust: String { "Нужно доверие: разблокируйте iPhone и нажмите «Доверять»" }
     var iphoneStatusReading: String { "Чтение…" }
     var iphoneStatusFailed: String { "Не удалось прочитать iPhone" }
@@ -198,6 +203,7 @@ extension StringsRU: IPhoneStrings {
     var iphoneSearchAgain: String { "Искать снова" }
     var iphoneUnlockFirstHint: String { "После перезагрузки или долгой блокировки iPhone не подключается, пока его не разблокируете. Разблокируйте его, и он появится здесь." }
     var iphoneRestartService: String { "Перезапустить службу подключения…" }
+    var iphoneWifiStallNote: String { "Связь с этим iPhone по Wi-Fi пропала. Если он снова в этой сети, перезапустите службу подключения, чтобы найти его." }
     var iphoneRestartConfirmTitle: String { "Перезапустить службу подключения?" }
     var iphoneRestartConfirmBody: String { "Служба на мгновение прервёт связь со всеми iPhone и iPad, подключёнными к этому Mac, включая синхронизацию в Finder. Понадобится пароль администратора или Touch ID." }
     var iphoneRestartConfirm: String { "Перезапустить" }

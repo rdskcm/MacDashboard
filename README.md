@@ -113,8 +113,10 @@ here is everything it does:
   installing `smartmontools` — download through Homebrew as usual.
 
 The app's own code has no telemetry and uses the network only when you
-click a control that says what it does. Nothing goes out at launch, on a
-timer or when a phone is attached. The "Firmware" card on the iPhone
+click a control that says what it does. Nothing goes out to the internet at
+launch, on a timer or when a phone is attached. A paired iPhone on your Wi-Fi
+is read over the local network, the same way as over the cable, while
+“Connect over Wi-Fi” is on in Settings. The "Firmware" card on the iPhone
 page contacts exactly these hosts:
 
 - `itunes.apple.com`, when you click "Check with Apple": it downloads
@@ -136,7 +138,7 @@ Every request also shows the server your Mac's IP address and
 `MacDashboard/<version>` as its user agent. Your phone's UDID, ECID, serial
 number and name are never sent anywhere. On screen, serial numbers show only
 their last 4 characters and an IMEI only its first 8 digits (the model's type
-code) until you click "Show". Nothing else touches the network.
+code) until you click "Show". Nothing else touches the internet.
 
 The app only reads a connected iPhone, with one exception: a sysdiagnose archive
 the app itself asked the phone to create is deleted from the phone after it has

@@ -130,6 +130,11 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    | `api.ipsw.me` | click «Ask ipsw.me» (its own button) | GET `/v4/device/<ProductType>?type=ipsw` | the model identifier, e.g. `iPhone18,2` |
    | `updates.cdn-apple.com`, `secure-appldnld.apple.com` | click «Download» (the optional HEAD), then confirm in the sheet (or «Resume») | optional HEAD, then GET (ranged on Resume) of one `.ipsw` | nothing device-specific |
 
+   Local network: while Settings › iPhone › «Connect over Wi-Fi» is on (default), the app reads the user's own
+   paired iPhone over the local network through Apple's MobileDevice service (usbmuxd), automatically on attach and
+   every 60 s while its page is shown, exactly as over the cable. This adds no internet host and sends nothing beyond
+   what the pairing protocol itself exchanges with that phone.
+
    Never sent: UDID, ECID, serial numbers, device or Mac names, Apple ID, file contents.
    Sessions are ephemeral (no cookies, no disk cache) and use the system's certificate
    trust. A download URL must be `https` on one of the two exact firmware hosts above, on
