@@ -15,7 +15,7 @@ import AppKit
 //   enabled <AXIdentifier>[|alt...]  "enabled" | "disabled" for the first element with that identifier, else "absent"
 //   vscroll <x>,<y>                  first AXScrollArea of window 1 whose frame contains the global point: "bar" when it has
 //                                    a vertical AXScrollBar child (its content overflows), else "nobar"
-//   pin                              window 1 to (0, 29) 1000x733, then the verify check: "pinned" | "MISMATCH ..." | "no window"
+//   pin                              window 1 to (0, 29) 1000x733, then the verify check: "pinned" | "off x y w h" | "MISMATCH ..." | "no window"
 //   place <x>,<y>,<w>,<h>            window 1 to that frame (global top-left points), same poll as pin: "placed" | "off x y w h"
 //                                    (AX and CG agree on another frame) | "MISMATCH ..." | "no window"
 //   main                             "x y w h" of the AXWindows element whose AXMain is true | "notmain" | "no window"
@@ -113,14 +113,32 @@ func focusedPid() -> Int32? {
 }
 // Sets w's frame, then polls up to 2 s (the window server applies it asynchronously) for AX frame = target = an
 // on-screen CG frame of pid. nil when settled at the target, else the last verify() answer.
+// A window that opens on another display than the target's (built-in vs external) loses a size set issued within about
+// 50 ms after the position set that moves it across displays: it keeps the old display's height (CROSS-SCREEN-PIN, 2026-11-11).
+// So the position goes first, the size follows 0.1 s later, and both are re-applied every 0.1 s while the frame is off.
 func setFrame(_ w: AXUIElement, _ target: CGRect) -> String? {
-    var p = target.origin, s = target.size
+    func apply(_ f: CGRect?) {
+        var p = target.origin, s = target.size
+        if f.map({ abs($0.minX - target.minX) > 2 || abs($0.minY - target.minY) > 2 }) ?? true {
+            AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &p)!)
+        }
+        if f.map({ abs($0.width - target.width) > 2 || abs($0.height - target.height) > 2 }) ?? true {
+            AXUIElementSetAttributeValue(w, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &s)!)
+        }
+    }
+    var p = target.origin
     AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &p)!)
-    AXUIElementSetAttributeValue(w, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &s)!)
+    Thread.sleep(forTimeInterval: 0.1)
     var last = ""
     for _ in 0..<20 {
-        last = verify(w, against: pid)
-        if last.hasPrefix("match"), let f = frame(w), near(f, target) { return nil }
+        let f = frame(w)
+        if let f, near(f, target) {
+            last = verify(w, against: pid)
+            if last.hasPrefix("match") { return nil }
+        } else {
+            apply(f)
+            last = verify(w, against: pid)
+        }
         Thread.sleep(forTimeInterval: 0.1)
     }
     return last
@@ -147,8 +165,8 @@ case "front":
 case "pin":
     guard let w = mainWindow() else { out("no window") }
     guard let last = setFrame(w, CGRect(x: 0, y: 29, width: 1000, height: 733)) else { out("pinned") }
-    // AX and CG agree but not at the target: "pinned", and gate.sh's CG frame check reports the wrong frame (exit 70).
-    out(last.hasPrefix("match") ? "pinned" : last)
+    // AX and CG agree but not at the target: "off x y w h" (not "pinned"), and gate.sh fails the pin (exit 70) with it.
+    out(last.hasPrefix("match ") ? "off " + String(last.dropFirst(6)) : last)
 case "place":
     let target = rect(value)
     guard let w = mainWindow() else { out("no window") }
