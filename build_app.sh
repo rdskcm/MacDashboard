@@ -103,6 +103,8 @@ cat > "$DIST/Contents/Info.plist" <<PLIST
     <string>The dashboard measures how much space your Downloads folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
     <key>NSRemovableVolumesUsageDescription</key>
     <string>The dashboard reports free space and Time Machine destinations for connected volumes, including removable disks. It reads volume sizes only — file contents are never opened.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>The app reads your paired iPhone over the local network when “Connect over Wi-Fi” is on in Settings. Nothing is sent to the internet.</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 rdskcm. MIT License.</string>
 </dict>
 </plist>
@@ -111,9 +113,9 @@ PLIST
 # NSAppleEventsUsageDescription is ONE app-wide string: macOS shows the same text for the
 # System Events prompt (login items) and the Finder prompt (empty Trash), so it must name
 # both — including the destructive one. NSDesktopFolderUsageDescription,
-# NSDocumentsFolderUsageDescription, NSDownloadsFolderUsageDescription, and
-# NSRemovableVolumesUsageDescription follow the same three-place rule (Info.plist plus en/ru
-# InfoPlist.strings), no shared source: keep all three in sync for each key.
+# NSDocumentsFolderUsageDescription, NSDownloadsFolderUsageDescription,
+# NSRemovableVolumesUsageDescription, and NSLocalNetworkUsageDescription follow the same
+# three-place rule (Info.plist plus en/ru InfoPlist.strings), no shared source: keep all three in sync for each key.
 echo "== localized InfoPlist.strings =="
 mkdir -p "$DIST/Contents/Resources/en.lproj" "$DIST/Contents/Resources/ru.lproj"
 
@@ -124,6 +126,7 @@ NSDesktopFolderUsageDescription = "The dashboard measures how much space your De
 NSDocumentsFolderUsageDescription = "The dashboard measures how much space your Documents folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
 NSDownloadsFolderUsageDescription = "The dashboard measures how much space your Downloads folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
 NSRemovableVolumesUsageDescription = "The dashboard reports free space and Time Machine destinations for connected volumes, including removable disks. It reads volume sizes only — file contents are never opened.";
+NSLocalNetworkUsageDescription = "The app reads your paired iPhone over the local network when “Connect over Wi-Fi” is on in Settings. Nothing is sent to the internet.";
 EOSTRINGS
 
 cat > "$DIST/Contents/Resources/ru.lproj/InfoPlist.strings" <<'EOSTRINGS'
@@ -133,6 +136,7 @@ NSDesktopFolderUsageDescription = "Дашборд измеряет, скольк
 NSDocumentsFolderUsageDescription = "Дашборд измеряет, сколько места занимает папка «Документы», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
 NSDownloadsFolderUsageDescription = "Дашборд измеряет, сколько места занимает папка «Загрузки», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
 NSRemovableVolumesUsageDescription = "Дашборд показывает свободное место и адреса резервных копий Time Machine для подключённых томов, включая съёмные диски. Читаются только размеры томов — содержимое файлов не открывается.";
+NSLocalNetworkUsageDescription = "Дашборд читает ваш сопряжённый iPhone по локальной сети, когда в Настройках включено «Подключение по Wi-Fi». В интернет ничего не отправляется.";
 EOSTRINGS
 
 echo "== icon (best-effort) =="

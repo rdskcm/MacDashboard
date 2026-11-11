@@ -1237,6 +1237,21 @@ extension SerialTests {
                             IPhonePendingTileView(status: .readFailed(L.iphoneStatusFailed)) {}
                         }
                     }
+                    HarnessSection(label: "iPhone tiles over Wi-Fi: connected / read failed / pending read failed") {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
+                            IPhoneTileView(record: alexRecord, status: .connected, link: .wifi,
+                                           snapshot: ip.lastSnapshot[alex], storage: nil) {}
+                            IPhoneTileView(record: alexRecord, status: .readFailed(L.iphoneStatusFailed), link: .wifi,
+                                           snapshot: nil, storage: nil) {}
+                            IPhonePendingTileView(status: .readFailed(L.iphoneStatusFailed), link: .wifi) {}
+                        }
+                    }
+                    HarnessSection(label: "Wi-Fi stall note: idle / restarting") {
+                        VStack(alignment: .leading, spacing: 16) {
+                            IPhoneWifiStallNote(restarting: false, disabled: false, onRestart: {}).frame(width: 1000)
+                            IPhoneWifiStallNote(restarting: true, disabled: true, onRestart: {}).frame(width: 1000)
+                        }
+                    }
                     HarnessSection(label: "iPhone tiles: actions button (connected, remembered)") {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
                             IPhoneTileView(record: alexRecord, status: .connected, snapshot: ip.lastSnapshot[alex],

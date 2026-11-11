@@ -51,6 +51,10 @@ extension IPhoneModel {
         ]
         transportAvailable = true
         connected = [Self.fixtureAlexKey: IPhoneHandle(raw: 1)]
+        // IPHONE-WIFI: `MACDASH_FIXTURE_IPHONE=wifi` shows Alex's phone connected over Wi-Fi on the bench build.
+        links = [IPhoneHandle(raw: 1): ProcessInfo.processInfo.environment["MACDASH_FIXTURE_IPHONE"] == "wifi" ? .wifi : .usb]
+        // IPHONE-WIFI D15: with `MACDASH_FIXTURE_IPHONE=wifi`, Sam's phone (not connected) shows the Wi-Fi stall note.
+        wifiStalled = ProcessInfo.processInfo.environment["MACDASH_FIXTURE_IPHONE"] == "wifi" ? [Self.fixtureSamKey] : []
         status = [Self.fixtureAlexKey: .connected, Self.fixtureSamKey: .remembered]
         pendingHandles = []
         pendingStatus = [:]

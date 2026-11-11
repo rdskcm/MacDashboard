@@ -62,7 +62,7 @@ struct MainDashboardView: View {
                 if router.mode == .mac {
                     MacContentView(model: model, router: router, width: liveWidth, tier: tier, breakpoints: breakpoints)
                 } else {
-                    IPhoneModeView(model: iphone)
+                    IPhoneModeView(model: iphone, onAskRestart: openRestartConfirm)
                 }
             }
             .onChange(of: L10nStore.shared.language) {

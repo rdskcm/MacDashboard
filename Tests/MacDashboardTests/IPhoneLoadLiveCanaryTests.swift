@@ -80,7 +80,7 @@ extension SerialTests {
             let transport = MobileDeviceTransport.shared
             let box = Self.liveBox
             transport.start { event in
-                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+                if case .attached(let h, _) = event, box.handle == nil { box.handle = h }
             }
             guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
                 Issue.record("attach an unlocked, trusted iPhone over USB")
@@ -165,7 +165,7 @@ extension SerialTests {
             let transport = MobileDeviceTransport.shared
             let box = Self.liveBox
             transport.start { event in
-                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+                if case .attached(let h, _) = event, box.handle == nil { box.handle = h }
             }
             guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
                 Issue.record("attach an unlocked, trusted iPhone over USB")
@@ -207,7 +207,7 @@ extension SerialTests {
             let transport = MobileDeviceTransport.shared
             let box = Self.liveBox
             transport.start { event in
-                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+                if case .attached(let h, _) = event, box.handle == nil { box.handle = h }
             }
             guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
                 Issue.record("attach an unlocked, trusted iPhone over USB")
@@ -241,7 +241,7 @@ extension SerialTests {
             let transport = MobileDeviceTransport.shared
             let box = Self.liveBox
             transport.start { event in
-                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+                if case .attached(let h, _) = event, box.handle == nil { box.handle = h }
             }
             guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
                 Issue.record("attach an unlocked, trusted iPhone over USB")
@@ -282,7 +282,7 @@ extension SerialTests {
             let transport = MobileDeviceTransport.shared
             let box = Self.liveBox
             transport.start { event in
-                if case .attached(let h) = event, box.handle == nil { box.handle = h }
+                if case .attached(let h, _) = event, box.handle == nil { box.handle = h }
             }
             guard await Self.wait(10, until: { box.handle != nil }), let h = box.handle else {
                 Issue.record("attach an unlocked, trusted iPhone over USB")

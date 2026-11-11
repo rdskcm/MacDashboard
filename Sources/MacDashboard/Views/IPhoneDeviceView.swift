@@ -9,6 +9,7 @@ struct IPhoneDeviceView: View {
     /// Window is at least 1200 pt wide (identity grids use 7 / 3 columns).
     let wide: Bool
     let onBack: () -> Void
+    var onAskRestart: () -> Void = {}
 
     private var record: IPhoneDeviceRecord? { model.devices.first { $0.id == deviceKey } }
     private var isConnected: Bool { model.connected[deviceKey] != nil }
@@ -17,6 +18,12 @@ struct IPhoneDeviceView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if model.wifiStalled.contains(deviceKey) && !isConnected {
+                    IPhoneWifiStallNote(restarting: model.restartingService,
+                                        disabled: model.restartingService || !model.transportAvailable,
+                                        onRestart: onAskRestart)
+                    if let err = model.restartError { IPhoneListBanner(kind: .error(err)) }   // existing strip, so a failed restart shows here too
+                }
                 IPhoneBatteryCard(record: record, snapshot: model.lastSnapshot[deviceKey], prefersRawHealth: model.prefersRawHealth)
                     .ds3Appear(delay: DS3Motion.cardDelays[0])
                     // IPHONE-LIVE-BATTERY: the 10 s battery refresh runs only while this card is mounted and at least
@@ -100,7 +107,7 @@ struct IPhoneDeviceView: View {
     private var tag: some View {
         let t: (DS3Tag.Tone, String) = {
             switch status {
-            case .connected: return (.accent, L.iphoneStatusConnected)
+            case .connected: return (.accent, model.link(deviceKey) == .wifi ? L.iphoneStatusConnectedWifi : L.iphoneStatusConnected)
             case .reading: return (.accent, L.iphoneStatusReading)
             case .needsTrust: return (.amber, L.iphoneStatusNeedsTrust)
             case .readFailed(let text): return (.hot, text)
@@ -118,5 +125,44 @@ struct IPhoneDeviceView: View {
             .help(isConnected ? "" : L.iphoneRefreshOfflineHelp)
             .accessibilityLabel(L.iphoneRefresh)
             .layoutPriority(1)
+    }
+}
+
+/// IPHONE-WIFI D15: under the device page header when the phone was lost over Wi-Fi and has not come back.
+struct IPhoneWifiStallNote: View {
+    let restarting: Bool
+    let disabled: Bool
+    let onRestart: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle().fill(DS3.amber).frame(width: 7, height: 7)
+            Text(L.iphoneWifiStallNote)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundStyle(DS3.amberInk)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button { onRestart() } label: {
+                Text(L.iphoneRestartService)
+                    .dsSwapInPlace(restarting) {
+                        HStack(spacing: 8) {
+                            DS3Spinner(role: .softRing, size: 13, accessibilityLabel: L.iphoneRestartBusy)
+                            Text(L.iphoneRestartingShort)
+                        }
+                    }
+            }
+            .buttonStyle(DS3ButtonStyle(kind: .secondary, height: 34, hPad: 15, topRim: 1, disabledOpacity: 0.5))
+            .disabled(disabled)
+            .help(L.iphoneRestartService)
+            .accessibilityLabel(L.iphoneRestartService)
+            .ds3BusyValue(restarting)
+        }
+        .padding(.vertical, 9)
+        .padding(.leading, 18)
+        .padding(.trailing, 9)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(DS3.amber.opacity(0.12)))
+        .ds3InsetRims(RoundedRectangle(cornerRadius: 18, style: .continuous), ring: DS3.amber.opacity(0.4))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L.iphoneWifiStallNote)
     }
 }

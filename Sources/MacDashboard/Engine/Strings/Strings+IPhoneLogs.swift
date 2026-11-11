@@ -71,6 +71,7 @@ protocol IPhoneLogsStrings {
     var iphoneTagReadFailed: String { get }
     var iphoneSubTrust: String { get }
     var iphoneSubReconnect: String { get }
+    var iphoneSubRetryWifi: String { get }
     func iphoneSubLastSeen(_ date: String) -> String
     func iphoneSubCharge(_ percent: Int, _ state: String) -> String
     var iphoneStateChargingLower: String { get }
@@ -81,6 +82,7 @@ protocol IPhoneLogsStrings {
     var iphoneNotIdentified: String { get }
     var iphonePendingTrustText: String { get }
     var iphonePendingFailedText: String { get }
+    var iphonePendingFailedWifiText: String { get }
     func iphoneSummary(connected: Int, notConnected: Int, waiting: Int) -> String
     var iphoneSummaryNone: String { get }
     var iphoneSummaryUnavailable: String { get }
@@ -294,6 +296,7 @@ extension StringsEN: IPhoneLogsStrings {
     var iphoneTagReadFailed: String { "Could not read" }
     var iphoneSubTrust: String { "unlock it and tap “Trust”" }
     var iphoneSubReconnect: String { "reconnect the cable" }
+    var iphoneSubRetryWifi: String { "unlock it or plug in the cable" }
     func iphoneSubLastSeen(_ date: String) -> String { "last seen \(date)" }
     func iphoneSubCharge(_ percent: Int, _ state: String) -> String { "\(percent) % · \(state)" }
     var iphoneStateChargingLower: String { "charging" }
@@ -304,6 +307,7 @@ extension StringsEN: IPhoneLogsStrings {
     var iphoneNotIdentified: String { "Not identified yet" }
     var iphonePendingTrustText: String { "Unlock the iPhone and tap “Trust” on its screen, then retry." }
     var iphonePendingFailedText: String { "Could not read the iPhone. Reconnect the cable, then retry." }
+    var iphonePendingFailedWifiText: String { "Could not read the iPhone over Wi-Fi. Unlock it or connect the cable, then retry." }
     func iphoneSummary(connected: Int, notConnected: Int, waiting: Int) -> String {
         var parts: [String] = []
         if connected > 0 { parts.append("\(connected) connected") }
@@ -537,6 +541,7 @@ extension StringsRU: IPhoneLogsStrings {
     var iphoneTagReadFailed: String { "Не удалось прочитать" }
     var iphoneSubTrust: String { "разблокируйте и нажмите «Доверять»" }
     var iphoneSubReconnect: String { "переподключите кабель" }
+    var iphoneSubRetryWifi: String { "разблокируйте его или подключите кабель" }
     func iphoneSubLastSeen(_ date: String) -> String { "был \(date)" }
     func iphoneSubCharge(_ percent: Int, _ state: String) -> String { "\(percent) % · \(state)" }
     var iphoneStateChargingLower: String { "заряжается" }
@@ -547,6 +552,7 @@ extension StringsRU: IPhoneLogsStrings {
     var iphoneNotIdentified: String { "Ещё не опознан" }
     var iphonePendingTrustText: String { "Разблокируйте iPhone, нажмите «Доверять» на его экране и повторите." }
     var iphonePendingFailedText: String { "Не удалось прочитать iPhone. Переподключите кабель и повторите." }
+    var iphonePendingFailedWifiText: String { "Не удалось прочитать iPhone по Wi-Fi. Разблокируйте его или подключите кабель и повторите." }
     func iphoneSummary(connected: Int, notConnected: Int, waiting: Int) -> String {
         var parts: [String] = []
         if connected > 0 { parts.append("подключено: \(connected)") }

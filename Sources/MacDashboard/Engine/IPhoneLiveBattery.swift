@@ -8,6 +8,10 @@ enum IPhoneLiveBattery {
     /// Seconds between the end of one battery reading and the next live read (user decision 2026-11-11).
     static let interval: TimeInterval = 10
 
+    /// IPHONE-WIFI D8: seconds between live reads over Wi-Fi (each read wakes the phone's radio).
+    static let wifiInterval: TimeInterval = 60
+    static func interval(for link: IPhoneLink) -> TimeInterval { link == .wifi ? wifiInterval : interval }
+
     /// Debug-level outcome lines for counting reads (`log stream --level debug`); no identifier, no value (D11).
     static let log = Logger(subsystem: "com.rdskcm.perf", category: "iphone.live")
 
