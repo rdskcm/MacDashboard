@@ -568,6 +568,19 @@ final class MobileDeviceTransport: @unchecked Sendable {
         if !queued { Self.onMain { completion(.failure(.unavailable)) } }
     }
 
+    /// IPHONE-LIVE-BATTERY: the battery registry payload only (no identity keys), parsed on the transport thread, at the
+    /// snapshot's urgency. `.success(nil)` when the relay did not answer with a payload.
+    func readBattery(_ h: IPhoneHandle,
+                     completion: @escaping @MainActor (Result<BatteryDetail?, IPhoneReadError>) -> Void) {
+        let queued = enqueue(.interactive) { [self] in
+            let result = withSession(h) { dev -> BatteryDetail? in
+                readBatteryPayload(dev).map { BatteryInspector.parse(dict: $0) }
+            }
+            Self.onMain { completion(result) }
+        }
+        if !queued { Self.onMain { completion(.failure(.unavailable)) } }
+    }
+
     /// Identity and parts without storage (read by `readStorage`): lockdown keys and registry entries
     /// over one relay connection. Values are returned to the caller only; nothing is stored or logged here.
     func readIdentity(_ h: IPhoneHandle, language: AppLanguage,

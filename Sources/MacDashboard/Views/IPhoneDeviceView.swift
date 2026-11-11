@@ -19,6 +19,12 @@ struct IPhoneDeviceView: View {
             VStack(alignment: .leading, spacing: 16) {
                 IPhoneBatteryCard(record: record, snapshot: model.lastSnapshot[deviceKey], prefersRawHealth: model.prefersRawHealth)
                     .ds3Appear(delay: DS3Motion.cardDelays[0])
+                    // IPHONE-LIVE-BATTERY: the 10 s battery refresh runs only while this card is mounted and at least
+                    // partly inside the page's scroll viewport (rule no-unseen-work).
+                    .onAppear { model.setBatteryCardShown(deviceKey: deviceKey, true) }
+                    .onDisappear { model.setBatteryCardShown(deviceKey: deviceKey, false) }
+                    .onScrollVisibilityChange(threshold: 0.01) { visible in model.setBatteryCardShown(deviceKey: deviceKey, visible) }
+                    .onChange(of: model.autoReadEnabled) { _, _ in model.liveBatteryGateChanged(deviceKey: deviceKey) }
                 IPhoneBatteryHistoryCard(points: record?.battery ?? [])
                     .ds3Appear(delay: DS3Motion.cardDelays[1])
                 IPhoneLogsCard(model: model, deviceKey: deviceKey)

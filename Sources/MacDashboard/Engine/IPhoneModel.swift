@@ -91,6 +91,14 @@ final class IPhoneModel {
     /// (`AppModel.isPaused`, SAMPLER-OCCLUSION-GATE), handed over by AppShell.swift. Starts false: the
     /// monitor reports the first change; under -visualFixture it never exists and nothing polls anyway.
     @ObservationIgnored private var windowPaused = false
+    /// IPHONE-LIVE-BATTERY: devices whose battery card is mounted (`IPhoneDeviceView` onAppear/onDisappear).
+    @ObservationIgnored private var batteryCardShown: Set<String> = []
+    /// The running live-battery loop per device; exists only while `IPhoneLiveBattery.shouldRun` holds (R2).
+    @ObservationIgnored private var liveBatteryTasks: [String: Task<Void, Never>] = [:]
+    /// Devices with a live battery read queued or running (R3).
+    @ObservationIgnored private var liveBatteryInFlight: Set<String> = []
+    /// When the last battery reading of each device ended (live read of any outcome, or a snapshot that read the battery) (D6).
+    @ObservationIgnored private var batteryCheckedAt: [String: Date] = [:]
     /// Devices whose running import paused on the «another phone» question (Decision 3).
     @ObservationIgnored private var identityAsked: Set<String> = []
 
@@ -410,6 +418,8 @@ final class IPhoneModel {
                 storage[key] = nil
                 identityFailed.remove(key)
                 lastSnapshot[key] = nil
+                batteryCheckedAt[key] = nil
+                updateLiveBattery(key)          // connected and snapshot are gone: the loop stops
                 logs[key] = nil
                 logsFailed.remove(key)
                 for k in logAction.keys where k.hasPrefix(key + "|live|") { logAction[k] = nil }
@@ -642,6 +652,7 @@ final class IPhoneModel {
         }
         cancelSysdiagnoseRequest(deviceKey: key)          // before the record goes (DEVICE-ARCHIVE-CLEANUP)
         requestPanelShown.remove(key)
+        batteryCardShown.remove(key)
         devices = remaining
         if let h = connected[key] {
             ignoredHandles.insert(h)
@@ -653,6 +664,8 @@ final class IPhoneModel {
         updatePolling(key)                                 // the list watch stops with the connection
         status[key] = nil
         lastSnapshot[key] = nil
+        batteryCheckedAt[key] = nil
+        updateLiveBattery(key)
         logs[key] = nil
         logsFailed.remove(key)
         archiveLogs[key] = nil
@@ -713,13 +726,7 @@ final class IPhoneModel {
             record.enclosureColor = snap.enclosureColor
             record.osVersion = snap.osVersion
             record.lastSeen = now
-            if let b = snap.battery, b.healthPercent != nil || b.cycleCount != nil {
-                let point = BatteryPoint(day: IPhoneData.historyDay(now),
-                                         cycles: b.cycleCount,
-                                         healthPercent: IPhoneData.historyHealthPercent(b, points: record.battery),
-                                         maxCapacityMAh: b.maxCapacityMAh,
-                                         designCapacityMAh: b.designCapacityMAh,
-                                         source: "live")
+            if let b = snap.battery, let point = IPhoneLiveBattery.historyPoint(b, points: record.battery, now: now) {
                 record.battery = IPhoneData.upsertLive(record.battery, point)
             }
             if let i = devices.firstIndex(where: { $0.id == key }) {
@@ -734,6 +741,8 @@ final class IPhoneModel {
             status[key] = .connected
             updatePolling(key)
             lastSnapshot[key] = snap
+            if snap.batteryRead { batteryCheckedAt[key] = now }
+            updateLiveBattery(key)
             if trigger == .attach, AppSettings.shared.iphoneAutoRead,
                IPhoneData.autoReadDue(last: autoReadAt[key], now: now) {
                 autoReadAt[key] = now
@@ -797,6 +806,7 @@ final class IPhoneModel {
         guard windowPaused != paused else { return }
         windowPaused = paused
         for key in Set(openRequests.keys).union(requestPanelShown).union(requestTasks.keys) { updatePolling(key) }
+        for key in batteryCardShown.union(liveBatteryTasks.keys) { updateLiveBattery(key) }
     }
 
     /// True while the 10 s poll loop of `deviceKey` exists (tests, `no-unseen-work` check).
@@ -905,6 +915,97 @@ final class IPhoneModel {
         guard let i = devices.firstIndex(where: { $0.id == deviceKey }) else { return }
         devices[i].ownArchives?.removeAll { $0.name == name }
         try? store.save(devices)
+    }
+
+    // MARK: Live battery (IPHONE-LIVE-BATTERY)
+
+    /// `IPhoneDeviceView` reports the battery card's mount state: the loop runs only while the device page is on screen.
+    func setBatteryCardShown(deviceKey: String, _ shown: Bool) {
+        if shown { batteryCardShown.insert(deviceKey) } else { batteryCardShown.remove(deviceKey) }
+        updateLiveBattery(deviceKey)
+    }
+
+    /// Re-checks the gate after a change the model does not observe itself (Settings, the automatic-read switch).
+    func liveBatteryGateChanged(deviceKey: String) { updateLiveBattery(deviceKey) }
+
+    /// The automatic-read switch, for the view's `onChange` (views read settings through the model).
+    var autoReadEnabled: Bool { AppSettings.shared.iphoneAutoRead }
+
+    /// True while the live-battery loop of `deviceKey` exists (tests, `no-unseen-work` check).
+    func isLiveBatteryRunning(deviceKey: String) -> Bool { liveBatteryTasks[deviceKey] != nil }
+
+    /// The only place a live-battery task is created or cancelled (R2).
+    private func updateLiveBattery(_ key: String) {
+        let wants = IPhoneLiveBattery.shouldRun(
+            pageShown: batteryCardShown.contains(key), windowPaused: windowPaused,
+            attached: connected[key].map { attached.contains($0) } ?? false,
+            hasSnapshot: lastSnapshot[key] != nil, autoRead: AppSettings.shared.iphoneAutoRead)
+        if wants, liveBatteryTasks[key] == nil {
+            liveBatteryTasks[key] = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self else { return }
+                    let wait = IPhoneLiveBattery.wait(lastChecked: batteryCheckedAt[key], now: Date(),
+                                                      inFlight: liveBatteryInFlight.contains(key))
+                    if wait > 0 {
+                        try? await Task.sleep(for: .seconds(wait))
+                    } else if !(await readLiveBattery(key)) {
+                        // Nothing was read (state changed under the loop): never spin.
+                        try? await Task.sleep(for: .seconds(IPhoneLiveBattery.interval))
+                    }
+                }
+            }
+        } else if !wants, let t = liveBatteryTasks.removeValue(forKey: key) {
+            t.cancel()
+        }
+    }
+
+    /// One live read; false when none was started. The result is applied even if the loop was cancelled meanwhile
+    /// (the values are current; `applyLiveBattery` drops it when the phone left).
+    private func readLiveBattery(_ key: String) async -> Bool {
+        guard let h = connected[key], attached.contains(h), lastSnapshot[key] != nil,
+              !liveBatteryInFlight.contains(key) else { return false }
+        liveBatteryInFlight.insert(key)
+        let t0 = ContinuousClock.now
+        let result: Result<BatteryDetail?, IPhoneReadError> = await withCheckedContinuation { cont in
+            transport.readBattery(h) { cont.resume(returning: $0) }
+        }
+        liveBatteryInFlight.remove(key)
+        let outcome = applyLiveBattery(result, deviceKey: key, handle: h)
+        // A dropped read (phone left mid-read) does not reset the clock: the next attach's snapshot sets it.
+        if outcome != "dropped" { batteryCheckedAt[key] = Date() }
+        let d = (ContinuousClock.now - t0).components
+        let ms = Int(d.seconds * 1000 + d.attoseconds / 1_000_000_000_000_000)
+        IPhoneLiveBattery.log.debug("battery live read \(outcome, privacy: .public) ms=\(ms, privacy: .public)")
+        return true
+    }
+
+    /// Merges a live reading into the shown snapshot and, only when the day's point changes, into the stored history
+    /// (R4-R7). Internal for tests. Returns the outcome word logged by `readLiveBattery`.
+    @discardableResult
+    func applyLiveBattery(_ result: Result<BatteryDetail?, IPhoneReadError>, deviceKey key: String,
+                          handle h: IPhoneHandle) -> String {
+        guard attached.contains(h), !ignoredHandles.contains(h), connected[key] == h,
+              var snap = lastSnapshot[key] else { return "dropped" }
+        guard case .success(let read) = result else { return "failed" }
+        guard let detail = read else { return "nodata" }
+        var outcome = "unchanged"
+        if snap.battery != detail || !snap.batteryRead {
+            snap.battery = detail
+            snap.batteryRead = true
+            lastSnapshot[key] = snap
+            outcome = "changed"
+        }
+        let now = Date()
+        if let i = devices.firstIndex(where: { $0.id == key }),
+           let history = IPhoneLiveBattery.updatedHistory(devices[i].battery, battery: detail, now: now) {
+            var record = devices[i]
+            record.battery = history
+            record.lastSeen = now
+            devices[i] = record
+            try? store.save(devices)
+            outcome += "+saved"
+        }
+        return outcome
     }
 
     // MARK: Find iPhone (Stage 7)
