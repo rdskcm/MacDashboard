@@ -1592,6 +1592,151 @@ extension SerialTests {
                         }
                     }
                 }
+                run.snap("content-iphone-firmware", mode, width: 1134) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        HarnessSection(label: "iPhone firmware: idle") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("idle") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware: checking") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("checking") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware: Apple only") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("apple") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware: both sources") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("both") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware: legacy model") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.seedLegacyFixturePhone(); $0.ipsw.applyVisualFixture("legacy") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware: both sources failed") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("errors") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware: Apple does not list the model") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("unlisted") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware: remembered phone") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("apple") }, deviceKey: sam)
+                        }
+                        HarnessSection(label: "iPhone firmware: no model identifier") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.devices[$0.devices.firstIndex { $0.id == alex }!].productType = nil; $0.lastSnapshot[alex]?.productType = nil; $0.ipsw.applyVisualFixture("idle") }, deviceKey: alex)
+                        }
+                    }
+                }
+                run.snap("content-iphone-firmware-download", mode, width: 1134) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        HarnessSection(label: "iPhone firmware download: preparing") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("preparing") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: downloading") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("downloading") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: stopped") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("paused") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: interrupted") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("interrupted") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: verifying") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("verifying") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: finished") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("finished") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: finished, file gone") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("finished-gone") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: cancelled") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("cancelled") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: failed") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("failed") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: busy on another phone's page") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("downloading") }, deviceKey: sam)
+                        }
+                    }
+                }
+                // Split from the download snap: one window may not exceed the capture size limit (16384 px at 2x).
+                run.snap("content-iphone-firmware-download-resume", mode, width: 1134) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        HarnessSection(label: "iPhone firmware download: relaunched") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("relaunched") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: interrupted by quit") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("quit-interrupted") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: older build than Apple's") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("outdated") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: resume rejected") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("rejected") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: resume without space") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("resume-nospace") }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware download: relaunched, remembered phone") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.devices[$0.devices.firstIndex { $0.id == sam }!].productType = "iPhone18,2"; $0.ipsw.applyVisualFixture("relaunched") }, deviceKey: sam)
+                        }
+                    }
+                }
+                // The confirm values come from the fixture model, as the card's own sheet would get them.
+                @MainActor func confirmFacts(_ state: String) -> IPSWConfirm {
+                    let m = fixtureIPhone { $0.ipsw.applyVisualFixture(state) }
+                    guard case .ready(let c)? = m.ipsw.confirm else { fatalError("fixture state \(state) has no confirm") }
+                    return c
+                }
+                // Real-length strings at a width below the narrowest the app allows (window minimum 900): a build row
+                // with two tags, a date, a 13.2 GB size and the button must keep version, build and button whole.
+                @MainActor func realLength(_ m: IPhoneModel) {
+                    let pt = "iPhone18,2"
+                    let url = URL(string: "https://updates.cdn-apple.com/fixture/iPhone18,2_27.2.1_24B156_Restore.ipsw")!
+                    let day = VisualFixture.referenceDate.addingTimeInterval(-86_400 * 66)
+                    let me = IPSWFirmware(source: .ipswMe, identifier: pt, version: "27.2.1", buildID: "24B156",
+                                          sha256: String(repeating: "b", count: 64), sha1: String(repeating: "a", count: 40),
+                                          fileSize: 13_200_000_000, url: url, releaseDate: day, signed: true)
+                    m.ipsw.apple[pt] = .loaded(IPSWAppleTarget(identifier: pt, firmware: IPSWFirmware(
+                        source: .apple, identifier: pt, version: "27.2.1", buildID: "24B156", sha256: nil,
+                        sha1: String(repeating: "a", count: 40), fileSize: nil, url: url, releaseDate: nil, signed: nil)),
+                        fetchedAt: VisualFixture.referenceDate)
+                    m.ipsw.ipswMe[pt] = .loaded(IPSWThirdParty(name: "iPhone 17 Pro Max", identifier: pt, firmwares: [me]),
+                                                fetchedAt: VisualFixture.referenceDate)
+                    m.devices[m.devices.firstIndex { $0.id == alex }!].osVersion = "27.2.1"
+                    m.lastSnapshot[alex]?.osVersion = "27.2.1"
+                    m.lastSnapshot[alex]?.build = "24B156"
+                }
+                run.snap("content-iphone-firmware-narrow", mode, width: 760) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        HarnessSection(label: "iPhone firmware: narrow, both sources, real-length strings") {
+                            IPhoneFirmwareCard(model: fixtureIPhone { $0.ipsw.applyVisualFixture("both"); realLength($0) }, deviceKey: alex)
+                        }
+                        HarnessSection(label: "iPhone firmware: narrow, downloading") {
+                            IPhoneFirmwareCard(model: fixtureIPhone {
+                                $0.ipsw.applyVisualFixture("downloading"); realLength($0)
+                                if let d = $0.ipsw.download {
+                                    var b = d.build; b.version = "27.2.1"; b.buildID = "24B156"
+                                    $0.ipsw.download = (b, .downloading(written: 2_100_000_000, total: 13_200_000_000))
+                                }
+                            }, deviceKey: alex)
+                        }
+                    }
+                }
+                run.snap("content-iphone-firmware-confirm", mode, width: 600) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        HarnessSection(label: "iPhone firmware: confirm") {
+                            IPSWConfirmSheet(c: confirmFacts("confirm"), onCancel: {}, onDownload: {})
+                                .background(DS3.overlay)
+                        }
+                        HarnessSection(label: "iPhone firmware: confirm, low space") {
+                            IPSWConfirmSheet(c: confirmFacts("confirm-low"), onCancel: {}, onDownload: {})
+                                .background(DS3.overlay)
+                        }
+                        HarnessSection(label: "iPhone firmware: confirm, disk too small") {
+                            IPSWConfirmSheet(c: confirmFacts("confirm-blocked"), onCancel: {}, onDownload: {})
+                                .background(DS3.overlay)
+                        }
+                    }
+                }
                 run.snap("content-iphone-dialogs", mode, width: 460) {
                     VStack(alignment: .leading, spacing: 24) {
                         HarnessSection(label: "iPhone dialogs: restart confirmation") {

@@ -19,6 +19,7 @@ extension AppActions {
 /// `AppModel.applyVisibility` (the gate, SAMPLER-OCCLUSION-GATE), the gate's verdict to `IPhoneModel.setPaused` (the
 /// sysdiagnose request poll), and `appDidBecomeActive()`. `NSPanel`s (HoverTip's tooltip panels) never keep the app un-paused. Created once per
 /// process by MacDashboardApp right after `model.start()`, never under -visualFixture; lives as long as the process.
+/// It also saves a running firmware download as stopped when the app quits (`willTerminateNotification`, IPHONE-IPSW D11).
 @MainActor
 final class AppActivityMonitor {
     private let model: AppModel
@@ -50,6 +51,10 @@ final class AppActivityMonitor {
             },
             center.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.recompute() }
+            },
+            // Synchronous (assumeIsolated, not Task): the process ends right after this notification. Saves, never deletes.
+            center.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { IPhoneModel.shared.ipsw.stopForQuit() }
             },
         ]
         // SAMPLER-OCCLUSION-GATE D15: a known first state (the gate defaults to .visible).

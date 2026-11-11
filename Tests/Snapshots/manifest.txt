@@ -339,3 +339,13 @@ content-battery-raw-dark	2026-11-08	27.2	Xcode 27.2	ea05460-dirty
 content-iphone-tile-health-dark	2026-11-08	27.2	Xcode 27.2	ea05460-dirty
 content-battery-raw-light	2026-11-08	27.2	Xcode 27.2	ea05460-dirty
 content-iphone-tile-health-light	2026-11-08	27.2	Xcode 27.2	ea05460-dirty
+content-iphone-firmware-dark	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-download-dark	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-download-resume-dark	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-narrow-dark	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-confirm-dark	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-light	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-download-light	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-download-resume-light	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-narrow-light	2026-11-11	27.2	Xcode 27.2	983c9f8
+content-iphone-firmware-confirm-light	2026-11-11	27.2	Xcode 27.2	983c9f8

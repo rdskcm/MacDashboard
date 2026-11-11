@@ -154,6 +154,22 @@ extension IPhoneModel {
         importResult[Self.fixtureAlexKey] = .success((name: archiveName, summary: ImportSummary(
             batteryPoints: 12, skippedRows: 0, logFiles: 37, keptPath: nil)))
         phoneCleanup[Self.fixtureAlexKey] = requestFixture == "kept" ? .keptBySetting : .deleted
+
+        // IPHONE-IPSW: `MACDASH_FIXTURE_IPSW` picks the card state (default `both`); Sam always has Apple's answer.
+        let ipswState = ProcessInfo.processInfo.environment["MACDASH_FIXTURE_IPSW"] ?? "both"
+        if ipswState == "legacy" { seedLegacyFixturePhone() }
+        ipsw.applyVisualFixture(ipswState)
+    }
+
+    /// The `legacy` firmware state: Alex's phone is an iPhone 5 (Global) on its last iOS, read from the connected phone.
+    func seedLegacyFixturePhone() {
+        if let i = devices.firstIndex(where: { $0.id == Self.fixtureAlexKey }) {
+            devices[i].productType = IPSWModel.fixtureLegacyType
+            devices[i].osVersion = "10.3.4"
+        }
+        lastSnapshot[Self.fixtureAlexKey]?.productType = IPSWModel.fixtureLegacyType
+        lastSnapshot[Self.fixtureAlexKey]?.osVersion = "10.3.4"
+        lastSnapshot[Self.fixtureAlexKey]?.build = "14G61"
     }
 
     /// `MACDASH_FIXTURE_REQUEST`: waiting | creating | ready | ambiguous | expired | timedOut | failed | kept | none.

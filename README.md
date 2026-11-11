@@ -114,8 +114,8 @@ here is everything it does:
 
 The app's own code has no telemetry and uses the network only when you
 click a control that says what it does. Nothing goes out at launch, on a
-timer or when a phone is attached. The iPhone firmware feature (being
-built; not visible in the app yet) contacts exactly these hosts:
+timer or when a phone is attached. The "Firmware" card on the iPhone
+page contacts exactly these hosts:
 
 - `itunes.apple.com`, when you click "Check with Apple": it downloads
   Apple's public device-software catalogue. Nothing about your phone is sent.
@@ -123,9 +123,12 @@ built; not visible in the app yet) contacts exactly these hosts:
   "Ask ipsw.me" button: the request contains your phone's model identifier
   (for example `iPhone18,2`) and nothing else.
 - `updates.cdn-apple.com` or `secure-appldnld.apple.com`, when you click
-  "Download": the restore image (`.ipsw`) Apple's catalogue names, over
-  https only, saved to `~/Downloads` after its size and checksums are
-  verified. The first save may make macOS ask whether MacDashboard may
+  "Download" (the optional size check goes out at that click, before the
+  confirm sheet) or "Resume": the restore image
+  (`.ipsw`) Apple's catalogue names, over https only, saved to `~/Downloads`
+  after its size and checksums are verified. A stopped download is kept for
+  7 days in `~/Library/Caches/<bundle id>/ipsw/` and resumes after a relaunch
+  only when you click "Resume". The first save may make macOS ask whether MacDashboard may
   access your Downloads folder; if you decline, the app says so and points
   to System Settings › Privacy & Security › Files and Folders.
 

@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### New
 
+- [feat] iPhone «Firmware» card: Apple's restore build for the model, signed builds per ipsw.me on its own click, and a verified IPSW download into Downloads with a confirm step and Stop and Resume, also after quitting the app.
 - [feat] SoC page (was CPU): separate CPU and GPU cards, each with its own load bar, and a shared chip-temperature block with the macOS thermal state. The GPU figure is the whole Mac's, including what macOS draws. Home's Now card shows CPU and GPU side by side in one SoC cell (the small CPU history line is gone). Not available on this Mac → a dash.
 - [feat] CPU: the SoC temperature tile shows macOS's own thermal state (normal, elevated, high, critical), updated when macOS reports a change; hover for what each state means. The app never estimates a throttling percentage. The exported report adds the state after the SoC temperature when it is above normal.
 - [feat] iPhone: «Unlink device…» in a device tile's «⋯» menu removes the phone's card and saved battery history after a confirm. Archives you kept from it move to the Trash. Nothing on the phone changes, and the phone appears again the next time it connects. The «Restart connection service…» confirm uses the same panel.

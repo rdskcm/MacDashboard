@@ -1,5 +1,5 @@
 // Views/IPhoneDeviceView.swift
-// IPHONE-DESIGN: the device page on DS3 - pinned frosted header and the five section cards.
+// IPHONE-DESIGN: the device page on DS3 - pinned frosted header and the six section cards.
 
 import SwiftUI
 
@@ -33,6 +33,8 @@ struct IPhoneDeviceView: View {
                     .ds3Appear(delay: DS3Motion.cardDelays[3])
                 IPhoneIdentityCard(model: model, deviceKey: deviceKey, wide: wide)
                     .ds3Appear(delay: DS3Motion.cardDelays[4])
+                IPhoneFirmwareCard(model: model, deviceKey: deviceKey)
+                    .ds3Appear(delay: DS3Motion.cardDelays[5])
             }
             .padding(.horizontal, 28)
             .padding(.top, 16)
