@@ -521,17 +521,19 @@ struct IPSWTests {
                                             digests: ExpectedDigests(sha256: s256c, sha1: nil, sha1Sources: []),
                                             downloadsDir: downloads, fileName: name, progress: { _ in }, isCancelled: { true })
         }
-        #expect(!fm.fileExists(atPath: f3.path))
-        #expect(try fm.contentsOfDirectory(atPath: staging.path).isEmpty)
+        // Cancelled work keeps the complete partial: the downloader parks it (Stop while verifying).
+        #expect(fm.fileExists(atPath: f3.path))
+        #expect(try fm.contentsOfDirectory(atPath: downloads.path).isEmpty)
     }
 
     @Test func stagingDirectoryIsOnTheDownloadsVolume() throws {
         let root = try tempDir("staging")
         defer { try? FileManager.default.removeItem(at: root) }
-        // A "Downloads" inside the temp dir is on the temp dir's volume, so staging is the temp dir itself.
-        let staging = try IPSWDownloader.stagingDirectory(for: root)
+        // A "Downloads" inside the temp dir is on the staging root's volume, so staging is the root itself.
+        let stagingRoot = root.appendingPathComponent("caches/ipsw", isDirectory: true)
+        let staging = try IPSWDownloader.stagingDirectory(for: root, root: stagingRoot)
         #expect(IPSWDownloader.sameVolume(staging, root))
-        #expect(staging.standardizedFileURL == FileManager.default.temporaryDirectory.standardizedFileURL)
+        #expect(staging.standardizedFileURL == stagingRoot.standardizedFileURL)
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent(IPSWData.hiddenStagingName).path))
     }
 
@@ -635,7 +637,7 @@ struct IPSWSourcesTests {
 struct IPSWDownloaderTests {
 
     private func firstPhase(_ b: IPSWBuild, _ sources: IPSWSources, downloadsDir: URL) async -> IPSWDownloadPhase {
-        let downloader = IPSWDownloader()
+        let downloader = IPSWDownloader(stagingRoot: downloadsDir.appendingPathComponent("caches", isDirectory: true))
         return await withCheckedContinuation { c in
             downloader.start(b, downloadsDir: downloadsDir, sources: sources) { phase in c.resume(returning: phase) }
         }
@@ -668,7 +670,7 @@ struct IPSWDownloaderTests {
         // The HEAD never answers until the test cancels, so the first run stays active.
         let gate = DispatchSemaphore(value: 0)
         let stub = IPSWStubFetch { _ in gate.wait(); return (Data(), 500, [:]) }
-        let downloader = IPSWDownloader()
+        let downloader = IPSWDownloader(stagingRoot: dir.appendingPathComponent("caches", isDirectory: true))
         let appleOnly = IPSWData.merge(apple: try appleTarget("iPhone18,2"), ipswMe: nil)[0]   // no size → HEAD
         var phases: [IPSWDownloadPhase] = []
         downloader.start(appleOnly, downloadsDir: dir, sources: stub.sources) { phases.append($0) }
@@ -688,7 +690,7 @@ struct IPSWDownloaderTests {
     @Test func cancelDuringPrepareLeavesNoStagingDirectory() async throws {
         let dir = try tempDir("cancel-prepare")
         defer { try? FileManager.default.removeItem(at: dir) }
-        let downloader = IPSWDownloader()
+        let downloader = IPSWDownloader(stagingRoot: dir.appendingPathComponent("caches", isDirectory: true))
         // Cancel while the HEAD is in flight, then let it succeed: prepare must stop before Downloads.
         let stub = IPSWStubFetch { _ in
             downloader.cancel()
@@ -768,6 +770,403 @@ struct IPSWModelTests {
     }
 }
 
+// MARK: - model: confirm, pause API, restore, unlink (stub downloader, stubbed sources)
+
+/// Records every call and keeps the `onPhase` it got, so a test can emit phases.
+final class StubDownloader: IPSWDownloading {
+    var calls: [String] = []
+    var handler: IPSWDownloader.PhaseHandler?
+    var restoreRecord: IPSWPartialRecord?
+    var restoreIdentifiers: Set<String>?
+    var forgotten: [String] = []
+
+    func start(_ b: IPSWBuild, downloadsDir: URL, sources: IPSWSources, onPhase: @escaping IPSWDownloader.PhaseHandler) {
+        calls.append("start"); handler = onPhase
+    }
+    func cancel() { calls.append("cancel") }
+    func resume(downloadsDir: URL) { calls.append("resume") }
+    func discard() { calls.append("discard") }
+    func restore(knownIdentifiers: Set<String>, onPhase: @escaping IPSWDownloader.PhaseHandler) -> IPSWPartialRecord? {
+        calls.append("restore"); handler = onPhase; restoreIdentifiers = knownIdentifiers
+        return restoreRecord
+    }
+    func suspendForQuit() { calls.append("suspendForQuit") }
+    func forget(identifier: String) { calls.append("forget"); forgotten.append(identifier) }
+}
+
+private let gib: Int64 = 1 << 30
+
+private func mergedBuild() throws -> IPSWBuild {
+    IPSWData.merge(apple: try appleTarget("iPhone18,2"), ipswMe: try ipswList(ipsw18Path))[0]
+}
+
+private func appleOnlyBuild() throws -> IPSWBuild {
+    IPSWData.merge(apple: try appleTarget("iPhone18,2"), ipswMe: nil)[0]
+}
+
+private func partialRecord(for b: IPSWBuild, stoppedAt: Date) -> IPSWPartialRecord {
+    IPSWPartialRecord(version: IPSWPartialRecord.currentVersion, id: UUID(), identifier: "iPhone18,2",
+                      productVersion: b.version, buildID: b.buildID, url: b.apple!.url,
+                      size: b.ipswMe?.fileSize ?? 1_000_000, sha256: b.ipswMe?.sha256, sha1: b.apple?.sha1,
+                      sha1Sources: [.apple], fileName: "x.ipsw", validator: "\"v\"", checkpoint: 600_000,
+                      startedAt: stoppedAt.addingTimeInterval(-60), stoppedAt: stoppedAt, reason: nil, partInDownloads: false)
+}
+
+@MainActor
+struct IPSWModelDownloadTests {
+    private let dir = URL(fileURLWithPath: "/Users/fixture/Downloads", isDirectory: true)
+
+    private func model(_ stub: IPSWStubFetch? = nil, downloader: StubDownloader = StubDownloader(),
+                       volume: @escaping @Sendable (URL) -> (available: Int64?, total: Int64?) = { _ in (200_000_000_000, 245_000_000_000) },
+                       networkAllowed: Bool = true) throws -> IPSWModel {
+        let sources = (try stub ?? fixtureFetch()).sources
+        return IPSWModel(sources: sources, downloader: downloader, downloadsDir: { dir }, lowSpacePercent: { 20 },
+                         volumeInfo: volume, networkAllowed: networkAllowed)
+    }
+
+    private func readyConfirm(_ m: IPSWModel) -> IPSWConfirm? {
+        if case .ready(let c)? = m.confirm { return c }
+        return nil
+    }
+
+    @Test func requestDownloadWithListedSizeSendsNothing() async throws {
+        let stub = IPSWStubFetch { _ in (Data(), 500, [:]) }
+        let m = try model(stub)
+        let b = try mergedBuild()
+        await m.requestDownload(b)?.value
+        let c = try #require(readyConfirm(m))
+        #expect(stub.requests.isEmpty, "the size is known from ipsw.me: no HEAD")
+        #expect(c.size == b.ipswMe?.fileSize && c.size != nil)
+        #expect(c.available == 200_000_000_000 && c.total == 245_000_000_000)
+        #expect(c.blocked == nil && c.lowSpace == nil && c.destination == dir && c.lowPercent == 20)
+        #expect(c.host == "updates.cdn-apple.com" && c.fileName == "iPhone18,2_27.0.1_24A446_Restore.ipsw")
+        #expect(c.checks == [VerifiedDigest(algorithm: .sha256, sources: [.ipswMe]),
+                             VerifiedDigest(algorithm: .sha1, sources: [.apple, .ipswMe])])
+    }
+
+    @Test func requestDownloadWithoutListedSizeSendsOneHead() async throws {
+        let stub = IPSWStubFetch { _ in (Data(), 200, ["Content-Length": "5000000000"]) }
+        let m = try model(stub)
+        await m.requestDownload(try appleOnlyBuild())?.value
+        #expect(stub.requests.count == 1 && stub.requests.first?.httpMethod == "HEAD")
+        #expect(readyConfirm(m)?.size == 5_000_000_000 && readyConfirm(m)?.blocked == nil)
+    }
+
+    @Test func headFailureIsReadyAndBlocked() async throws {
+        let m = try model(IPSWStubFetch { _ in (Data(), 500, [:]) })
+        await m.requestDownload(try appleOnlyBuild())?.value
+        #expect(readyConfirm(m)?.blocked == .http(500))
+        #expect(readyConfirm(m)?.size == nil)
+    }
+
+    @Test func spaceBelowSizePlusMarginBlocks() async throws {
+        let b = try mergedBuild()
+        let size = try #require(b.ipswMe?.fileSize)
+        let m = try model(volume: { _ in (size + gib - 1, 245_000_000_000) })
+        await m.requestDownload(b)?.value
+        #expect(readyConfirm(m)?.blocked == .notEnoughSpace(needed: size + gib, available: size + gib - 1))
+        let enough = try model(volume: { _ in (size + gib, 245_000_000_000) })
+        await enough.requestDownload(b)?.value
+        #expect(readyConfirm(enough)?.blocked == nil)
+        let silent = try model(volume: { _ in (nil, nil) })
+        await silent.requestDownload(b)?.value
+        #expect(readyConfirm(silent)?.blocked == nil && readyConfirm(silent)?.lowSpace == nil, "no figures: no block, no warning")
+    }
+
+    @Test func lowSpaceAfterUsesTheStorageRule() {
+        let total: Int64 = 245_000_000_000, size: Int64 = 9_400_000_000
+        func level(afterPercent p: Double) -> SpaceLevel? {
+            IPSWData.lowSpaceAfter(size: size, available: size + Int64(Double(total) * p / 100), total: total, lowPercent: 20)
+        }
+        #expect(level(afterPercent: 21) == nil)
+        #expect(level(afterPercent: 19) == nil, "19 % of 245 GB is 46.5 GB, above the 40 GB cap")
+        #expect(level(afterPercent: 12) == .low)
+        #expect(level(afterPercent: 5) == .critical)
+        #expect(IPSWData.lowSpaceAfter(size: size, available: size - 1, total: total, lowPercent: 20) == .critical, "clamped at 0")
+        #expect(IPSWData.lowSpaceAfter(size: size, available: nil, total: total, lowPercent: 20) == nil)
+        #expect(IPSWData.lowSpaceAfter(size: size, available: 1, total: nil, lowPercent: 20) == nil)
+        #expect(IPSWData.lowSpaceAfter(size: size, available: 1, total: 0, lowPercent: 20) == nil)
+    }
+
+    @Test func cancelConfirmDropsTheLateResult() async throws {
+        let m = try model()
+        let task = m.requestDownload(try mergedBuild())
+        #expect(m.confirm == .preparing(try mergedBuild()))
+        #expect(m.requestDownload(try mergedBuild()) == nil, "a second click while preparing does nothing")
+        m.cancelConfirm()
+        await task?.value
+        #expect(m.confirm == nil)
+    }
+
+    @Test func staleConfirmTaskIsDroppedAfterCancelAndReRequest() async throws {
+        // The volume reading differs per call: the first (stale) task reads 100 GB, the second 200 GB.
+        let calls = NSLock()
+        nonisolated(unsafe) var n = 0
+        let m = try model(volume: { _ in calls.lock(); defer { calls.unlock() }; n += 1; return (n == 1 ? 100_000_000_000 : 200_000_000_000, 245_000_000_000) })
+        let b = try mergedBuild()
+        let first = m.requestDownload(b)
+        m.cancelConfirm()
+        let second = m.requestDownload(b)
+        await first?.value
+        await second?.value
+        #expect(readyConfirm(m)?.available == 200_000_000_000, "only the latest request publishes")
+    }
+
+    @Test func startOverReplacesAnOpenConfirm() async throws {
+        let m = try model()
+        let b = try mergedBuild(), other = try appleOnlyBuild()
+        m.confirm = .preparing(other)
+        m.download = (b, .failed(.resumeRejected))
+        m.startOver()
+        #expect(m.download == nil && m.confirm == .preparing(b))
+        for _ in 0..<200 where readyConfirm(m) == nil { try await Task.sleep(nanoseconds: 5_000_000) }
+        #expect(readyConfirm(m)?.build == b)
+    }
+
+    @Test func confirmDownloadStartsOnlyWhenNotBlocked() async throws {
+        let stub = StubDownloader()
+        let b = try mergedBuild()
+        let size = try #require(b.ipswMe?.fileSize)
+        let blocked = try model(downloader: stub, volume: { _ in (size, 245_000_000_000) })
+        await blocked.requestDownload(b)?.value
+        blocked.confirmDownload()
+        #expect(stub.calls.isEmpty && readyConfirm(blocked)?.blocked != nil && blocked.download == nil)
+
+        let ok = try model(downloader: stub)
+        await ok.requestDownload(b)?.value
+        ok.confirmDownload()
+        #expect(stub.calls == ["start"] && ok.confirm == nil)
+        #expect(ok.download?.phase == .preparing)
+    }
+
+    @Test func offlineFixtureModeNeverCallsAnything() async throws {
+        let fetch = IPSWStubFetch { _ in (Data(), 200, [:]) }
+        let stub = StubDownloader()
+        let m = try model(fetch, downloader: stub, networkAllowed: false)
+        let b = try mergedBuild()
+        #expect(m.checkApple(productType: "iPhone18,2") == nil)
+        #expect(m.askIPSWMe(productType: "iPhone18,2") == nil)
+        #expect(m.apple["iPhone18,2"] == .failed(.offline) && m.ipswMe["iPhone18,2"] == .failed(.offline))
+        #expect(m.requestDownload(b) == nil)
+        #expect(readyConfirm(m)?.blocked == .offline)
+        m.cancelConfirm()
+        m.startDownload(b)
+        #expect(m.download?.phase == .failed(.offline))
+        m.download = (b, .paused(written: 1, total: 2, interruption: nil))
+        m.resumeDownload()
+        #expect(m.download?.phase == .failed(.offline))
+        m.restoreParked(knownIdentifiers: ["iPhone18,2"])
+        #expect(fetch.requests.isEmpty && stub.calls.isEmpty)
+    }
+
+    @Test func pausedBlocksAnotherStart() throws {
+        let stub = StubDownloader()
+        let m = try model(downloader: stub)
+        let b = try mergedBuild()
+        m.download = (b, .paused(written: 5, total: 10, interruption: nil))
+        #expect(m.blocksStart)
+        m.startDownload(try appleOnlyBuild())
+        #expect(m.requestDownload(try appleOnlyBuild()) == nil)
+        #expect(stub.calls.isEmpty && m.download?.build == b)
+        m.download = (b, .failed(.cancelled))
+        #expect(!m.blocksStart)
+    }
+
+    @Test func resumeDiscardDismissOnlyFromTheRightPhase() throws {
+        let stub = StubDownloader()
+        let m = try model(downloader: stub)
+        let b = try mergedBuild()
+        m.resumeDownload(); m.discardDownload(); m.dismissDownload()
+        #expect(stub.calls.isEmpty, "no download")
+        for phase: IPSWDownloadPhase in [.preparing, .downloading(written: 1, total: 2), .verifying(hashed: 1, total: 2)] {
+            m.download = (b, phase)
+            m.resumeDownload(); m.discardDownload(); m.dismissDownload()
+            #expect(stub.calls.isEmpty && m.download != nil, "\(phase)")
+        }
+        m.download = (b, .paused(written: 1, total: 2, interruption: nil))
+        m.dismissDownload()
+        #expect(m.download != nil)
+        m.discardDownload()
+        #expect(stub.calls == ["discard"])
+        m.resumeDownload()
+        #expect(stub.calls == ["discard", "resume"] && m.download?.phase == .preparing)
+        m.download = (b, .failed(.checksumMismatch))
+        m.dismissDownload()
+        #expect(m.download == nil)
+        m.stopForQuit()
+        #expect(stub.calls.last == "suspendForQuit")
+    }
+
+    @Test func downloadPhaseMatchesByAppleIdentifier() throws {
+        let m = try model()
+        #expect(m.downloadPhase(for: "iPhone18,2") == nil)
+        m.download = (try mergedBuild(), .downloading(written: 1, total: 2))
+        #expect(m.downloadPhase(for: "iPhone18,2") == .downloading(written: 1, total: 2))
+        #expect(m.downloadPhase(for: "iPhone16,2") == nil)
+        #expect(m.downloadPhase(for: nil) == nil)
+        #expect(m.blocksStart)
+    }
+
+    @Test func visibleBuildsKeepsTargetSignedAndInstalled() async throws {
+        let m = try model()
+        await m.checkApple(productType: "iPhone18,2")?.value
+        await m.askIPSWMe(productType: "iPhone18,2")?.value
+        let all = m.builds(productType: "iPhone18,2")
+        let unsigned = all.filter { !$0.isAppleTarget && $0.signed == false }
+        #expect(all.map(\.buildID) == ["24A446", "24A437", "23G90"] && unsigned.count == 2)
+
+        let none = m.visibleBuilds(productType: "iPhone18,2", installedBuild: nil, installedVersion: nil)
+        #expect(none.rows.map(\.buildID) == ["24A446"] && none.hiddenUnsigned == 2)
+        let installed = m.visibleBuilds(productType: "iPhone18,2", installedBuild: "23G90", installedVersion: nil)
+        #expect(installed.rows.map(\.buildID) == ["24A446", "23G90"] && installed.hiddenUnsigned == 1)
+        let byVersion = m.visibleBuilds(productType: "iPhone18,2", installedBuild: nil, installedVersion: all[1].version)
+        #expect(byVersion.rows.map(\.buildID) == ["24A446", "24A437"] && byVersion.hiddenUnsigned == 1)
+        #expect(m.visibleBuilds(productType: "iPhone1,1", installedBuild: nil, installedVersion: nil).rows.isEmpty)
+    }
+
+    @Test func plannedDigestsEqualWhatFinalizeReturns() throws {
+        let root = try tempDir("planned")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let body = Data((0..<5000).map { UInt8($0 % 251) })
+        let sha256 = IPSWData.hex(SHA256.hash(data: body)), sha1 = IPSWData.hex(Insecure.SHA1.hash(data: body))
+        let cases = [ExpectedDigests(sha256: sha256, sha1: sha1, sha1Sources: [.apple, .ipswMe]),
+                     ExpectedDigests(sha256: nil, sha1: sha1, sha1Sources: [.apple]),
+                     ExpectedDigests(sha256: sha256, sha1: nil, sha1Sources: []),
+                     ExpectedDigests(sha256: nil, sha1: sha1, sha1Sources: [.ipswMe])]
+        for (i, d) in cases.enumerated() {
+            let staged = root.appendingPathComponent("s\(i).part"), downloads = root.appendingPathComponent("d\(i)")
+            try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+            try body.write(to: staged)
+            let (_, verified) = try IPSWDownloader.finalize(staged: staged, size: Int64(body.count), digests: d,
+                                                            downloadsDir: downloads, fileName: "x.ipsw",
+                                                            progress: { _ in }, isCancelled: { false })
+            #expect(IPSWData.plannedDigests(d) == verified, "case \(i)")
+        }
+    }
+
+    @Test func restoreParkedShowsTheRecordFromDiskOnly() throws {
+        let stub = StubDownloader()
+        let fetch = IPSWStubFetch { _ in (Data(), 500, [:]) }
+        let m = try model(fetch, downloader: stub)
+        let b = try mergedBuild()
+        let stopped = Date(timeIntervalSince1970: 1_900_000_000)
+        var record = partialRecord(for: b, stoppedAt: stopped)
+        record.reason = .appQuit
+        stub.restoreRecord = record
+        m.restoreParked(knownIdentifiers: ["iPhone18,2"])
+        #expect(stub.restoreIdentifiers == ["iPhone18,2"])
+        #expect(m.download?.build.buildID == b.buildID)
+        #expect(m.download?.phase == .paused(written: 600_000, total: record.size, interruption: .appQuit))
+        #expect(m.stoppedAt == stopped)
+        #expect(fetch.requests.isEmpty)
+        m.restoreParked(knownIdentifiers: ["other"])
+        #expect(stub.calls == ["restore"], "once per process")
+
+        // The restored handler keeps working: resume, then the downloader's phases reach the model.
+        m.resumeDownload()
+        #expect(m.download?.phase == .preparing && m.stoppedAt == nil)
+        stub.handler?(.downloading(written: 700_000, total: record.size))
+        #expect(m.download?.phase == .downloading(written: 700_000, total: record.size))
+    }
+
+    @Test func pausedPhaseSetsStoppedAt() throws {
+        let clock = Clock()
+        let stub = StubDownloader()
+        let m = IPSWModel(sources: try fixtureFetch().sources, downloader: stub, downloadsDir: { dir },
+                          now: { clock.now }, lowSpacePercent: { 20 })
+        m.startDownload(try mergedBuild())
+        #expect(m.stoppedAt == nil)
+        stub.handler?(.paused(written: 5, total: 10, interruption: nil))
+        #expect(m.stoppedAt == clock.now)
+        stub.handler?(.downloading(written: 6, total: 10))
+        #expect(m.stoppedAt == nil)
+    }
+
+    final class Clock: @unchecked Sendable { var now = Date(timeIntervalSince1970: 2_000_000_000) }
+
+    @Test func outdatedNoteOnlyWhenAppleNamesAnotherBuild() async throws {
+        let m = try model()
+        let b = try mergedBuild()
+        m.download = (b, .paused(written: 1, total: 2, interruption: nil))
+        #expect(m.outdatedNote(productType: "iPhone18,2") == nil, "nothing looked up")
+        await m.checkApple(productType: "iPhone18,2")?.value
+        #expect(m.outdatedNote(productType: "iPhone18,2") == nil, "Apple names the same build")
+        var older = b
+        older.buildID = "23G90"
+        m.download = (older, .paused(written: 1, total: 2, interruption: nil))
+        #expect(m.outdatedNote(productType: "iPhone18,2")?.buildID == "24A446")
+        #expect(m.outdatedNote(productType: "iPhone16,2") == nil)
+        m.download = (older, .downloading(written: 1, total: 2))
+        #expect(m.outdatedNote(productType: "iPhone18,2") == nil)
+    }
+
+    @Test func startOverOnlyAfterARejectedResume() async throws {
+        let stub = StubDownloader()
+        let m = try model(downloader: stub)
+        let b = try mergedBuild()
+        m.download = (b, .failed(.checksumMismatch))
+        m.startOver()
+        #expect(m.download != nil && m.confirm == nil)
+        m.download = (b, .failed(.resumeRejected))
+        m.startOver()
+        #expect(m.download == nil)
+        #expect(m.confirm == .preparing(b))
+        await Task.yield()
+        for _ in 0..<200 where readyConfirm(m) == nil { try await Task.sleep(nanoseconds: 5_000_000) }
+        #expect(readyConfirm(m)?.build == b && stub.calls.isEmpty)
+    }
+
+    @Test func forgetModelClearsOnlyAMatchingDownload() throws {
+        let stub = StubDownloader()
+        let m = try model(downloader: stub)
+        let b = try mergedBuild()
+        m.download = (b, .paused(written: 1, total: 2, interruption: nil))
+        m.stoppedAt = Date()
+        m.forgetModel(identifier: "iPhone16,2")
+        #expect(m.download != nil && m.stoppedAt != nil)
+        m.forgetModel(identifier: "iPhone18,2")
+        #expect(m.download == nil && m.stoppedAt == nil)
+        #expect(stub.forgotten == ["iPhone16,2", "iPhone18,2"])
+    }
+
+    @Test func unlinkForgetsTheModelOnlyWhenItsLastPhoneGoes() async throws {
+        let root = try tempDir("unlink")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stub = StubDownloader()
+        let ipsw = try model(downloader: stub)
+        let m = IPhoneModel(store: IPhoneStore(url: root.appendingPathComponent("iphones.json")),
+                            archiveRoot: root.appendingPathComponent("archive"),
+                            logTypeStore: IPhoneLogTypeStore(url: root.appendingPathComponent(IPhoneLogTypeStore.fileName)),
+                            ipsw: ipsw)
+        let k1 = "0123456789abcdef", k2 = "fedcba9876543210", k3 = "00112233445566ff"
+        func rec(_ id: String, _ type: String) -> IPhoneDeviceRecord {
+            IPhoneDeviceRecord(id: id, name: id, productType: type, lastSeen: Date(), battery: [], keptArchives: [])
+        }
+        m.devices = [rec(k1, "iPhone18,2"), rec(k2, "iPhone18,2"), rec(k3, "iPhone16,2")]
+        let noTrash: @Sendable (URL) throws -> Void = { _ in }
+        await m.unlink(deviceKey: k1, trash: noTrash)
+        #expect(m.devices.count == 2 && stub.forgotten.isEmpty, "another phone of the model stays")
+        await m.unlink(deviceKey: k2, trash: noTrash)
+        #expect(m.devices.count == 1 && stub.forgotten == ["iPhone18,2"])
+        await m.unlink(deviceKey: k3, trash: noTrash)
+        #expect(stub.forgotten == ["iPhone18,2", "iPhone16,2"])
+    }
+
+    @Test func everyFixtureStateSeedsWithoutTouchingTheDownloaderOrNetwork() throws {
+        let stub = StubDownloader()
+        let fetch = IPSWStubFetch { _ in (Data(), 500, [:]) }
+        let m = try model(fetch, downloader: stub, networkAllowed: false)
+        for state in IPSWModel.fixtureStates {
+            m.applyVisualFixture(state)
+            #expect(m.apple["iPhone16,2"] != nil, "Sam always has Apple's answer: \(state)")
+            #expect((m.confirm != nil) == state.hasPrefix("confirm"), "\(state)")
+            let pausedState = ["paused", "interrupted", "relaunched", "quit-interrupted", "outdated", "resume-nospace"].contains(state)
+            if case .paused? = m.download?.phase { #expect(pausedState && m.stoppedAt != nil, "\(state)") } else { #expect(!pausedState, "\(state)") }
+        }
+        #expect(stub.calls.isEmpty && fetch.requests.isEmpty)
+    }
+}
+
 // MARK: - messages (language is process-wide → SerialTests)
 
 extension SerialTests {
@@ -777,7 +1176,7 @@ extension SerialTests {
             .notDownloadable("http"), .noChecksum, .noSize, .sourcesDisagree,
             .notEnoughSpace(needed: 14_000_000_000, available: 2_000_000_000), .downloadsDenied,
             .sizeMismatch(expected: 2, actual: 1), .checksumMismatch, .transfer("boom"), .fileSystem("disk"),
-            .busy, .cancelled,
+            .busy, .cancelled, .resumeRejected, .appQuit,
         ]
 
         @Test func messagesInBothLanguages() {
@@ -800,5 +1199,140 @@ extension SerialTests {
             #expect(IPSWData.verifiedText([VerifiedDigest(algorithm: .sha1, sources: [.apple])]) == "Проверено: SHA-1 (Apple) и размер")
             #expect(StringsRU().ipswAskSends("iPhone18,2") == "Отправит в ipsw.me идентификатор модели iPhone18,2")
         }
+
+        @Test func digestListIsTheInnerPartOfVerifiedText() {
+            L10nStore.shared.language = .en
+            let v: Set<VerifiedDigest> = [VerifiedDigest(algorithm: .sha1, sources: [.ipswMe, .apple]),
+                                          VerifiedDigest(algorithm: .sha256, sources: [.ipswMe])]
+            #expect(IPSWData.digestList(v) == "SHA-256 (ipsw.me), SHA-1 (Apple, ipsw.me) and size")
+            #expect(IPSWData.verifiedText(v) == "Verified: " + IPSWData.digestList(v))
+        }
+
+        @Test func cardStringsAreFilledInBothLanguagesWithoutSemicolons() {
+            func all(_ s: any IPSWStrings) -> [String] {
+                [s.ipswCardTitle, s.ipswHint, s.ipswCheckApple, s.ipswCheckAppleA11y, s.ipswAskIPSWMe,
+                 s.ipswAskIPSWMeA11y("iPhone18,2"), s.ipswCheckedAt("Apple", "10:00"), s.ipswInstalled("26.4.1", nil),
+                 s.ipswInstalled("26.4.1", "23E254"), s.ipswInstalledFromPhone, s.ipswInstalledLastSeen("1 Nov"),
+                 s.ipswInstalledUnknown, s.ipswAppleUnknownModel, s.ipswDownload, s.ipswDownloadA11y("26.4.1", "23E254"),
+                 s.ipswOlderHidden(1), s.ipswOlderHidden(2), s.ipswOlderHidden(5), s.ipswBusyPaused,
+                 s.ipswConfirmTitle("26.4.1", "23E254"), s.ipswConfirmSize, s.ipswConfirmDestination, s.ipswConfirmHost,
+                 s.ipswConfirmFreeAfter, s.ipswConfirmChecks("SHA-1"), s.ipswLowSpaceWarning("20 GB", 20),
+                 s.ipswDownloadAnyway, s.ipswCancel, s.ipswCancelA11y, s.ipswStop, s.ipswStopA11y,
+                 s.ipswVerifyingProgress("1 GB", "9 GB"), s.ipswPausedTitle("4 GB", "9 GB"),
+                 s.ipswInterruptedTitle("4 GB", "9 GB"), s.ipswPausedBody, s.ipswStoppedOn("1 Nov"), s.ipswAppQuit,
+                 s.ipswParkedOutdated("26.4.1", "23E254"), s.ipswErrResumeRejected, s.ipswStartOver, s.ipswStartOverA11y,
+                 s.ipswResume, s.ipswResumeA11y, s.ipswDiscard, s.ipswDiscardA11y, s.ipswClose, s.ipswCloseA11y,
+                 s.ipswRevealA11y("x.ipsw"), s.ipswFileGone]
+            }
+            for (lang, table) in [("en", all(StringsEN())), ("ru", all(StringsRU()))] {
+                for text in table { #expect(!text.isEmpty && !text.contains(";") && !text.contains("Optional("), "\(lang): \(text)") }
+            }
+            #expect(StringsEN().ipswInstalled("26.4.1", "23E254") == "Installed: iOS 26.4.1 (23E254)")
+            #expect(StringsEN().ipswOlderHidden(1) == "1 older build is not signed (per ipsw.me) and is not listed.")
+            #expect(StringsRU().ipswOlderHidden(1) == "Ещё 1 старая сборка без подписи (по данным ipsw.me) не показана.")
+            #expect(StringsRU().ipswOlderHidden(2) == "Ещё 2 старые сборки без подписи (по данным ipsw.me) не показаны.")
+            #expect(StringsRU().ipswOlderHidden(5) == "Ещё 5 старых сборок без подписи (по данным ipsw.me) не показаны.")
+        }
+    }
+}
+
+// MARK: - Decision 9: the finished file is watched (temp files only)
+
+@MainActor
+struct IPSWFinishedFileWatchTests {
+    private func tempFile() throws -> (dir: URL, file: URL) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ipsw-watch-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("x.ipsw")
+        try Data("x".utf8).write(to: file)
+        return (dir, file)
+    }
+
+    /// A model whose download has just finished with `file`.
+    private func finishedModel(_ file: URL, stub: StubDownloader = StubDownloader()) async throws -> IPSWModel {
+        let b = try mergedBuild()
+        let m = IPSWModel(sources: try fixtureFetch().sources, downloader: stub,
+                          downloadsDir: { file.deletingLastPathComponent() }, lowSpacePercent: { 20 },
+                          volumeInfo: { _ in (200_000_000_000, 245_000_000_000) })
+        await m.requestDownload(b)?.value
+        m.confirmDownload()
+        stub.handler?(.finished(file, verified: []))
+        return m
+    }
+
+    private func waitUntil(_ cond: () -> Bool) async {
+        for _ in 0..<200 where !cond() { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    @Test func deletingTheFileSwitchesToGone() async throws {
+        let (dir, file) = try tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let m = try await finishedModel(file)
+        #expect(!m.fileIsGone(file))
+        try FileManager.default.removeItem(at: file)
+        await waitUntil { m.fileIsGone(file) }
+        #expect(m.fileIsGone(file))
+        m.dismissDownload()
+    }
+
+    @Test func movingTheFileSwitchesToGone() async throws {
+        let (dir, file) = try tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let m = try await finishedModel(file)
+        try FileManager.default.moveItem(at: file, to: dir.appendingPathComponent("moved.ipsw"))
+        await waitUntil { m.fileIsGone(file) }
+        #expect(m.fileIsGone(file))
+        m.dismissDownload()
+    }
+
+    @Test func aFileAlreadyMissingIsGoneAtOnce() async throws {
+        let (dir, file) = try tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.removeItem(at: file)
+        let m = try await finishedModel(file)
+        #expect(m.fileIsGone(file))
+        m.dismissDownload()
+    }
+
+    @Test func closingThePanelStopsTheWatch() async throws {
+        let (dir, file) = try tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let m = try await finishedModel(file)
+        m.dismissDownload()
+        try FileManager.default.removeItem(at: file)
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(!m.fileIsGone(file), "no event after the panel closed")
+    }
+
+    @Test func aNewDownloadAndForgettingStopTheWatch() async throws {
+        let (dir, file) = try tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let m = try await finishedModel(file)
+        m.forgetModel(identifier: "iPhone18,2")
+        try FileManager.default.removeItem(at: file)
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(!m.fileIsGone(file))
+    }
+
+    @Test func quitStopsTheWatch() async throws {
+        let (dir, file) = try tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let m = try await finishedModel(file)
+        m.stopForQuit()
+        try FileManager.default.removeItem(at: file)
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(!m.fileIsGone(file))
+        m.dismissDownload()
+    }
+
+    @Test func aCancelledWatchDeliversNothingAndClosesItsDescriptor() async throws {
+        let (dir, file) = try tempFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var fired = false
+        let w = try #require(IPSWFileWatch(url: file) { fired = true })
+        w.cancel()
+        try FileManager.default.removeItem(at: file)
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(!fired)
     }
 }

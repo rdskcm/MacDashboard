@@ -148,8 +148,8 @@ enum DS3Motion {
     static let appearOffsetY: CGFloat = 14
     static let appearScale: CGFloat = 0.98
     static let tileStagger: Double = 0.07
-    /// Battery, history, logs, import, identity.
-    static let cardDelays: [Double] = [0.08, 0.14, 0.20, 0.26, 0.32]
+    /// Battery, history, logs, import, identity, firmware.
+    static let cardDelays: [Double] = [0.08, 0.14, 0.20, 0.26, 0.32, 0.38]
 
     static let page: Animation = .spring(response: 0.5, dampingFraction: 0.75)
     /// RESIZE-MOTION (decision D2): one curve for a width-tier change (tile/cell frames, header capsules, label fades).

@@ -15,7 +15,7 @@
 import Foundation
 import CryptoKit
 
-enum IPSWSource: String, Equatable, Hashable, Sendable { case apple, ipswMe }
+enum IPSWSource: String, Codable, Equatable, Hashable, Sendable { case apple, ipswMe }
 
 /// One build as ONE source describes it.
 struct IPSWFirmware: Equatable, Identifiable, Sendable {
@@ -94,6 +94,10 @@ enum IPSWError: Error, Equatable {
     case notEnoughSpace(needed: Int64, available: Int64), downloadsDenied
     case sizeMismatch(expected: Int64, actual: Int64), checksumMismatch
     case transfer(String), fileSystem(String), busy, cancelled
+    /// Resume refused: the record failed re-validation or the server did not honour the range. The partial is gone.
+    case resumeRejected
+    /// Interruption reason of a download stopped by quitting or a crash (never produced by a request).
+    case appQuit
 }
 
 enum IPSWData {
@@ -332,6 +336,23 @@ enum IPSWData {
         return available >= needed ? nil : .notEnoughSpace(needed: needed, available: available)
     }
 
+    /// Decision 7b: the low-space level the disk would be left at after `size` more bytes, nil when it stays ok
+    /// or when the volume did not report both figures. Uses `StorageSpace.level`, the only low-space rule.
+    static func lowSpaceAfter(size: Int64, available: Int64?, total: Int64?, lowPercent: Int) -> SpaceLevel? {
+        guard let available, let total, total > 0 else { return nil }
+        guard let level = StorageSpace.level(avail: max(available - size, 0), size: total, lowPercent: lowPercent),
+              level != .ok else { return nil }
+        return level
+    }
+
+    /// The digests a finished download will be verified against (the set `finalize` returns on success).
+    static func plannedDigests(_ d: ExpectedDigests) -> Set<VerifiedDigest> {
+        var out = Set<VerifiedDigest>()
+        if d.sha256 != nil { out.insert(VerifiedDigest(algorithm: .sha256, sources: [.ipswMe])) }
+        if d.sha1 != nil { out.insert(VerifiedDigest(algorithm: .sha1, sources: d.sha1Sources)) }
+        return out
+    }
+
     // MARK: naming
 
     /// The URL's last path component (percent-decoded), or a built name when that is unusable.
@@ -417,12 +438,19 @@ enum IPSWData {
         case .fileSystem(let detail): return L.ipswErrFileSystem(detail)
         case .busy: return L.ipswBusy
         case .cancelled: return L.ipswCancelled
+        case .resumeRejected: return L.ipswErrResumeRejected
+        case .appQuit: return L.ipswAppQuit
         }
     }
 
     /// Decision 3: the exact verified set as one line, e.g.
     /// "Verified: SHA-256 (ipsw.me), SHA-1 (Apple, ipsw.me) and size".
     @MainActor static func verifiedText(_ verified: Set<VerifiedDigest>) -> String {
+        L.ipswVerified(digestList(verified))
+    }
+
+    /// The list inside `verifiedText`, e.g. "SHA-256 (ipsw.me), SHA-1 (Apple, ipsw.me) and size".
+    @MainActor static func digestList(_ verified: Set<VerifiedDigest>) -> String {
         func name(_ s: IPSWSource) -> String { s == .apple ? "Apple" : "ipsw.me" }
         let order: [DigestAlgorithm] = [.sha256, .sha1]
         let parts = order.compactMap { alg -> String? in
@@ -431,6 +459,6 @@ enum IPSWData {
             let who = [IPSWSource.apple, .ipswMe].filter { v.sources.contains($0) }.map(name).joined(separator: ", ")
             return who.isEmpty ? label : "\(label) (\(who))"
         }
-        return L.ipswVerified(parts.joined(separator: ", ") + " " + L.ipswVerifiedSizeOnly)
+        return parts.joined(separator: ", ") + " " + L.ipswVerifiedSizeOnly
     }
 }

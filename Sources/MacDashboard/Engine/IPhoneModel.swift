@@ -19,7 +19,11 @@ final class IPhoneModel {
         let dir = tmp.appendingPathComponent("md-fixture-\(pid)", isDirectory: true)
         return IPhoneModel(store: IPhoneStore(url: dir.appendingPathComponent("iphones.json")),
                            archiveRoot: dir.appendingPathComponent("archive", isDirectory: true),
-                           logTypeStore: IPhoneLogTypeStore(url: dir.appendingPathComponent(IPhoneLogTypeStore.fileName)))
+                           logTypeStore: IPhoneLogTypeStore(url: dir.appendingPathComponent(IPhoneLogTypeStore.fileName)),
+                           // The fixture never reads the user's caches root and never reaches the network (IPHONE-IPSW D15).
+                           ipsw: IPSWModel(downloader: IPSWDownloader(stagingRoot: dir.appendingPathComponent("ipsw", isDirectory: true)),
+                                           downloadsDir: { dir.appendingPathComponent("Downloads", isDirectory: true) },
+                                           networkAllowed: false))
     }()
 
     /// Removes `md-fixture-<pid>` folders of processes that no longer run. Failures are ignored.
@@ -51,6 +55,8 @@ final class IPhoneModel {
     /// Status of each pending handle (`.needsTrust` or `.readFailed`).
     var pendingStatus: [IPhoneHandle: DeviceStatus] = [:]
     var lastSnapshot: [String: IPhoneSnapshot] = [:]
+    /// IPHONE-IPSW (D1): firmware lookups and the one download, owned for the process lifetime so a download survives page changes.
+    let ipsw: IPSWModel
     var transportAvailable = true
     /// Crash-log listing per device (memory only).
     var logs: [String: [IPhoneLogEntry]] = [:]
@@ -273,7 +279,9 @@ final class IPhoneModel {
          transport: MobileDeviceTransport = .shared,
          archiveRoot: URL? = nil,
          logTypeStore: IPhoneLogTypeStore = IPhoneLogTypeStore(
-            url: AppInfo.supportFolderURL.appendingPathComponent(IPhoneLogTypeStore.fileName))) {
+            url: AppInfo.supportFolderURL.appendingPathComponent(IPhoneLogTypeStore.fileName)),
+         ipsw: IPSWModel = IPSWModel()) {
+        self.ipsw = ipsw
         self.store = store
         self.logTypeStore = logTypeStore
         self.transport = transport
@@ -291,6 +299,8 @@ final class IPhoneModel {
         devices = store.load()
         headerCache = logTypeStore.load(keeping: Set(devices.map(\.id)))
         for d in devices { status[d.id] = .remembered }
+        // IPHONE-IPSW (R14, R18): a download stopped in an earlier run shows as stopped. Disk only, before the transport starts.
+        ipsw.restoreParked(knownIdentifiers: Set(devices.compactMap(\.productType)))
         migrateLegacyArchivesIfNeeded()
         transportAvailable = transport.isAvailable
         guard transportAvailable else { return }
@@ -654,6 +664,9 @@ final class IPhoneModel {
         requestPanelShown.remove(key)
         batteryCardShown.remove(key)
         devices = remaining
+        if let pt = record.productType, !remaining.contains(where: { $0.productType == pt }) {
+            ipsw.forgetModel(identifier: pt)                // D26: the last phone of this model took its stopped download along
+        }
         if let h = connected[key] {
             ignoredHandles.insert(h)
             logsLoading.detach(h)

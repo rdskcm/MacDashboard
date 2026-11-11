@@ -179,6 +179,20 @@ func fmtDisplayDateTime(_ date: Date) -> String {
     displayDateTimeFormatter.string(from: date)
 }
 
+private let displayDateTimeShortFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = .autoupdatingCurrent
+    f.timeZone = .autoupdatingCurrent
+    f.dateStyle = .short
+    f.timeStyle = .short
+    return f
+}()
+
+/// System-region short date + hours:minutes, no seconds, for display only (the firmware card's «checked» and «stopped» times).
+func fmtDisplayDateTimeShort(_ date: Date) -> String {
+    displayDateTimeShortFormatter.string(from: date)
+}
+
 private func makeShortDayFormatter(_ template: String) -> DateFormatter {
     let f = DateFormatter()
     f.locale = .autoupdatingCurrent

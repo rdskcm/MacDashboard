@@ -75,7 +75,7 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    | 5 | `brew upgrade` | `Engine/BrewUpgrader.swift:17` | user | yes — `Views/BrewUpgradeConfirm.swift:33`, opened from `Views/MaintenanceCard.swift:80` and `Views/AdviceActionDispatch.swift:60` |
    | 6 | Install `smartmontools` via Homebrew | `Engine/SmartToolsController.swift:133` (`installNow`) | user | **no** — deliberate, see below |
    | 7 | Apply energy settings | `Views/EnergyCard.swift:363` (`pmset -b`/`-c`) | admin | yes — `Views/EnergyCard.swift:176` |
-   | 8 | Download an iOS restore image (IPSW) | `Engine/IPSWDownloader.swift` | user (+ Files & Folders prompt for Downloads) | yes — UI step: size, destination, source |
+   | 8 | Download an iOS restore image (IPSW) | `Engine/IPSWDownloader.swift` | user (+ Files & Folders prompt for Downloads) | yes — confirm sheet: size, destination, server, checks, free space after |
    | 9 | Delete an app-requested sysdiagnose archive from the iPhone | `Engine/MobileDeviceTransport.swift` (`AFCSession.removeOwnArchive`, the one AFC remove call site) | user (paired phone) | yes — the import choice sheet states it (`Views/IPhoneImportCard.swift`, `deleteNote`); off with Settings › Devices › «Keep requested archives on the iPhone» |
    | 10 | Move a kept sysdiagnose archive to the Trash (the Mac copy only, no phone call) | `Engine/IPhoneModel.swift` (`trashKeptArchive`, `trashItem`), button in `Views/IPhoneImportCard.swift` (`keptSection`) | user | no — the Trash is recoverable |
 
@@ -101,8 +101,9 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    `rm`, not a move to the Trash — see the doc comment of `StartupItemsController.deleteOrphan`, `Engine/StartupItemsController.swift:96-100`) and that 7
    now escalates privileges only after its confirmation.
 
-   Row 8 (block IPHONE-IPSW, 2026-10) ships Engine-only first; its confirmation dialog comes
-   with the UI step. Its first write to `~/Downloads` can show macOS's Files & Folders prompt
+   Row 8 (block IPHONE-IPSW) asks in a confirm sheet before any firmware byte. A stopped download
+   keeps its partial file and a small record under `~/Library/Caches/<bundle id>/ipsw/` for 7 days,
+   across quits, until Resume or Discard. Its first write to `~/Downloads` can show macOS's Files & Folders prompt
    («"MacDashboard" would like to access files in your Downloads folder») unless Downloads
    access or Full Disk Access was granted earlier; declining it surfaces as "no access to the
    Downloads folder" with a pointer to System Settings › Privacy & Security › Files and Folders.
@@ -115,7 +116,8 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    Two further boundaries hold with no exceptions: the app writes file **content** only
    inside `~/Library/Application Support/MacDashboard/`, kept iPhone sysdiagnose archives in the
    archive folder (default `~/Documents/MacDashboard/iPhone`, Settings › Devices), the verified
-   `.ipsw` in `~/Downloads` (row 8), read-only copies of iPhone crash logs in the per-user temporary
+   `.ipsw` in `~/Downloads` (row 8), the partial `.ipsw` and its record under
+   `~/Library/Caches/<bundle id>/ipsw/` (row 8), read-only copies of iPhone crash logs in the per-user temporary
    folder (`$TMPDIR/md-crashlog-*`, removed when iPhone mode next starts) and a crash log saved to the
    place the user picks in the save panel (IPHONE-CRASHLOG-ACTIONS) (rows 1, 3, 4 delete or move files elsewhere but never author
    them), and the app has **no telemetry; the network is used only on an explicit user
@@ -126,7 +128,7 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    |---|---|---|---|
    | `itunes.apple.com` | click «Check with Apple» | GET the fixed version-catalogue URL | nothing device-specific |
    | `api.ipsw.me` | click «Ask ipsw.me» (its own button) | GET `/v4/device/<ProductType>?type=ipsw` | the model identifier, e.g. `iPhone18,2` |
-   | `updates.cdn-apple.com`, `secure-appldnld.apple.com` | click «Download» | optional HEAD, then GET of one `.ipsw` | nothing device-specific |
+   | `updates.cdn-apple.com`, `secure-appldnld.apple.com` | click «Download» (the optional HEAD), then confirm in the sheet (or «Resume») | optional HEAD, then GET (ranged on Resume) of one `.ipsw` | nothing device-specific |
 
    Never sent: UDID, ECID, serial numbers, device or Mac names, Apple ID, file contents.
    Sessions are ephemeral (no cookies, no disk cache) and use the system's certificate
