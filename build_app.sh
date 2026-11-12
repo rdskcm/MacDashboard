@@ -51,12 +51,12 @@ echo "== swift build (Apple Silicon, arm64) =="
 # Apple Silicon only: Intel Macs stay on v2.1. --triple pins the architecture and
 # the deployment target independently of the host this script runs on.
 EXPECTED_ARCH="arm64"
-SWIFT_BUILD_ARGS=(-c release --product MacDashboard
+SWIFT_BUILD_ARGS=(-c release --product Moonport
   --triple "$EXPECTED_ARCH-apple-macosx$MIN_MACOS"
   -Xswiftc -sdk -Xswiftc "$SDK_PATH"
   -Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_MACOS" -Xlinker "$SDK_VERSION")
 swift build "${SWIFT_BUILD_ARGS[@]}"
-BIN="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)/MacDashboard"
+BIN="$(swift build "${SWIFT_BUILD_ARGS[@]}" --show-bin-path)/Moonport"
 [ -x "$BIN" ] || { echo "binary not found: $BIN" >&2; exit 1; }
 
 echo "== LaunchServices: drop stale registrations =="

@@ -3,7 +3,7 @@
 #
 # Usage:  tools/harness/render.sh <scenario.swift> <output.png> [light|dark|both]
 #
-# Compiles: full app source tree (minus MacDashboardApp.swift) + HarnessKit.swift
+# Compiles: full app source tree (minus MoonportApp.swift) + HarnessKit.swift
 # + the scenario (copied to main.swift — top-level statements require that name),
 # then runs the binary, passing <output.png> as argv[1] for harnessRender().
 # Optional 3rd arg pins the theme (exported to the binary as HARNESS_APPEARANCE):
@@ -29,7 +29,7 @@ cp "$SCENARIO" "$BUILD/main.swift"
 # Collect app sources except the @main entry (bash 3.2: no mapfile).
 SRCS=()
 while IFS= read -r f; do SRCS+=("$f"); done < <(
-  find "$ROOT/Sources/MacDashboard" -name '*.swift' ! -name 'MacDashboardApp.swift' | sort
+  find "$ROOT/Sources/Moonport" -name '*.swift' ! -name 'MoonportApp.swift' | sort
 )
 
 # NOTE: no `-framework Observation` — it's an SDK Swift module, linking it fails.

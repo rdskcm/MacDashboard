@@ -2,7 +2,7 @@
 // Reusable helpers for headless UI render harnesses (see tools/harness/README.md).
 // A "scenario" file composes app views with directly-injected AppModel state
 // and calls `harnessRender(...)`; tools/harness/render.sh compiles scenario + this
-// file + the full app source tree (minus MacDashboardApp.swift) and runs it.
+// file + the full app source tree (minus MoonportApp.swift) and runs it.
 //
 // Empirically-learned gotchas baked into this setup — do not relearn them:
 // - The scenario must be compiled under the literal filename `main.swift`
@@ -149,7 +149,7 @@ func harnessRender<Content: View>(width: CGFloat = 460, appearance: HarnessAppea
 }
 
 /// Removes every CA animation from `layer` and all its descendants (SNAPSHOT-DARK-OFFSCREEN amendment 1).
-/// Copy of Tests/MacDashboardTests/SnapshotSupport.swift `removeAllLayerAnimations` (the harness cannot compile test-target files); keep the two in step.
+/// Copy of Tests/MoonportTests/SnapshotSupport.swift `removeAllLayerAnimations` (the harness cannot compile test-target files); keep the two in step.
 fileprivate func removeAllLayerAnimations(_ layer: CALayer) {
     layer.removeAllAnimations()
     for sub in layer.sublayers ?? [] { removeAllLayerAnimations(sub) }
@@ -163,7 +163,7 @@ struct WindowCaptureError: Error, CustomStringConvertible {
 /// PNG bytes of a window captured by the window server: `/usr/sbin/screencapture -x -l <windowNumber>`
 /// (SNAPSHOT-DARK-OFFSCREEN, findings C6). It renders a window that was never ordered in exactly like the real
 /// on-screen window and shows nothing on screen. Throws instead of returning a blank, partial or wrong-size image.
-/// Copy of Tests/MacDashboardTests/SnapshotSupport.swift `captureWindowPNG` (the harness cannot compile test-target files); keep the two in step.
+/// Copy of Tests/MoonportTests/SnapshotSupport.swift `captureWindowPNG` (the harness cannot compile test-target files); keep the two in step.
 func captureWindowPNG(windowNumber: Int, pixelWidth: Int, pixelHeight: Int) throws -> Data {
     guard CGPreflightScreenCaptureAccess() else {
         throw WindowCaptureError(description: "Screen Recording permission is missing for the app that started this run "

@@ -183,7 +183,7 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
 > parallel agents of §11 phase 2; those agents finished long ago. The tree has since
 > grown to 30 files under `Engine/` and 26 under `Views/`, and none of
 > `ContentView.swift`, `Components.swift`, `Cards.swift` still exist. The real test
-> target is `Tests/MacDashboardTests/` (swift-testing, since CHECKS-SWIFT-TESTING; before that the
+> target is `Tests/MoonportTests/` (swift-testing, since CHECKS-SWIFT-TESTING; before that the
 > executable `Checks/` target of §10's fallback). Read the tree, not this block.
 >
 > One rule below **is** still live and is repeated here so it does not get lost with
@@ -199,8 +199,8 @@ MacDashboard/
   Package.swift                 # scaffold owns
   SPEC.md
   build_app.sh                  # packaging phase owns
-  Sources/MacDashboard/
-    MacDashboardApp.swift       # scaffold
+  Sources/Moonport/
+    MoonportApp.swift       # scaffold
     Models.swift                # scaffold — FROZEN contract (below)
     Engine/DashboardModel.swift # scaffold (stubs) → collectors agent wires real data
     Engine/CommandRunner.swift  # collectors agent
@@ -214,7 +214,7 @@ MacDashboard/
     Views/Components.swift      # UI agent (tiles, meters, ChartOrTableCard, Severity colors)
     Views/Cards.swift           # UI agent (all cards)
     Views/ReportTab.swift       # UI agent
-  Tests/MacDashboardTests/      # integration phase (parsers + assessment fixtures)
+  Tests/MoonportTests/      # integration phase (parsers + assessment fixtures)
 ```
 
 Rule for agents: `Models.swift` and `Package.swift` are read-only once scaffolded.
@@ -422,7 +422,7 @@ func refreshReport()              // re-run full report (single-flight; ignore i
 ## 5. Collectors
 
 ### 5.1 LiveCollector (every N s, user-configurable; runs off-main, publishes to model on main)
-- interval: `AppSettings.fastIntervalSeconds` (`Sources/MacDashboard/Engine/AppSettings.swift:10-12,26-29`),
+- interval: `AppSettings.fastIntervalSeconds` (`Sources/Moonport/Engine/AppSettings.swift:10-12,26-29`),
   allowed values `[1, 2, 3, 5, 10]` seconds, default 2, user-settable in Settings, read fresh by
   the loop every tick (no restart needed on change).
 - CPU %: `host_processor_info`/`host_statistics64(HOST_CPU_LOAD_INFO)` — diff ticks
@@ -608,7 +608,7 @@ A file that exists but cannot be read as a history object is never overwritten: 
 > longer match what ships. Treat this as a record of the original design brief.
 >
 > Three things in it are still accurate and load-bearing: the window geometry
-> (`MacDashboardApp.swift:20,25` — default 1150×780, min 900×620), the bilingual `L10n`
+> (`MoonportApp.swift:20,25` — default 1150×780, min 900×620), the bilingual `L10n`
 > protocol with `StringsEN`/`StringsRU` witnesses, and the `ChartOrTableCard` rule that
 > chart and table must read the SAME observable state — that last one is the regression
 > the original dashboard had, and it is still the reason the component exists.
@@ -702,9 +702,9 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
 
 > **HISTORICAL — the plan, not the outcome.** The `import Testing` route in the first
 > bullet failed under bare Command Line Tools, so the fallback was built as `Checks/`
-> (target `MacDashboardChecks`, sources symlinked into `Sources/MacDashboard/`). Once
+> (target `MacDashboardChecks`, sources symlinked into `Sources/Moonport/`). Once
 > Xcode 27 was installed, CHECKS-SWIFT-TESTING ported every check to swift-testing in
-> `Tests/MacDashboardTests/` (`swift test`) and removed `Checks/`; its last state is kept under
+> `Tests/MoonportTests/` (`swift test`) and removed `Checks/`; its last state is kept under
 > the git tag `checks-runner-archive`.
 
 - Unit tests (swift-testing `import Testing`; if unavailable with CLT, make a separate
@@ -714,7 +714,7 @@ README-install note: on another Mac after copying, if Gatekeeper complains:
   pass/fail Checks target): renders a SwiftUI scenario file off-screen to a PNG via
   `render.sh <scenario.swift> <out.png>` for visual verification of Views.
 - Parser fixtures (planned as inline string literals in Checks/main.swift; as built, real captured
-  outputs are files in Tests/Fixtures/<command>/ — see its README — alongside inline cases in Tests/MacDashboardTests/):
+  outputs are files in Tests/Fixtures/<command>/ — see its README — alongside inline cases in Tests/MoonportTests/):
   top output (both stats orders, with +/- suffixes), vm.swapusage line, pmset -g batt (laptop AC/battery,
   desktop = no battery lines), system_profiler hardware (M3 Mac AND Intel with
   "Processor Name"/"Processor Speed"), tmutil destinationinfo (configured / "No

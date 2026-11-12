@@ -7,26 +7,26 @@
 import PackageDescription
 
 let package = Package(
-    name: "MacDashboard",
+    name: "Moonport",
     platforms: [
         // MIN-MACOS-26: keep in step with MIN_MACOS in build_app.sh (the release build's target).
         .macOS(.v26)
     ],
     targets: [
         .executableTarget(
-            name: "MacDashboard",
-            path: "Sources/MacDashboard"
+            name: "Moonport",
+            path: "Sources/Moonport"
         ),
         // SWIFT-TESTING SUITE: run by `swift test` locally and in .github/workflows/ci.yml; the
-        // place new tests go. It reaches the engine through `@testable import MacDashboard`
+        // place new tests go. It reaches the engine through `@testable import Moonport`
         // (no symlinks). Ported checks live under the `.serialized` root suite `SerialTests`
-        // (Tests/MacDashboardTests/TestSupport.swift). `swift build` never compiles a test
+        // (Tests/MoonportTests/TestSupport.swift). `swift build` never compiles a test
         // target (only `swift test` / `--build-tests` do) and build_app.sh builds
-        // `--product MacDashboard` only, so local builds are unchanged.
+        // `--product Moonport` only, so local builds are unchanged.
         .testTarget(
-            name: "MacDashboardTests",
-            dependencies: ["MacDashboard"],
-            path: "Tests/MacDashboardTests"
+            name: "MoonportTests",
+            dependencies: ["Moonport"],
+            path: "Tests/MoonportTests"
         )
     ],
     swiftLanguageModes: [.v6]
