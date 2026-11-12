@@ -580,7 +580,7 @@ struct IPSWSourcesTests {
         #expect(ipsw.timeoutInterval == 15)
         for r in reqs {
             #expect(r.value(forHTTPHeaderField: "User-Agent") == IPSWSources.userAgent)
-            #expect(IPSWSources.userAgent.hasPrefix("MacDashboard/"))
+            #expect(IPSWSources.userAgent.hasPrefix("Moonport/"))
             #expect(r.httpBody == nil && r.value(forHTTPHeaderField: "Cookie") == nil, "nothing else is sent")
         }
     }
@@ -1136,6 +1136,7 @@ struct IPSWModelDownloadTests {
         let ipsw = try model(downloader: stub)
         let m = IPhoneModel(store: IPhoneStore(url: root.appendingPathComponent("iphones.json")),
                             archiveRoot: root.appendingPathComponent("archive"),
+                            oldDefaultArchiveRoot: root.appendingPathComponent("archive-old"),
                             logTypeStore: IPhoneLogTypeStore(url: root.appendingPathComponent(IPhoneLogTypeStore.fileName)),
                             ipsw: ipsw)
         let k1 = "0123456789abcdef", k2 = "fedcba9876543210", k3 = "00112233445566ff"

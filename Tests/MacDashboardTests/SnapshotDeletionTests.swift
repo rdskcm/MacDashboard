@@ -61,9 +61,9 @@ struct SnapshotDeletionTests {
     }
 
     @Test func onlyTheAppItselfMayRunTheRealDelete() throws {
-        #expect(SnapshotDeletion.mayRunRealDelete(bundleID: "com.rdskcm.mac-dashboard", visualFixture: false))
-        #expect(!SnapshotDeletion.mayRunRealDelete(bundleID: "com.rdskcm.mac-dashboard", visualFixture: true))
-        #expect(!SnapshotDeletion.mayRunRealDelete(bundleID: "com.rdskcm.mac-dashboard.bench", visualFixture: false))
+        #expect(SnapshotDeletion.mayRunRealDelete(bundleID: "app.moonport", visualFixture: false))
+        #expect(!SnapshotDeletion.mayRunRealDelete(bundleID: "app.moonport", visualFixture: true))
+        #expect(!SnapshotDeletion.mayRunRealDelete(bundleID: "app.moonport.bench", visualFixture: false))
         #expect(!SnapshotDeletion.mayRunRealDelete(bundleID: nil, visualFixture: false))
         #expect(!SnapshotDeletion.mayRunRealDelete(bundleID: Bundle.main.bundleIdentifier, visualFixture: false), "this test process is refused")
         // A renamed bundle id must fail here, not at the user's click.

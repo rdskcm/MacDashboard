@@ -1,5 +1,5 @@
 #!/bin/bash
-# Warning gate (BUILD-WARNINGS). Compiles MacDashboard and MacDashboardTests the way CI does
+# Warning gate (BUILD-WARNINGS). Compiles Moonport and MoonportTests the way CI does
 # (debug, `swift build --build-tests`) into an EMPTY scratch directory and fails on any warning:
 #   - Swift compiler warnings: -warnings-as-errors makes each one an error.
 #   - Linker warnings: -fatal_warnings makes ld exit non-zero.
@@ -53,4 +53,4 @@ if [ -n "$STRAY" ]; then
   echo "$STRAY" >&2
   exit 1
 fi
-echo "warning check OK: no warnings in MacDashboard and MacDashboardTests"
+echo "warning check OK: no warnings in Moonport and MoonportTests"

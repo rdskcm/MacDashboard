@@ -216,7 +216,7 @@ extension SerialTests {
         @Test func crashes() {
             let today = at(1, 15, 9, 41)
             let jan12 = at(1, 12, 22, 17)
-            let groups = [crash("MacDashboard", 2, last: today, path: "/x/MacDashboard-1.ips"),
+            let groups = [crash(AppInfo.name, 2, last: today, path: "/x/MacDashboard-1.ips"),   // the own-app row is matched by AppInfo.name
                           crash("kernel", 1, panic: true, last: jan12, path: "/x/k.panic"),
                           crash("Xcode", 1)]
             withLanguage(.en) {
@@ -224,7 +224,7 @@ extension SerialTests {
                 #expect(none.crashesNone && none.crashRows.isEmpty && none.crashesCaption == "own app and kernel panics")
                 let m = make(input(crashes: groups))
                 #expect(m.crashesCaption == "4 crashes · own app and kernel panics" && !m.crashesNone)
-                #expect(m.crashRows[0] == SecurityCrashRow(id: "MacDashboard", name: "MacDashboard", sub: "last today, 09:41",
+                #expect(m.crashRows[0] == SecurityCrashRow(id: AppInfo.name, name: AppInfo.name, sub: "last today, 09:41",
                                                           value: "×2", tone: .amber, path: "/x/MacDashboard-1.ips"))
                 #expect(m.crashRows[1].name == "Kernel panic" && m.crashRows[1].tone == .hot && m.crashRows[1].sub == "Jan 12, 22:17")
                 #expect(m.crashRows[2].sub == "" && m.crashRows[2].path == nil)

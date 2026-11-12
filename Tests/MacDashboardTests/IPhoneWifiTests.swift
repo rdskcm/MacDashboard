@@ -1,6 +1,6 @@
 // Tests/MacDashboardTests/IPhoneWifiTests.swift
 // IPHONE-WIFI: the link policy, the live-battery interval per link and the model's USB / Wi-Fi connection handling
-// (priority, standby, promotion, the setting). Temp paths only, never `~/Library/Application Support/MacDashboard`;
+// (priority, standby, promotion, the setting). Temp paths only, never `~/Library/Application Support/Moonport`;
 // the default transport (`.shared`) is never started here, so any job on it fails with `.gone`.
 import Foundation
 import Testing
@@ -17,6 +17,7 @@ import Testing
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let m = IPhoneModel(store: IPhoneStore(url: dir.appendingPathComponent("iphones.json")),
                             archiveRoot: dir.appendingPathComponent("archive"),
+                            oldDefaultArchiveRoot: dir.appendingPathComponent("archive-old"),
                             logTypeStore: IPhoneLogTypeStore(url: dir.appendingPathComponent(IPhoneLogTypeStore.fileName)))
         return (m, dir)
     }

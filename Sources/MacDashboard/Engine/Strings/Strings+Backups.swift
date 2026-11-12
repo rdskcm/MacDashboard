@@ -239,7 +239,7 @@ extension StringsEN: BackupsStrings {
     var bkNoteClaudeNone: String { "No successful Claude backup in the log. Check that the backup job still runs." }
     func bkNoteClaudeMissing(_ path: String) -> String { "Log not found: \(path)" }
     var bkOpenSettingsBackups: String { "Settings › Backup location" }
-    var bkOpenSettingsBackupsA11y: String { "Open MacDashboard Settings on the Backup section" }
+    var bkOpenSettingsBackupsA11y: String { "Open Moonport Settings on the Backup section" }
     func bkNoteClaudeUnreadable(_ path: String) -> String { "Can’t read \(path). Full Disk Access may be needed." }
     var bkOpenPrivacy: String { "Open Privacy settings…" }
     var bkOpenPrivacyA11y: String { "Open System Settings › Privacy & Security › Full Disk Access" }
@@ -377,7 +377,7 @@ extension StringsRU: BackupsStrings {
     var bkNoteClaudeNone: String { "В журнале нет успешных бэкапов Claude. Проверьте, что задача резервного копирования запускается." }
     func bkNoteClaudeMissing(_ path: String) -> String { "Лог не найден: \(path)" }
     var bkOpenSettingsBackups: String { "Настройки › Расположение бэкапа" }
-    var bkOpenSettingsBackupsA11y: String { "Открыть настройки MacDashboard, раздел «Бэкап»" }
+    var bkOpenSettingsBackupsA11y: String { "Открыть настройки Moonport, раздел «Бэкап»" }
     func bkNoteClaudeUnreadable(_ path: String) -> String { "Не удалось прочитать \(path). Возможно, нужен полный доступ к диску." }
     var bkOpenPrivacy: String { "Открыть «Конфиденциальность»…" }
     var bkOpenPrivacyA11y: String { "Открыть Системные настройки › Конфиденциальность › Полный доступ к диску" }

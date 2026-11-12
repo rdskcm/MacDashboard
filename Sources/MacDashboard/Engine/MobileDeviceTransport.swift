@@ -244,7 +244,7 @@ final class MobileDeviceTransport: @unchecked Sendable {
     private func onThread(_ body: @escaping () -> Void) -> Bool {
         guard syms != nil else { return false }
         threadLock.lock()
-        let t = thread ?? ParkedRunLoopThread(name: "com.macdashboard.mobiledevice")
+        let t = thread ?? ParkedRunLoopThread(name: "app.moonport.mobiledevice")
         thread = t
         threadLock.unlock()
         return t.async(body)

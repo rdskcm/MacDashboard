@@ -12,13 +12,15 @@ final class IPhoneModel {
     /// Under `-visualFixture` every store lives in a temp folder (IPHONE-UNLINK D3): the fixture's tiles can be
     /// unlinked, their archives trashed or claims saved without touching the user's App Support or Documents.
     static let shared: IPhoneModel = {
-        guard VisualFixture.isRequested else { return IPhoneModel() }
+        guard VisualFixture.isRequested else { return IPhoneModel(oldDefaultArchiveRoot: IPhoneStore.legacyDocumentsArchiveRoot()) }
         let tmp = FileManager.default.temporaryDirectory
         let pid = ProcessInfo.processInfo.processIdentifier
         removeStaleFixtureFolders(in: tmp, keeping: pid)
         let dir = tmp.appendingPathComponent("md-fixture-\(pid)", isDirectory: true)
         return IPhoneModel(store: IPhoneStore(url: dir.appendingPathComponent("iphones.json")),
                            archiveRoot: dir.appendingPathComponent("archive", isDirectory: true),
+                           // Nor does it look into the user's Documents for the old app's archive folder (MOONPORT-RENAME D4).
+                           oldDefaultArchiveRoot: dir.appendingPathComponent("archive-old", isDirectory: true),
                            logTypeStore: IPhoneLogTypeStore(url: dir.appendingPathComponent(IPhoneLogTypeStore.fileName)),
                            // The fixture never reads the user's caches root and never reaches the network (IPHONE-IPSW D15).
                            ipsw: IPSWModel(downloader: IPSWDownloader(stagingRoot: dir.appendingPathComponent("ipsw", isDirectory: true)),
@@ -259,6 +261,9 @@ final class IPhoneModel {
     /// REDESIGN-IPHONE: where kept archives live (`<archiveRoot>/<deviceKey>/<name>`); resolved from
     /// `AppSettings.iphoneArchiveFolder`, changed only through `setArchiveFolder`.
     private(set) var archiveRoot: URL
+    /// MOONPORT-RENAME D4: the old app's default archive folder (`~/Documents/<old name>/iPhone`). Readers look here after
+    /// `archiveRoot`, so a row resolves before, during and after the first-launch archive move. Test seam, like `archiveRoot:`.
+    let oldDefaultArchiveRoot: URL
     enum ArchiveFolderError: Equatable { case couldNotMove(Int) }
     /// Why the last «Choose…» left the folder unchanged; cleared by the next successful change.
     var archiveFolderError: ArchiveFolderError?
@@ -292,6 +297,7 @@ final class IPhoneModel {
     init(store: IPhoneStore = IPhoneStore(url: IPhoneStore.defaultURL()),
          transport: MobileDeviceTransport = .shared,
          archiveRoot: URL? = nil,
+         oldDefaultArchiveRoot: URL,
          logTypeStore: IPhoneLogTypeStore = IPhoneLogTypeStore(
             url: AppInfo.supportFolderURL.appendingPathComponent(IPhoneLogTypeStore.fileName)),
          ipsw: IPSWModel = IPSWModel()) {
@@ -299,6 +305,7 @@ final class IPhoneModel {
         self.store = store
         self.logTypeStore = logTypeStore
         self.transport = transport
+        self.oldDefaultArchiveRoot = oldDefaultArchiveRoot
         self.archiveRoot = archiveRoot ?? AppSettings.resolveArchiveFolder(
             raw: AppSettings.shared.iphoneArchiveFolder, defaultRoot: IPhoneStore.defaultArchiveRoot())
     }
@@ -357,9 +364,11 @@ final class IPhoneModel {
         }
     }
 
-    /// The kept file, wherever it is: the archive folder first, then the legacy App Support place; nil when gone.
+    /// The kept file, wherever it is: the archive folder first, then the old app's default folder in Documents, then the
+    /// legacy App Support place; nil when gone.
     func keptArchiveURL(deviceKey: String, name: String) -> URL? {
-        Self.resolveKeptArchive(archiveRoot: archiveRoot, legacyRoot: IPhoneStore.legacyArchiveRoot(), deviceKey: deviceKey, name: name)
+        Self.resolveKeptArchive(archiveRoot: archiveRoot, oldDefaultRoot: oldDefaultArchiveRoot, legacyRoot: IPhoneStore.legacyArchiveRoot(),
+                                deviceKey: deviceKey, name: name)
     }
 
     /// A name from `iphones.json` is a plain file name: not empty, `.`, `..`, and without a path separator.
@@ -367,10 +376,12 @@ final class IPhoneModel {
         !name.isEmpty && name != "." && name != ".." && name == (name as NSString).lastPathComponent
     }
 
-    nonisolated private static func resolveKeptArchive(archiveRoot: URL, legacyRoot: URL, deviceKey: String, name: String) -> URL? {
+    nonisolated static func resolveKeptArchive(archiveRoot: URL, oldDefaultRoot: URL, legacyRoot: URL, deviceKey: String, name: String) -> URL? {
         let fm = FileManager.default
         let current = archiveRoot.appendingPathComponent(deviceKey, isDirectory: true).appendingPathComponent(name)
         if fm.fileExists(atPath: current.path) { return current }
+        let old = oldDefaultRoot.appendingPathComponent(deviceKey, isDirectory: true).appendingPathComponent(name)
+        if fm.fileExists(atPath: old.path) { return old }
         let legacy = legacyRoot.appendingPathComponent(deviceKey, isDirectory: true)
             .appendingPathComponent("sysdiagnose", isDirectory: true).appendingPathComponent(name)
         return fm.fileExists(atPath: legacy.path) ? legacy : nil
@@ -378,7 +389,7 @@ final class IPhoneModel {
 
     /// DEVICE-ARCHIVE-CLEANUP D14: moves one kept archive (the Mac copy only, no phone call) to the Trash and drops
     /// its name from the record; battery history and logs stay. `url` is the one `keptArchiveURL` resolved for the
-    /// row: its folder must be one of the two places that function looks in and its last component must be `name`,
+    /// row: its folder must be one of the three places that function looks in and its last component must be `name`,
     /// else nothing happens. A file already gone counts as removed. Any other failure keeps the row and sets
     /// `keptTrashFailed`. Never deletes outright: only the Trash move.
     func trashKeptArchive(deviceKey: String, name: String, url: URL,
@@ -386,9 +397,10 @@ final class IPhoneModel {
         keptTrashFailed[deviceKey] = nil
         let folder = url.deletingLastPathComponent().standardizedFileURL
         let current = archiveRoot.appendingPathComponent(deviceKey, isDirectory: true).standardizedFileURL
+        let oldDefault = oldDefaultArchiveRoot.appendingPathComponent(deviceKey, isDirectory: true).standardizedFileURL
         let legacy = IPhoneStore.legacyArchiveRoot().appendingPathComponent(deviceKey, isDirectory: true)
             .appendingPathComponent("sysdiagnose", isDirectory: true).standardizedFileURL
-        guard name == url.lastPathComponent, folder == current || folder == legacy,
+        guard name == url.lastPathComponent, folder == current || folder == oldDefault || folder == legacy,
               let i = devices.firstIndex(where: { $0.id == deviceKey }),
               devices[i].keptArchives.contains(name) else { return }
         if FileManager.default.fileExists(atPath: url.path) {
@@ -404,6 +416,8 @@ final class IPhoneModel {
     /// Settings › Devices › Choose…: moves every kept archive to `url`, then stores the setting. All or nothing:
     /// a skipped or failed file moves the moved ones back and reports the count.
     func setArchiveFolder(_ url: URL) async {
+        // MOONPORT-RENAME D4: Choose… never plans while the first-launch archive move runs.
+        _ = await LegacyArchiveMove.task?.value
         let new = url.standardizedFileURL
         guard !archiveFolderBusy, new != archiveRoot.standardizedFileURL else { return }
         archiveFolderBusy = true
@@ -801,15 +815,16 @@ final class IPhoneModel {
         // app open ~/Documents (no Files & Folders prompt, REDESIGN-IPHONE Decision 5).
         guard !record.keptArchives.isEmpty else { return }
         let names = record.keptArchives.filter(Self.isPlainFileName)
-        let root = archiveRoot, legacy = IPhoneStore.legacyArchiveRoot()
+        let root = archiveRoot, oldDefault = oldDefaultArchiveRoot, legacy = IPhoneStore.legacyArchiveRoot()
         let failed: [URL] = await Task.detached(priority: .utility) {
             var failed: [URL] = []
-            let urls = names.compactMap { IPhoneModel.resolveKeptArchive(archiveRoot: root, legacyRoot: legacy, deviceKey: key, name: $0) }
+            let urls = names.compactMap { IPhoneModel.resolveKeptArchive(archiveRoot: root, oldDefaultRoot: oldDefault, legacyRoot: legacy, deviceKey: key, name: $0) }
             for u in urls { do { try trash(u) } catch { failed.append(u) } }
             guard failed.isEmpty else { return failed }
             let own = root.appendingPathComponent(key, isDirectory: true)
             let legacyDir = legacy.appendingPathComponent(key, isDirectory: true)
             ArchiveMigration.removeEmptyDirectories([own], stopAt: root)
+            ArchiveMigration.removeEmptyDirectories([oldDefault.appendingPathComponent(key, isDirectory: true)], stopAt: oldDefault)
             ArchiveMigration.removeEmptyDirectories(
                 [legacyDir.appendingPathComponent("sysdiagnose", isDirectory: true), legacyDir], stopAt: legacy)
             return failed

@@ -37,6 +37,7 @@ import Testing
         if storeURL == nil { try IPhoneStore(url: url).save(devices) }
         try typeStore.save([k: [:], o: [:]])
         let m = IPhoneModel(store: IPhoneStore(url: url), archiveRoot: dir.appendingPathComponent("archive"),
+                            oldDefaultArchiveRoot: dir.appendingPathComponent("archive-old"),
                             logTypeStore: typeStore)
         m.devices = devices
         m.headerCache = [k: [:], o: [:]]

@@ -107,7 +107,7 @@ final class IPSWDownloader: NSObject, URLSessionDataDelegate, IPSWDownloading, @
         queue = OperationQueue()
         super.init()
         queue.maxConcurrentOperationCount = 1
-        queue.name = "MacDashboard.IPSWDownloader"
+        queue.name = "Moonport.IPSWDownloader"
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData

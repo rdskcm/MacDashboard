@@ -30,7 +30,7 @@ enum SnapshotDeletion {
     /// About 30 × the measured 2.1 s run.
     static let timeoutSeconds: TimeInterval = 60
     /// `build_app.sh`'s CFBundleIdentifier. Bench copies, `swift test` and `swift run` have another id or none.
-    static let appBundleID = "com.rdskcm.mac-dashboard"
+    static let appBundleID = AppInfo.bundleID
 
     /// The real command runs only in the app itself, never in a test process or a fixture run.
     static func mayRunRealDelete(bundleID: String?, visualFixture: Bool) -> Bool {

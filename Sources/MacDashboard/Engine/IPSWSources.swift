@@ -39,7 +39,7 @@ struct IPSWSources: Sendable {
     }
 
     static var userAgent: String {
-        "MacDashboard/" + ((Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev")
+        "Moonport/" + ((Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "dev")
     }
 
     static func request(_ url: URL, method: String = "GET", timeout: TimeInterval) -> URLRequest {

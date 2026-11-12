@@ -3,7 +3,7 @@
 
 usage: python3 -I mkfixture.py <bench-home-dir>
 
-Builds <home>/Library/Application Support/MacDashboard/ (mode 0700) with
+Builds <home>/Library/Application Support/Moonport/ (mode 0700) with
   mac_check_state.json  500 daily rows ending today (port of the hunt's mkstate.sh)
   iphones.json          3 devices; device 0 (newest, so tile 0) has 1026 daily battery rows
 
@@ -40,12 +40,12 @@ def main(argv):
 
     real_home = os.path.realpath(os.path.expanduser("~"))
     real_lib = os.path.join(real_home, "Library")
-    real_data = os.path.join(real_lib, "Application Support", "MacDashboard")
+    real_data = os.path.join(real_lib, "Application Support", "Moonport")
     if inside(home, real_lib):
         refuse("bench home %s is inside %s" % (home, real_lib))
     if inside(real_home, home):
         refuse("bench home %s is the real home or one of its parents" % home)
-    target = os.path.realpath(os.path.join(home, "Library", "Application Support", "MacDashboard"))
+    target = os.path.realpath(os.path.join(home, "Library", "Application Support", "Moonport"))
     if inside(target, real_data) or inside(real_data, target):
         refuse("target %s overlaps the real data folder" % target)
 
@@ -60,7 +60,7 @@ def main(argv):
     with open(marker, "w") as f:
         f.write("perf gate synthetic bench home\n")
 
-    data_dir = os.path.join(home, "Library", "Application Support", "MacDashboard")
+    data_dir = os.path.join(home, "Library", "Application Support", "Moonport")
     os.makedirs(data_dir, mode=0o700)
     os.chmod(data_dir, 0o700)
 

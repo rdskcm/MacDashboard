@@ -43,7 +43,7 @@ extension LanguageChoice {
 protocol AppStrings: SettingsStrings, CommonStrings, OverviewStrings, SecurityStrings, ReportStrings,
     StorageStrings, MemoryStrings, CPUStrings, MaintenanceStrings, BackupsStrings,
     HistoryStrings, BatteryStrings, SystemStrings, AttentionStrings, IPhoneStrings,
-    IPhoneLogsStrings, IPSWStrings, HomeStrings {}
+    IPhoneLogsStrings, IPSWStrings, HomeStrings, LegacyStrings {}
 
 /// English string table, the reference. Its members are the `extension StringsEN` parts of Engine/Strings/.
 struct StringsEN: AppStrings {}

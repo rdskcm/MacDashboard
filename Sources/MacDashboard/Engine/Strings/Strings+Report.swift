@@ -123,7 +123,7 @@ extension StringsEN: ReportStrings {
     var reportFailedNoReading: String { "Couldn’t generate the report: system_profiler returned no data." }
 
     // MARK: Report text
-    func reportTitle(_ model: String) -> String { "MacDashboard report — \(model)" }
+    func reportTitle(_ model: String) -> String { "Moonport report — \(model)" }
     func reportGenerated(_ dateTime: String, _ os: String) -> String { "Generated \(dateTime) · \(os)" }
     func reportGeneratedNoOS(_ dateTime: String) -> String { "Generated \(dateTime)" }
     var reportKeyStatus: String { "STATUS" }
@@ -160,7 +160,7 @@ extension StringsEN: ReportStrings {
     var reportSectionUpdates: String { "macOS UPDATES" }
     var reportSectionSmart: String { "EXTERNAL AND INTERNAL DISKS: SMART" }
     var reportSectionUnparsed: String { "UNRECOGNISED COMMAND OUTPUT (first lines)" }
-    var reportUnparsedHint: String { "MacDashboard could not read the output of these commands. Serial numbers and UUIDs are masked. Attach this block to a bug report." }
+    var reportUnparsedHint: String { "Moonport could not read the output of these commands. Serial numbers and UUIDs are masked. Attach this block to a bug report." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(+\(n) more lines not shown)" }
     var reportNone: String { "(none)" }
     func reportUptime(_ v: String) -> String { "Uptime: \(v)" }
@@ -246,7 +246,7 @@ extension StringsRU: ReportStrings {
     var reportFailedNoReading: String { "Не удалось создать отчёт: system_profiler не вернул данных." }
 
     // MARK: Report text
-    func reportTitle(_ model: String) -> String { "Отчёт MacDashboard — \(model)" }
+    func reportTitle(_ model: String) -> String { "Отчёт Moonport — \(model)" }
     func reportGenerated(_ dateTime: String, _ os: String) -> String { "Создан \(dateTime) · \(os)" }
     func reportGeneratedNoOS(_ dateTime: String) -> String { "Создан \(dateTime)" }
     var reportKeyStatus: String { "СОСТОЯНИЕ" }
@@ -283,7 +283,7 @@ extension StringsRU: ReportStrings {
     var reportSectionUpdates: String { "ОБНОВЛЕНИЯ macOS" }
     var reportSectionSmart: String { "ВНЕШНИЕ И ВСТРОЕННЫЕ ДИСКИ: SMART" }
     var reportSectionUnparsed: String { "НЕРАСПОЗНАННЫЙ ВЫВОД КОМАНД (первые строки)" }
-    var reportUnparsedHint: String { "MacDashboard не смог разобрать вывод этих команд. Серийные номера и UUID скрыты. Приложите этот блок к сообщению об ошибке." }
+    var reportUnparsedHint: String { "Moonport не смог разобрать вывод этих команд. Серийные номера и UUID скрыты. Приложите этот блок к сообщению об ошибке." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(ещё не показано строк: \(n))" }
     var reportNone: String { "(нет)" }
     func reportUptime(_ v: String) -> String { "Аптайм: \(v)" }

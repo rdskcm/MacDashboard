@@ -1,4 +1,4 @@
-# SPEC — «Дашборд Mac» native SwiftUI app (MacDashboard)
+# SPEC — Moonport native SwiftUI app (formerly MacDashboard, «Дашборд Mac»)
 
 Rewrite of the web pipeline (mac_checkup.sh → mac_report.txt → mac_dashboard.py →
 HTML + mac_live_server.py SSE) as ONE native macOS app. No browser, no HTTP server,
@@ -104,7 +104,7 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    Row 8 (block IPHONE-IPSW) asks in a confirm sheet before any firmware byte. A stopped download
    keeps its partial file and a small record under `~/Library/Caches/<bundle id>/ipsw/` for 7 days,
    across quits, until Resume or Discard. Its first write to `~/Downloads` can show macOS's Files & Folders prompt
-   («"MacDashboard" would like to access files in your Downloads folder») unless Downloads
+   («"Moonport" would like to access files in your Downloads folder») unless Downloads
    access or Full Disk Access was granted earlier; declining it surfaces as "no access to the
    Downloads folder" with a pointer to System Settings › Privacy & Security › Files and Folders.
 
@@ -114,8 +114,8 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    move leaves the file under App Support, still reachable from the device page).
 
    Two further boundaries hold with no exceptions: the app writes file **content** only
-   inside `~/Library/Application Support/MacDashboard/`, kept iPhone sysdiagnose archives in the
-   archive folder (default `~/Documents/MacDashboard/iPhone`, Settings › Devices), the verified
+   inside `~/Library/Application Support/Moonport/`, kept iPhone sysdiagnose archives in the
+   archive folder (default `~/Documents/Moonport/iPhone`, Settings › Devices; both moved from the MacDashboard paths at the first launch), the verified
    `.ipsw` in `~/Downloads` (row 8), the partial `.ipsw` and its record under
    `~/Library/Caches/<bundle id>/ipsw/` (row 8), read-only copies of iPhone crash logs in the per-user temporary
    folder (`$TMPDIR/md-crashlog-*`, removed when iPhone mode next starts) and a crash log saved to the
@@ -124,7 +124,7 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
    action** (`CONSTRAINTS-EVIDENCE.md` slug `network-stance` in the docs repo). Every host
    the app's own code contacts:
 
-   | Host | When | Request | Sent beyond IP + `User-Agent: MacDashboard/<version>` |
+   | Host | When | Request | Sent beyond IP + `User-Agent: Moonport/<version>` |
    |---|---|---|---|
    | `itunes.apple.com` | click «Check with Apple» | GET the fixed version-catalogue URL | nothing device-specific |
    | `api.ipsw.me` | click «Ask ipsw.me» (its own button) | GET `/v4/device/<ProductType>?type=ipsw` | the model identifier, e.g. `iPhone18,2` |
@@ -153,24 +153,24 @@ The scaffold class `DashboardModel` named below was split into `AppModel` and pe
 ## 2. Locations
 
 - Sources: `<project>/MacDashboard/` (SwiftPM package, this file lives there).
-- App data dir: `~/Library/Application Support/MacDashboard/`
+- App data dir: `~/Library/Application Support/Moonport/`
   (create on first run via `FileManager.urls(for: .applicationSupportDirectory…)`).
   - `mac_report.txt` — the single report file (overwritten).
   - `mac_check_state.json` — history (same schema as legacy file, see §7).
   - `iphones.json` — remembered iPhones and their battery history. «Unlink device…» removes one phone's record and moves
     its kept archives (`<archive folder>/<device key>/`) to the Trash.
-- iPhone archive folder: `~/Documents/MacDashboard/iPhone/<deviceKey>/<archive>` by default, or the
+- iPhone archive folder: `~/Documents/Moonport/iPhone/<deviceKey>/<archive>` by default, or the
   folder chosen in Settings › Devices (kept sysdiagnose archives only).
 - iPhone crash-log copies: `$TMPDIR/md-crashlog-<UUID>/<file>` (0700 / 0600), removed when iPhone mode
-  next starts; `~/Library/Application Support/MacDashboard/iphone-log-types.json` — the crash-log type cache (paths,
+  next starts; `~/Library/Application Support/Moonport/iphone-log-types.json` — the crash-log type cache (paths,
   sizes, times, bug types, process names, header timestamps per device key; version 2).
-- Built app: `MacDashboard/dist.noindex/MacDashboard.app` — `APP_NAME="MacDashboard"` /
+- Built app: `MacDashboard/dist.noindex/Moonport.app` — `APP_NAME="Moonport"` /
   `DIST="dist.noindex/$APP_NAME.app"` at `build_app.sh:20-21`. (`--install` moves it to
-  `~/Applications/MacDashboard.app`, removing any stale bundle under the old
-  «Дашборд Mac» name first. The bundle name is `MacDashboard` in both languages —
+  `~/Applications/Moonport.app`. The bundle name is `Moonport` in both languages; an old
+  MacDashboard.app is offered for the Trash by the app itself (MOONPORT-RENAME) —
   `build_app.sh:106-117` writes only `NSHumanReadableCopyright` and
   `NSAppleEventsUsageDescription` into the `.lproj` files; `CFBundleName`/
-  `CFBundleDisplayName` are plain `"MacDashboard"` in both (`:82`, `:88`). This is
+  `CFBundleDisplayName` are plain `"Moonport"` in both (`:82`, `:88`). This is
   load-bearing, not cosmetic: because `CFBundleName` is NOT localized, `AppInfo.name`
   (`AppInfo.swift:16-18`) matches the `CFBundleExecutable` embedded in crash-report
   filenames, which is what `ReportCollector.crashRaisesAttention`
@@ -658,7 +658,7 @@ Structure:
 ```
 swift build -c release --triple arm64-apple-macosx26.0 \
   -Xswiftc -sdk -Xswiftc <SDK path> -Xlinker -platform_version -Xlinker macos -Xlinker 26.0 -Xlinker <SDK version>
-dist.noindex/MacDashboard.app/Contents/{MacOS/MacDashboard, Info.plist, Resources/AppIcon.icns, Resources/{en,ru}.lproj/InfoPlist.strings}
+dist.noindex/Moonport.app/Contents/{MacOS/Moonport, Info.plist, Resources/{Assets.car, AppIcon.icns}, Resources/{en,ru}.lproj/InfoPlist.strings}
 ```
 Apple Silicon only (arm64) from v2.2 on; Intel Macs stay on v2.1, the last universal release.
 The SDK is whatever `xcrun --sdk macosx` resolves; the explicit `-sdk` and
@@ -667,35 +667,36 @@ The SDK is whatever `xcrun --sdk macosx` resolves; the explicit `-sdk` and
 with `lipo`/`vtool` that the binary is exactly arm64 and records that `sdk` and
 `minos 26.0`, and fails on any mismatch.
 
-Info.plist: CFBundleIdentifier=com.rdskcm.mac-dashboard, CFBundleName=MacDashboard,
-CFBundleDisplayName=MacDashboard, LSMinimumSystemVersion=26.0, NSHighResolutionCapable,
+Info.plist: CFBundleIdentifier=app.moonport, CFBundleName=Moonport,
+CFBundleDisplayName=Moonport, LSMinimumSystemVersion=26.0, NSHighResolutionCapable,
 CFBundleShortVersionString/CFBundleVersion: version is defined solely by `VERSION`/`CODENAME` in `build_app.sh`. LSApplicationCategoryType=public.app-category.utilities,
 NSHumanReadableCopyright, NSAppleEventsUsageDescription. NO LSUIElement (normal Dock app).
 Localized `en.lproj`/`ru.lproj` InfoPlist.strings are generated for the copyright and the
 Apple-events usage description.
-Icon: reuse legacy generator idea — render simple pulse-line icon via CoreGraphics
-swift script into iconset → iconutil (best-effort; skip icon on failure).
-codesign --force --options runtime --timestamp=none --entitlements MacDashboard.entitlements
---sign <identity> "dist.noindex/MacDashboard.app". <identity> is the SHA-1 of the single keychain identity
-named "MacDashboard Local Signing" (created once per Mac by tools/signing/make-identity.sh; its
+Icon: `Icon/AppIcon.icon` (Icon Composer document, light + dark layers) compiled by
+`xcrun actool` into `Assets.car` (Default and Dark renditions) and a light `AppIcon.icns`;
+actool's partial plist gives CFBundleIconFile/CFBundleIconName. A failure stops the build.
+codesign --force --options runtime --timestamp=none --entitlements Moonport.entitlements
+--sign <identity> "dist.noindex/Moonport.app". <identity> is the SHA-1 of the single keychain identity
+named "Moonport Local Signing" (created once per Mac by tools/signing/make-identity.sh; its
 designated requirement names the certificate, not the cdhash, so TCC grants survive rebuilds), or
 `-` (ad-hoc, with a loud warning) when none exists — release CI always takes the ad-hoc path; two
 or more such identities fail the build. The signature carries the hardened runtime (V2-SECURITY-FIX: without
 --options runtime, DYLD_INSERT_LIBRARIES is honoured and library validation is off, so any local
 process running as this user could inject into an app the README asks users to grant Full Disk
-Access). MacDashboard.entitlements grants exactly one entitlement,
+Access). Moonport.entitlements grants exactly one entitlement,
 com.apple.security.automation.apple-events, which the hardened runtime requires for the in-process
 NSAppleScript Trash action.
-`--install` flag: moves the built bundle to `~/Applications/MacDashboard.app` (so `dist.noindex/` holds no
-second copy) through the temporary names `.MacDashboard.app.new` / `.MacDashboard.app.old`, so a failed move
-leaves the previous install in place, removes any stale bundle under an old app name, then runs
+`--install` flag: moves the built bundle to `~/Applications/Moonport.app` (so `dist.noindex/` holds no
+second copy) through the temporary names `.Moonport.app.new` / `.Moonport.app.old`, so a failed move
+leaves the previous install in place, then runs
 `tools/ls-prune.sh` (every `lsregister` call bounded to 60 s; exit 3 on a timeout).
 Every build also runs `tools/ls-prune.sh` first and excludes `dist.noindex/` from Time Machine
 (`tmutil addexclusion`): LaunchServices keeps every bundle with this bundle ID it has seen, and
 opening the app by bundle ID must resolve to the installed copy (APP-ID-DUPLICATES).
-The prune also unregisters bench copies (`com.rdskcm.mac-dashboard.bench`), which `tools/bench-app.sh` names `MacDashboardBench.app`: opening the app by name matches the bundle file name and would otherwise prefer a bench copy (LS-PRUNE-MISSES).
+The prune also unregisters bench copies (`app.moonport.bench`), which `tools/bench-app.sh` names `MoonportBench.app`: opening the app by name matches the bundle file name and would otherwise prefer a bench copy (LS-PRUNE-MISSES).
 README-install note: on another Mac after copying, if Gatekeeper complains:
-`xattr -dr com.apple.quarantine "MacDashboard.app"` or right-click → Open.
+`xattr -dr com.apple.quarantine "Moonport.app"` or right-click → Open.
 
 ## 10. Testing
 

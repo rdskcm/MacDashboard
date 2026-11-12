@@ -91,6 +91,10 @@ final class AppSettings {
     static let iphoneWifiKey = "iphoneWifi"
     /// REDESIGN-IPHONE: folder for kept sysdiagnose archives; absent or empty = `IPhoneStore.defaultArchiveRoot()`.
     static let iphoneArchiveFolderKey = "iphoneArchiveFolder"
+    /// MOONPORT-RENAME: the user chose "Keep it" for the old app in the one-time notice (the Settings › About row stays while the old app exists).
+    static let legacyAppOfferDismissedKey = "legacyAppOfferDismissed"
+    /// MOONPORT-RENAME W1: the Welcome panel was presented once (written the moment it is shown).
+    static let welcomeShownKey = "moonportWelcomeShown"
     /// DEVICE-ARCHIVE-CLEANUP: when true, an archive the app requested stays on the iPhone after its import (C5).
     static let iphoneKeepRequestedOnPhoneKey = "iphoneKeepRequestedOnPhone"
     static let batteryShowsRawIPhoneKey = "batteryShowsRawIPhone"
@@ -237,6 +241,14 @@ final class AppSettings {
     var keepImportedArchives: Bool {
         didSet { defaults.set(keepImportedArchives, forKey: Self.keepImportedArchivesKey) }
     }
+    /// MOONPORT-RENAME: "Keep it" was chosen for the old app. Not an assessment input.
+    var legacyAppOfferDismissed: Bool {
+        didSet { defaults.set(legacyAppOfferDismissed, forKey: Self.legacyAppOfferDismissedKey) }
+    }
+    /// MOONPORT-RENAME W1: the Welcome panel was presented once. Never reset by the app. Not an assessment input.
+    var welcomeShown: Bool {
+        didSet { defaults.set(welcomeShown, forKey: Self.welcomeShownKey) }
+    }
     /// DEVICE-ARCHIVE-CLEANUP: false (default) = delete an app-requested archive from the iPhone after a full import.
     var iphoneKeepRequestedOnPhone: Bool {
         didSet { defaults.set(iphoneKeepRequestedOnPhone, forKey: Self.iphoneKeepRequestedOnPhoneKey) }
@@ -290,6 +302,8 @@ final class AppSettings {
         orbsEnabled = d.object(forKey: Self.orbsEnabledKey) as? Bool ?? true
         rimProfile = Self.resolveRimProfile(raw: d.string(forKey: Self.rimProfileKey))
         keepImportedArchives = d.object(forKey: Self.keepImportedArchivesKey) as? Bool ?? true
+        legacyAppOfferDismissed = d.object(forKey: Self.legacyAppOfferDismissedKey) as? Bool ?? false
+        welcomeShown = d.object(forKey: Self.welcomeShownKey) as? Bool ?? false
         iphoneKeepRequestedOnPhone = d.object(forKey: Self.iphoneKeepRequestedOnPhoneKey) as? Bool ?? false
         iphoneAutoRead = d.object(forKey: Self.iphoneAutoReadKey) as? Bool ?? true
         iphoneWifi = d.object(forKey: Self.iphoneWifiKey) as? Bool ?? true

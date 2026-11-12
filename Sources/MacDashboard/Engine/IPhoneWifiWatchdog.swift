@@ -15,7 +15,7 @@ final class IPhoneWifiWatchdog: @unchecked Sendable {
 
     // @unchecked Sendable: `lock` and `queue` are immutable; every var below is read and written only under `lock`.
     private let lock = NSLock()
-    private let queue = DispatchQueue(label: "com.macdashboard.mobiledevice.watchdog", qos: .utility)
+    private let queue = DispatchQueue(label: "app.moonport.mobiledevice.watchdog", qos: .utility)
     private var onDead: (@Sendable () -> Void)?
     private var fds: Set<Int32> = []
     private var busy = false

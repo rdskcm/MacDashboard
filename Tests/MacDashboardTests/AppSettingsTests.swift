@@ -115,7 +115,7 @@ extension SerialTests {
         @Test func testProcessIsNotTheAppDomain() {
             let id = Bundle.main.bundleIdentifier
             print("P3: test process bundle id = \(id ?? "nil")")
-            #expect(id != "com.rdskcm.mac-dashboard")
+            #expect(id != AppInfo.bundleID)
         }
 
 

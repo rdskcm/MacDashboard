@@ -129,7 +129,7 @@ extension SerialTests {
             let tasks = rwTasks()
             let k = { (s: String) in pad(s, 16) }
             let lines = [
-                "MacDashboard report — MacBook Air (Apple M3)",
+                "Moonport report — MacBook Air (Apple M3)",
                 "Generated Jul 3, 2026, 18:37 · macOS 26.1 (25B78)",
                 "",
                 k("STATUS") + "Critical · 2 tasks",
@@ -171,7 +171,7 @@ extension SerialTests {
             let out = ReportWriter.render(fullInput(), language: L10nStore.shared.language)
             let rows = out.components(separatedBy: "\n")
             let k = { (s: String) in pad(s, 16) }
-            #expect(rows[0] == "Отчёт MacDashboard — MacBook Air (Apple M3)", "renderRU title (got \(rows[0]))")
+            #expect(rows[0] == "Отчёт Moonport — MacBook Air (Apple M3)", "renderRU title (got \(rows[0]))")
             // The month word comes from the system CLDR data: the abbreviated or the genitive July form depending on the macOS version.
             #expect(rows[1].hasPrefix("Создан 3 июл") && rows[1].contains(" 2026, 18:37 · macOS 26.1 (25B78)"),
                     "renderRU generated line (got \(rows[1]))")
@@ -207,7 +207,7 @@ extension SerialTests {
             let out = ReportWriter.render(emptyInput(), language: L10nStore.shared.language)
             let rows = out.components(separatedBy: "\n")
             let k = { (s: String) in pad(s, 16) }
-            #expect(rows[0] == "MacDashboard report — Mac", "renderMissing title")
+            #expect(rows[0] == "Moonport report — Mac", "renderMissing title")
             #expect(rows[1] == "Generated Jul 3, 2026, 18:37", "renderMissing generated line has no macOS part (got \(rows[1]))")
             #expect(rows[3] == k("STATUS") + "All good", "renderMissing status has no task count (got \(rows[3]))")
             #expect(rows[4] == "", "renderMissing blank after status without task lines")

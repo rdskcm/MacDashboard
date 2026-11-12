@@ -195,7 +195,7 @@ enum PrivilegedRunner {
             drainGroup.leave()
         }
 
-        let timeoutQueue = DispatchQueue(label: "MacDashboard.PrivilegedRunner.timeout")
+        let timeoutQueue = DispatchQueue(label: "Moonport.PrivilegedRunner.timeout")
         let timer = DispatchSource.makeTimerSource(queue: timeoutQueue)
         timer.schedule(deadline: .now() + invocation.timeout)
         timer.setEventHandler { [pid = process.processIdentifier] in

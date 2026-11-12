@@ -22,7 +22,8 @@ extension SerialTests {
             let dir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("md-history-ctl-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)", isDirectory: true)
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            #expect(!dir.path.contains("/Library/Application Support/MacDashboard"))
+            #expect(!dir.path.contains("/Library/Application Support/" + AppInfo.supportFolderName))
+            #expect(!dir.path.contains("/Library/Application Support/" + AppInfo.legacySupportFolderName))
             return dir
         }
         private func write(_ text: String, _ url: URL) {

@@ -82,12 +82,12 @@ enum IPSWPartialStore {
     static let checkpointBytes: Int64 = 64 << 20
     static let maxAge: TimeInterval = 7 * 86_400
 
-    /// `~/Library/Caches/<bundle id>/ipsw/` (`MacDashboard` when there is no bundle id, as under `swift test`).
+    /// `~/Library/Caches/<bundle id>/ipsw/` (`Moonport` when there is no bundle id, as under `swift test`).
     static func defaultRoot() -> URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return caches
-            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "MacDashboard", isDirectory: true)
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? AppInfo.supportFolderName, isDirectory: true)
             .appendingPathComponent("ipsw", isDirectory: true)
     }
 

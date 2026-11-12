@@ -13,6 +13,7 @@ import Testing
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let m = IPhoneModel(store: IPhoneStore(url: dir.appendingPathComponent("iphones.json")),
                             archiveRoot: dir.appendingPathComponent("archive"),
+                            oldDefaultArchiveRoot: dir.appendingPathComponent("archive-old"),
                             logTypeStore: IPhoneLogTypeStore(url: dir.appendingPathComponent(IPhoneLogTypeStore.fileName)))
         func rec(_ id: String, _ marketing: String, _ design: Int) -> IPhoneDeviceRecord {
             IPhoneDeviceRecord(id: id, name: "iPhone", marketingName: marketing, productType: nil, enclosureColor: nil,

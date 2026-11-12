@@ -1,23 +1,23 @@
 #!/bin/bash
-# tools/perf/foreign-copies.sh — MacDashboard processes the perf tools did not start (GATE-AX-MISS).
-# A second MacDashboard process made the 2026-10-30 night gate press buttons in the wrong app, and any copy loads
+# tools/perf/foreign-copies.sh — Moonport processes the perf tools did not start (GATE-AX-MISS).
+# A second Moonport process made the 2026-10-30 night gate press buttons in the wrong app, and any copy loads
 # the CPU and GPU the gate measures. gate.sh refuses to start while one runs (list); night.sh closes them (close).
 #
 # Usage:
 #   foreign-copies.sh list
-#       one line per running MacDashboard process (zombies skipped), "pid ppid started command" from
+#       one line per running Moonport process (zombies skipped), "pid ppid started command" from
 #       ps -ww -o pid=,ppid=,lstart=,command=; nothing when there is none. Exit 0.
 #   foreign-copies.sh close [--dry-run] [--only PID]
 #       closes them. First every copy that is not the installed app (bench copies, dist.noindex builds, scratchpad
 #       copies): SIGTERM, SIGKILL after 5 s. Then the installed app (a bundle directly in /Applications or
-#       ~/Applications with bundle id com.rdskcm.mac-dashboard): one AppleScript quit, 15 s limit, never killed.
+#       ~/Applications with bundle id app.moonport): one AppleScript quit, 15 s limit, never killed.
 #       Prints "found: <list line>" per process, then "closed: <pid> (<how>)" or "left: <pid> <path> (<why>)".
 #       --dry-run prints "would close: ..." / "would quit: ..." instead and touches nothing.
-#       --only PID (test seam) acts on that one process; it must be a running MacDashboard process, else exit 64.
+#       --only PID (test seam) acts on that one process; it must be a running Moonport process, else exit 64.
 # Exit: 0 nothing left | 1 at least one "left:" line | 64 usage
 set -uo pipefail
 
-BUNDLE_ID="com.rdskcm.mac-dashboard"
+BUNDLE_ID="app.moonport"
 TERM_GRACE=5     # s from SIGTERM to SIGKILL
 QUIT_LIMIT=15    # s the installed app gets after the AppleScript quit
 
@@ -25,7 +25,7 @@ usage() { sed -n '2,/^set -uo/{/^#/p;}' "$0" | sed 's/^# \{0,1\}//'; }
 bad() { echo "foreign-copies.sh: $*" >&2; exit 64; }
 
 alive() { local s; s="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"; [ -n "$s" ] && [ "${s#Z}" = "$s" ]; }
-pids() { local p; for p in $(pgrep -x MacDashboard 2>/dev/null); do alive "$p" && echo "$p"; done; return 0; }
+pids() { local p; for p in $(pgrep -x Moonport 2>/dev/null); do alive "$p" && echo "$p"; done; return 0; }
 line() { ps -ww -o pid=,ppid=,lstart=,command= -p "$1" 2>/dev/null | sed 's/^ *//'; }
 exe() { ps -ww -o comm= -p "$1" 2>/dev/null; }
 gone() { local t=0; while alive "$1" && [ "$t" -lt $(( $2 * 10 )) ]; do sleep 0.1; t=$((t + 1)); done; ! alive "$1"; }
@@ -54,7 +54,7 @@ done
 ALL="$(pids)"
 if [ -n "$ONLY" ]; then
   [[ "$ONLY" =~ ^[0-9]+$ ]] || bad "--only needs a pid"
-  grep -qx "$ONLY" <<< "$ALL" || bad "--only $ONLY is not a running MacDashboard process"
+  grep -qx "$ONLY" <<< "$ALL" || bad "--only $ONLY is not a running Moonport process"
   ALL="$ONLY"
 fi
 OTHER=""; INST=""

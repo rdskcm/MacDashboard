@@ -20,6 +20,7 @@ import Testing
         if createFile { FileManager.default.createFile(atPath: file.path, contents: Data("x".utf8)) }
         let m = IPhoneModel(store: IPhoneStore(url: dir.appendingPathComponent("iphones.json")),
                             archiveRoot: dir.appendingPathComponent("archive"),
+                            oldDefaultArchiveRoot: dir.appendingPathComponent("archive-old"),
                             logTypeStore: IPhoneLogTypeStore(url: dir.appendingPathComponent(IPhoneLogTypeStore.fileName)))
         m.devices = [IPhoneDeviceRecord(id: key, name: "T", lastSeen: Date(), battery: [], keptArchives: [name])]
         return (m, dir, file)

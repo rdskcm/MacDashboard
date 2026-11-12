@@ -7,7 +7,7 @@
          the send fails with errAEEventNotPermitted (-1743) even when TCC has approved
          the app. (The login-items read goes through a child /usr/bin/osascript, which
          carries its own signature — this entitlement covers only the sender. But TCC
-         attributes the Automation grant to the RESPONSIBLE PROCESS, MacDashboard, not
+         attributes the Automation grant to the RESPONSIBLE PROCESS, Moonport, not
          the sender, which is why the app's own NSAppleEventsUsageDescription is what
          the user sees for the System Events prompt as well as the Finder one — see
          build_app.sh:96.) -->

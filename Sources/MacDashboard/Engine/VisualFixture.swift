@@ -28,6 +28,21 @@ enum VisualFixture {
     /// of the honest-empty GPU card and Home figure). Read only under `-visualFixture`.
     static var gpuUnavailableRequested: Bool { ProcessInfo.processInfo.arguments.contains("-fixtureGPUUnavailable") }
 
+    /// MOONPORT-RENAME D7: the one-time notice as fixture data (never read from disk). The offscreen state
+    /// `content-legacy-notice` renders it; the real window shows it only with `-fixtureLegacyNotice`, so the `main-*`
+    /// states carry no sheet.
+    static let legacyNotice = LegacyNotice(moved: 7, parked: 1, failed: 2, archivesMoving: true,
+                                           oldApp: URL(fileURLWithPath: "/Applications/MacDashboard.app"), oldAppRunning: false,
+                                           parkedFolder: URL(fileURLWithPath: "/fixture/Moonport/old-app-data-20260101-120000"),
+                                           parkedFiles: ["report.json"], failedFiles: ["history/2026-01.json", "iphones-old.json"],
+                                           archiveCount: 3)
+    /// The design's minimal variant: data and archives moved, no conflict, no failure, no old app.
+    static let legacyNoticeMinimal = LegacyNotice(moved: 7, parked: 0, failed: 0, archivesMoving: true, oldApp: nil,
+                                                  oldAppRunning: false, archiveCount: 3)
+    /// The Trash location the «trashed» snapshot state starts from (the file does not exist).
+    static let legacyTrashedApp = URL(fileURLWithPath: "/fixture/.Trash/MacDashboard.app")
+    static var legacyNoticeRequested: Bool { ProcessInfo.processInfo.arguments.contains("-fixtureLegacyNotice") }
+
     /// Always in the past, so `reportUpdatedTimeString` takes its stable
     /// "date + time" branch (not the "same day as now" time-only branch).
     static let referenceDate: Date = Calendar.current.date(
@@ -133,9 +148,9 @@ enum VisualFixture {
         }
         let user = home + "/Library/Logs/DiagnosticReports"
         return [
-            CrashGroup(process: "MacDashboard", count: 2, directory: user, lastReportAt: at(0, 9, 41),
-                       newestReportPath: user + "/MacDashboard-2026-01-15-094112.ips",
-                       reportPaths: [user + "/MacDashboard-2026-01-15-094112.ips", user + "/MacDashboard-2026-01-14-181530.ips"]),
+            CrashGroup(process: "Moonport", count: 2, directory: user, lastReportAt: at(0, 9, 41),
+                       newestReportPath: user + "/Moonport-2026-01-15-094112.ips",
+                       reportPaths: [user + "/Moonport-2026-01-15-094112.ips", user + "/Moonport-2026-01-14-181530.ips"]),
             CrashGroup(process: "Kernel", count: 1, isPanic: true, directory: "/Library/Logs/DiagnosticReports",
                        lastReportAt: at(3, 22, 17),
                        newestReportPath: "/Library/Logs/DiagnosticReports/panic-full-2026-01-12-221704.panic",

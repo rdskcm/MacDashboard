@@ -53,11 +53,13 @@ extension SerialTests {
                          bench home \(home) is an account's home folder; \
                          snapshots.sh uses tools/visual/out/snapshot-home
                          """)
-            try #require(!FileManager.default.fileExists(atPath: home + "/Library/Application Support/MacDashboard"),
-                         """
-                         bench home \(home) already holds MacDashboard user data; \
-                         refuse (Live constraint: user data is off-limits to tests)
-                         """)
+            for folder in [AppInfo.legacySupportFolderName, AppInfo.supportFolderName] {
+                try #require(!FileManager.default.fileExists(atPath: home + "/Library/Application Support/" + folder),
+                             """
+                             bench home \(home) already holds \(folder) user data; \
+                             refuse (Live constraint: user data is off-limits to tests)
+                             """)
+            }
             VisualFixture.forced = true
             defer { VisualFixture.forced = false }
             // D8: Settings panes render with AppSettings at their unset defaults.
@@ -105,11 +107,12 @@ extension SerialTests {
             let ipStore = FileManager.default.temporaryDirectory
                 .appendingPathComponent("md-visual-iphone-\(ProcessInfo.processInfo.processIdentifier)")
                 .appendingPathComponent("iphones.json")
-            @MainActor func fixtureIPhone(archiveRoot: URL = URL(fileURLWithPath: "/Users/fixture/Documents/MacDashboard/iPhone", isDirectory: true),
+            @MainActor func fixtureIPhone(archiveRoot: URL = URL(fileURLWithPath: "/Users/fixture/Documents/Moonport/iPhone", isDirectory: true),
                                _ tweak: (IPhoneModel) -> Void = { _ in }) -> IPhoneModel {
                 // Machine-independent archive path for the Settings › iPhone reference.
                 let m = IPhoneModel(store: IPhoneStore(url: ipStore),
                                     archiveRoot: archiveRoot,
+                                    oldDefaultArchiveRoot: URL(fileURLWithPath: "/Users/fixture/Documents/OldApp/iPhone", isDirectory: true),
                                     logTypeStore: IPhoneLogTypeStore(
                                         url: ipStore.deletingLastPathComponent().appendingPathComponent(IPhoneLogTypeStore.fileName)))
                 m.applyVisualFixture()
@@ -834,12 +837,12 @@ extension SerialTests {
                 run.snap("content-security-crashes", mode, width: 1094) {
                     VStack(spacing: 16) {
                         SecurityCrashesCard(model: secCrashes)
-                        SecurityCrashesCard(model: secCrashes, initialOpenedReport: secHome + "/Library/Logs/DiagnosticReports/MacDashboard-2026-01-15-094112.ips")
+                        SecurityCrashesCard(model: secCrashes, initialOpenedReport: secHome + "/Library/Logs/DiagnosticReports/Moonport-2026-01-15-094112.ips")
                     }
                 }
                 run.snap("content-security-crash-actions", mode, width: 1094) {
                     VStack(spacing: 16) {
-                        SecurityCrashesCard(model: secCrashActions, initialConfirm: "MacDashboard", initialHiddenOpen: true)
+                        SecurityCrashesCard(model: secCrashActions, initialConfirm: "Moonport", initialHiddenOpen: true)
                         SecurityCrashesCard(model: secCrashFailed)
                         SecurityCrashesCard(model: secCrashWorking)
                     }
@@ -1142,6 +1145,26 @@ extension SerialTests {
                         }
                     }
                 }
+                // MOONPORT-RENAME amendment 3: the Welcome panel in its states. `maxPanelHeight` nil = natural height.
+                let full = VisualFixture.legacyNotice, minimal = VisualFixture.legacyNoticeMinimal
+                let moved3 = LegacyArchiveMove.Outcome.moved(files: 41, kept: 0, failed: 0)
+                let welcomeStates: [(id: String, notice: LegacyNotice, start: WelcomeStart)] = [
+                    ("content-legacy-notice", full, WelcomeStart()),
+                    ("content-legacy-notice-minimal", minimal, WelcomeStart(archive: moved3)),
+                    ("content-legacy-notice-archive-done", full, WelcomeStart(archive: moved3)),
+                    ("content-legacy-notice-archive-left", full, WelcomeStart(archive: .moved(files: 38, kept: 1, failed: 2))),
+                    ("content-legacy-notice-archive-denied", full, WelcomeStart(archive: .denied)),
+                    ("content-legacy-notice-perms-done", full, WelcomeStart(fullDiskAccess: true)),
+                    ("content-legacy-notice-old-app-kept", full, WelcomeStart(oldApp: .kept)),
+                    ("content-legacy-notice-old-app-trashed", full,
+                     WelcomeStart(fullDiskAccess: true, oldApp: .trashed(VisualFixture.legacyTrashedApp))),
+                    ("content-legacy-notice-all-done", minimal, WelcomeStart(archive: moved3, fullDiskAccess: true)),
+                ]
+                for state in welcomeStates {
+                    run.snap(state.id, mode, width: 600) {
+                        LegacyNoticeSheet(notice: state.notice, settings: m.settings, onDone: {}, actions: .inert, start: state.start)
+                    }
+                }
                 run.snap("content-report-sheet", mode, width: 740) {
                     let ref = VisualFixture.referenceDate
                     let text = m.reportText
@@ -1306,7 +1329,7 @@ extension SerialTests {
                             IPhoneListBanner(kind: .restarting)
                             IPhoneNotice(kind: .empty)
                             IPhoneNotice(kind: .unavailable)
-                            IPhoneListBanner(kind: .error(IPhoneModel.UnlinkNotice.trashFailed(count: 2, folder: "/Users/fixture/Documents/MacDashboard/iPhone/0123456789abcdef").message))
+                            IPhoneListBanner(kind: .error(IPhoneModel.UnlinkNotice.trashFailed(count: 2, folder: "/Users/fixture/Documents/Moonport/iPhone/0123456789abcdef").message))
                             IPhoneListBanner(kind: .error(IPhoneModel.UnlinkNotice.saveFailed(name: "Alex’s iPhone").message))
                         }
                     }
@@ -1868,9 +1891,9 @@ extension SerialTests {
                 }
                 // Settings states: the window frame (680 x 420) is owned by the test, not by SettingsView.
                 func settingsState(_ name: String, _ section: SettingsSection, _ model: AppModel, launch: AppLanguage = .en,
-                                   iphone: IPhoneModel? = nil) {
+                                   iphone: IPhoneModel? = nil, oldApp: LegacyApp.Found? = nil) {
                     run.snap(name, mode, width: 680) {
-                        SettingsView(model: model, startSection: section, iphone: iphone, launchLanguage: launch).frame(width: 680, height: 420)
+                        SettingsView(model: model, startSection: section, iphone: iphone, launchLanguage: launch, oldApp: oldApp).frame(width: 680, height: 420)
                     }
                 }
                 // REDESIGN-ORBS: the main window's backdrop alone, at the perf bench size (orbs: Stage 1; H1 profile: Stage 2 — invisible offscreen, see spec §5).
@@ -1890,6 +1913,7 @@ extension SerialTests {
                 settingsState("content-settings-iphone-movefailed", .iphone, m,
                               iphone: fixtureIPhone { $0.archiveFolderError = .couldNotMove(2) })
                 settingsState("content-settings-about", .about, m)
+                settingsState("content-settings-about-oldapp", .about, m, oldApp: .init(url: VisualFixture.legacyNotice.oldApp!))
             }
             try run.finish()
         }

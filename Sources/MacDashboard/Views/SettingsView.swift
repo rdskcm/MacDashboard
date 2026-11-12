@@ -202,8 +202,10 @@ private struct SettingsGroup<Content: View>: View {
 
 struct SettingsView: View {
     @MainActor init(model: AppModel, state: SettingsWindowState, iphone: IPhoneModel? = nil,
-         launchLanguage: AppLanguage? = nil) {
+         launchLanguage: AppLanguage? = nil, oldApp: LegacyApp.Found? = nil) {
         self.model = model
+        injectedOldApp = oldApp
+        _oldApp = State(initialValue: oldApp)
         _settings = Bindable(model.settings)
         self.iphone = iphone ?? .shared
         self.state = state
@@ -215,8 +217,9 @@ struct SettingsView: View {
     // Harness-only init param so offscreen renders can show any section without
     // clicks (same precedent as MemoryCompositionCard.initialView).
     @MainActor init(model: AppModel, startSection: SettingsSection = .general, iphone: IPhoneModel? = nil,
-         launchLanguage: AppLanguage? = nil) {
-        self.init(model: model, state: SettingsWindowState(section: startSection), iphone: iphone, launchLanguage: launchLanguage)
+         launchLanguage: AppLanguage? = nil, oldApp: LegacyApp.Found? = nil) {
+        self.init(model: model, state: SettingsWindowState(section: startSection), iphone: iphone, launchLanguage: launchLanguage,
+                  oldApp: oldApp)
     }
 
     var model: AppModel
@@ -233,6 +236,11 @@ struct SettingsView: View {
     /// REDESIGN-NOTIFY (R8): system authorization; the fixture status comes from the client, never from the view.
     @State private var notifyAuth: NotificationAuthorization = NotificationCenterClient.fixtureStatus ?? .notDetermined
     @State private var loginError: String?
+    /// MOONPORT-RENAME D6: the old MacDashboard app while it is still installed (About row). Read once per window show;
+    /// `injectedOldApp` is the snapshot test's value. Under `-visualFixture` nothing is detected from disk.
+    private let injectedOldApp: LegacyApp.Found?
+    @State private var oldApp: LegacyApp.Found?
+    @State private var oldAppState = LegacyTrashState.idle
 
     /// The chosen (or default) log file is not there: red path, red sidebar dot.
     private var pathMissing: Bool { model.claudeBackup == nil }
@@ -253,10 +261,10 @@ struct SettingsView: View {
         .onChange(of: model.claudeBackup) { _, s in
             withAnimation(rowAnim) { bannerShown = s == .unreadable }
         }
-        .onAppear { refreshLoginStatus(); refreshNotifyStatus() }
+        .onAppear { refreshLoginStatus(); refreshNotifyStatus(); refreshOldApp() }
         // The window is kept alive when closed, so `onAppear` does not fire again: re-read the system status each time
         // it is brought forward (R8).
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in refreshLoginStatus(); refreshNotifyStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in refreshLoginStatus(); refreshNotifyStatus(); refreshOldApp() }
     }
 
     private func refreshLoginStatus() {
@@ -701,6 +709,39 @@ struct SettingsView: View {
                 buttonTitle: L.commonShowInFinder,
                 action: { AdviceActionRunner.reveal(AppInfo.supportFolderURL.path) }
             )
+            if let oldApp {
+                let failure: String? = if case .failed(let message) = oldAppState { message } else { nil }
+                SettingsPathRow(
+                    label: L.settingsOldAppLabel,
+                    sub: failure ?? L.settingsOldAppSub,
+                    subColor: failure == nil ? nil : DS3.hotInk,
+                    path: oldApp.url.path,
+                    buttonTitle: L.legacyTrashButton,
+                    busy: oldAppState == .quitting,
+                    action: { Task { await trashOldApp(oldApp) } }
+                )
+            }
+        }
+    }
+
+    private func refreshOldApp() {
+        guard oldAppState == .idle || oldAppState == .trashed else { return }
+        oldApp = LegacyAppActions.oldApp(injected: injectedOldApp)
+    }
+
+    /// Quit the old app when it runs (asked, never forced), then Trash it. The row disappears when it is gone.
+    private func trashOldApp(_ found: LegacyApp.Found) async {
+        oldAppState = .quitting
+        if LegacyAppActions.isOldAppRunning(), await !LegacyAppActions.quitOldApp() {
+            oldAppState = .failed(L.legacyQuitRefused)
+            return
+        }
+        do {
+            _ = try LegacyApp.trash(found)
+            oldAppState = .trashed
+            oldApp = nil
+        } catch {
+            oldAppState = .failed(L.legacyTrashFailed(reason: error.localizedDescription))
         }
     }
 }

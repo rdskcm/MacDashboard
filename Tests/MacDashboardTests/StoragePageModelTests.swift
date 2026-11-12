@@ -189,9 +189,9 @@ extension SerialTests {
             #expect(StoragePageModel.fdaNote([]) == nil)
             withLang(.en) {
                 #expect(StoragePageModel.fdaNote(["Mail", "Messages", "Safari"])
-                        == "Not shown here: Mail, Messages, Safari — MacDashboard doesn’t have Full Disk Access.")
+                        == "Not shown here: Mail, Messages, Safari — Moonport doesn’t have Full Disk Access.")
                 #expect(StoragePageModel.fdaNote(["Mail", "Messages", "Safari", "Contacts", "Notes"])
-                        == "Not shown here: Mail, Messages, Safari and 2 more — MacDashboard doesn’t have Full Disk Access.")
+                        == "Not shown here: Mail, Messages, Safari and 2 more — Moonport doesn’t have Full Disk Access.")
             }
             withLang(.ru) {
                 #expect(StoragePageModel.fdaNote(["Почта", "Сообщения", "Safari", "Контакты", "Заметки"])?.contains("Safari и ещё 2 —") == true)

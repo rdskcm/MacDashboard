@@ -270,7 +270,7 @@ private final class CommandJob: @unchecked Sendable {
         self.onLine = onLine
         self.interruptGrace = interruptGrace
         self.qos = qos
-        self.queue = DispatchQueue(label: "MacDashboard.CommandRunner.job", qos: qos.dispatchQoS)
+        self.queue = DispatchQueue(label: "Moonport.CommandRunner.job", qos: qos.dispatchQoS)
     }
 
     func start(path: String, args: [String], environment: [String: String], timeout: TimeInterval,
@@ -388,7 +388,7 @@ private final class CommandJob: @unchecked Sendable {
             let exited = (r == 0)                   // r == -1 (ECHILD): reaped elsewhere, status unknown
             self.queue.async { self.reap(pid, exited: exited) }
         }
-        t.name = "MacDashboard.CommandRunner.wait"
+        t.name = "Moonport.CommandRunner.wait"
         t.qualityOfService = threadQoS
         t.start()
     }

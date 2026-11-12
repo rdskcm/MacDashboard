@@ -24,6 +24,10 @@ private let headerTrafficLightBand: CGFloat = 21
 struct MainDashboardView: View {
     var model: AppModel
     var iphone: IPhoneModel = .shared
+    /// Tests: shows this notice instead of asking `LegacyNotice.atLaunch` (the presence check of V16).
+    var legacyNoticeOverride: LegacyNotice? = nil
+    /// The Welcome pending file: the real one in the app, a temp file in tests.
+    var pendingURL: URL = WelcomePending.defaultURL
 
     /// REDESIGN-FOUNDATION: mode, report tab and (later) pages go through the router.
     @State private var router = NavigationRouter()
@@ -47,6 +51,11 @@ struct MainDashboardView: View {
     /// RESIZE-MOTION C2: the subtitle form the content-fit probe chose last (`subtitleView`); drives opacity only.
     @State private var subtitleLevel = SubtitleLevel.full
     @State private var subtitleLevelSeeded = false
+    /// MOONPORT-RENAME D7: the one-time Moonport Welcome panel. nil = nothing to say or already dismissed; the
+    /// overlay is mounted only while it is set (`no-unseen-work`). Seeded once in `.onAppear`, set after a 0.6 s delay.
+    @State private var legacyNotice: LegacyNotice?
+    @State private var legacyNoticeSeeded = false
+    @State private var legacyNoticeTask: Task<Void, Never>?
     /// Toolbar geometry shared by the layout and the header-form fit formula (RESIZE-MOTION C2): keep them equal.
     private static let toolbarSpacing: CGFloat = 12
     private static let actionsTrailingPad: CGFloat = 18
@@ -80,6 +89,8 @@ struct MainDashboardView: View {
                 }
             }
         }
+        .accessibilityHidden(legacyNotice != nil)
+        .allowsHitTesting(legacyNotice == nil)
         // One background owner for both modes (REDESIGN-HOME D13): nothing here depends on `router.mode`.
         .onChange(of: router.mode) { _, _ in iphoneRestartConfirmShown = false }
         // IPHONE-UNLINK Stage C: the restart confirm, drawn above the toolbar and the page (mockup :56, :68).
@@ -101,7 +112,57 @@ struct MainDashboardView: View {
         }
         .ignoresSafeArea()
         .sheet(isPresented: $router.isReportShown) { ReportSheet(model: model) { router.isReportShown = false } }
+        // MOONPORT-RENAME D7 (amendment 3): the Welcome panel as a centred overlay, mounted only while the notice exists. The window beneath
+        // is hidden from accessibility and takes no clicks meanwhile.
+        .overlay {
+            if let notice = legacyNotice {
+                LegacyNoticeOverlay(notice: notice, settings: model.settings, actions: .live(notice: notice),
+                                    onFinished: { finishLegacyNotice() })
+            }
+        }
+        .onAppear { seedLegacyNotice() }
+        // A window seeded while another held the claim asks again once it is released (first window closed, no user close).
+        .onChange(of: WelcomeClaim.shared.claimed) { _, claimed in
+            guard !claimed, legacyNoticeOverride == nil, legacyNoticeSeeded, legacyNotice == nil, legacyNoticeTask == nil else { return }
+            legacyNoticeSeeded = false
+            seedLegacyNotice()
+        }
+        .onDisappear {
+            // The window went away without the user closing the panel (Cmd-W, red button): not a user close. Nothing is
+            // written, the pending file stays, the claim goes back and the next window presents the panel again. The
+            // launch gate stays held until a user close in some window.
+            guard legacyNoticeTask != nil || legacyNotice != nil else { return }
+            legacyNoticeTask?.cancel()
+            legacyNoticeTask = nil
+            legacyNotice = nil
+            if legacyNoticeOverride == nil { LegacyNotice.releaseClaim() }
+            legacyNoticeSeeded = false
+        }
         .ds3PointerTracking(pointer)
+    }
+
+    /// Once per window (D7); the decision lives in `LegacyNotice.atLaunch` (views never read the fixture flag).
+    private func seedLegacyNotice() {
+        guard !legacyNoticeSeeded else { return }
+        legacyNoticeSeeded = true
+        guard let notice = legacyNoticeOverride ?? LegacyNotice.atLaunch(settings: model.settings, pendingURL: pendingURL) else { return }
+        // Present once, 0.6 s after the window first appears, so the page's own entrance has finished. Amendment 4: the
+        // shown flag is written when the user closes the panel (`finishLegacyNotice`), not here.
+        // Cancelled when the window goes away first: nothing is written, and the notice goes back to the next window.
+        legacyNoticeTask = Task {
+            try? await Task.sleep(for: .seconds(0.6))
+            guard !Task.isCancelled else { return }
+            legacyNotice = notice
+            legacyNoticeTask = nil
+        }
+    }
+
+    /// After the panel's exit animation (Later, Done, Esc). Writes the shown flag and deletes the pending file, except for the
+    /// test override (it is not the launch's panel). Then unmounts the panel and opens the launch gate.
+    private func finishLegacyNotice() {
+        if legacyNoticeOverride == nil { LegacyNotice.markShown(settings: model.settings, pendingURL: pendingURL) }
+        legacyNotice = nil
+        model.welcome.release()
     }
 
     // MARK: Toolbar (single row: title block · mode switch · flexible gap · per-mode actions)

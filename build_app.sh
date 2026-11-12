@@ -1,6 +1,6 @@
 #!/bin/bash
-# Build "MacDashboard.app": Apple Silicon (arm64) release, hand-rolled bundle,
-# codesign (stable local identity, ad-hoc fallback). Output: dist.noindex/MacDashboard.app
+# Build "Moonport.app": Apple Silicon (arm64) release, hand-rolled bundle,
+# codesign (stable local identity, ad-hoc fallback). Output: dist.noindex/Moonport.app
 # Usage: ./build_app.sh [--install]
 #   --install             also moves the built app to ~/Applications (dist.noindex/ is left empty)
 set -euo pipefail
@@ -14,7 +14,7 @@ for arg in "$@"; do
   esac
 done
 
-APP_NAME="MacDashboard"
+APP_NAME="Moonport"
 DIST="dist.noindex/$APP_NAME.app"
 VERSION="2.3.2"
 # Codename names the whole 2.x branch, not the point release — stays "Krieg" until 3.0.
@@ -71,7 +71,7 @@ mkdir -p "$DIST/Contents/MacOS" "$DIST/Contents/Resources"
 # A Time Machine copy of this bundle is registered with LaunchServices whenever the backup is
 # mounted (APP-ID-DUPLICATES). Sticky exclusion on dist.noindex/ itself: survives rebuilds, no sudo.
 tmutil addexclusion dist.noindex 2>/dev/null || echo "!! tmutil addexclusion dist.noindex failed — dist.noindex/ stays in Time Machine backups" >&2
-cp "$BIN" "$DIST/Contents/MacOS/MacDashboard"
+cp "$BIN" "$DIST/Contents/MacOS/Moonport"
 
 cat > "$DIST/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -79,13 +79,12 @@ cat > "$DIST/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
-    <key>CFBundleDisplayName</key><string>MacDashboard</string>
-    <key>CFBundleExecutable</key><string>MacDashboard</string>
-    <key>CFBundleIconFile</key><string>AppIcon</string>
-    <key>CFBundleIdentifier</key><string>com.rdskcm.mac-dashboard</string>
+    <key>CFBundleDisplayName</key><string>Moonport</string>
+    <key>CFBundleExecutable</key><string>Moonport</string>
+    <key>CFBundleIdentifier</key><string>app.moonport</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleLocalizations</key><array><string>en</string><string>ru</string></array>
-    <key>CFBundleName</key><string>MacDashboard</string>
+    <key>CFBundleName</key><string>Moonport</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${SHORT_VERSION}</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
@@ -94,15 +93,15 @@ cat > "$DIST/Contents/Info.plist" <<PLIST
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>The dashboard uses Apple events for two things: it reads your Login Items list via System Events, and — only when you confirm it in the app — it asks Finder to empty the Trash.</string>
+    <string>Moonport uses Apple events for two things: it reads your Login Items list via System Events, and — only when you confirm it in the app — it asks Finder to empty the Trash.</string>
     <key>NSDesktopFolderUsageDescription</key>
-    <string>The dashboard measures how much space your Desktop folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
+    <string>Moonport measures how much space your Desktop folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
     <key>NSDocumentsFolderUsageDescription</key>
-    <string>The dashboard measures how much space your Documents folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
+    <string>Moonport measures how much space your Documents folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
     <key>NSDownloadsFolderUsageDescription</key>
-    <string>The dashboard measures how much space your Downloads folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
+    <string>Moonport measures how much space your Downloads folder uses, for the "home folders" section of the report. It reads folder sizes only — file contents are never opened.</string>
     <key>NSRemovableVolumesUsageDescription</key>
-    <string>The dashboard reports free space and Time Machine destinations for connected volumes, including removable disks. It reads volume sizes only — file contents are never opened.</string>
+    <string>Moonport reports free space and Time Machine destinations for connected volumes, including removable disks. It reads volume sizes only — file contents are never opened.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>The app reads your paired iPhone over the local network when “Connect over Wi-Fi” is on in Settings. Nothing is sent to the internet.</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 rdskcm. MIT License.</string>
@@ -121,31 +120,54 @@ mkdir -p "$DIST/Contents/Resources/en.lproj" "$DIST/Contents/Resources/ru.lproj"
 
 cat > "$DIST/Contents/Resources/en.lproj/InfoPlist.strings" <<'EOSTRINGS'
 NSHumanReadableCopyright = "© 2026 rdskcm. MIT License.";
-NSAppleEventsUsageDescription = "The dashboard uses Apple events for two things: it reads your Login Items list via System Events, and — only when you confirm it in the app — it asks Finder to empty the Trash.";
-NSDesktopFolderUsageDescription = "The dashboard measures how much space your Desktop folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
-NSDocumentsFolderUsageDescription = "The dashboard measures how much space your Documents folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
-NSDownloadsFolderUsageDescription = "The dashboard measures how much space your Downloads folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
-NSRemovableVolumesUsageDescription = "The dashboard reports free space and Time Machine destinations for connected volumes, including removable disks. It reads volume sizes only — file contents are never opened.";
+NSAppleEventsUsageDescription = "Moonport uses Apple events for two things: it reads your Login Items list via System Events, and — only when you confirm it in the app — it asks Finder to empty the Trash.";
+NSDesktopFolderUsageDescription = "Moonport measures how much space your Desktop folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
+NSDocumentsFolderUsageDescription = "Moonport measures how much space your Documents folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
+NSDownloadsFolderUsageDescription = "Moonport measures how much space your Downloads folder uses, for the \"home folders\" section of the report. It reads folder sizes only — file contents are never opened.";
+NSRemovableVolumesUsageDescription = "Moonport reports free space and Time Machine destinations for connected volumes, including removable disks. It reads volume sizes only — file contents are never opened.";
 NSLocalNetworkUsageDescription = "The app reads your paired iPhone over the local network when “Connect over Wi-Fi” is on in Settings. Nothing is sent to the internet.";
 EOSTRINGS
 
 cat > "$DIST/Contents/Resources/ru.lproj/InfoPlist.strings" <<'EOSTRINGS'
 NSHumanReadableCopyright = "© 2026 rdskcm. Лицензия MIT.";
-NSAppleEventsUsageDescription = "Дашборд использует Apple events для двух задач: читает список объектов автозагрузки (Login Items) через System Events и — только после вашего подтверждения в приложении — просит Finder очистить Корзину.";
-NSDesktopFolderUsageDescription = "Дашборд измеряет, сколько места занимает папка «Рабочий стол», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
-NSDocumentsFolderUsageDescription = "Дашборд измеряет, сколько места занимает папка «Документы», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
-NSDownloadsFolderUsageDescription = "Дашборд измеряет, сколько места занимает папка «Загрузки», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
-NSRemovableVolumesUsageDescription = "Дашборд показывает свободное место и адреса резервных копий Time Machine для подключённых томов, включая съёмные диски. Читаются только размеры томов — содержимое файлов не открывается.";
-NSLocalNetworkUsageDescription = "Дашборд читает ваш сопряжённый iPhone по локальной сети, когда в Настройках включено «Подключение по Wi-Fi». В интернет ничего не отправляется.";
+NSAppleEventsUsageDescription = "Moonport использует Apple events для двух задач: читает список объектов автозагрузки (Login Items) через System Events и — только после вашего подтверждения в приложении — просит Finder очистить Корзину.";
+NSDesktopFolderUsageDescription = "Moonport измеряет, сколько места занимает папка «Рабочий стол», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
+NSDocumentsFolderUsageDescription = "Moonport измеряет, сколько места занимает папка «Документы», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
+NSDownloadsFolderUsageDescription = "Moonport измеряет, сколько места занимает папка «Загрузки», для раздела отчёта о папках домашней директории. Читаются только размеры папок — содержимое файлов не открывается.";
+NSRemovableVolumesUsageDescription = "Moonport показывает свободное место и адреса резервных копий Time Machine для подключённых томов, включая съёмные диски. Читаются только размеры томов — содержимое файлов не открывается.";
+NSLocalNetworkUsageDescription = "Moonport читает ваш сопряжённый iPhone по локальной сети, когда в Настройках включено «Подключение по Wi-Fi». В интернет ничего не отправляется.";
 EOSTRINGS
 
-echo "== icon (best-effort) =="
-if swift tools/make_icon.swift "$DIST/Contents/Resources/AppIcon.icns"; then
-  echo "icon OK"
-else
-  echo "!! icon generation failed — shipping without custom icon" >&2
-  /usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$DIST/Contents/Info.plist" 2>/dev/null || true
+echo "== icon (actool: Icon/AppIcon.icon -> Assets.car + AppIcon.icns) =="
+# Icon/AppIcon.icon is an Icon Composer document (macOS 26 layered icon). actool compiles it
+# into Assets.car (Default and Dark renditions, which the system picks from the appearance)
+# and a flat light AppIcon.icns for Finder/QuickLook fallbacks. Its partial Info.plist carries
+# CFBundleIconFile and CFBundleIconName, merged into the bundle's Info.plist below. Needs
+# Xcode's actool only (no network); a failure stops the build instead of shipping no icon.
+# Every path passed to actool is absolute: actool resolves relative ones against the working
+# directory of an earlier actool run, not this one.
+ICON_TMP="$(mktemp -d)"
+trap 'rm -rf "$ICON_TMP"' EXIT
+if ! xcrun actool "$PWD/Icon/AppIcon.icon" --platform macosx --minimum-deployment-target "$MIN_MACOS" \
+     --app-icon AppIcon --output-format human-readable-text \
+     --output-partial-info-plist "$ICON_TMP/partial.plist" --compile "$PWD/$DIST/Contents/Resources" \
+     > "$ICON_TMP/actool.log" 2>&1; then
+  cat "$ICON_TMP/actool.log" >&2
+  echo "!! actool failed to compile Icon/AppIcon.icon" >&2
+  exit 1
 fi
+/usr/libexec/PlistBuddy -c "Merge $ICON_TMP/partial.plist" "$DIST/Contents/Info.plist"
+for f in Assets.car AppIcon.icns; do
+  [ -s "$DIST/Contents/Resources/$f" ] || { echo "!! actool did not produce $f" >&2; exit 1; }
+done
+[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$DIST/Contents/Info.plist")" = "AppIcon" ] \
+  || { echo "!! CFBundleIconName is not AppIcon after the merge" >&2; exit 1; }
+# The Dark rendition must come from the dark layers. If actool ignored the document's dark
+# specializations it would still emit a system-generated dark icon, so check the layer images.
+ICON_INFO="$(assetutil --info "$DIST/Contents/Resources/Assets.car")"
+printf '%s' "$ICON_INFO" | grep -q 'AppIcon_Assets.*dark-' \
+  || { echo "!! Assets.car has no dark icon layers — check Icon/AppIcon.icon/icon.json" >&2; exit 1; }
+echo "icon OK"
 
 echo "== codesign (hardened runtime) =="
 # Signing identity. Local builds sign with the stable self-signed identity that
@@ -155,7 +177,7 @@ echo "== codesign (hardened runtime) =="
 # that identity (release CI, a fresh clone) the build is signed ad-hoc as before and says
 # so loudly: an ad-hoc designated requirement is the cdhash, which changes whenever the
 # code does. Release artifacts are ad-hoc by design (release.yml).
-SIGN_CN="MacDashboard Local Signing"   # keep equal to CN in tools/signing/make-identity.sh
+SIGN_CN="Moonport Local Signing"   # keep equal to CN in tools/signing/make-identity.sh
 # Without -v: -v lists only identities with a TRUSTED certificate, and this one is
 # deliberately not trusted (signing and designated-requirement checks do not need trust).
 SIGN_HASHES="$({ security find-identity -p codesigning 2>/dev/null || true; } \
@@ -186,14 +208,14 @@ fi
 # Nested code, if ever added, must be signed explicitly.
 # --timestamp=none: a self-signed signature gains nothing from a secure timestamp, and
 # asking for one would make every build depend on Apple's timestamp server; no-op for ad-hoc.
-codesign --force --options runtime --timestamp=none --entitlements MacDashboard.entitlements \
+codesign --force --options runtime --timestamp=none --entitlements Moonport.entitlements \
   --sign "$SIGN_ID" "$DIST"
 
 echo "== result =="
 # Fail-loud gate (V27-TOOLCHAIN): the binary must be arm64 only and record the SDK
 # compiled against above and the deployment target. Runs before --install, so a
 # wrong build is never installed.
-FINAL_BIN="$DIST/Contents/MacOS/MacDashboard"
+FINAL_BIN="$DIST/Contents/MacOS/Moonport"
 # "27" and "27.0" are the same version; xcrun and vtool need not format alike.
 norm_version() { sed -E 's/(\.0)+$//' <<<"$1"; }
 FINAL_ARCHS="$(lipo -archs "$FINAL_BIN")"
@@ -268,12 +290,6 @@ if [ "$INSTALL" = "1" ]; then
   fi
   rm -rf "$OLD_APP"
   echo "installed: $INSTALLED_APP"
-  # Remove the stale pre-rename bundle (old Russian display name) so the Dock/
-  # Spotlight don't keep two copies around after the MacDashboard rename.
-  if [ -d "$HOME/Applications/Дашборд Mac.app" ]; then
-    rm -rf "$HOME/Applications/Дашборд Mac.app"
-    echo "removed stale: $HOME/Applications/Дашборд Mac.app"
-  fi
   echo "== LaunchServices: installed copy only =="
   tools/ls-prune.sh || echo "!! tools/ls-prune.sh exited $? — other copies may still be registered" >&2
 fi

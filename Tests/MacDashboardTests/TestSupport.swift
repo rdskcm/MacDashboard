@@ -58,7 +58,7 @@ let ipsFixturesRoot = URL(fileURLWithPath: #filePath)
 
 /// ARCH-SETTINGS-PATH: a fresh, empty `UserDefaults` suite for one test. The name always starts with
 /// `MacDashboardTests.`, so `removeIsolatedDefaults` can never remove a real domain (the app's is
-/// `com.rdskcm.mac-dashboard`). Callers: `let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }`.
+/// `app.moonport`). Callers: `let (d, name) = makeIsolatedDefaults(); defer { removeIsolatedDefaults(d, name) }`.
 func makeIsolatedDefaults() -> (UserDefaults, String) {
     let name = "MacDashboardTests.settings.\(ProcessInfo.processInfo.processIdentifier).\(UUID().uuidString)"
     let d = UserDefaults(suiteName: name)!

@@ -109,7 +109,7 @@ extension StringsEN: IPSWStrings {
     func ipswSourceFailed(_ source: String, _ reason: String) -> String { "\(source) unavailable: \(reason)" }
     var ipswErrNotDownloadable: String { "This build is not offered from Apple’s secure download servers, so it is not downloaded." }
     var ipswNoSecureAppleLink: String { "No secure Apple link exists for this build, so it cannot be downloaded here." }
-    var ipswNotFromApple: String { "MacDashboard downloads only the build Apple’s catalogue currently offers." }
+    var ipswNotFromApple: String { "Moonport downloads only the build Apple’s catalogue currently offers." }
     var ipswErrNoChecksum: String { "No checksum is known for this build, so it is not downloaded." }
     var ipswErrNoSize: String { "The file size is unknown, so it is not downloaded." }
     var ipswErrSourcesDisagree: String { "Apple and ipsw.me disagree about this file, so it is not downloaded." }
@@ -193,7 +193,7 @@ extension StringsRU: IPSWStrings {
     func ipswSourceFailed(_ source: String, _ reason: String) -> String { "\(source) недоступен: \(reason)" }
     var ipswErrNotDownloadable: String { "Эта сборка не раздаётся с защищённых серверов Apple, её не скачиваем." }
     var ipswNoSecureAppleLink: String { "Защищённой ссылки Apple на эту сборку нет, здесь её не скачать." }
-    var ipswNotFromApple: String { "MacDashboard скачивает только ту сборку, которую сейчас предлагает каталог Apple." }
+    var ipswNotFromApple: String { "Moonport скачивает только ту сборку, которую сейчас предлагает каталог Apple." }
     var ipswErrNoChecksum: String { "Для этой сборки нет контрольной суммы, её не скачиваем." }
     var ipswErrNoSize: String { "Размер файла неизвестен, его не скачиваем." }
     var ipswErrSourcesDisagree: String { "Apple и ipsw.me расходятся в данных об этом файле, его не скачиваем." }

@@ -123,6 +123,35 @@ extension SerialTests {
             h.close()
         }
 
+        /// MOONPORT-RENAME D7 / V16 (amendment 2): with no notice the main window mounts no `LegacyNoticeOverlay`. The control
+        /// mounts the overlay itself and the same accessibility-tree search must find it, so a missed search cannot pass the check.
+        @MainActor @Test func noLegacyNoticeOverlayWithoutNotice() async throws {
+            VisualFixture.forced = true
+            defer { VisualFixture.forced = false }
+            let savedLanguage = L10nStore.shared.language
+            L10nStore.shared.language = .en
+            defer { L10nStore.shared.language = savedLanguage }
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("md-legacy-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: dir) }
+            let m = AppModel(dataDirectory: dir)
+            m.applyVisualFixture()
+
+            /// Presence metric (R1): NSView count of the main window after the 0.6 s present delay and the entrance start.
+            /// Waits with `Task.sleep` (not the run loop) so the view's own 0.6 s `Task.sleep` can resume on the main actor.
+            func viewCount(_ notice: LegacyNotice?) async throws -> Int {
+                let h = Host(MainDashboardView(model: m, legacyNoticeOverride: notice, pendingURL: dir.appendingPathComponent("welcome-pending.json")))
+                defer { h.close() }
+                try await Task.sleep(for: .seconds(1.6))
+                h.settle(0.2)
+                return h.views
+            }
+            let without = try await viewCount(nil)
+            let with = try await viewCount(VisualFixture.legacyNotice)
+            #expect(with - without >= 10, "control: a notice mounts the overlay (\(without) -> \(with) views)")
+            #expect(try await viewCount(nil) == without, "no notice, no overlay: the view count is the plain window's")
+        }
+
         /// APPEAR-COST R3/R8: Home's staggered entrance starts once per window; Back to Home mounts Home without `DS3Appear`.
         @MainActor @Test func homeEntrancePlaysOncePerWindow() throws {
             VisualFixture.forced = false

@@ -65,7 +65,7 @@ final class IPhoneWifiLane: @unchecked Sendable {
     /// that returns late, never runs on a freed device.
     let dev: Ptr
     let watchdog = IPhoneWifiWatchdog()
-    private let queue = DispatchQueue(label: "com.macdashboard.mobiledevice.wifi", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "app.moonport.mobiledevice.wifi", qos: .userInitiated)
     private let lock = NSLock()
     private var jobs = IPhoneJobQueue<Job>()
     private var running: IPhoneJobTicket?

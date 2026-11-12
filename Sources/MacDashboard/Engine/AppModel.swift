@@ -227,6 +227,8 @@ final class AppModel {
     /// ARCH-SETTINGS-PATH: the settings this model assesses with and its pages read (`model.settings`).
     /// The app passes `.shared`; tests pass an isolated instance.
     let settings: AppSettings
+    /// MOONPORT-RENAME: held while the Welcome panel is up; launch work that can raise a permission prompt waits on it.
+    let welcome = WelcomeGate()
     private let actions: AppActions
     /// ARCH-MODEL-SPLIT: the clock/sleep the pass wait and the controllers use; tests inject a virtual one.
     private let time: TimeSource
@@ -637,12 +639,18 @@ final class AppModel {
         smart.startSampling()
 
         loadCachedReportFromDisk()
-        storage.reprobeProtectedLocations()
-        refreshReport(trigger: .automatic)
         Task { [weak self] in await self?.refreshClaudeBackup(); await self?.claudeRun.refreshJob() }
 
-        // Hourly folder-size count (SIZES-BACKGROUND): StorageController owns the 60 s poll; skipped while paused.
-        storage.startSizeSchedule()
+        // MOONPORT-RENAME: everything below can raise a macOS prompt (the report pass asks System Events for the login
+        // items and its folder count walks Desktop, Documents and Downloads; the probes open protected folders), so it
+        // waits while the Welcome panel is up. With no panel it runs here, as before.
+        welcome.whenOpen { [weak self] in
+            guard let self, self.fastTask != nil else { return }   // stop() ran while the panel was up
+            self.storage.reprobeProtectedLocations()
+            self.refreshReport(trigger: .automatic)
+            // Hourly folder-size count (SIZES-BACKGROUND): StorageController owns the 60 s poll; skipped while paused.
+            self.storage.startSizeSchedule()
+        }
 
         // SAMPLER-OCCLUSION-GATE: the one slow clock. Hidden: the assessment tick for notifications (D3). Always, once a
         // pass has completed: the daily History point (D5), whether or not another pass ever runs. Own LiveCollector
@@ -963,6 +971,8 @@ final class AppModel {
 
     /// App became active: the storage controller ends the Full Disk Access wait and re-probes the protected locations (REDESIGN-STORAGE D14).
     func appDidBecomeActive() {
+        // MOONPORT-RENAME: the probes open protected folders; the launch work re-probes once the Welcome panel is closed.
+        guard !welcome.isHolding else { return }
         storage.appDidBecomeActive()
     }
 
@@ -1067,16 +1077,6 @@ final class AppModel {
     }
 
     private static func defaultReportURL() -> URL {
-        let fm = FileManager.default
-        let base = (try? fm.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )) ?? fm.homeDirectoryForCurrentUser
-        let dir = base.appendingPathComponent("MacDashboard", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true,
-                                attributes: [.posixPermissions: 0o700])
-        return dir.appendingPathComponent("mac_report.txt")
+        AppInfo.supportFolderURL(create: true).appendingPathComponent("mac_report.txt")
     }
 }

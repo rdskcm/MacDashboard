@@ -46,6 +46,22 @@ enum ArchiveMigration {
         return moves.sorted { $0.source.path < $1.source.path }
     }
 
+    /// MOONPORT-RENAME: a whole tree, `<from>/<rel>` → `<to>/<rel>`, every regular file at any depth including dotfiles
+    /// (`children` skips them on purpose for archives; here they must move or the old folder never empties). Sorted by source path.
+    static func planTree(from: URL, to: URL) -> [ArchiveMove] {
+        let keys: [URLResourceKey] = [.isRegularFileKey]
+        guard let en = FileManager.default.enumerator(at: from, includingPropertiesForKeys: keys) else { return [] }
+        let root = from.standardizedFileURL.path
+        var moves: [ArchiveMove] = []
+        for case let u as URL in en {
+            guard (try? u.resourceValues(forKeys: Set(keys)))?.isRegularFile == true else { continue }
+            let path = u.standardizedFileURL.path
+            guard path.hasPrefix(root + "/") else { continue }
+            moves.append(ArchiveMove(source: u, destination: to.appendingPathComponent(String(path.dropFirst(root.count + 1)))))
+        }
+        return moves.sorted { $0.source.path < $1.source.path }
+    }
+
     private static func children(of dir: URL) -> [(url: URL, isDir: Bool, isRegular: Bool)] {
         let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey]
         guard let urls = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: keys) else { return [] }
@@ -114,7 +130,7 @@ enum ArchiveMigration {
         outcome.moved.reversed().map { ArchiveMove(source: $0.destination, destination: $0.source) }
     }
 
-    private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+    static func isSameFile(_ a: URL, _ b: URL) -> Bool {
         let key: Set<URLResourceKey> = [.fileResourceIdentifierKey]
         if let x = (try? a.resourceValues(forKeys: key))?.fileResourceIdentifier,
            let y = (try? b.resourceValues(forKeys: key))?.fileResourceIdentifier {
@@ -127,7 +143,7 @@ enum ArchiveMigration {
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
-    private static func volume(of url: URL) -> NSObjectProtocol? {
+    static func volume(of url: URL) -> NSObjectProtocol? {
         (try? url.resourceValues(forKeys: [.volumeIdentifierKey]))?.volumeIdentifier
     }
 

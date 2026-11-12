@@ -19,7 +19,7 @@ import AppKit
 /// different thread per call.
 /// Blocks queue on this thread's run loop, so two empty-trash runs can never
 /// overlap and no lock is needed.
-private let appleScriptThread = ParkedRunLoopThread(name: "com.macdashboard.applescript")
+private let appleScriptThread = ParkedRunLoopThread(name: "app.moonport.applescript")
 
 enum AdviceActionRunner {
     static func openPane(_ url: String) {
@@ -31,7 +31,7 @@ enum AdviceActionRunner {
             // Nothing in the UI is waiting on this, but a nil handler swallowed launch
             // failure entirely — at least leave a trace in Console.
             if let error {
-                NSLog("[MacDashboard] openApp failed for %@: %@", path, error.localizedDescription)
+                NSLog("[Moonport] openApp failed for %@: %@", path, error.localizedDescription)
             }
         }
     }
@@ -46,7 +46,7 @@ enum AdviceActionRunner {
             return
         }
         NSWorkspace.shared.open([file], withApplicationAt: console, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-            if let error { NSLog("[MacDashboard] openInConsole failed for %@: %@", path, error.localizedDescription) }
+            if let error { NSLog("[Moonport] openInConsole failed for %@: %@", path, error.localizedDescription) }
             guard let completion else { return }
             DispatchQueue.main.async { MainActor.assumeIsolated { completion(error == nil) } }
         }

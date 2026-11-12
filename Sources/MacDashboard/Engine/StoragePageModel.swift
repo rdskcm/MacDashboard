@@ -40,6 +40,9 @@ struct ProtectedLocation: Equatable, Sendable {
     let app: ProtectedApp
 }
 
+/// MOONPORT-RENAME W3: what the Welcome panel knows about Full Disk Access. `unknown` = no probe row exists.
+enum FullDiskAccessState: Equatable, Sendable { case granted, notGranted, unknown }
+
 /// Home-relative locations macOS protects behind Full Disk Access, with the app each belongs to.
 enum ProtectedLocations {
     static let table: [ProtectedLocation] = [
@@ -51,6 +54,18 @@ enum ProtectedLocations {
         ProtectedLocation(relativePath: "Library/Group Containers/group.com.apple.notes", app: .notes),
         ProtectedLocation(relativePath: "Library/HomeKit", app: .home),
     ]
+
+    /// The two rows that sit behind Full Disk Access alone. The others (AddressBook, Calendars, Notes, HomeKit) may have
+    /// their own TCC services, so they are not used to decide "Full Disk Access is granted".
+    static let fdaOnlyRows = ["Library/Safari", "Library/Mail"]
+
+    /// W3/D-W3: any `.denied` → `.notGranted`, else any `.readable` → `.granted`, else `.unknown`. `opendir` never
+    /// prompts (Full Disk Access has no consent prompt); `access()` and `isReadableFile` are not probes.
+    static func fullDiskAccess(home: String, probe: (String) -> DirAccess) -> FullDiskAccessState {
+        let results = fdaOnlyRows.map { probe(home + "/" + $0) }
+        if results.contains(.denied) { return .notGranted }
+        return results.contains(.readable) ? .granted : .unknown
+    }
 
     /// Table order; only `.denied` entries (missing and readable ones are dropped). `probe` gets the absolute path.
     static func denied(home: String, probe: (String) -> DirAccess) -> [ProtectedLocation] {

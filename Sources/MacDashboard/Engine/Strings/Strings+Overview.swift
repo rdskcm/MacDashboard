@@ -42,7 +42,7 @@ extension StringsEN: OverviewStrings {
     var adviceTrashConfirmTitle: String { "Empty the Trash?" }
     var adviceTrashConfirmButton: String { "Empty Trash" }
     var adviceTrashError: String { "Could not empty the Trash" }
-    var adviceTrashNotPermitted: String { "MacDashboard is not allowed to control Finder, so it cannot empty the Trash. Allow it under Privacy & Security → Automation." }
+    var adviceTrashNotPermitted: String { "Moonport is not allowed to control Finder, so it cannot empty the Trash. Allow it under Privacy & Security → Automation." }
     var adviceTrashOpenAutomation: String { "Open Automation settings" }
     var adviceFirewallConfirmTitle: String { "Turn on the firewall?" }
     var adviceFirewallConfirmMessage: String { "Touch ID or an administrator password will be required." }
@@ -66,7 +66,7 @@ extension StringsRU: OverviewStrings {
     var adviceTrashConfirmTitle: String { "Очистить Корзину?" }
     var adviceTrashConfirmButton: String { "Очистить" }
     var adviceTrashError: String { "Не удалось очистить Корзину" }
-    var adviceTrashNotPermitted: String { "У Дашборда нет разрешения управлять Finder, поэтому очистить Корзину не получилось. Разрешите это в «Конфиденциальность и безопасность» → «Автоматизация»." }
+    var adviceTrashNotPermitted: String { "У Moonport нет разрешения управлять Finder, поэтому очистить Корзину не получилось. Разрешите это в «Конфиденциальность и безопасность» → «Автоматизация»." }
     var adviceTrashOpenAutomation: String { "Открыть настройки автоматизации" }
     var adviceFirewallConfirmTitle: String { "Включить файрвол?" }
     var adviceFirewallConfirmMessage: String { "Понадобится Touch ID или пароль администратора." }

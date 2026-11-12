@@ -54,6 +54,14 @@ enum DS3 {
     /// Opaque twin of `overlay` for a pinned header that rows scroll under. `overlay` over the card ground (`rimGround*`):
     /// dark 0.97*(30,29,27)+0.03*(27,27,29) = (29.9,28.9,27.1) -> (30,29,27); light 0.96*(250,248,244)+0.04*(250,250,249) = (250,248.1,244.2) -> (250,248,244).
     static let overlaySolid = Color(light: Color(hex: 0xFAF8F4), dark: Color(hex: 0x1E1D1B))
+    /// Moonport Welcome (amendment 3): the tint over the window's blurred material behind the panel.
+    static let veil = Color(light: ds3RGB(238, 235, 229, 0.26), dark: ds3RGB(16, 15, 13, 0.22))
+    /// Moonport Welcome (amendment 3): the panel fill over its material.
+    static let panel = Color(light: ds3RGB(250, 248, 244, 0.86), dark: ds3RGB(32, 31, 29, 0.86))
+    /// Moonport Welcome (amendment 3): the vertical gradient on the word «Moonport» in the title (the light pair is darker).
+    static let moonTextTop = Color(light: Color(hex: 0xA8812E), dark: Color(hex: 0xFFF7E2))
+    static let moonTextBottom = Color(light: Color(hex: 0x7E5C14), dark: Color(hex: 0xE8D6A6))
+    static var moonText: LinearGradient { LinearGradient(colors: [moonTextTop, moonTextBottom], startPoint: .top, endPoint: .bottom) }
 
     static let accent = Color(light: Color(hex: 0x2F7FE0), dark: Color(hex: 0x6AA6F2))
     static let accentInk = Color(light: Color(hex: 0x1A63C2), dark: Color(hex: 0x93BFF7))
@@ -98,7 +106,7 @@ enum DS3 {
 /// Hand-drawn shadow stacks (see `ds3Elevation`). `radius` is the SwiftUI blur radius (CSS blur / 2),
 /// `inset` is the negated CSS spread.
 enum DS3Shadow {
-    case card, pop, lens, primaryGlow, header
+    case card, pop, lens, primaryGlow, header, welcome
 
     struct Layer {
         let color: Color
@@ -131,6 +139,9 @@ enum DS3Shadow {
         case .header:
             // 01-window-chrome: y 10, blur 24, spread −18, black .35 (both appearances).
             return [Layer(color: Color.black.opacity(0.35), y: 10, radius: 12, inset: 18)]
+        case .welcome:
+            // Moonport Welcome (amendment 3): the `pop` layers plus `0 40 90 -30 black .45` (CSS blur 90 = radius 45, spread -30 = inset 30).
+            return Self.pop.layers + [Layer(color: Color.black.opacity(0.45), y: 40, radius: 45, inset: 30)]
         }
     }
 }

@@ -117,7 +117,7 @@ extension StringsEN: SettingsStrings {
     var settingsWarnAfterFewer: String { "Fewer days" }
     var settingsWarnAfterMore: String { "More days" }
     var settingsPermTitle: String { "Full Disk Access needed" }
-    var settingsPermBody: String { "MacDashboard can’t read the Claude backup log without it." }
+    var settingsPermBody: String { "Moonport can’t read the Claude backup log without it." }
     var settingsReportFolderLabel: String { "Report folder" }
     var settingsMenuItem: String { "Settings…" }
     func settingsLowSpaceOption(_ percent: Int) -> String { "\(percent)%" }
@@ -132,7 +132,7 @@ extension StringsEN: SettingsStrings {
     var settingsNotifyBackup: String { "Backup overdue" }
     var settingsNotifyUpdates: String { "Updates available" }
     var settingsNotifyCrashes: String { "New crash reports" }
-    var settingsNotifyDenied: String { "Notifications for MacDashboard are turned off in System Settings." }
+    var settingsNotifyDenied: String { "Notifications for Moonport are turned off in System Settings." }
     var settingsNotifyOpen: String { "Open Notification settings…" }
     var settingsNotifyOpenA11y: String { "Open System Settings › Notifications" }
     var settingsWindowTitle: String { "Settings" }
@@ -188,7 +188,7 @@ extension StringsRU: SettingsStrings {
     var settingsWarnAfterFewer: String { "Меньше дней" }
     var settingsWarnAfterMore: String { "Больше дней" }
     var settingsPermTitle: String { "Нужен полный доступ к диску" }
-    var settingsPermBody: String { "Без него MacDashboard не может прочитать журнал резервных копий Claude." }
+    var settingsPermBody: String { "Без него Moonport не может прочитать журнал резервных копий Claude." }
     var settingsReportFolderLabel: String { "Папка отчёта" }
     var settingsMenuItem: String { "Настройки…" }
     func settingsLowSpaceOption(_ percent: Int) -> String { "\(percent) %" }
@@ -203,7 +203,7 @@ extension StringsRU: SettingsStrings {
     var settingsNotifyBackup: String { "Резервная копия устарела" }
     var settingsNotifyUpdates: String { "Доступны обновления" }
     var settingsNotifyCrashes: String { "Новые отчёты о сбоях" }
-    var settingsNotifyDenied: String { "Уведомления MacDashboard выключены в Системных настройках." }
+    var settingsNotifyDenied: String { "Уведомления Moonport выключены в Системных настройках." }
     var settingsNotifyOpen: String { "Открыть «Уведомления»…" }
     var settingsNotifyOpenA11y: String { "Открыть Системные настройки › Уведомления" }
     var settingsWindowTitle: String { "Настройки" }

@@ -3,6 +3,7 @@
 // app-activity monitor behind AppModel's pause/resume, relaunch, the `AppleLanguages` write and the appearance
 // apply. This file may read `VisualFixture.isRequested`; views may not (EngineBoundaryTests).
 import AppKit
+import Observation
 
 extension AppActions {
     /// The real actions, wired once in `MacDashboardApp.init`.
@@ -131,6 +132,34 @@ enum AppLifecycle {
     }
 }
 
+/// MOONPORT-RENAME D6: the AppKit half of the old-app offer (detection and the Trash move are Engine, `LegacyApp`).
+/// A user's app is asked to quit, never killed: no `forceTerminate()`, no AppleScript.
+enum LegacyAppActions {
+    private static func runningOldApps() -> [NSRunningApplication] {
+        NSRunningApplication.runningApplications(withBundleIdentifier: AppInfo.legacyBundleID)
+    }
+
+    static func isOldAppRunning() -> Bool { !runningOldApps().isEmpty }
+
+    /// The old app for the Settings › About row: the injected value (snapshot test), else live detection. Under
+    /// `-visualFixture` nothing is read from disk, so the fixture states do not depend on the machine.
+    static func oldApp(injected: LegacyApp.Found?) -> LegacyApp.Found? {
+        injected ?? (VisualFixture.isRequested ? nil : LegacyApp.detect())
+    }
+
+    /// Asks every instance with the old bundle ID to quit and waits up to `timeout` seconds (polling every 0.2 s).
+    /// true = none is running any more; false = at least one refused, nothing was forced.
+    @MainActor static func quitOldApp(timeout: TimeInterval = 5) async -> Bool {
+        let apps = runningOldApps()
+        for app in apps { app.terminate() }
+        let deadline = Date().addingTimeInterval(timeout)
+        while apps.contains(where: { !$0.isTerminated }), Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        return apps.allSatisfy(\.isTerminated)
+    }
+}
+
 extension AppAppearance {
     /// D5: app-wide; under -visualFixture `FixtureAppearance` owns NSApp.appearance and this is a no-op.
     @MainActor func apply() {
@@ -140,5 +169,117 @@ extension AppAppearance {
         case .light: NSApplication.shared.appearance = NSAppearance(named: .aqua)
         case .dark: NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
         }
+    }
+}
+
+/// D-W2: whether a window of this launch holds the Welcome notice. Observable so a second window seeded while it was held
+/// re-asks when the claim is released (the first window closed without the user closing the panel).
+@MainActor @Observable final class WelcomeClaim {
+    static let shared = WelcomeClaim()
+    var claimed = false
+}
+
+extension LegacyNotice {
+    /// D-W2: this launch already claimed the notice for a window, so a second window opened in the same launch shows none.
+    @MainActor private static var claimed: Bool {
+        get { WelcomeClaim.shared.claimed }
+        set { WelcomeClaim.shared.claimed = newValue }
+    }
+
+    /// True while this launch still has a Welcome panel to show: not claimed by a window yet, not closed by the user before
+    /// (`welcomeShown`), and either the data migration moved something or an earlier launch left `welcome-pending.json`
+    /// (amendment 4: it showed the panel and the user never closed it). One small file read, only while the flag is unset.
+    /// `MacDashboardApp.init` holds the `WelcomeGate` on it. `pendingURL` is a parameter so tests never read the real file.
+    @MainActor static func willShowAtLaunch(settings: AppSettings, pendingURL: URL) -> Bool {
+        guard !claimed, !settings.welcomeShown else { return false }
+        return LegacyDataMigration.lastOutcome != .nothing || WelcomePending.load(pendingURL) != nil
+    }
+
+    /// The notice for the main window, built once per launch (D7, D-W1). Under `-visualFixture` the `main-*` states carry no
+    /// panel (A6); `-fixtureLegacyNotice` shows the fixture value. Otherwise: this launch's migration outcome, the shown
+    /// flag, the pending file and the old-app detection. A fresh decision (this launch moved something) is written to the
+    /// pending file when none exists; a re-show reads it and writes nothing.
+    @MainActor static func atLaunch(settings: AppSettings, pendingURL: URL) -> LegacyNotice? {
+        if VisualFixture.isRequested { return VisualFixture.legacyNoticeRequested ? VisualFixture.legacyNotice : nil }
+        guard willShowAtLaunch(settings: settings, pendingURL: pendingURL) else { return nil }
+        let outcome = LegacyDataMigration.lastOutcome
+        let notice = make(outcome: outcome, archivesMoving: LegacyArchiveMove.pending,
+                          oldApp: LegacyApp.detect(), running: LegacyAppActions.isOldAppRunning(),
+                          dismissed: settings.legacyAppOfferDismissed,
+                          parkedFolder: LegacyDataMigration.newestParkedFolder(in: AppInfo.supportFolderURL),
+                          shown: settings.welcomeShown, archiveCount: LegacyArchiveMove.archiveCount,
+                          record: LegacyDataMigration.lastRecord,
+                          pending: WelcomePending.load(pendingURL))
+        guard let notice else { return nil }
+        claimed = true
+        // Once: a same-launch re-seed must not rebuild the file and drop the archive outcome `updateArchive` stored.
+        if outcome != .nothing, WelcomePending.load(pendingURL) == nil { WelcomePending(notice).write(to: pendingURL) }
+        followArchiveMove(LegacyArchiveMove.task, pendingURL: pendingURL)
+        return notice
+    }
+
+    /// Stores the archive move's outcome in the pending file when the move ends (the panel was decided before it did).
+    /// A closed panel has deleted the file by then: no-op.
+    @MainActor static func followArchiveMove(_ task: Task<LegacyArchiveMove.Outcome, Never>?, pendingURL: URL) {
+        guard let task else { return }
+        Task { @MainActor in
+            let outcome = await task.value
+            WelcomePending.updateArchive(outcome, at: pendingURL)
+        }
+    }
+
+    /// The window that claimed the notice went away before presenting it: the next window may claim it.
+    @MainActor static func releaseClaim() { claimed = false }
+
+    /// Amendment 4: written only when the user closes the panel («Later», «Done», Esc, after the exit animation), together with
+    /// deleting the pending file. Cmd-Q, a crash or the Full Disk Access relaunch before that leave the flag unset and the
+    /// panel comes back. Never under `-visualFixture`. The flag goes first: a crash between the two leaves an orphan file the
+    /// flag outranks.
+    @MainActor static func markShown(settings: AppSettings, pendingURL: URL) {
+        guard !VisualFixture.isRequested else { return }
+        settings.welcomeShown = true
+        WelcomePending.delete(pendingURL)
+    }
+}
+
+extension WelcomeActions {
+    /// Snapshots and the `-fixtureLegacyNotice` window: no AppKit, no disk. A computed property because closures are not
+    /// Sendable under Swift 6.
+    @MainActor static var inert: WelcomeActions {
+        WelcomeActions(quitOldApp: { true }, trash: { VisualFixture.legacyTrashedApp }, restore: { _ in },
+                       openFullDiskAccess: {}, fullDiskAccess: { .notGranted }, archiveTask: { nil },
+                       retryArchives: { nil }, reveal: { _, _ in })
+    }
+
+    /// The real actions of the panel (W3-W7). Every one runs on an explicit click, or (`fullDiskAccess`) on the panel's
+    /// own app-became-active check. Nothing here can raise a TCC prompt.
+    @MainActor static func live(notice: LegacyNotice) -> WelcomeActions {
+        if VisualFixture.isRequested { return .inert }
+        return WelcomeActions(
+            quitOldApp: { await LegacyAppActions.quitOldApp() },
+            trash: {
+                guard let url = notice.oldApp else { throw CocoaError(.fileNoSuchFile) }
+                return try LegacyApp.trash(.init(url: url))
+            },
+            restore: { trashed in
+                guard let original = notice.oldApp else { throw CocoaError(.fileNoSuchFile) }
+                try LegacyApp.restore(trashed: trashed, to: original)
+            },
+            openFullDiskAccess: { AdviceActionRunner.openPane(AdvicePanes.fullDiskAccess) },
+            fullDiskAccess: {
+                ProtectedLocations.fullDiskAccess(home: FileManager.default.homeDirectoryForCurrentUser.path,
+                                                  probe: DirectoryAccess.probe)
+            },
+            archiveTask: { LegacyArchiveMove.task },
+            retryArchives: {
+                let t = LegacyArchiveMove.retryAfterAccessGranted()
+                LegacyNotice.followArchiveMove(t, pendingURL: WelcomePending.defaultURL)
+                return t
+            },
+            reveal: { urls, fallback in
+                let existing = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+                if existing.isEmpty { AdviceActionRunner.reveal(fallback.path) }
+                else { NSWorkspace.shared.activateFileViewerSelecting(existing) }
+            })
     }
 }

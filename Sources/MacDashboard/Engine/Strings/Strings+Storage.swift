@@ -199,8 +199,8 @@ extension StringsEN: StorageStrings {
     func storageConfirmTextNoCount(_ size: String) -> String { "Everything in the Trash (\(size)) will be deleted permanently. You can’t undo this." }
     var storageConfirmEmpty: String { "Empty Trash" }
     var storageConfirmCancel: String { "Cancel" }
-    func storageFDANote(_ names: String) -> String { "Not shown here: \(names) — MacDashboard doesn’t have Full Disk Access." }
-    func storageFDANoteMore(_ names: String, _ n: Int) -> String { "Not shown here: \(names) and \(n) more — MacDashboard doesn’t have Full Disk Access." }
+    func storageFDANote(_ names: String) -> String { "Not shown here: \(names) — Moonport doesn’t have Full Disk Access." }
+    func storageFDANoteMore(_ names: String, _ n: Int) -> String { "Not shown here: \(names) and \(n) more — Moonport doesn’t have Full Disk Access." }
     var storageFDAButtonA11y: String { "Open Full Disk Access in Privacy & Security settings" }
     var storageSmartCardTitle: String { "Disks (SMART)" }
     var storageSubInternalOK: String { "INTERNAL · OK" }

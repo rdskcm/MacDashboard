@@ -185,7 +185,7 @@ final class DS3RimView: NSView {
         let sprite = RimSpriteCache.shared.sprite(h: h, scale: scale, ground: ground)
         let amb = depthPx > 0 ? RimSpriteCache.shared.ambient(depthPx: depthPx, ground: ground, alpha: isDark ? 0.2 : 0.5) : nil
         if sprite == nil || (depthPx > 0 && amb == nil) {
-            if !loggedRenderFailure { NSLog("[MacDashboard] rim bitmap render failed; keeping the previous contents, retrying on the next pass") }
+            if !loggedRenderFailure { NSLog("[Moonport] rim bitmap render failed; keeping the previous contents, retrying on the next pass") }
             loggedRenderFailure = true
         } else {
             renderedKey = key
@@ -597,7 +597,7 @@ final class DS3OrbView: NSView {
         }
         let failed = images.contains { $0 == nil }
         if failed {
-            if !loggedRenderFailure { NSLog("[MacDashboard] orb bitmap render failed; keeping the previous contents, retrying on the next pass") }
+            if !loggedRenderFailure { NSLog("[Moonport] orb bitmap render failed; keeping the previous contents, retrying on the next pass") }
             loggedRenderFailure = true
         } else {
             renderedAppearance = name        // a failed render is not recorded, so the next pass retries

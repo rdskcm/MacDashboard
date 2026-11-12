@@ -865,7 +865,7 @@ enum IPhoneData {
     }
 }
 
-/// Remembered iPhones in one file (D8): `{"devices":[…]}` under App Support/MacDashboard.
+/// Remembered iPhones in one file (D8): `{"devices":[…]}` under App Support/Moonport.
 /// Same rules as `HistoryStore.save()`: dir 0700, file 0600, atomic write, and a file
 /// that cannot be decoded is renamed aside on the next save, never overwritten.
 final class IPhoneStore {
@@ -917,32 +917,37 @@ final class IPhoneStore {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
-    /// Default archive folder, `~/Documents/MacDashboard/iPhone` (handoff 11-settings:33). Never created here:
+    /// Default archive folder, `~/Documents/Moonport/iPhone` (handoff 11-settings:33). Never created here:
     /// the first keep or the migration creates it, so a user who never keeps an archive never gets the
     /// Files & Folders prompt for Documents.
     static func defaultArchiveRoot() -> URL {
+        documentsFolder(AppInfo.supportFolderName).appendingPathComponent("iPhone", isDirectory: true)
+    }
+
+    /// The old app's default archive folder (`AppInfo.legacySupportFolderName` under Documents, then `iPhone`): the source of the first-launch
+    /// archive move (`LegacyArchiveMove`) and a reader fallback. Never created here.
+    static func legacyDocumentsArchiveRoot() -> URL {
+        documentsFolder(AppInfo.legacySupportFolderName).appendingPathComponent("iPhone", isDirectory: true)
+    }
+
+    /// `<Documents>/<name>`, with the `~/Documents` fallback; one lookup for both roots. Never created.
+    private static func documentsFolder(_ name: String) -> URL {
         let fm = FileManager.default
         let docs = (try? fm.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false))
             ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
-        return docs.appendingPathComponent("MacDashboard", isDirectory: true)
-            .appendingPathComponent("iPhone", isDirectory: true)
+        return docs.appendingPathComponent(name, isDirectory: true)
     }
 
-    /// Where archives were kept before REDESIGN-IPHONE: `<App Support>/MacDashboard/iphones` (layout
-    /// `<deviceKey>/sysdiagnose/<name>`). Not created here (`AppInfo.supportFolderURL` does not create either).
+    /// Where archives were kept before REDESIGN-IPHONE: `<App Support>/Moonport/iphones` (layout
+    /// `<deviceKey>/sysdiagnose/<name>`; the folder moved here from the old app's name at the first Moonport launch).
+    /// Not created here (`AppInfo.supportFolderURL` does not create either).
     static func legacyArchiveRoot() -> URL {
         AppInfo.supportFolderURL.appendingPathComponent("iphones", isDirectory: true)
     }
 
-    /// App Support/MacDashboard/iphones.json, built like `AppModel.defaultReportURL()`.
+    /// App Support/Moonport/iphones.json.
     static func defaultURL() -> URL {
-        let fm = FileManager.default
-        let base = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                appropriateFor: nil, create: true)) ?? fm.homeDirectoryForCurrentUser
-        let dir = base.appendingPathComponent("MacDashboard", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true,
-                                attributes: [.posixPermissions: 0o700])
-        return dir.appendingPathComponent("iphones.json")
+        AppInfo.supportFolderURL(create: true).appendingPathComponent("iphones.json")
     }
 
     /// `<file name>.unreadable-<yyyyMMdd-HHmmss>` next to the store file.

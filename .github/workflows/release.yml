@@ -1,6 +1,6 @@
 name: Release
 
-# Builds the Apple Silicon (arm64) MacDashboard.app, packages it with `ditto` (which
+# Builds the Apple Silicon (arm64) Moonport.app, packages it with `ditto` (which
 # preserves the ad-hoc signature across the zip round-trip), and attaches the
 # .zip to a GitHub Release. The app is ad-hoc signed (not notarized), so on
 # first launch users must clear Gatekeeper — see the README install section.
@@ -76,7 +76,7 @@ jobs:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist.noindex/MacDashboard.app/Contents/Info.plist)"
+          ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist.noindex/Moonport.app/Contents/Info.plist)"
           echo "release tag: $TAG; CFBundleVersion: $ver"
           if [ "v$ver" != "$TAG" ]; then
             echo "::error::the app is version $ver but the release tag is $TAG — set VERSION in build_app.sh to match before tagging"
@@ -87,7 +87,7 @@ jobs:
       - name: Assert arm64-only binary
         run: |
           set -euo pipefail
-          archs="$(lipo -archs dist.noindex/MacDashboard.app/Contents/MacOS/MacDashboard)"
+          archs="$(lipo -archs dist.noindex/Moonport.app/Contents/MacOS/Moonport)"
           echo "archs: $archs"
           if [ "$archs" != "arm64" ]; then
             echo "::error::binary archs are '$archs', expected exactly 'arm64' (the app is Apple Silicon only)"
@@ -98,7 +98,7 @@ jobs:
       - name: Assert the binary records the selected Xcode's SDK
         run: |
           set -euo pipefail
-          bin="dist.noindex/MacDashboard.app/Contents/MacOS/MacDashboard"
+          bin="dist.noindex/Moonport.app/Contents/MacOS/Moonport"
           norm() { sed -E 's/(\.0)+$//' <<<"$1"; }
           info="$(vtool -show-build "$bin")"
           rec="$(awk '$1=="sdk"{print $2; exit}' <<<"$info")"
@@ -115,7 +115,7 @@ jobs:
           # ThermalHIDReader resolves these six at runtime via dlopen/dlsym on
           # purpose: hard-linking them means the app fails to LAUNCH on a macOS
           # that dropped them. `nm` prints the Mach-O leading underscore.
-          bin="dist.noindex/MacDashboard.app/Contents/MacOS/MacDashboard"
+          bin="dist.noindex/Moonport.app/Contents/MacOS/Moonport"
           syms="${RUNNER_TEMP:-.}/iokit-syms.txt"
           # Own command, not a pipeline: `nm` failing (renamed binary, toolchain
           # change) must fail the job. The old form buried it in a command
@@ -134,19 +134,19 @@ jobs:
           echo "no hard-linked private IOKit symbols"
 
       - name: Package (ditto preserves the ad-hoc signature)
-        run: ditto -c -k --keepParent dist.noindex/MacDashboard.app MacDashboard.zip
+        run: ditto -c -k --keepParent dist.noindex/Moonport.app Moonport.zip
 
       - name: Verify signature survives the zip round-trip
         run: |
           set -euo pipefail
           rm -rf _verify && mkdir _verify
-          ditto -x -k MacDashboard.zip _verify
+          ditto -x -k Moonport.zip _verify
           # Signature must stay intact after packaging — this gates the release.
-          codesign --verify --deep --strict --verbose=2 "_verify/MacDashboard.app"
+          codesign --verify --deep --strict --verbose=2 "_verify/Moonport.app"
           # Gatekeeper assessment is EXPECTED to be rejected (ad-hoc, not
           # notarized). We log it to document the exact message users will see;
           # never gate the release on it.
-          spctl -a -vvv --type execute "_verify/MacDashboard.app" || true
+          spctl -a -vvv --type execute "_verify/Moonport.app" || true
 
       - name: Assert hardened runtime + AppleEvents entitlement
         run: |
@@ -155,17 +155,17 @@ jobs:
           # and NO entitlements blob, so it cannot catch build_app.sh losing `--options
           # runtime` or `--entitlements`. Without them the shipped app fails empty-Trash
           # with -1743 for every user, and the DYLD_INSERT_LIBRARIES hole reopens.
-          flags="$(codesign -dvv "_verify/MacDashboard.app" 2>&1 | sed -n 's/^CodeDirectory .*flags=\([^ ]*\).*/\1/p')"
+          flags="$(codesign -dvv "_verify/Moonport.app" 2>&1 | sed -n 's/^CodeDirectory .*flags=\([^ ]*\).*/\1/p')"
           echo "CodeDirectory flags: $flags"
           case "$flags" in
             *runtime*) echo "hardened runtime OK" ;;
             *) echo "::error::hardened runtime flag missing (flags=${flags:-none}) — build_app.sh must sign with --options runtime"; exit 1 ;;
           esac
-          codesign -d --entitlements :- --xml "_verify/MacDashboard.app" > _entitlements.plist 2>/dev/null
+          codesign -d --entitlements :- --xml "_verify/Moonport.app" > _entitlements.plist 2>/dev/null
           plutil -p _entitlements.plist
           val="$(plutil -extract 'com\.apple\.security\.automation\.apple-events' raw -o - _entitlements.plist 2>/dev/null || echo missing)"
           if [ "$val" != "true" ]; then
-            echo "::error::com.apple.security.automation.apple-events entitlement is $val — build_app.sh must sign with --entitlements MacDashboard.entitlements"
+            echo "::error::com.apple.security.automation.apple-events entitlement is $val — build_app.sh must sign with --entitlements Moonport.entitlements"
             exit 1
           fi
           echo "AppleEvents entitlement OK"
@@ -180,12 +180,12 @@ jobs:
             # the same VERSION it writes to CFBundleVersion, and CFBundleVersion was checked against the
             # tag above. The notes are a placeholder that the release flow replaces
             # with `gh release edit --notes-file`.
-            short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist.noindex/MacDashboard.app/Contents/Info.plist)"
+            short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist.noindex/Moonport.app/Contents/Info.plist)"
             gh release create "$TAG" \
               --title "v$short" \
               --notes "Apple Silicon (arm64) build. Intel Macs: download v2.1 from https://github.com/rdskcm/MacDashboard/releases/tag/v2.1. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
           fi
-          gh release upload "$TAG" MacDashboard.zip --clobber
-          sum="$(shasum -a 256 MacDashboard.zip | awk '{print $1}')"
+          gh release upload "$TAG" Moonport.zip --clobber
+          sum="$(shasum -a 256 Moonport.zip | awk '{print $1}')"
           echo "SHA-256: $sum"
-          echo "SHA-256 of \`MacDashboard.zip\`: \`$sum\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA-256 of \`Moonport.zip\`: \`$sum\`" >> "$GITHUB_STEP_SUMMARY"

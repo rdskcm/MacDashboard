@@ -16,7 +16,7 @@
 set -euo pipefail
 umask 077
 
-CN="MacDashboard Local Signing"   # keep equal to SIGN_CN in build_app.sh
+CN="Moonport Local Signing"   # keep equal to SIGN_CN in build_app.sh
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 # The system LibreSSL: its PKCS#12 defaults are the ones `security import` accepts
 # (OpenSSL 3 defaults produce "MAC verification failed").

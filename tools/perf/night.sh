@@ -23,13 +23,13 @@
 #   tools/perf/night.sh --standing-list | --standing-remove NAME
 #   tools/perf/night.sh --stop-tonight HH:MM     jobs of the coming night's automatic run stop at HH:MM instead of 09:00
 #                                                (after 03:00, before 13:00); that night only, later nights stop at 09:00
-#   tools/perf/night.sh --install | --uninstall  add / remove the user LaunchAgent com.rdskcm.macdashboard.night
+#   tools/perf/night.sh --install | --uninstall  add / remove the user LaunchAgent app.moonport.night
 #   tools/perf/night.sh --restore-brightness     put back display / keyboard values a crashed run left saved
 # Test seams: NIGHT_OUT=<absolute dir> replaces tools/perf/out/night.noindex (state, queue, builds, reports) in every mode
 # but --install/--uninstall; NIGHT_CLAUDE_PROJECTS with --dry-run or NIGHT_OUT; NIGHT_DATE with --check --dry-run;
 # NIGHT_HOUR with --check --dry-run, or 3-23 with --check and NIGHT_OUT; NIGHT_IDLE=<seconds> (the HID idle the evening
 # hold sees, never the start check) with --dry-run or NIGHT_OUT; NIGHT_FOREIGN_ONLY=<pid> with NIGHT_OUT (the close step
-# acts on that MacDashboard process only).
+# acts on that Moonport process only).
 # Exit: 0 (also for skips — the reason is in the report) | 64 usage | 70 runtime error
 set -uo pipefail
 
@@ -37,7 +37,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PERF="$ROOT/tools/perf"
 NIGHT="$PERF/out/night.noindex"
 DATE="$(date +%Y%m%d)"
-LABEL="com.rdskcm.macdashboard.night"
+LABEL="app.moonport.night"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 usage() { sed -n '2,/^set -uo/{/^#/p;}' "$0" | sed 's/^# \{0,1\}//'; }
@@ -467,6 +467,9 @@ if [ "$MODE" = "--install" ]; then
 </dict>
 </plist>
 PL
+  # MOONPORT-RENAME D14: the agent had the label com.rdskcm.macdashboard.night before the rename; remove it so only one runs.
+  launchctl bootout "gui/$(id -u)/com.rdskcm.macdashboard.night" 2>/dev/null
+  rm -f "$HOME/Library/LaunchAgents/com.rdskcm.macdashboard.night.plist"
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null
   launchctl bootstrap "gui/$(id -u)" "$PLIST" || fatal 70 "launchctl bootstrap failed"
   echo "installed: checks every 60 s; between 00:00 and 03:00, when the Mac is idle and no Claude Code transcript was written for $WORK_QUIET_MIN min, it runs the gate (when main changed), then the queued jobs, then the standing set, until 09:00; from 21:00 until the run starts (03:00 at the latest) it keeps the display awake, dimmed while you are away, so the screen cannot lock; report: $NIGHT/latest.md"
@@ -603,20 +606,20 @@ STOP_EPOCH="$(date -j -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 SOFT_HM="$(date -r $((STOP_EPOCH - 900)) +%H:%M)"        # D7: STOP_AT for self-stopping jobs
 STANDING=0; { [ "$NOW" = 0 ] || [ "$STANDING_FLAG" = 1 ]; } && STANDING=1   # NIGHT-STANDING-JOBS: automatic runs always, hand runs with --standing
 
-# GATE-AX-MISS: every MacDashboard process is closed before the gate and before each job (tools/perf/foreign-copies.sh:
+# GATE-AX-MISS: every Moonport process is closed before the gate and before each job (tools/perf/foreign-copies.sh:
 # copies SIGTERM then SIGKILL, the installed app by a polite AppleScript quit, never killed).
 close_copies() {   # what -> 0 nothing left | 1 some left or the close failed (CLOSE_WHY); CLOSE_LINES = report lines, empty when none was found
   local out rc l
   CLOSE_LINES=(); CLOSE_WHY=""
   out="$("$PERF/foreign-copies.sh" close ${FOREIGN_ONLY:+--only "$FOREIGN_ONLY"} 2>&1)"; rc=$?
   if [ -n "$out" ]; then
-    CLOSE_LINES+=("MacDashboard processes before $1 (found: pid ppid started command):")
+    CLOSE_LINES+=("Moonport processes before $1 (found: pid ppid started command):")
     while IFS= read -r l; do CLOSE_LINES+=("    | $l"); done <<< "$out"
   fi
   [ "$rc" = 0 ] && return 0
   l="$(sed -n 's/^left: //p' <<< "$out" | paste -sd ';' - | sed 's/;/; /g')"
-  if [ -n "$l" ]; then CLOSE_WHY="MacDashboard process(es) still running after the close: $l"
-  else CLOSE_WHY="closing MacDashboard processes failed (foreign-copies.sh exit $rc: $(tail -1 <<< "$out"))"; fi
+  if [ -n "$l" ]; then CLOSE_WHY="Moonport process(es) still running after the close: $l"
+  else CLOSE_WHY="closing Moonport processes failed (foreign-copies.sh exit $rc: $(tail -1 <<< "$out"))"; fi
   return 1
 }
 stop_job() {   # reason grace -> TERM the job's process group, KILL after grace. No-op when no job runs or the
@@ -756,10 +759,10 @@ run_standing() {   # NIGHT-STANDING-JOBS: every standing job in file order after
   done
 }
 
-# A finished night build: build.ok and the bench copy tools/bench-app.sh writes (MacDashboardBench.app since
-# LS-PRUNE-MISSES). A build directory from before holds MacDashboard.app and counts as unfinished: the candidate
+# A finished night build: build.ok and the bench copy tools/bench-app.sh writes (MoonportBench.app since
+# LS-PRUNE-MISSES). A build directory from before holds Moonport.app and counts as unfinished: the candidate
 # is rebuilt, and such a directory is never a baseline and is removed by the bookkeeping prune.
-night_built() { [ -f "$1/build.ok" ] && [ -d "$1/MacDashboardBench.app" ]; }
+night_built() { [ -f "$1/build.ok" ] && [ -d "$1/MoonportBench.app" ]; }
 run_gate() {
   local OFFLINE="" SHA BASE="" BASE_SHA="" GOUT GRC GLINE NOISY NFAILG NERR PRUNE_OK PRUNE_NOTE="" VERDICT IDLE d l crc
   # 5. candidate
@@ -776,7 +779,7 @@ run_gate() {
       GATE_VERDICT="ERROR — build of $SHA failed, see runs/$DATE/build.log"; return
     fi
     rm -rf "$NIGHT/builds/$SHA"
-    "$ROOT/tools/bench-app.sh" "$SRC/dist.noindex/MacDashboard.app" "$NIGHT/builds/$SHA" >> "$NIGHT/runs/$DATE/build.log" 2>&1 \
+    "$ROOT/tools/bench-app.sh" "$SRC/dist.noindex/Moonport.app" "$NIGHT/builds/$SHA" >> "$NIGHT/runs/$DATE/build.log" 2>&1 \
       || { GATE_VERDICT="ERROR — bench copy of $SHA failed, see runs/$DATE/build.log"; return; }
     echo "$SHA $(date '+%Y-%m-%d %H:%M')" > "$NIGHT/builds/$SHA/build.ok"
     rm -rf "$SRC"; SRC=""
@@ -787,10 +790,10 @@ run_gate() {
     d="${d%/}"
     [ "$(basename "$d")" = "$SHA" ] && continue
     night_built "$d" || continue
-    BASE="$d/MacDashboardBench.app"; BASE_SHA="$(basename "$d")"; break
+    BASE="$d/MoonportBench.app"; BASE_SHA="$(basename "$d")"; break
   done < <(ls -1dt "$NIGHT"/builds/*/ 2>/dev/null)
 
-  # 6b. MacDashboard processes (GATE-AX-MISS): closed before the gate; one that survives skips it (gate.sh would refuse)
+  # 6b. Moonport processes (GATE-AX-MISS): closed before the gate; one that survives skips it (gate.sh would refuse)
   close_copies "the gate"; crc=$?
   [ "${#CLOSE_LINES[@]}" = 0 ] || GATE_LINES+=("${CLOSE_LINES[@]}")
   [ "$crc" = 0 ] || { GATE_VERDICT="SKIPPED — $CLOSE_WHY — main $SHA"; return; }
@@ -798,7 +801,7 @@ run_gate() {
   # 7. gate
   GOUT="$PERF/out/night-$DATE"
   [ ! -e "$GOUT" ] || GOUT="$GOUT-$(date +%H%M%S)"
-  env -u GATE_TEST_ALLOW_FOREIGN -u GATE_TEST_RANGE_SCALE -u GATE_TEST_CAND_POS_HZ "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MacDashboardBench.app" ${BASE:+--baseline "$BASE"} \
+  env -u GATE_TEST_ALLOW_FOREIGN -u GATE_TEST_RANGE_SCALE -u GATE_TEST_CAND_POS_HZ "$PERF/gate.sh" --app "$NIGHT/builds/$SHA/MoonportBench.app" ${BASE:+--baseline "$BASE"} \
     --scenarios "${LIST:-all}" --runs "${N:-3}" --out "$GOUT" > "$NIGHT/runs/$DATE/gate.out" 2>&1
   GRC=$?
   "$ROOT/tools/keep-latest.sh" --exclude "$GOUT" "$PERF/out" '^night-[0-9]{8}(-[0-9]{6})?$' 5 >> "$NIGHT/runs/$DATE/prune.log" 2>&1 || true   # NIGHT-STANDING-JOBS retention

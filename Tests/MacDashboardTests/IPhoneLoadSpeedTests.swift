@@ -1,6 +1,6 @@
 // Tests/MacDashboardTests/IPhoneLoadSpeedTests.swift
 // IPHONE-LOAD-SPEED Stage 1: job queue, type split/merge, saved type cache, storage state.
-// Temp files only (temporaryDirectory/<UUID>); never touches ~/Library/Application Support/MacDashboard.
+// Temp files only (temporaryDirectory/<UUID>); never touches ~/Library/Application Support/Moonport.
 import Foundation
 import Testing
 @testable import MacDashboard

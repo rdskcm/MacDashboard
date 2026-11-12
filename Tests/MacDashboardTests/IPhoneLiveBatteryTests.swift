@@ -2,7 +2,7 @@
 // IPHONE-LIVE-BATTERY: the pure gate / schedule / history decisions (`IPhoneLiveBattery`) and the model's loop
 // (exists only while the gate holds, `no-unseen-work`) and merge (`applyLiveBattery`). The default transport (`.shared`)
 // is never started here, so `devices` in the transport is empty and any job fails with `.gone`. Temp paths only, never
-// `~/Library/Application Support/MacDashboard`.
+// `~/Library/Application Support/Moonport`.
 import Foundation
 import Testing
 @testable import MacDashboard
@@ -14,6 +14,7 @@ import Testing
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let m = IPhoneModel(store: IPhoneStore(url: dir.appendingPathComponent("iphones.json")),
                             archiveRoot: dir.appendingPathComponent("archive"),
+                            oldDefaultArchiveRoot: dir.appendingPathComponent("archive-old"),
                             logTypeStore: IPhoneLogTypeStore(url: dir.appendingPathComponent(IPhoneLogTypeStore.fileName)))
         return (m, dir)
     }
