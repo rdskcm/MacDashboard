@@ -55,13 +55,13 @@ jobs:
 
       - name: Build all targets, failing on any warning
         # CI-SPEED: the only compile in this run. BUILD-WARNINGS: tools/check-warnings.sh builds
-        # MacDashboard and MacDashboardTests (debug) from an empty scratch directory with Swift
+        # Moonport and MoonportTests (debug) from an empty scratch directory with Swift
         # warnings as errors and linker warnings fatal, and fails on any other warning line. The
         # same command reproduces this step on a Mac: `tools/check-warnings.sh`.
         # The test step below reuses this build via --skip-build and never compiles.
         run: tools/check-warnings.sh "$RUNNER_TEMP/build"
 
-      - name: Run swift-testing suite (MacDashboardTests)
+      - name: Run swift-testing suite (MoonportTests)
         # The only test gate (CHECKS-SWIFT-TESTING). Needs the Testing module that ships with
         # the Xcode selected in the first step.
         # The count guard fails the step if swift-testing ran zero tests, so a toolchain

@@ -5,7 +5,7 @@
 #
 # Usage: gate.sh [--app PATH] [--baseline PATH] [--scenarios G1,G2,...] [--runs N] [--out DIR]
 #                [--keep-traces] [--g1-max PCT] [--g9-max PCT]
-#   --app        bundle under test (default dist.noindex/MacDashboard.app)
+#   --app        bundle under test (default dist.noindex/Moonport.app)
 #   --baseline   pre-block bundle, built from the PERF-GATE-RETARGET merge or later (README §2); candidate and baseline runs alternate A,B,A,B,...
 #   --scenarios  G1..G7, G9, G10, GP:<page> (pages: cpu memory storage battery security backups system history), or
 #                all (= every G item plus GP for all pages); default G1,G2,G3,G4,G5,G6,G7,G9 (G10, the
@@ -21,20 +21,20 @@
 #       retry, or a trace or analysis step of one run failed, or a scroll window left its range; the other scenarios ran and are reported) | 64 usage |
 #       65 precondition refused | 70 runtime error (setup, app launch or window pin, fixture, final verdict) or a shell error (exit 1 before the verdict is reported as 70).
 #       When several apply: 3 over 4 over 5 over 1.
-# Preconditions refuse (65) while any MacDashboard process runs that the gate did not start (tools/perf/foreign-copies.sh
+# Preconditions refuse (65) while any Moonport process runs that the gate did not start (tools/perf/foreign-copies.sh
 # list; GATE-AX-MISS). GATE_TEST_ALLOW_FOREIGN=1 runs beside them instead — for the GATE-AX-MISS verification only.
 #       Last line: GATE: exit=<n> pass=<k> fail=<m> noisy=<j> invalid=<0|1> error=<e>
-# Data safety: runs bench copies (bundle id com.rdskcm.mac-dashboard.bench); synthetic fixtures only; never touches ~/Library/Application Support/MacDashboard;
+# Data safety: runs bench copies (bundle id app.moonport.bench); synthetic fixtures only; never touches ~/Library/Application Support/Moonport;
 # kills only the PIDs it started (never by name); never writes or restores the defaults domain.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PERF="$ROOT/tools/perf"
-BUNDLE_ID="com.rdskcm.mac-dashboard"
-BENCH_ID="com.rdskcm.mac-dashboard.bench"
+BUNDLE_ID="app.moonport"
+BENCH_ID="app.moonport.bench"
 GP_PAGES="cpu memory storage battery security backups system history"
 
-APP="$ROOT/dist.noindex/MacDashboard.app"
+APP="$ROOT/dist.noindex/Moonport.app"
 BASELINE=""
 SCENARIOS=""
 RUNS=""
@@ -125,11 +125,11 @@ abspath() { python3 -I -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' 
 
 [ -d "$APP" ] || fatal 64 "--app is not a directory: $APP"
 APP="$(abspath "$APP")"
-[ -x "$APP/Contents/MacOS/MacDashboard" ] || fatal 64 "--app binary is not executable: $APP/Contents/MacOS/MacDashboard"
+[ -x "$APP/Contents/MacOS/Moonport" ] || fatal 64 "--app binary is not executable: $APP/Contents/MacOS/Moonport"
 if [ -n "$BASELINE" ]; then
   [ -d "$BASELINE" ] || fatal 64 "--baseline is not a directory: $BASELINE"
   BASELINE="$(abspath "$BASELINE")"
-  [ -x "$BASELINE/Contents/MacOS/MacDashboard" ] || fatal 64 "--baseline binary is not executable: $BASELINE/Contents/MacOS/MacDashboard"
+  [ -x "$BASELINE/Contents/MacOS/Moonport" ] || fatal 64 "--baseline binary is not executable: $BASELINE/Contents/MacOS/Moonport"
 fi
 case "$RUNS" in ""|[1-7]) ;; *) fatal 64 "--runs must be 1-7" ;; esac
 case "$G1_MAX" in *[!0-9.]*|"") fatal 64 "--g1-max must be a number" ;; esac
@@ -189,17 +189,17 @@ for p in $(pgrep -f '^[^[:space:]]*bash ([^-].*/)?tools/perf/gate\.sh([[:space:]
   refuse "another gate.sh is running (pid $p)"
 done
 
-# no MacDashboard process the gate did not start (GATE-AX-MISS): on 2026-10-30 a leftover bench copy of another session
+# no Moonport process the gate did not start (GATE-AX-MISS): on 2026-10-30 a leftover bench copy of another session
 # took the gate's presses, and any copy loads the CPU/GPU being measured. The gate never closes one (night.sh does).
 FOREIGN="$("$PERF/foreign-copies.sh" list)" || fatal 70 "tools/perf/foreign-copies.sh list failed"
 FOREIGN_NOTE=""
 if [ -n "$FOREIGN" ]; then
   FOREIGN_ONE="$(paste -sd ';' - <<< "$FOREIGN" | sed 's/;/; /g')"
   if [ "${GATE_TEST_ALLOW_FOREIGN:-0}" = 1 ]; then
-    FOREIGN_NOTE="TEST ONLY (GATE_TEST_ALLOW_FOREIGN=1): running beside MacDashboard process(es) the gate did not start (pid ppid started command): $FOREIGN_ONE"
+    FOREIGN_NOTE="TEST ONLY (GATE_TEST_ALLOW_FOREIGN=1): running beside Moonport process(es) the gate did not start (pid ppid started command): $FOREIGN_ONE"
     echo "gate: $FOREIGN_NOTE" >&2
   else
-    refuse "MacDashboard process(es) the gate did not start are running (pid ppid started command): $FOREIGN_ONE — quit them and run again (the gate never closes them; night.sh does)"
+    refuse "Moonport process(es) the gate did not start are running (pid ppid started command): $FOREIGN_ONE — quit them and run again (the gate never closes them; night.sh does)"
   fi
 fi
 
@@ -250,8 +250,8 @@ mark_val() { awk -v k="$1" '$1==k && NF==2 {print $2; exit}' "$2"; }   # first u
 
 ax() { "$BIN/ax" "$PID" "$@" 2>&1; }   # native AX by pid (ax.swift); the kinds and answers of the old AppleScript helper
 # AX misses (S6). The one retry after re-activating the app is robustness. The 2026-10-20 and 2026-10-30 misses had a
-# cause (GATE-AX-MISS): the AppleScript process lookup by unix id returned another MacDashboard process's
-# window contents; the helper is now native AX by pid and the gate refuses to start beside another MacDashboard process.
+# cause (GATE-AX-MISS): the AppleScript process lookup by unix id returned another Moonport process's
+# window contents; the helper is now native AX by pid and the gate refuses to start beside another Moonport process.
 # A second miss writes diagnostics (ax_miss) and returns 1; attempt() then marks the scenario ERROR and the gate goes on.
 # Never a coordinate fallback. The helpers log to stderr: ax_frame runs inside $(...), whose stdout is the result.
 ax_reactivate() {   # kind value: frontmost again; a Home tile also gets a fresh Home press
@@ -274,7 +274,7 @@ ax_miss() {   # label -> $CUR_PREFIX-axdiag/ {miss.txt ax-dump.txt winfo.txt scr
     echo "time: $(date '+%Y-%m-%d %H:%M:%S')"
     echo "app pid $PID alive: $(kill -0 "$PID" 2>/dev/null && echo yes || echo no)"
     echo "frontmost pid: $(ax focused)"
-    echo "MacDashboard processes (pid ppid started command):"; "$PERF/foreign-copies.sh" list 2>&1 | sed 's/^/  /'
+    echo "Moonport processes (pid ppid started command):"; "$PERF/foreign-copies.sh" list 2>&1 | sed 's/^/  /'
     if [ -x "$b" ]; then echo "brightness: $("$b" get 2>&1)"; else echo "brightness: n/a (no helper at $b)"; fi
     echo "session locked: $(ioreg -n Root -d1 | grep -q '"IOConsoleLocked" *= *Yes' && echo yes || echo no)"
     echo "HID idle s: $(ioreg -c IOHIDSystem -d 4 | awk '/"HIDIdleTime"/ {print int($NF/1000000000); exit}')"
@@ -394,7 +394,7 @@ park_pointer() { "$BIN/hold" 1100 500 0.4 >/dev/null 2>&1; }   # drv move with 0
 launch_app() {   # app tag -> PID; 1 when the pin check failed (diagnostics written)
   defaults delete "$BENCH_ID" >/dev/null 2>&1 || true
   rm -rf "$HOME/Library/Saved Application State/$BENCH_ID.savedState"
-  CFFIXED_USER_HOME="$HOMEDIR" "$1/Contents/MacOS/MacDashboard" -appLanguage en -AppleLanguages "(en)" -ApplePersistenceIgnoreState YES >"$OUT/$2-app.log" 2>&1 &
+  CFFIXED_USER_HOME="$HOMEDIR" "$1/Contents/MacOS/Moonport" -appLanguage en -AppleLanguages "(en)" -ApplePersistenceIgnoreState YES >"$OUT/$2-app.log" 2>&1 &
   PID=$!
   track "$PID"; LS_DIRTY=1
   sleep 7

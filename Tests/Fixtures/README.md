@@ -1,8 +1,8 @@
 # Tests/Fixtures
 
 Parser fixtures for R3-FIXTURES: one directory per `ParsedCommand` rawValue
-(`Sources/MacDashboard/Engine/ParsedCommands.swift`), found by
-`Tests/MacDashboardTests/ParserFixtureTests.swift` via `#filePath`, no Swift edit needed to add one.
+(`Sources/Moonport/Engine/ParsedCommands.swift`), found by
+`Tests/MoonportTests/ParserFixtureTests.swift` via `#filePath`, no Swift edit needed to add one.
 
 ## Naming law
 - a real capture (scrubbed) is `<command>-macos<major.minor>.txt` or
@@ -43,7 +43,7 @@ Parser fixtures for R3-FIXTURES: one directory per `ParsedCommand` rawValue
 
 ## Captures with a fixed role
 `pmset-assertions/pmset-assertions-macos27.0-caffeinate.txt` is read by name in
-`Tests/MacDashboardTests/WakeHoldersTests.swift`, which asserts its exact assertions. Do not rename,
+`Tests/MoonportTests/WakeHoldersTests.swift`, which asserts its exact assertions. Do not rename,
 recapture or edit it.
 
 ## Provenance of `synthetic` files

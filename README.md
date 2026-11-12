@@ -1,6 +1,11 @@
 [Русская версия](README.ru.md)
 
-# MacDashboard
+# Moonport
+
+Formerly MacDashboard (versions 1.0–2.3.3). On its first launch Moonport moves your data from
+`~/Library/Application Support/MacDashboard/` to `~/Library/Application Support/Moonport/` and offers to move an
+old MacDashboard.app to the Trash; macOS asks for its permissions again. To go back to MacDashboard, quit Moonport
+and move the folder back by hand.
 
 Native SwiftUI app for diagnosing your Mac: no browser, no local server,
 no dependencies — just one window. Bilingual — English and Russian,
@@ -40,7 +45,7 @@ feedback and comments. Hope you like it!
   Homebrew, macOS updates) and saves the report — a short summary on top
   (status and open tasks, CPU, memory, storage, battery, security, backups,
   uptime), the full details below it; the same text the Report sheet shows — to
-  `~/Library/Application Support/MacDashboard/mac_report.txt` — always a
+  `~/Library/Application Support/Moonport/mac_report.txt` — always a
   single file, each run overwrites the previous one.
 - Live metrics (CPU, memory, swap, battery) refresh every 2 seconds by
   default; the interval is configurable — 2/5/10 s — in Settings → Monitoring.
@@ -49,7 +54,7 @@ feedback and comments. Hope you like it!
   Sampling pauses while the app is not in front or no window of the app is on screen (covered, minimised or hidden)
   and resumes at once when you come back; the daily History point and the checks that feed notifications keep running.
 - History (disk usage over time, battery cycles) accumulates in
-  `~/Library/Application Support/MacDashboard/mac_check_state.json`
+  `~/Library/Application Support/Moonport/mac_check_state.json`
   (compatible with the old file format).
 - Detects recent crash logs (7-day window), grouped and collapsed, and flags
   own-app crashes vs. system panics.
@@ -63,11 +68,13 @@ feedback and comments. Hope you like it!
 
 ## What it can change
 
-By default MacDashboard only reads: it collects information and writes its
+By default Moonport only reads: it collects information and writes its
 own report/history files under Application Support and, only when you choose to keep an
 imported iPhone sysdiagnose, that archive in the folder shown in Settings › Devices (default
-`~/Documents/MacDashboard/iPhone`; if Documents syncs to iCloud Drive, kept archives sync with
-it) — nothing else. The only
+`~/Documents/Moonport/iPhone`; if Documents syncs to iCloud Drive, kept archives sync with
+it) — nothing else. Archives kept in the old default folder (`~/Documents/MacDashboard/iPhone`) move there at the first
+launch; macOS asks once for access to Documents, and if you refuse, they stay where they are and move at a later
+launch. A folder you chose yourself stays as it is. The only
 exceptions are actions you explicitly click, each of which shows a
 confirmation dialog (and, where the system requires it, a Touch ID / admin
 password prompt) before doing anything:
@@ -86,20 +93,20 @@ buttons above, the app never changes anything.
 
 ## Privacy
 
-MacDashboard does not upload your diagnostic data, reports or history. The
+Moonport does not upload your diagnostic data, reports or history. The
 few network requests it makes are all listed below, each with exactly what it
 sends. There is no telemetry, no analytics, no crash reporting, no
 auto-update check, and no account of any kind.
 
-Every report and history file MacDashboard writes stays in
-`~/Library/Application Support/MacDashboard/` on this Mac. Nothing is
+Every report and history file Moonport writes stays in
+`~/Library/Application Support/Moonport/` on this Mac. Nothing is
 uploaded.
 
 To forget an iPhone, use «Unlink device…» in its tile's «⋯» menu. Its record and battery history are deleted and its kept archives go to the Trash.
 
 When you open an iPhone crash log in Console or save it, the app copies that one file from the phone (read-only) into a private temporary folder, removed the next time the app starts; a saved copy goes only where you choose.
 
-**Honest network disclosure.** MacDashboard is not silent on the network —
+**Honest network disclosure.** Moonport is not silent on the network —
 here is everything it does:
 
 - Collecting a report runs `softwareupdate -l`, which contacts Apple's own
@@ -130,12 +137,12 @@ page contacts exactly these hosts:
   (`.ipsw`) Apple's catalogue names, over https only, saved to `~/Downloads`
   after its size and checksums are verified. A stopped download is kept for
   7 days in `~/Library/Caches/<bundle id>/ipsw/` and resumes after a relaunch
-  only when you click "Resume". The first save may make macOS ask whether MacDashboard may
+  only when you click "Resume". The first save may make macOS ask whether Moonport may
   access your Downloads folder; if you decline, the app says so and points
   to System Settings › Privacy & Security › Files and Folders.
 
 Every request also shows the server your Mac's IP address and
-`MacDashboard/<version>` as its user agent. Your phone's UDID, ECID, serial
+`Moonport/<version>` as its user agent. Your phone's UDID, ECID, serial
 number and name are never sent anywhere. On screen, serial numbers show only
 their last 4 characters and an IMEI only its first 8 digits (the model's type
 code) until you click "Show". Nothing else touches the internet.
@@ -149,7 +156,7 @@ the iPhone” is on. Archives you created yourself are never deleted.
 release, was removed from the code; its last state is kept under the git tag
 `ai-assistant-archive`.
 
-**What's in the report.** The diagnostic report MacDashboard collects is
+**What's in the report.** The diagnostic report Moonport collects is
 machine-identifying: it can include folder names, installed-app hints,
 running process names, and your Time Machine destination name. This stays
 entirely local — but if you ever choose to share a report (for example,
@@ -171,27 +178,27 @@ Two ways — pick one.
 
 > **Intel Mac?** Version 2.2 and later run on Apple Silicon only. On an Intel Mac, download `MacDashboard.zip` from the [v2.1 release](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1) instead — it is the last version built for Intel.
 
-1. Open the [Releases](../../releases) page and download `MacDashboard.zip` from the latest release.
+1. Open the [Releases](../../releases) page and download `Moonport.zip` from the latest release.
 2. *Optional — verify the download.* Compare the hash against the **SHA-256** line in the release notes:
    ```bash
-   shasum -a 256 MacDashboard.zip
+   shasum -a 256 Moonport.zip
    ```
-3. Unzip and move `MacDashboard.app` into `/Applications` (or `~/Applications`).
+3. Unzip and move `Moonport.app` into `/Applications` (or `~/Applications`).
 4. **First launch — a one-time Gatekeeper step.** The app is ad-hoc signed but
    *not notarized* (I don't have an Apple Developer certificate yet), so the first
    time you open a copy downloaded from the internet macOS blocks it. Clear it once,
    either way:
 
    **Via System Settings (no Terminal):**
-   1. Double-click `MacDashboard.app`. macOS shows **"MacDashboard" Not Opened** — click **Done** (this first dialog deliberately offers no "open" button).
-   2. Open **System Settings → Privacy & Security** and scroll down to the *Security* section. Next to **"MacDashboard" was blocked to protect your Mac** click **Open Anyway**.
-   3. In the **Open "MacDashboard"?** dialog click **Open Anyway** again, then authenticate with Touch ID or your password.
+   1. Double-click `Moonport.app`. macOS shows **"Moonport" Not Opened** — click **Done** (this first dialog deliberately offers no "open" button).
+   2. Open **System Settings → Privacy & Security** and scroll down to the *Security* section. Next to **"Moonport" was blocked to protect your Mac** click **Open Anyway**.
+   3. In the **Open "Moonport"?** dialog click **Open Anyway** again, then authenticate with Touch ID or your password.
 
    > On macOS 15 (Sequoia) and later the old "right-click → Open" trick no longer bypasses Gatekeeper — use System Settings or the Terminal command below.
 
    **Or in Terminal — one command, same effect:**
    ```bash
-   xattr -dr com.apple.quarantine /Applications/MacDashboard.app
+   xattr -dr com.apple.quarantine /Applications/Moonport.app
    ```
    then open the app normally.
 
@@ -207,7 +214,7 @@ Xcode will fail to compile it. The app built from this source runs on macOS 26
 ```bash
 git clone https://github.com/rdskcm/MacDashboard.git
 cd MacDashboard
-./build_app.sh            # builds dist.noindex/MacDashboard.app
+./build_app.sh            # builds dist.noindex/Moonport.app
 ./build_app.sh --install  # ...and moves it into ~/Applications
 ```
 
@@ -238,8 +245,9 @@ naming what it could not see, with a button that opens the right System Settings
 pane, and one matching recommendation appears in the summary.
 
 To grant it: **System Settings → Privacy & Security → Full Disk Access → +**, pick
-`MacDashboard.app` (or switch it on if it is already listed). macOS restarts the app
-afterwards.
+`Moonport.app` (or switch it on if it is already listed). macOS restarts the app
+afterwards. Full Disk Access is the only permission the first-launch panel asks for. macOS asks
+for the others (Files and Folders, Automation, Local Network) itself, the first time a feature needs one.
 
 A separate, unrelated grant: the **Empty the Trash** action drives Finder through
 Automation, so the first time you use it macOS asks for permission to control
@@ -252,13 +260,13 @@ or show a calm "not set up / none" instead of an error.
 
 ## Moving to another Mac
 
-Copy `MacDashboard.app` over (AirDrop, USB drive, whatever). If it picked up a
+Copy `Moonport.app` over (AirDrop, USB drive, whatever). If it picked up a
 quarantine flag along the way, clear it exactly as in the first-launch step above.
 
 ## Structure
 
-- `Sources/MacDashboard/` — the app itself (SwiftUI, no external dependencies).
-- `Tests/MacDashboardTests/` — swift-testing suite: parser, assessment and engine tests (`swift test`, needs Xcode).
+- `Sources/Moonport/` — the app itself (SwiftUI, no external dependencies).
+- `Tests/MoonportTests/` — swift-testing suite: parser, assessment and engine tests (`swift test`, needs Xcode).
 - `Tests/Fixtures/` — captured command outputs the parser checks run against (see its README).
 - `tools/visual/` — visual baseline: `snapshots.sh` (offscreen states) and `smoke.sh` (real windows), compared with reference screenshots (dev tool).
 - `build_app.sh` — Apple Silicon (arm64) build + `.app` packaging + codesign (the local signing identity if present, otherwise ad-hoc).
@@ -288,7 +296,7 @@ from open-source prior art:
 
 - Reading Apple Silicon temperature sensors via the private
   `IOHIDEventSystemClient` API
-  (`Sources/MacDashboard/Engine/ThermalHIDReader.swift`) follows a publicly
+  (`Sources/Moonport/Engine/ThermalHIDReader.swift`) follows a publicly
   documented technique used by [exelban/stats](https://github.com/exelban/stats)
   (MIT license) and the [smctemp](https://github.com/narugit/smctemp) project.
   The technique itself — the specific private `IOHIDEventSystemClient*`

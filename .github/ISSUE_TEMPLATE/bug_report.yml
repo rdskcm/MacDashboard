@@ -50,8 +50,8 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: MacDashboard version
-      description: Open MacDashboard → Settings and copy the version shown there.
+      label: Moonport version
+      description: Open Moonport → Settings and copy the version shown there.
       placeholder: as shown in Settings
     validations:
       required: true
@@ -75,7 +75,7 @@ body:
       label: Steps to reproduce
       description: Numbered steps, as precise as you can make them.
       placeholder: |
-        1. Open MacDashboard
+        1. Open Moonport
         2. ...
         3. ...
     validations:

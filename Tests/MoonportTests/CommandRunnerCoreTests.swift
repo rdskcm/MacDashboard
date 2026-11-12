@@ -1,0 +1,421 @@
+// Tests/MoonportTests/CommandRunnerCoreTests.swift
+// Port of Checks/CommandRunnerCoreChecks.swift (CHECKS-SWIFT-TESTING).
+// RUNNER-CORE: coverage for the posix_spawn/process-group runner and its CommandOutcome
+// contract. Real check code (NOT a symlink — see README.md).
+import Foundation
+import Testing
+@testable import Moonport
+#if canImport(Darwin)
+import Darwin
+#endif
+
+extension SerialTests {
+    struct CommandRunnerCoreTests {
+        @Test func commandRunnerCore() async {
+            // MARK: - CommandOutcome.termination(killReason:waitStatus:outputCut:)
+
+            #expect(CommandOutcome.termination(killReason: nil, waitStatus: 0) == .exited(0),
+                  "CommandOutcome.termination: (nil, exit 0) ⇒ .exited(0)")
+            #expect(CommandOutcome.termination(killReason: nil, waitStatus: 3 << 8) == .exited(3),
+                  "CommandOutcome.termination: (nil, exit 3) ⇒ .exited(3)")
+            #expect(CommandOutcome.termination(killReason: nil, waitStatus: 9) == .signaled(9),
+                  "CommandOutcome.termination: (nil, signal 9) ⇒ .signaled(9)")
+            #expect(CommandOutcome.termination(killReason: nil, waitStatus: 0x80 | 11) == .signaled(11),
+                  "CommandOutcome.termination: (nil, signal 11 + core-dump bit) ⇒ .signaled(11), core-dump bit ignored")
+            #expect(CommandOutcome.termination(killReason: nil, waitStatus: nil) == .signaled(0),
+                  "CommandOutcome.termination: (nil, nil status) ⇒ .signaled(0)")
+            // RUNNER-HANG C-M2c regression: a kill reason no longer overrides a clean exit whose output is complete.
+            #expect(CommandOutcome.termination(killReason: .timedOut, waitStatus: 0) == .exited(0),
+                  "CommandOutcome.termination: (.timedOut, clean exit 0, output complete) ⇒ .exited(0) — C-M2c")
+            #expect(CommandOutcome.termination(killReason: .cancelled, waitStatus: 3 << 8) == .exited(3),
+                  "CommandOutcome.termination: (.cancelled, exit 3, output complete) ⇒ .exited(3)")
+            #expect(CommandOutcome.termination(killReason: .cancelled, waitStatus: 0x80 | 11) == .signaled(11),
+                  "CommandOutcome.termination: (.cancelled, its own signal 11) ⇒ .signaled(11)")
+            #expect(CommandOutcome.termination(killReason: .timedOut, waitStatus: 9) == .timedOut,
+                  "CommandOutcome.termination: (.timedOut, SIGKILL) ⇒ .timedOut")
+            #expect(CommandOutcome.termination(killReason: .cancelled, waitStatus: 9) == .cancelled,
+                  "CommandOutcome.termination: (.cancelled, SIGKILL) ⇒ .cancelled")
+            #expect(CommandOutcome.termination(killReason: .timedOut, waitStatus: nil) == .timedOut,
+                  "CommandOutcome.termination: (.timedOut, status unknown) ⇒ .timedOut")
+            #expect(CommandOutcome.termination(killReason: .timedOut, waitStatus: 0, outputCut: true) == .timedOut,
+                  "CommandOutcome.termination: (.timedOut, exit 0, output cut) ⇒ .timedOut")
+            #expect(CommandOutcome.termination(killReason: .cancelled, waitStatus: 3 << 8, outputCut: true) == .cancelled,
+                  "CommandOutcome.termination: (.cancelled, exit 3, output cut) ⇒ .cancelled")
+
+            // MARK: - CommandOutcome.text
+
+            #expect(CommandOutcome(termination: .exited(0), stdout: "", stdoutTruncated: false, stderrHead: "").text == "",
+                  "CommandOutcome.text: exited(0) + \"\" ⇒ \"\"")
+            #expect(CommandOutcome(termination: .exited(3), stdout: "", stdoutTruncated: false, stderrHead: "").text == nil,
+                  "CommandOutcome.text: exited(3) + \"\" ⇒ nil")
+            #expect(CommandOutcome(termination: .exited(3), stdout: "x", stdoutTruncated: false, stderrHead: "").text == "x",
+                  "CommandOutcome.text: exited(3) + \"x\" ⇒ \"x\"")
+            #expect(CommandOutcome(termination: .signaled(9), stdout: "", stdoutTruncated: false, stderrHead: "").text == nil,
+                  "CommandOutcome.text: signaled(9) + \"\" ⇒ nil")
+            #expect(CommandOutcome(termination: .signaled(9), stdout: "x", stdoutTruncated: false, stderrHead: "").text == "x",
+                  "CommandOutcome.text: signaled(9) + \"x\" ⇒ \"x\"")
+            #expect(CommandOutcome(termination: .timedOut, stdout: "x", stdoutTruncated: false, stderrHead: "").text == nil,
+                  "CommandOutcome.text: timedOut + \"x\" ⇒ nil")
+            #expect(CommandOutcome(termination: .cancelled, stdout: "x", stdoutTruncated: false, stderrHead: "").text == nil,
+                  "CommandOutcome.text: cancelled + \"x\" ⇒ nil")
+            #expect(CommandOutcome.launchFailed(2).text == nil,
+                  "CommandOutcome.text: launchFailed(2) ⇒ nil")
+
+            // MARK: - CommandOutcome.nonEmptyText
+
+            #expect(CommandOutcome(termination: .exited(0), stdout: " \n", stdoutTruncated: false, stderrHead: "").nonEmptyText == nil,
+                  "CommandOutcome.nonEmptyText: exited(0) + \" \\n\" ⇒ nil")
+            #expect(CommandOutcome(termination: .exited(0), stdout: "hi\n", stdoutTruncated: false, stderrHead: "").nonEmptyText == "hi\n",
+                  "CommandOutcome.nonEmptyText: exited(0) + \"hi\\n\" ⇒ \"hi\\n\"")
+
+            // MARK: - CappedBuffer
+
+            do {
+                var buf = CappedBuffer(cap: 4)
+                buf.append(Data("ab".utf8))
+                buf.append(Data("cd".utf8))
+                #expect(buf.data == Data("abcd".utf8) && !buf.truncated,
+                      "CappedBuffer: \"ab\" then \"cd\" (cap 4) ⇒ \"abcd\", truncated false")
+                buf.append(Data("e".utf8))
+                #expect(buf.data == Data("abcd".utf8) && buf.truncated,
+                      "CappedBuffer: then \"e\" ⇒ data unchanged, truncated true")
+            }
+            do {
+                var buf = CappedBuffer(cap: 4)
+                buf.append(Data("abcdef".utf8))
+                #expect(buf.data == Data("abcd".utf8) && buf.truncated,
+                      "CappedBuffer: fresh buffer fed \"abcdef\" (cap 4) ⇒ \"abcd\", truncated true")
+            }
+
+            // MARK: - LineSplitter
+
+            do {
+                var s = LineSplitter()
+                #expect(s.feed(Data("a\nb".utf8)) == ["a"], "LineSplitter: feed(\"a\\nb\") ⇒ [\"a\"]")
+                #expect(s.finish() == "b", "LineSplitter: finish() ⇒ \"b\"")
+                #expect(s.finish() == nil, "LineSplitter: finish() again ⇒ nil")
+            }
+            do {
+                var s = LineSplitter()
+                #expect(s.feed(Data("x\r\n".utf8)) == ["x"], "LineSplitter: feed(\"x\\r\\n\") ⇒ [\"x\"] (trailing \\r stripped)")
+            }
+            do {
+                var s = LineSplitter()
+                #expect(s.feed(Data("\n".utf8)) == [""], "LineSplitter: feed(\"\\n\") ⇒ [\"\"]")
+            }
+            do {
+                var s = LineSplitter()
+                #expect(s.feed(Data("ab".utf8)) == [], "LineSplitter: feed(\"ab\") ⇒ []")
+                #expect(s.feed(Data("c\nd\n".utf8)) == ["abc", "d"], "LineSplitter: then feed(\"c\\nd\\n\") ⇒ [\"abc\", \"d\"]")
+                #expect(s.finish() == nil, "LineSplitter: finish() ⇒ nil (nothing pending)")
+            }
+            do {
+                var s = LineSplitter(cap: 4)
+                #expect(s.feed(Data("abcdef".utf8)) == ["abcdef"],
+                      "LineSplitter(cap: 4): feed(\"abcdef\") ⇒ [\"abcdef\"] (over cap, delivered whole)")
+                #expect(s.finish() == nil, "LineSplitter(cap: 4): finish() ⇒ nil")
+            }
+
+            // MARK: - Real processes
+
+            // Post-exit sweep (R3): a leftover background child is swept when the leader exits.
+            do {
+                let start = Date()
+                let outcome = await runCommand("/bin/sh", ["-c", "sleep 30 & echo $!"], timeout: 10)
+                let elapsed = Date().timeIntervalSince(start)
+                #expect(outcome.termination == .exited(0), "post-exit sweep: termination == .exited(0)")
+                #expect(elapsed < 3, "post-exit sweep: elapsed < 3 s (was \(elapsed)) — no fixed 3 s drain bound")
+                let pid = pid_t(outcome.stdout.trimmingCharacters(in: .whitespacesAndNewlines)) ?? -1
+                #expect(pid > 0, "post-exit sweep: a pid was parsed from stdout")
+                var reaped = false
+                let deadline = Date().addingTimeInterval(3)
+                while Date() < deadline {
+                    if kill(pid, 0) == -1 && errno == ESRCH { reaped = true; break }
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                #expect(reaped, "post-exit sweep: the leftover background child was killed")
+            }
+
+            // Cancellation, plain run (R4).
+            do {
+                let start = Date()
+                let task = Task { await CommandRunner.run("/bin/sleep", ["10"], timeout: 30) }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { task.cancel() }
+                let o = await task.value
+                let elapsed = Date().timeIntervalSince(start)
+                #expect(o.termination == .cancelled, "cancellation, plain run: termination == .cancelled")
+                #expect(o.text == nil, "cancellation, plain run: text == nil")
+                #expect(elapsed < 3, "cancellation, plain run: elapsed < 3 s (was \(elapsed))")
+            }
+
+            // Pre-cancelled run spawns nothing (R4).
+            do {
+                let marker = NSTemporaryDirectory() + "macdashboard-precancel-\(getpid())"
+                unlink(marker)
+                let o = await Task { () async -> CommandOutcome in
+                    withUnsafeCurrentTask { $0?.cancel() }
+                    return await CommandRunner.run("/usr/bin/touch", [marker], timeout: 5)
+                }.value
+                #expect(o.termination == .cancelled, "pre-cancelled run: termination == .cancelled")
+                #expect(!FileManager.default.fileExists(atPath: marker), "pre-cancelled run: nothing was spawned (marker absent)")
+                unlink(marker)
+            }
+
+            // Streaming cancellation (R0(a)/R4).
+            do {
+                let lines = LockedLines()
+                let start = Date()
+                let task = Task {
+                    await CommandRunner.run("/bin/sh", ["-c", "while :; do echo tick; sleep 0.1; done"], timeout: 30,
+                                            onLine: { l, e in lines.append(l, e) })
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) { task.cancel() }
+                let o = await task.value
+                let elapsed = Date().timeIntervalSince(start)
+                #expect(o.termination == .cancelled, "streaming cancellation: termination == .cancelled")
+                #expect(lines.lines.count >= 2, "streaming cancellation: at least 2 lines delivered (got \(lines.lines.count))")
+                #expect(lines.lines.allSatisfy { $0.0 == "tick" }, "streaming cancellation: every delivered line == \"tick\"")
+                #expect(elapsed < 3, "streaming cancellation: elapsed < 3 s (was \(elapsed))")
+            }
+
+            // Interrupt-first cancellation (BREW-CANCEL).
+            do {
+                let marker = NSTemporaryDirectory() + "macdashboard-sigint-\(getpid())"
+                unlink(marker)
+                let start = Date()
+                let task = Task {
+                    await CommandRunner.run("/bin/sh",
+                                            ["-c", "trap 'touch \(marker); exit 7' INT; while :; do sleep 0.1; done"],
+                                            timeout: 30, interruptGrace: 5)
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { task.cancel() }
+                let o = await task.value
+                let elapsed = Date().timeIntervalSince(start)
+                #expect(FileManager.default.fileExists(atPath: marker), "interrupt-first cancellation lets the child clean up: INT trap ran")
+                #expect(elapsed < 3, "interrupt-first cancellation lets the child clean up: elapsed < 3 s (was \(elapsed))")
+                #expect(o.termination != .timedOut, "interrupt-first cancellation lets the child clean up: not timedOut")
+                unlink(marker)
+            }
+            do {
+                let start = Date()
+                let task = Task {
+                    await CommandRunner.run("/bin/sh", ["-c", "trap '' INT; while :; do sleep 0.1; done"],
+                                            timeout: 30, interruptGrace: 1)
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { task.cancel() }
+                let o = await task.value
+                let elapsed = Date().timeIntervalSince(start)
+                #expect(o.termination == .cancelled, "interrupt ignored → SIGKILL after the grace: termination == .cancelled")
+                #expect(elapsed >= 1.0 && elapsed < 4, "interrupt ignored → SIGKILL after the grace: 1 s <= elapsed < 4 s (was \(elapsed))")
+            }
+
+            // Unaffected run.
+            #expect(await runCommand("/bin/echo", ["hi"], timeout: 5).text?.trimmingCharacters(in: .whitespacesAndNewlines) == "hi",
+                  "unaffected run: /bin/echo hi ⇒ \"hi\"")
+
+            // stderrHead (R2).
+            do {
+                let o = await runCommand("/bin/sh", ["-c", "echo oops >&2; exit 2"], timeout: 5)
+                #expect(o.termination == .exited(2), "stderrHead: exit 2 ⇒ .exited(2)")
+                #expect(o.stderrHead == "oops\n", "stderrHead: captured \"oops\\n\"")
+                #expect(o.text == nil, "stderrHead: text == nil (empty stdout, non-zero exit)")
+            }
+            do {
+                let o = await runCommand("/bin/sh", ["-c", "head -c 5000 /dev/zero | tr '\\0' e >&2"], timeout: 5)
+                #expect(o.stderrHead.utf8.count == CommandRunner.stderrHeadCap,
+                      "stderrHead: capped at CommandRunner.stderrHeadCap bytes")
+                #expect(o.text == "", "stderrHead: text == \"\" (empty stdout, clean exit)")
+            }
+
+            // R6: relative path.
+            do {
+                let marker2 = NSTemporaryDirectory() + "macdashboard-r6-\(getpid())"
+                unlink(marker2)
+                let o = await runCommand("touch", [marker2], timeout: 5)
+                #expect(o.termination == .launchFailed(EINVAL), "R6: a relative path ⇒ .launchFailed(EINVAL)")
+                #expect(!FileManager.default.fileExists(atPath: marker2), "R6: nothing was spawned (marker absent)")
+                unlink(marker2)
+            }
+
+            // Fast-exit reaping: a missed reap would show up as .timedOut.
+            do {
+                let start = Date()
+                var allExited = true
+                for _ in 0..<30 {
+                    if await runCommand("/usr/bin/true", [], timeout: 5).termination != .exited(0) { allExited = false }
+                }
+                let elapsed = Date().timeIntervalSince(start)
+                #expect(allExited, "fast-exit reaping: 30 sequential runs all give .exited(0)")
+                #expect(elapsed < 15, "fast-exit reaping: total elapsed < 15 s (was \(elapsed))")
+            }
+
+            // MARK: - COLLECT-FASTPATH: QoS plumbing
+            #expect(CommandQoS.utility.spawnQoSClass == QOS_CLASS_UTILITY, "CommandQoS.utility.spawnQoSClass == QOS_CLASS_UTILITY")
+            #expect(CommandQoS.userInitiated.spawnQoSClass == nil, "CommandQoS.userInitiated.spawnQoSClass == nil")
+            #expect(CommandQoS.utility.threadQoS == .utility, "CommandQoS.utility.threadQoS == .utility")
+            #expect(CommandQoS.userInitiated.threadQoS == .userInitiated, "CommandQoS.userInitiated.threadQoS == .userInitiated")
+            do {
+                // Runtime proof (R9): the child reports its own scheduling priority.
+                let u = await CommandRunner.$qos.withValue(.utility) {
+                    await CommandRunner.run("/bin/sh", ["-c", "/bin/ps -o pri= -p $$"], timeout: 10) }
+                let d =
+                    await CommandRunner.run("/bin/sh", ["-c", "/bin/ps -o pri= -p $$"], timeout: 10)
+                let uv = Int(u.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+                let dv = Int(d.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+                #expect(uv != nil && dv != nil, "QoS runtime: both children report a priority (u=\(String(describing: uv)), d=\(String(describing: dv)))")
+                if let uv, let dv {
+                    #expect(uv <= 20, "QoS runtime: utility child runs in the utility band (u=\(uv), d=\(dv))")
+                    // A CI runner starts this process at utility, so an unclamped child reads 20 there too and the comparison says nothing.
+                    if dv > 20 {
+                        #expect(uv < dv, "QoS runtime: unclamped child runs above the utility child (u=\(uv), d=\(dv))")
+                    } else {
+                        #expect(Bool(true), "QoS runtime: ambient QoS is already utility (d=\(dv)), comparison skipped (u=\(uv))")
+                    }
+                }
+            }
+        }
+
+        // Process group on timeout (R3, CI-PGROUP-FLAKE): the whole group is killed at the deadline.
+        // The pgid comes from a file the leader writes, never from the killed run's stdout. An absent
+        // or empty file means the shell was killed before it forked anything, so nothing can leak and
+        // only the timeout itself is checked; that is the only effect a slow start under load can have.
+        @Test func processGroupKilledOnTimeout() async {
+            let pgidFile = NSTemporaryDirectory() + "cmdrunner-pgroup-\(getpid())-\(UUID().uuidString)"
+            unlink(pgidFile)
+            defer { unlink(pgidFile) }
+            let start = Date()
+            let outcome = await runCommand("/bin/sh", ["-c", "echo started; echo $$ > '\(pgidFile)'; sleep 30 & wait"],
+                                           timeout: 2)
+            let elapsed = Date().timeIntervalSince(start)
+            #expect(outcome.termination == .timedOut, "process group on timeout: termination == .timedOut")
+            #expect(elapsed < 10, "process group on timeout: elapsed < 10 s (was \(elapsed))")
+            guard let text = try? String(contentsOfFile: pgidFile, encoding: .utf8),
+                  let pgid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pgid > 1 else { return }
+            // `started` was written before the pgid file, so it was in the pipe before the kill.
+            #expect(outcome.stdout == "started\n",
+                    "process group on timeout: output written before the kill is kept (was \(outcome.stdout.debugDescription))")
+            var gone = false
+            let deadline = Date().addingTimeInterval(10)
+            while Date() < deadline {
+                if killpg(pgid, 0) == -1 && errno == ESRCH { gone = true; break }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            #expect(gone, "process group on timeout: no process of group \(pgid) survives")
+        }
+
+        // CI-PGROUP-FLAKE / RUNNER-HANG: a pipe holder OUTSIDE the group survives our kill. The drain is
+        // bounded, so the run returns about killDrainWindow after the reap, with the output marked cut.
+        @Test func killedRunWithOutsideHolderReturns() async {
+            let ready = NSTemporaryDirectory() + "cmdrunner-outside-\(getpid())-\(UUID().uuidString)"
+            unlink(ready)
+            defer { unlink(ready); unlink(ready + ".tmp") }
+            // perl leaves the group (setpgrp), records its pid atomically (tmp + rename), then becomes sleep.
+            let script = #"/usr/bin/perl -e 'setpgrp(0,0) or die; open(F, ">", "$ARGV[0].tmp") or die; print F "$$\n"; close F; rename("$ARGV[0].tmp", $ARGV[0]) or die; exec "/bin/sleep", "30"' '\#(ready)' & wait"#
+            let task = Task { await CommandRunner.run("/bin/sh", ["-c", script], timeout: 30) }
+            var holder: pid_t = -1
+            let deadline = Date().addingTimeInterval(20)
+            while Date() < deadline {
+                if let t = try? String(contentsOfFile: ready, encoding: .utf8),
+                   let p = pid_t(t.trimmingCharacters(in: .whitespacesAndNewlines)) { holder = p; break }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            #expect(holder > 1, "outside holder: the holder left the group and reported its pid")
+            let start = Date()
+            task.cancel()
+            let o = await task.value
+            let elapsed = Date().timeIntervalSince(start)
+            if holder > 1 { _ = kill(holder, SIGKILL) }        // it is outside the group: the runner cannot reach it
+            #expect(o.termination == .cancelled, "outside holder: termination == .cancelled (was \(o.termination))")
+            #expect(elapsed >= CommandRunner.killDrainWindow * 0.9,
+                    "outside holder: the runner drained before giving up (elapsed \(elapsed))")
+            #expect(elapsed < 10, "outside holder: bounded drain, no hang (elapsed \(elapsed))")
+        }
+
+        // CI-PGROUP-FLAKE regression (path B): after OUR kill the runner keeps reading until EOF
+        // (bounded by CommandRunner.killDrainWindow), so output the child wrote is kept and nothing
+        // counts as cut. The holder ignores SIGINT and keeps both pipes open until reap's own sweep;
+        // before the fix reading stopped right at reap with both streams open (outputCut → .cancelled).
+        @Test func killedRunKeepsOutputUntilEOF() async {
+            let ready = NSTemporaryDirectory() + "cmdrunner-drain-\(getpid())-\(UUID().uuidString)"
+            unlink(ready)
+            defer { unlink(ready) }
+            let script = "trap 'echo cleanup; exit 0' INT; (trap '' INT; : > '\(ready)'; exec /bin/sleep 30) & wait"
+            let task = Task { await CommandRunner.run("/bin/sh", ["-c", script], timeout: 30, interruptGrace: 30) }
+            let deadline = Date().addingTimeInterval(20)
+            while !FileManager.default.fileExists(atPath: ready) && Date() < deadline {
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            #expect(FileManager.default.fileExists(atPath: ready), "drain: the SIGINT-immune pipe holder started")
+            task.cancel()
+            let o = await task.value
+            #expect(o.termination == .exited(0),
+                    "drain: the child's own exit status, nothing cut (was \(o.termination))")
+            #expect(o.stdout == "cleanup\n",
+                    "drain: output written after SIGINT is kept (was \(o.stdout.debugDescription))")
+        }
+
+        // CI-TZ-FLAKE regression: the runner must not depend on free worker threads of the global GCD
+        // pool. DispatchIO reads ran there, so while the pool was saturated (the heavy `concurrentPerform`
+        // render tests in the same process) a child that exited after 20 ms had its output unread at the
+        // deadline and the run was reported `.timedOut` with empty stdout.
+        // The pool is filled with BLOCKED blocks (no CPU load), submitted from a plain Thread. They are
+        // released from the `onLine` callback (job queue) or by a hard stop on a plain Thread after 10 s,
+        // never from the test task, whose own resumption needs the pool. Old reader: the line can only
+        // arrive after the hard stop. Read sources on the job queue: it arrives within milliseconds,
+        // so the blocks are held for about the readiness wait (under a second) and about 20 ms.
+        @Test func exitedChildOutputIsReadWhileGCDPoolIsSaturated() async {
+            final class Gate: @unchecked Sendable {
+                private let lock = NSLock()
+                private(set) var started = 0
+                private(set) var hardStopFired = false
+                private(set) var lineSeen = false
+                private(set) var lineSeenBeforeHardStop = false
+                private var released = false
+                let blocks = DispatchSemaphore(value: 0)
+                let done = DispatchSemaphore(value: 0)
+                let total: Int
+                init(total: Int) { self.total = total }
+                func didStart() { lock.lock(); started += 1; lock.unlock() }
+                var startedCount: Int { lock.lock(); defer { lock.unlock() }; return started }
+                func lineArrived() {
+                    lock.lock(); if !lineSeen { lineSeen = true; lineSeenBeforeHardStop = !hardStopFired }; lock.unlock()
+                    release()
+                }
+                func hardStop() { lock.lock(); hardStopFired = true; lock.unlock(); release() }
+                func release() {
+                    lock.lock(); let first = !released; released = true; lock.unlock()
+                    if first { for _ in 0..<total { blocks.signal() } }
+                }
+            }
+            func waitSync(_ s: DispatchSemaphore) { s.wait() }          // the test thread blocks here on purpose
+            let gate = Gate(total: 300)
+            let ready = DispatchSemaphore(value: 0)
+            let qosClasses: [DispatchQoS.QoSClass] = [.userInteractive, .userInitiated, .default, .utility]
+            let filler = Thread {
+                for i in 0..<gate.total {
+                    DispatchQueue.global(qos: qosClasses[i % qosClasses.count]).async { gate.didStart(); gate.blocks.wait() }
+                }
+                // Saturated once the started count has not grown for 400 ms (the pool's thread limit is reached).
+                var last = -1, stable = 0
+                while stable < 8 {
+                    Thread.sleep(forTimeInterval: 0.05)
+                    let n = gate.startedCount
+                    if n == last && n >= ProcessInfo.processInfo.activeProcessorCount { stable += 1 } else { stable = 0 }
+                    last = n
+                }
+                ready.signal()
+            }
+            let stopper = Thread {
+                if gate.done.wait(timeout: .now() + 10) == .timedOut { gate.hardStop() }
+            }
+            filler.start(); stopper.start()
+            waitSync(ready)
+            let o = await CommandRunner.run("/bin/echo", ["ok"], timeout: 30, onLine: { _, _ in gate.lineArrived() })
+            gate.release()
+            gate.done.signal()
+            #expect(gate.lineSeenBeforeHardStop, "saturated pool: the output line arrived without any pool worker being freed")
+            #expect(o.termination == .exited(0), "saturated pool: the exited child is not timed out (was \(o.termination))")
+            #expect(o.stdout == "ok\n", "saturated pool: its output is kept (was \(o.stdout.debugDescription))")
+        }
+    }
+}

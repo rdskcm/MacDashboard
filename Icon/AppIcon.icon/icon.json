@@ -1,0 +1,108 @@
+{
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "light-3-window.png",
+          "name": "light-3-window",
+          "hidden-specializations": [
+            {
+              "value": false
+            },
+            {
+              "appearance": "dark",
+              "value": true
+            }
+          ]
+        },
+        {
+          "glass": false,
+          "image-name": "dark-3-window.png",
+          "name": "dark-3-window",
+          "hidden-specializations": [
+            {
+              "value": true
+            },
+            {
+              "appearance": "dark",
+              "value": false
+            }
+          ]
+        },
+        {
+          "glass": false,
+          "image-name": "light-2-glow.png",
+          "name": "light-2-glow",
+          "hidden-specializations": [
+            {
+              "value": false
+            },
+            {
+              "appearance": "dark",
+              "value": true
+            }
+          ]
+        },
+        {
+          "glass": false,
+          "image-name": "dark-2-glow.png",
+          "name": "dark-2-glow",
+          "hidden-specializations": [
+            {
+              "value": true
+            },
+            {
+              "appearance": "dark",
+              "value": false
+            }
+          ],
+          "blend-mode": "plus-lighter"
+        },
+        {
+          "glass": false,
+          "image-name": "light-1-background.png",
+          "name": "light-1-background",
+          "hidden-specializations": [
+            {
+              "value": false
+            },
+            {
+              "appearance": "dark",
+              "value": true
+            }
+          ]
+        },
+        {
+          "glass": false,
+          "image-name": "dark-1-background.png",
+          "name": "dark-1-background",
+          "hidden-specializations": [
+            {
+              "value": true
+            },
+            {
+              "appearance": "dark",
+              "value": false
+            }
+          ]
+        }
+      ],
+      "lighting": "individual",
+      "shadow": {
+        "kind": "none",
+        "opacity": 0
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}

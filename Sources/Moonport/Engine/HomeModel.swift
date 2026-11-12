@@ -1,0 +1,794 @@
+// Engine/HomeModel.swift
+// REDESIGN-HOME (stage A): everything the Home page derives from the assessment and the model
+// data, as pure static functions over values — tasks, status pill, scan state, "You can" chips,
+// the eight section tiles. Foundation only; covered by Tests/MoonportTests/HomeModelTests.
+// Views must not re-derive labels (`shared-vocabulary`).
+
+import Foundation
+
+/// Views map: green→DS3.green/greenInk, amber→amber/amberInk, hot→hot/hotInk, neutral→muted/inkSoft.
+enum HomeTone: Equatable, Sendable { case green, neutral, amber, hot }
+
+struct HomeTask: Identifiable, Equatable {
+    let id: String            // AttentionItem.id
+    let kind: AttentionKind
+    let tone: HomeTone        // .hot for crit/serious, .amber for warn
+    let object: String        // «Disk», «caffeinate», «macOS 26.1.1»
+    let state: String         // «87% full» — drawn in tone-ink after the object
+    let section: Page
+    let destination: Destination
+    let verb: String?         // nil = no button (SIP)
+    let help: String          // tooltip: SIP → homeSipHelp + why, else item.fullTextWithWhy
+    let tileTag: String       // the section tile's tag text when this task is the section's first
+    let legacyAction: AdviceAction?   // item.action (used only by decision 1 option A)
+    let wakeHolderKeys: [WakeHolderKey]
+}
+
+struct HomeChip: Identifiable, Equatable {
+    let id: String
+    let object: String
+    let value: String?
+    let destination: Destination
+    /// A click also opens the Backups card's delete confirmation (never deletes by itself).
+    var opensDeleteConfirm = false
+}
+
+extension HomeChip {
+    /// The button's VoiceOver label: the visible text, object then value.
+    var accessibilityText: String { [object, value].compactMap { $0 }.joined(separator: " ") }
+}
+
+/// `tone` nil = DS3.ink, .hot = hotInk, .amber = amberInk, .neutral = muted.
+struct HomeKV: Equatable {
+    let label: String
+    let value: String
+    let tone: HomeTone?
+}
+
+struct HomeTile: Identifiable, Equatable {
+    var id: Page { page }
+    let page: Page
+    let name: String
+    let symbol: String
+    let sub: String
+    let subIsFailure: Bool          // failure → hotInk
+    let tagTone: HomeTone
+    let tagText: String
+    let skeleton: Bool
+    let kvs: [HomeKV]               // always 2
+    let destination: Destination
+    let hotRing: Bool
+    /// SOC-DETAILS 4.3: the SoC tile's status row, drawn in place of the tag. nil for every other page.
+    var socRow: HomeSocRow? = nil
+}
+
+/// SOC-DETAILS 4.3 (design 7.13): the SoC tile's full-width status row. Tones reuse the SoC page's `CPUNoteTone`
+/// (green = calm and normal, neutral = elevated, amber, hot); `rowTone` is the tint (calm unless amber / hot).
+struct HomeSocRow: Equatable {
+    enum Kind: Equatable {
+        case thermal(step: Int, text: String, help: String)   // text: the word at 1150, the full text at 900
+        case highLoad(text: String, help: String)
+        case empty                                            // height reserved, nothing drawn
+    }
+    let kind: Kind
+    let rightText: String?
+    let rowTone: CPUNoteTone
+    let textTone: CPUNoteTone
+    let rightTone: CPUNoteTone
+
+    /// VoiceOver text: what the row draws, in reading order.
+    var accessibilityText: String {
+        switch kind {
+        case .thermal(_, let text, _), .highLoad(let text, _): return [text, rightText].compactMap { $0 }.joined(separator: " ")
+        case .empty: return ""
+        }
+    }
+}
+
+extension HomeTile {
+    /// HOME-AX-FIGURES: the tile's VoiceOver label — name, sub, then (not while skeleton) tag and each "label value"
+    /// pair. Used by `HomeSectionTile`; covered by HomeModelTests.
+    var accessibilityText: String {
+        var parts = [name, sub]
+        if !skeleton { parts += [socRow?.accessibilityText ?? tagText] + kvs.map { "\($0.label) \($0.value)" } }
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+}
+
+enum HomeScan: Equatable {
+    case firstScan
+    case ok(at: Date)
+    case refreshing(lastGoodAt: Date)
+    case failed(BlockFailure, lastGoodAt: Date?)
+}
+
+enum HomeStatus: Equatable { case checking, good, attention, critical }
+
+/// Built by the view from AppModel: values, no references.
+struct HomeInput {
+    var assessment: Assessment
+    var report: FullReport
+    var scan: BlockState
+    var load: [Double]?
+    var ncpu: Int
+    var processCount: Int?
+    var mem: MemSnapshot?
+    var swap: SwapInfo?
+    var disk: DiskInfo?
+    var hasBattery: Bool
+    var battery: BatteryInfo?
+    var batteryMaxMAh: Int? = nil   // BatteryDetail.maxCapacityMAh; nil until a battery read landed
+    /// BATTERY-HEALTH-UNIFY: the ioreg raw ratio (`BatteryDetail.healthPercent`) and the Monitoring switch; with the
+    /// defaults Home shows Apple's figure exactly as before.
+    var batteryRawPercent: Double? = nil
+    var batteryPrefersRaw: Bool = false
+    var system: SystemInfo?
+    var claudeBackup: ClaudeBackupStatus?
+    var backupStaleHours: Int
+    var lowSpacePercent: Int
+    var history: [MacHistoryEntry]
+    var now: Date
+    /// Precomputed history figures. The app passes the model's cached digest (recomputed only when the history
+    /// changes) and leaves `history` empty; when nil, the digest is derived from `history`.
+    var historyDigest: HomeHistoryDigest? = nil
+    /// SOC-DETAILS 4.3: the SoC tile's row reads these (already sampled by the model, no new system read).
+    var socTempC: Int? = nil
+    var thermal: ThermalLevel? = nil
+    var cpu: CPUUsage? = nil
+    var cpuHighSince: Date? = nil
+}
+
+/// The history-derived figures of the History tile: entry count and the two quarter-window monthly slopes.
+struct HomeHistoryDigest: Equatable {
+    var count: Int
+    var diskPerMonth: Double?
+    var batteryPerMonth: Double?
+    static let empty = HomeHistoryDigest(count: 0, diskPerMonth: nil, batteryPerMonth: nil)
+}
+
+extension Page {
+    @MainActor var title: String {
+        switch self {
+        case .home: return L.commonThisMac
+        case .cpu: return L.commonSoC
+        case .memory: return L.commonMemory
+        case .storage: return L.commonStorage
+        case .battery: return L.commonBattery
+        case .security: return L.commonSecurity
+        case .backups: return L.commonBackups
+        case .system: return L.commonSystem
+        case .history: return L.commonHistory
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .home: return "house"
+        case .cpu: return "cpu"
+        case .memory: return "memorychip"
+        case .storage: return "internaldrive"
+        case .battery: return "battery.75percent"
+        case .security: return "lock.shield"
+        case .backups: return "clock.arrow.circlepath"
+        case .system: return "gearshape"
+        case .history: return "chart.xyaxis.line"
+        }
+    }
+
+    var defaultFocus: CardID? {
+        switch self {
+        case .home: return nil
+        case .cpu: return .cpu
+        case .memory: return .usage
+        case .storage: return .disk
+        case .battery: return .bathero
+        case .security: return .protect
+        case .backups: return .tm
+        case .system: return .sleep
+        case .history: return .hist
+        }
+    }
+}
+
+enum HomeModel {
+    private static let GIB: Int64 = 1 << 30
+    private static let dash = "—"
+
+    // MARK: scan / status
+
+    static func scan(_ s: BlockState) -> HomeScan {
+        switch s.phase {
+        case .loading:
+            if let good = s.lastGoodAt { return .refreshing(lastGoodAt: good) }
+            return .firstScan
+        case .ok(let at): return .ok(at: at)
+        case .failed(let f, let lastGoodAt): return .failed(f, lastGoodAt: lastGoodAt)
+        }
+    }
+
+    static func status(scan: HomeScan, tasks: [HomeTask]) -> HomeStatus {
+        if scan == .firstScan { return .checking }
+        if tasks.isEmpty { return .good }
+        return tasks.contains { $0.tone == .hot } ? .critical : .attention
+    }
+
+    // MARK: tasks
+
+    /// One task per assessment item, same order (already crit > serious > warn, stable).
+    /// `disk` = `model.disk`, `battery` = `model.battery` — the same values Assessment used.
+    @MainActor static func tasks(_ a: Assessment, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?) -> [HomeTask] {
+        a.items.map { task($0, report: report, disk: disk, battery: battery, battShownPercent: a.battShownPercent) }
+    }
+
+    @MainActor private static func task(_ item: AttentionItem, report: FullReport, disk: DiskInfo?, battery: BatteryInfo?, battShownPercent: MacShownHealth?) -> HomeTask {
+        let tone: HomeTone = (item.sev == .crit || item.sev == .serious) ? .hot : .amber
+        var section: Page = .system
+        var focus: CardID? = nil
+        var object = ""
+        var state = ""
+        var verb: String? = nil
+        var tag = ""
+
+        switch item.kind {
+        case .firewallOff:
+            (section, focus) = (.security, .protect)
+            (object, state, verb, tag) = (L.commonFirewall, L.homeStateOff, L.commonEnable, L.homeTagFirewallOff)
+        case .smartErrors:
+            (section, focus) = (.storage, .smart)
+            (object, state, verb, tag) = (L.homeDiskHealth, L.homeStateFailing, L.homeVerbDetails, L.homeTagDriveFailing)
+        case .diskFull, .diskFullSoon:
+            let pct = disk.map { Int(($0.pct * 100).rounded()) } ?? 0
+            (section, focus) = (.storage, .disk)
+            (object, state, verb, tag) = (L.commonDisk, L.homeStateDiskFull(pct), L.homeVerbFreeUp, L.homeStateDiskFull(pct))
+        case .timeMachine:
+            (section, focus) = (.backups, .tm)
+            (object, state, verb, tag) = ("Time Machine", L.homeStateNotSetUp, L.commonSetUp, L.homeTagTMNotSetUp)
+        case .timeMachineOverdue:
+            (section, focus) = (.backups, .tm)
+            (object, state, verb, tag) = ("Time Machine", item.detail, L.commonShow, L.bkTagOverdue)
+        case .wakeHolders:
+            let keys = item.wakeHolderKeys
+            let first = keys.first?.owner ?? item.label
+            (section, focus) = (.system, .sleep)
+            (object, state, verb, tag) = (keys.count > 1 ? "\(first) +\(keys.count - 1)" : first,
+                                          L.homeStateKeepsAwake, L.commonShow, L.commonMacCantSleep)
+        case .batteryCapacity:
+            // The number the verdict judged (Assess.assess → battShownPercent), so the task shows what raised the item.
+            (section, focus) = (.battery, .bathero)
+            (object, state, verb, tag) = (L.commonBattery, L.homeStateWorn(battShownPercent?.wornDigits(language: L10nStore.shared.language) ?? "0"), L.homeVerbDetails, L.homeTagWorn)
+        case .updates:
+            let n = report.updates?.count ?? 0
+            (section, focus) = (.security, .updates)
+            (object, state, verb, tag) = (updateObject(report.updates?.map(\.label)),
+                                          n == 1 ? L.homeStateUpdateAvailable : L.homeStateUpdatesAvailable(n),
+                                          L.commonInstall, L.homeTagUpdateAvailable)
+        case .swapHigh:
+            (section, focus) = (.memory, .usage)
+            (object, state, verb, tag) = (L.homeMemoryObject,
+                                          item.sev == .serious ? L.homeStateRunningOut : L.homeStateRunningLow,
+                                          L.commonShow, L.homeTagLowMemory)
+        case .batteryCondition:
+            (section, focus) = (.battery, .bathero)
+            (object, state, verb, tag) = (L.commonBattery, L.commonServiceRecommended, L.homeVerbDetails, L.homeTagService)
+        case .fileVaultOff:
+            (section, focus) = (.security, .protect)
+            (object, state, verb, tag) = ("FileVault", L.homeStateOff, L.homeVerbSettings, L.homeTagFileVaultOff)
+        case .gatekeeperOff:
+            (section, focus) = (.security, .protect)
+            (object, state, verb, tag) = ("Gatekeeper", L.homeStateOff, L.commonEnable, L.homeTagGatekeeperOff)
+        case .sipOff:
+            (section, focus) = (.security, .protect)
+            (object, state, verb, tag) = ("SIP", L.homeStateOff, nil, L.homeTagSipOff)
+        case .crashes:
+            let n = (report.crashes ?? []).filter { ReportCollector.crashRaisesAttention($0) && $0.count > 0 }
+                .reduce(0) { $0 + $1.count }
+            (section, focus) = (.security, .crashes)
+            (object, state, verb, tag) = (L.homeCrashes, L.homeStateReports(n), L.commonShow, L.homeCrashes)
+        case .smartWear:
+            let disk = (report.smart ?? []).first { item.label.contains($0.localizedTitle) }
+            let pu = disk.flatMap { smartPercentUsed($0) }
+            (section, focus) = (.storage, .smart)
+            (object, state, verb, tag) = (L.homeDiskWear, pu.map { L.homePercent("\($0)") } ?? item.detail,
+                                          L.homeVerbDetails, L.homeTagDiskWorn)
+        case .claudeBackup:
+            (section, focus) = (.backups, .claude)
+            (object, state, verb, tag) = (L.commonClaudeBackup, item.detail, L.commonShow, L.homeTagClaudeStale)
+        }
+
+        return HomeTask(id: item.id, kind: item.kind, tone: tone, object: object, state: state,
+                        section: section, destination: Destination(section, focus: focus),
+                        verb: verb, help: item.kind == .sipOff ? [L.homeSipHelp, item.why].compactMap { $0 }.joined(separator: " ") : item.fullTextWithWhy,
+                        tileTag: tag, legacyAction: item.action, wakeHolderKeys: item.wakeHolderKeys)
+    }
+
+    /// Mirrors `Assess.attrInt(d, "Percentage Used")`: first attribute with that key, digits only.
+    static func smartPercentUsed(_ d: SmartDisk) -> Int? {
+        guard let raw = d.attrs.first(where: { $0.0 == "Percentage Used" })?.1 else { return nil }
+        let digits = raw.filter { $0.isNumber }
+        return digits.isEmpty ? nil : Int(digits)
+    }
+
+    /// Object of the macOS-update task: one pending label → "macOS 26.1.1" (macOS) or the label
+    /// without its build suffix; zero or several → "macOS".
+    static func updateObject(_ labels: [String]?) -> String {
+        guard let labels, labels.count == 1, let label = labels.first else { return "macOS" }
+        if label.hasPrefix("macOS") {
+            guard let token = label.split(separator: " ").first(where: { $0.first?.isNumber == true }) else { return "macOS" }
+            let version = token.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? String(token)
+            return "macOS " + version
+        }
+        if let dash = label.lastIndex(of: "-") {
+            let suffix = label[label.index(after: dash)...]
+            let isBuildId = !suffix.isEmpty && suffix.allSatisfy { $0.isLetter || $0.isNumber || $0 == "." }
+            if isBuildId, dash != label.startIndex { return String(label[..<dash]) }
+        }
+        return label
+    }
+
+    // MARK: chips
+
+    @MainActor static func chips(_ input: HomeInput) -> [HomeChip] {
+        let report = input.report
+        var out: [HomeChip] = []
+
+        // Free up space: the folders that raise today's Downloads / Trash / Caches attention items.
+        // Downloads and Caches only when space is short (StorageSpace is the one low-space rule); Trash always.
+        let space = input.disk.flatMap { StorageSpace.level(avail: $0.avail, size: $0.size, lowPercent: input.lowSpacePercent) }
+        let short = StorageSpace.suggestsFreeing(space)
+        var freeable: Int64 = 0
+        for d in report.homeDirs ?? [] {
+            let name = (d.path as NSString).lastPathComponent
+            if name == "Downloads", d.bytes > 10 * GIB, short { freeable += d.bytes }
+            if name == ".Trash", d.bytes > 1 * GIB { freeable += d.bytes }
+        }
+        if short, let d = report.homeCaches, d.bytes > 3 * GIB { freeable += d.bytes }
+        let foldersHome = Destination(.storage, focus: .folders, foldersSegment: .home)
+        if freeable > 0 {
+            out.append(HomeChip(id: "freeUp", object: L.homeFreeUp, value: fmtBytes(freeable), destination: foldersHome))
+        }
+        // Only when space is short (StorageSpace is the one low-space rule); the Backups card always offers it.
+        if let n = report.snapshots?.count, n > 0, short {
+            out.append(HomeChip(id: "snapshots", object: L.bkDeleteVerb, value: L.bkSnapshotCount(n),
+                                destination: Destination(.backups, focus: .tm), opensDeleteConfirm: true))
+        }
+        // Outdated packages are this suggestion only, never an attention row: new versions arrive almost daily (TRIAGE-THRESHOLDS-REVIEW).
+        if let n = report.brewOutdated?.count, n > 0 {
+            out.append(HomeChip(id: "brew", object: L.homeUpdateHomebrew, value: "(\(n))",
+                                destination: Destination(.system, focus: .brew)))
+        }
+        if !report.homeDirsUnreadable.isEmpty || !report.serviceDirsUnreadable.isEmpty {
+            out.append(HomeChip(id: "fda", object: L.homeGrantFullDiskAccess, value: nil, destination: foldersHome))
+        }
+        return out
+    }
+
+    // MARK: small derivations
+
+    /// How many of the four protections are on; nil before the security section is collected.
+    static func protectionOn(_ s: SecurityState?) -> Int? {
+        guard let s else { return nil }
+        return [s.fileVault, s.gatekeeper, s.sip, s.firewall].filter { $0 == true }.count
+    }
+
+    /// D5: hot when FileVault, Gatekeeper or SIP is off; amber when only the firewall is; nil when all on or unknown.
+    static func protectionTone(_ s: SecurityState?) -> HomeTone? {
+        guard let s else { return nil }
+        if s.fileVault == false || s.gatekeeper == false || s.sip == false { return .hot }
+        return s.firewall == false ? .amber : nil
+    }
+
+    static func historyDigest(_ entries: [MacHistoryEntry]) -> HomeHistoryDigest {
+        HomeHistoryDigest(count: entries.count,
+                          diskPerMonth: monthlyRate(entries) { $0.disk_used_gb },
+                          batteryPerMonth: monthlyRate(entries) { $0.battery_pct })
+    }
+
+    /// Slope per 30 days between the oldest and newest entry carrying the value inside the
+    /// quarter window (D14); nil with fewer than two such entries or less than 14 days between them.
+    static func monthlyRate(_ entries: [MacHistoryEntry], _ value: (MacHistoryEntry) -> Int?) -> Double? {
+        // Calendar days as integers: this runs on every Home refresh over up to ~500 entries, where
+        // DateFormatter parsing cost tens of milliseconds per pass. Same window as `HistoryPageModel.window(.quarter)`.
+        guard let last = entries.last, let endDay = dayNumber(last.date),
+              let windowDays = HistoryRange.quarter.days else { return nil }
+        let startDay = endDay - (windowDays - 1)
+        let points: [(day: Int, value: Int)] = entries.compactMap { e in
+            guard let day = dayNumber(e.date), day >= startDay, day <= endDay, let v = value(e) else { return nil }
+            return (day, v)
+        }
+        guard points.count >= 2, let o = points.first, let n = points.last else { return nil }
+        let days = n.day - o.day
+        guard days >= 14 else { return nil }
+        return Double(n.value - o.value) / Double(days) * 30
+    }
+
+    /// Days since 1970-01-01 of a "yyyy-MM-dd" string (proleptic Gregorian, no time zone); nil if malformed.
+    static func dayNumber(_ s: String) -> Int? {
+        let parts = s.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+              let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]),
+              (1...12).contains(m), (1...31).contains(d) else { return nil }
+        // days-from-civil (H. Hinnant)
+        let yy = m <= 2 ? y - 1 : y
+        let era = (yy >= 0 ? yy : yy - 399) / 400
+        let yoe = yy - era * 400
+        let doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        return era * 146097 + doe - 719468
+    }
+
+    /// "+" for v > 0 (after rounding to `decimals`), U+2212 for v < 0, no sign for 0.
+    @MainActor static func signed(_ v: Double, decimals: Int) -> String {
+        let factor = pow(10.0, Double(decimals))
+        let rounded = (v * factor).rounded() / factor
+        let magnitude = decimals > 0 ? fmtFixed(abs(v), decimals: decimals) : String(Int(abs(v).rounded()))
+        if rounded > 0 { return "+" + magnitude }
+        if rounded < 0 { return "\u{2212}" + magnitude }
+        return magnitude
+    }
+
+    static func hhmm(_ d: Date) -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = .current
+        df.dateFormat = "HH:mm"
+        return df.string(from: d)
+    }
+
+    // MARK: tiles
+
+    @MainActor static func tiles(_ input: HomeInput, tasks: [HomeTask], scan: HomeScan, narrow: Bool = false) -> [HomeTile] {
+        var pages: [Page] = [.cpu, .memory, .storage, .battery, .security, .backups, .system, .history]
+        if !input.hasBattery { pages.removeAll { $0 == .battery } }
+        let skeleton = scan == .firstScan
+        var failedAt: Date? = nil
+        if case .failed(_, let lastGood) = scan { failedAt = lastGood }
+
+        return pages.map { page in
+            let first = tasks.first { $0.section == page }
+            let (okTone, okTag, normalSub, rawKVs) = tileParts(page, input, tasks: tasks)
+            let kvs = skeleton ? rawKVs.map { HomeKV(label: $0.label, value: dash, tone: .neutral) } : rawKVs
+            return HomeTile(page: page, name: page.title, symbol: page.symbol,
+                            sub: failedAt.map { L.homeTileLastCheck(hhmm($0)) } ?? normalSub,
+                            subIsFailure: failedAt != nil,
+                            tagTone: skeleton ? .neutral : (first?.tone ?? okTone),
+                            tagText: skeleton ? "" : (first?.tileTag ?? okTag),
+                            skeleton: skeleton, kvs: kvs,
+                            destination: first?.destination ?? Destination(page, focus: page.defaultFocus),
+                            hotRing: first?.tone == .hot && !skeleton,
+                            socRow: page == .cpu ? socRow(for: input, narrow: narrow) : nil)
+        }
+    }
+
+    /// The SoC tile's row for the model values of `input`.
+    @MainActor static func socRow(for i: HomeInput, narrow: Bool) -> HomeSocRow {
+        let high = i.cpu.map { CPULoad.isHigh($0, since: i.cpuHighSince, now: i.now) } ?? false
+        return socRow(thermal: i.thermal, socTempC: i.socTempC, cpuHigh: high,
+                      highMinutes: CPULoad.highMinutes(since: i.cpuHighSince, now: i.now),
+                      cpuPct: i.cpu.map { Int(CPULoad.usage($0).rounded()) }, narrow: narrow)
+    }
+
+    /// Design 7.13 tone rule. High load wins (amber row, "High load", the CPU share on the right, the minutes in the
+    /// tip). Otherwise the thermal state word with its rail step and the chip temperature on the right. Text takes the
+    /// thermal tone, the right value the temperature tone when warm / hot, the row tint the more severe of the two.
+    /// Thermal unknown and load normal: `.empty`.
+    @MainActor static func socRow(thermal: ThermalLevel?, socTempC: Int?, cpuHigh: Bool, highMinutes: Int?, cpuPct: Int?,
+                       narrow: Bool) -> HomeSocRow {
+        if cpuHigh {
+            return HomeSocRow(kind: .highLoad(text: L.cpuTagHigh, help: highMinutes.map { L.cpuHighLoadFor($0) } ?? L.cpuTagHigh),
+                              rightText: cpuPct.map { L.homePercent("\($0)") },
+                              rowTone: .amber, textTone: .amber, rightTone: .amber)
+        }
+        // Home is the reverse of the page bar: the word only at 1150 (the row is 226 wide), the full text at 900 (378).
+        let r = SocReadout.make(socTempC: socTempC, thermal: thermal, powerW: nil, narrow: false, tagVisible: false)
+        guard let th = r.thermal else { return HomeSocRow(kind: .empty, rightText: nil, rowTone: .green, textTone: .green, rightTone: .green) }
+        let tempTone: CPUNoteTone? = r.temperature.flatMap { $0.zone == 2 ? .hot : ($0.zone == 1 ? .amber : nil) }
+        func severity(_ t: CPUNoteTone?) -> Int { t == .hot ? 2 : (t == .amber ? 1 : 0) }
+        let rowTone: CPUNoteTone = severity(tempTone) >= severity(th.tone) ? (tempTone ?? .green) : th.tone
+        return HomeSocRow(kind: .thermal(step: th.step, text: narrow ? th.full : th.word, help: "\(th.full). \(th.help)"),
+                          rightText: r.temperature?.value, rowTone: rowTone, textTone: th.tone, rightTone: tempTone ?? th.tone)
+    }
+
+    /// OK tag, normal sub line and the two mini KVs of one tile.
+    @MainActor private static func tileParts(_ page: Page, _ i: HomeInput, tasks: [HomeTask])
+        -> (HomeTone, String, String, [HomeKV]) {
+        let r = i.report
+        func has(_ k: AttentionKind) -> Bool { tasks.contains { $0.kind == k } }
+        func kv(_ label: String, _ value: String?, _ tone: HomeTone? = nil) -> HomeKV {
+            value.map { HomeKV(label: label, value: $0, tone: tone) } ?? HomeKV(label: label, value: dash, tone: .neutral)
+        }
+        switch page {
+        case .cpu:
+            let chip = i.system?.chip ?? ""
+            let sub = chip.isEmpty ? L.homeCoresOnly(i.ncpu) : L.homeCPUSub(chip, i.ncpu)
+            return (.green, L.homeTagNormal, sub,
+                    [kv(L.homeKVLoad15, i.load.flatMap { $0.count > 2 ? fmtFixed($0[2], decimals: 2) : nil }),
+                     kv(L.homeKVProcesses, i.processCount.map { "\($0)" })])
+        case .memory:
+            return (.green, L.homeTagNormal, fmtBytes(i.system?.memBytes ?? i.mem?.total),
+                    [kv(L.memPurgeable, i.mem.map { fmtBytes($0.purgeable) }),
+                     kv(L.memFileCache, i.mem.map { fmtBytes($0.fileBacked) })])
+        case .storage:
+            let smart: HomeKV
+            if has(.smartErrors) {
+                smart = HomeKV(label: "SMART", value: L.homeKVFailing, tone: .hot)
+            } else if has(.smartWear) {
+                let pu = (r.smart ?? []).compactMap { smartPercentUsed($0) }.first { $0 >= 80 }
+                smart = pu.map { HomeKV(label: "SMART", value: L.homeKVWorn($0), tone: .amber) }
+                    ?? HomeKV(label: "SMART", value: L.homeTagDiskWorn, tone: .amber)
+            } else if let s = r.smart, !s.isEmpty {
+                smart = HomeKV(label: "SMART", value: L.commonOK, tone: nil)
+            } else {
+                smart = HomeKV(label: "SMART", value: dash, tone: .neutral)
+            }
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            let trash = r.homeDirs?.first { $0.path == home + "/.Trash" }.map { fmtCapacity($0.bytes) }
+            return (.green, L.homeTagHealthy, L.homeStorageSub,
+                    [kv(L.storageTrashLabel, trash), smart])
+        case .battery:
+            let b = BatteryInfo.merged(live: i.battery, report: r.battery)
+            let cond = has(.batteryCondition)
+            return (.green, L.homeTagHealthy, L.homeBatterySub,
+                    [kv(L.batteryCapCondition, BatteryPageModel.conditionText(b?.condition), cond ? .hot : nil),
+                     kv(L.batteryCapMax, i.batteryMaxMAh.map { L.batMAh(fmtGrouped($0)) })])
+        case .security:
+            let on = protectionOn(r.security)
+            let updates: String?
+            if let u = r.updates { updates = u.isEmpty ? L.homeKVNone : "\(u.count)" } else { updates = nil }
+            return (.green, L.homeTagAllOn, L.homeSecuritySub,
+                    [kv(L.commonProtection, on.map { L.homeKVProtection($0) }, protectionTone(r.security)),
+                     kv(L.commonUpdates, updates)])
+        case .backups:
+            let claude: HomeKV
+            switch i.claudeBackup {
+            case .lastSuccess(let d):
+                let secs = Int(i.now.timeIntervalSince(d))
+                claude = HomeKV(label: L.commonClaudeBackup, value: L.claudeBackupAgo(BackupLog.durationText(seconds: secs, language: L10nStore.shared.language)),
+                                tone: has(.claudeBackup) ? .amber : nil)
+            case .noSuccessFound:
+                claude = HomeKV(label: L.commonClaudeBackup, value: L.attnDetailClaudeBackupNone, tone: .amber)
+            case .unreadable, nil:
+                claude = HomeKV(label: L.commonClaudeBackup, value: dash, tone: .neutral)
+            }
+            return (.green, L.homeTagUpToDate, L.homeBackupsSub,
+                    [claude, kv(L.homeKVSnapshots, r.snapshots.map { "\($0.count)" })])
+        case .system:
+            let brew: HomeKV
+            if let n = r.brewOutdated?.count {
+                brew = n > 0 ? HomeKV(label: "Homebrew", value: L.homeBrewOutdatedShort(n), tone: nil)
+                             : HomeKV(label: "Homebrew", value: L.homeKVUpToDate, tone: nil)
+            } else {
+                brew = HomeKV(label: "Homebrew", value: dash, tone: .neutral)
+            }
+            return (.green, L.homeTagNormal, L.homeSystemSub,
+                    [kv(L.homeKVLoginItems, r.autostart?.loginItems.map { "\($0.count)" }), brew])
+        case .history:
+            let d = i.historyDigest ?? historyDigest(i.history)
+            let disk = d.diskPerMonth
+            let batt = d.batteryPerMonth
+            return (.neutral, L.homeHistoryDays(d.count), L.homeHistorySub,
+                    [kv(L.homeKVDiskPerMonth, disk.map { L.homeGB(signed($0, decimals: 0)) }),
+                     kv(L.homeKVCapacity, batt.map { L.homePercent(signed($0, decimals: 1)) })])
+        case .home:
+            return (.neutral, "", "", [])
+        }
+    }
+}
+
+// MARK: - HOME-C: the Now card
+
+/// Views map: s1, s2, s4, s5, s6 / sfree → DS3.s1, s2, s4, s5, s6 / DS3.sfree, track → DS3.track,
+/// green/amber/hot → DS3.green/amber/hot.
+enum HomeSeries: Equatable, Hashable { case s1, s2, s4, s5, s6, sfree, track, green, amber, hot }
+enum HomeNowKind: String, Equatable { case cpu, memory, storage, battery }
+struct HomeNowSegment: Equatable { let series: HomeSeries; let value: Double }
+struct HomeLegendItem: Equatable { let series: HomeSeries; let text: String }
+/// The Battery cell's bar: one fill up to the capacity, a tick at the wear threshold, the threshold's value under the tick.
+struct HomeBatteryBar: Equatable {
+    let fraction: Double    // capacity / 100; DS3Bar clamps it to 0…1
+    let fill: HomeSeries    // .green / .amber / .hot
+    let tick: Double        // 0.8
+    let tickLabel: String   // "80%" / "80 %"
+    let spoken: String      // the threshold in words, for VoiceOver
+    let help: String        // tooltip over the tick and its label
+}
+
+/// GPU-UTILIZATION: one of the SoC cell's two figures (CPU, GPU). `spoken` is its VoiceOver text.
+/// `fraction` (0...1) and `bar` (the fill's series colour) draw the 5 pt bar under the figure.
+struct HomeNowFigure: Equatable {
+    let kicker: String; let value: String; let spoken: String; let dimmed: Bool
+    var fraction: Double = 0
+    var bar: HomeSeries = .s1
+}
+
+/// The temperature gauge of the Now chip: zone 0 normal / 1 warm / 2 hot and the marker position (design 7.12).
+struct HomeChipGauge: Equatable { let zone: Int; let markerX: Double }
+
+struct HomeNowCell: Identifiable, Equatable {
+    var id: HomeNowKind { kind }
+    let kind: HomeNowKind
+    let label: String
+    let tone: HomeTone                 // .neutral / .amber / .hot = cell tint
+    let chipTone: HomeTone?
+    let chipText: String?              // nil = no chip
+    let big: String
+    let of: String
+    let figures: [HomeNowFigure]       // SoC cell only; [] elsewhere
+    let loading: Bool
+    let segments: [HomeNowSegment]     // memory/storage stack; CPU, battery: []
+    let batteryBar: HomeBatteryBar?    // battery with a capacity reading only
+    let legend: [HomeLegendItem]
+    let foot: String
+    let destination: Destination
+    /// SoC cell only, nil when the temperature is unavailable (no chip then).
+    var chipGauge: HomeChipGauge? = nil
+}
+
+extension HomeNowCell {
+    /// HOME-AX-FIGURES: the cell's VoiceOver label — every string the cell draws: label, value + unit (not while
+    /// loading: the "—" placeholder), chip, legend items, the battery threshold in words, foot. Used by `HomeNowCellView`; covered by HomeModelTests.
+    var accessibilityText: String {
+        var parts = [label]
+        if !loading {
+            if figures.isEmpty { parts.append("\(big) \(of)".trimmingCharacters(in: .whitespaces)) }
+            else { parts += figures.map(\.spoken) }
+        }
+        if let chipText, chipTone != nil { parts.append(chipText) }
+        parts += legend.map(\.text)
+        if let batteryBar { parts.append(batteryBar.spoken) }
+        parts.append(foot)
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+}
+
+extension HomeModel {
+    private static let gib: Double = Double(1 << 30)
+
+    /// The Now card cells (battery omitted when the Mac has none).
+    @MainActor static func nowCells(_ input: HomeInput, tasks: [HomeTask], memPressure: MemoryPressureLevel?, socTempC: Int?, gpuUtil: Int?,
+                         cpu: CPUUsage?, cpuHigh: Bool = false, short: Bool, narrow: Bool) -> [HomeNowCell] {
+        func task(_ k: AttentionKind) -> HomeTask? { tasks.first { $0.kind == k } }
+        func loadingCell(_ kind: HomeNowKind, _ label: String, _ dest: Destination,
+                         figures: [HomeNowFigure] = []) -> HomeNowCell {
+            HomeNowCell(kind: kind, label: label, tone: .neutral, chipTone: nil, chipText: nil, big: "—", of: "", figures: figures,
+                        loading: true, segments: [HomeNowSegment(series: .track, value: 1)], batteryBar: nil, legend: [],
+                        foot: L.commonCollectingData, destination: dest)
+        }
+        func g(_ x: Int64) -> String { fmtNum(Double(x) / gib, decimals: 1) }
+        func gb(_ x: Int64) -> String { fmtNum(Double(x) / 1e9, decimals: 0) }
+
+        var cells: [HomeNowCell] = []
+
+        // CPU
+        let cpuDest = Destination(.cpu, focus: .cpu)
+        if let cpu {
+            var chipTone: HomeTone? = nil, chipText: String? = nil, chipGauge: HomeChipGauge? = nil
+            if let t = socTempC {
+                chipText = "\(t) °C"
+                switch CPULoad.socLevel(t) {   // the CPU page tile reads the same level
+                case .hot: chipTone = .hot
+                case .warm: chipTone = .amber
+                case .normal: chipTone = .green
+                }
+                let zone = chipTone == .hot ? 2 : (chipTone == .amber ? 1 : 0)
+                chipGauge = HomeChipGauge(zone: zone, markerX: SocReadout.markerX(celsius: t))
+            }
+            let foot: String
+            if let l = input.load, let l0 = l.first { foot = L.homeLoadCores(fmtFixed(l0, decimals: 2), input.ncpu) }
+            else { foot = L.homeCoresOnly(input.ncpu) }
+            let cpuPct = L.homePercent(fmtFixed(cpu.user + cpu.sys, decimals: 0))
+            let cpuFigure = HomeNowFigure(kicker: L.commonCPU, value: cpuPct, spoken: "\(L.commonCPU) \(cpuPct)", dimmed: false,
+                                         fraction: min(1, max(0, CPULoad.usage(cpu) / 100)), bar: cpuHigh ? .amber : .s1)
+            let gpuFigure: HomeNowFigure = gpuUtil.map {
+                HomeNowFigure(kicker: L.commonGPU, value: L.homePercent("\($0)"), spoken: "\(L.commonGPU) \(L.homePercent("\($0)"))", dimmed: false,
+                              fraction: min(1, max(0, Double($0) / 100)), bar: .s6)
+            } ?? HomeNowFigure(kicker: L.commonGPU, value: "—", spoken: "\(L.commonGPU): \(L.gpuNotAvailable)", dimmed: true, bar: .s6)
+            cells.append(HomeNowCell(kind: .cpu, label: L.commonSoC, tone: .neutral, chipTone: chipTone, chipText: chipText,
+                                     big: "", of: "", figures: [cpuFigure, gpuFigure], loading: false,
+                                     segments: [], batteryBar: nil, legend: [], foot: foot, destination: cpuDest, chipGauge: chipGauge))
+        } else {
+            cells.append(loadingCell(.cpu, L.commonSoC, cpuDest, figures: [
+                HomeNowFigure(kicker: L.commonCPU, value: "—", spoken: "", dimmed: true),
+                HomeNowFigure(kicker: L.commonGPU, value: "—", spoken: "", dimmed: true, bar: .s6)]))
+        }
+
+        // Memory
+        let memDest = Destination(.memory, focus: .usage)
+        if let mem = input.mem, mem.total > 0 {
+            var chipTone: HomeTone? = nil, chipText: String? = nil
+            switch MemoryLoad.pressureTone(memPressure) {
+            case .low?: (chipTone, chipText) = (.green, L.homePressureLow)
+            case .medium?: (chipTone, chipText) = (.amber, L.homePressureMedium)
+            case .high?: (chipTone, chipText) = (.hot, L.homePressureHigh)
+            case nil: break
+            }
+            let rest = max(0, mem.total - mem.active - mem.wired - mem.compressor - mem.inactive)
+            // The compressed item only where the cell is wide: 2x2 (narrow) and the 3-column no-battery layout;
+            // the 4-in-a-row layouts keep three items (a fourth truncates the labels there).
+            var memLegend = [HomeLegendItem(series: .s1, text: L.homeLegendActive(g(mem.active), short: short)),
+                             HomeLegendItem(series: .s2, text: L.homeLegendWired(g(mem.wired))),
+                             HomeLegendItem(series: .s4, text: L.homeLegendInactive(g(mem.inactive), short: short))]
+            if narrow || !input.hasBattery {
+                memLegend.insert(HomeLegendItem(series: .s6, text: L.homeLegendCompressed(g(mem.compressor), short: short)), at: 2)
+            }
+            let foot: String
+            if let s = input.swap, s.total > 0 { foot = L.homeMemFoot(fmtBytes(s.used), fmtBytes(s.total), fmtBytes(mem.compressor)) }
+            else { foot = L.homeMemFootNoSwap(fmtBytes(mem.compressor)) }
+            cells.append(HomeNowCell(
+                kind: .memory, label: L.commonMemory, tone: task(.swapHigh)?.tone ?? .neutral,
+                chipTone: chipTone, chipText: chipText,
+                big: fmtBytes(mem.usedBytes), of: L.homeOf("\(Int((Double(mem.total) / gib).rounded()))"), figures: [], loading: false,
+                segments: [HomeNowSegment(series: .s1, value: Double(mem.active)),
+                           HomeNowSegment(series: .s2, value: Double(mem.wired)),
+                           HomeNowSegment(series: .s6, value: Double(mem.compressor)),
+                           HomeNowSegment(series: .s4, value: Double(mem.inactive)),
+                           HomeNowSegment(series: .track, value: Double(rest))],
+                batteryBar: nil,
+                legend: memLegend,
+                foot: foot, destination: memDest))
+        } else {
+            cells.append(loadingCell(.memory, L.commonMemory, memDest))
+        }
+
+        // Storage
+        if let disk = input.disk, disk.size > 0 {
+            let smart = task(.smartErrors)
+            let diskT = task(.diskFull) ?? task(.diskFullSoon)
+            let wear = task(.smartWear)
+            let tone: HomeTone
+            let chipTone: HomeTone, chipText: String
+            if smart != nil { tone = .hot; (chipTone, chipText) = (.hot, L.homeChipDriveFailing(short: narrow)) }
+            else if let d = diskT { tone = d.tone; (chipTone, chipText) = (d.tone, L.homeChipLowSpace) }
+            else if wear != nil { tone = .amber; (chipTone, chipText) = (.amber, L.homeChipWorn) }
+            else { tone = .neutral; (chipTone, chipText) = (.green, L.homeChipHealthy) }
+            let used = disk.usedTotal
+            let segments: [HomeNowSegment]
+            let legend: [HomeLegendItem]
+            if let data = disk.dataUsed, let system = disk.sysUsed {
+                let other = max(0, used - data - system)
+                segments = [HomeNowSegment(series: .s1, value: Double(data)), HomeNowSegment(series: .sfree, value: Double(system)),
+                            HomeNowSegment(series: .s5, value: Double(other)), HomeNowSegment(series: .track, value: Double(disk.avail))]
+                legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(data))),
+                          HomeLegendItem(series: .sfree, text: L.homeLegendSystem(gb(system), short: short)),
+                          HomeLegendItem(series: .s5, text: L.homeLegendOther(gb(other), short: short))]
+            } else {
+                segments = [HomeNowSegment(series: .s1, value: Double(used)), HomeNowSegment(series: .track, value: Double(disk.avail))]
+                legend = [HomeLegendItem(series: .s1, text: L.homeLegendData(gb(used)))]
+            }
+            let size = short ? L.homeGB(fmtNum(Double(disk.size) / 1e9, decimals: 0)) : fmtCapacity(disk.size)
+            let focus: CardID = (smart != nil || (wear != nil && diskT == nil)) ? .smart : .disk
+            cells.append(HomeNowCell(
+                kind: .storage, label: L.commonStorage, tone: tone, chipTone: chipTone, chipText: chipText,
+                big: fmtCapacity(disk.avail), of: L.homeFreeWord, figures: [], loading: false, segments: segments, batteryBar: nil, legend: legend,
+                foot: L.homeStorageFoot(size: size, purgeable: disk.purgeable.map { fmtCapacity($0) }, short: short),
+                destination: Destination(.storage, focus: focus)))
+        } else {
+            cells.append(loadingCell(.storage, L.commonStorage, Destination(.storage, focus: .disk)))
+        }
+
+        // Battery
+        if input.hasBattery {
+            let battDest = Destination(.battery, focus: .bathero)
+            if let b = BatteryInfo.merged(live: input.battery, report: input.report.battery),
+               let shown = BatteryHealth.macShownPercent(apple: b.maxCapacity, raw: input.batteryRawPercent, prefersRaw: input.batteryPrefersRaw) {
+                let svc = task(.batteryCondition), worn = task(.batteryCapacity)
+                let tone: HomeTone
+                let chipTone: HomeTone, chipText: String
+                let fill: HomeSeries
+                if svc != nil { tone = .hot; (chipTone, chipText) = (.hot, L.homeChipService); fill = .hot }
+                else if let w = worn { tone = w.tone; (chipTone, chipText) = (w.tone, L.homeChipWorn); fill = w.tone == .hot ? .hot : .amber }
+                else { tone = .neutral; (chipTone, chipText) = (.green, L.homeChipHealthy); fill = .green }
+                cells.append(HomeNowCell(
+                    kind: .battery, label: L.commonBattery, tone: tone, chipTone: chipTone, chipText: chipText,
+                    big: L.homePercent(shown.digits(language: L10nStore.shared.language)), of: L.homeOfNew, figures: [], loading: false, segments: [],
+                    batteryBar: HomeBatteryBar(fraction: shown.percent / 100, fill: fill, tick: Double(BatteryHealth.wornBelowPercent) / 100, tickLabel: L.homePercent("\(BatteryHealth.wornBelowPercent)"),
+                                               spoken: L.homeWearThreshold, help: L.homeWearThresholdHelp),
+                    legend: [],
+                    foot: L.homeBatteryFoot(cycles: b.cycles, charge: b.charge, state: b.state?.localizedText, short: short),
+                    destination: battDest))
+            } else {
+                cells.append(loadingCell(.battery, L.commonBattery, battDest))
+            }
+        }
+        return cells
+    }
+}

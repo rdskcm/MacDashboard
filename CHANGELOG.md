@@ -6,6 +6,10 @@ All notable changes to this project are documented in this file.
 
 ### New
 
+- [major] MacDashboard is now Moonport (the app, its window and menu, the bundle `Moonport.app`). On its first launch it moves your data from `~/Library/Application Support/MacDashboard/` to `~/Library/Application Support/Moonport/`, your settings come along, and a Welcome panel lists what it moved. To go back to MacDashboard, quit Moonport and move the folder back by hand.
+- [major] Kept iPhone sysdiagnose archives in the old default folder move from `~/Documents/MacDashboard/iPhone` to `~/Documents/Moonport/iPhone` at the first launch. macOS asks once for access to Documents. If you refuse, they stay where they are and move at a later launch. A folder you chose in Settings › Devices stays as it is.
+- [major] macOS asks for its permissions again, because the app has a new identity. The Welcome panel asks only for Full Disk Access (it opens the pane and checks the grant). macOS asks for the others itself, the first time a feature needs one: Files and Folders, Automation and Local Network.
+- [major] If an old MacDashboard.app is found, the Welcome panel offers to move it to the Trash (or keep it) and can undo that.
 - [feat] iPhone «Firmware» card: Apple's restore build for the model, signed builds per ipsw.me on its own click, and a verified IPSW download into Downloads with a confirm step and Stop and Resume, also after quitting the app.
 - [feat] SoC page (was CPU): separate CPU and GPU cards, each with its own load bar, and a shared chip-temperature block with the macOS thermal state. The GPU figure is the whole Mac's, including what macOS draws. Home's Now card shows CPU and GPU side by side in one SoC cell (the small CPU history line is gone). Not available on this Mac → a dash.
 - [feat] CPU: the SoC temperature tile shows macOS's own thermal state (normal, elevated, high, critical), updated when macOS reports a change; hover for what each state means. The app never estimates a throttling percentage. The exported report adds the state after the SoC temperature when it is above normal.
@@ -15,7 +19,7 @@ All notable changes to this project are documented in this file.
 - [feat] iPhone battery card: on iOS 27 the temperature is read again (iOS 27 moved it to a separate registry node; the app now asks for that node when the main one lacks it), and while the phone charges the State tile shows the power going into the battery, e.g. «Charging +2.4 W». Its tooltip spells out the voltage and current behind the figure and, where the phone reports it, what is drawn from the cable (iOS 27) or what the power source offers (iOS 26).
 - [feat] The header's iPhone segment is now «Devices»; Esc, ⌘[ and a second click on the segment return from a device page to the list.
 - [feat] Settings › Devices: «Auto-read on connect» (off = on attach the app only identifies the phone and reads the battery and crash logs on request).
-- [feat] Kept iPhone sysdiagnose archives live in `~/Documents/MacDashboard/iPhone` (or a folder chosen in Settings › Devices); archives kept so far are moved there once. The first write to Documents can show macOS's Files & Folders prompt.
+- [feat] Kept iPhone sysdiagnose archives live in `~/Documents/Moonport/iPhone` (or a folder chosen in Settings › Devices); archives kept so far are moved there once. The first write to Documents can show macOS's Files & Folders prompt.
 - [feat] iPhone import card: each saved archive has a «Move to Trash» button next to «Show in Finder». It moves the Mac copy to the Trash (recoverable, no confirmation) and drops it from the list. Battery history and logs stay, and nothing is sent to the phone.
 - [feat] Battery tiles on the iPhone page show the charge, cycle and temperature tones.
 - [feat] iPhone firmware, engine only (nothing is visible in the app yet): on a click, Apple's catalogue gives the iOS build Apple restores the phone's model to; a separate, labelled click asks ipsw.me which builds are still signed (it sends the model identifier only). Apple's build can be downloaded to `~/Downloads` over https from Apple's firmware servers only, after size and free-space checks, verified against every checksum both sources publish, without ever replacing an existing file. The network is used only on these clicks; the hosts and what they receive are listed in the README.
@@ -23,6 +27,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- For contributors: the bundle ID is `app.moonport` (bench copies `app.moonport.bench`, `MoonportBench.app`), the signing identity is `Moonport Local Signing`, the entitlements file is `Moonport.entitlements`, the night runner's LaunchAgent label is `app.moonport.night` (`tools/perf/night.sh --install` also removes the old `com.rdskcm.macdashboard.night` agent), and the Swift module is renamed to Moonport. The visual baseline references that carry the app name need `snapshots.sh --bless` once.
 - [major] SoC page: rows of the process and GPU lists take their new place at once instead of sliding for half a second, which lowers the app's CPU use while the page is open. The bars still glide.
 - [major] Energy: disk free space is read every 30 seconds instead of every 2, and at once after the app frees space or a volume mounts.
 - [major] Numbers: the report's process table and every remaining decimal now use the app language's separator (comma in Russian, point in English).

@@ -1,8 +1,8 @@
 # Release notes template
 
-Every MacDashboard release on GitHub follows this file. Release flow: the tag push runs
+Every Moonport release on GitHub follows this file. Release flow: the tag push runs
 `.github/workflows/release.yml`, which creates the release with the standard title and a placeholder
-note and uploads `MacDashboard.zip`. Then write the body below into a file and apply it:
+note and uploads `Moonport.zip`. Then write the body below into a file and apply it:
 
     gh release edit vX.Y -R rdskcm/MacDashboard --title "vX.Y (Codename)" --notes-file <body file>
 
@@ -16,7 +16,7 @@ after it. Codenames name a major version: 1.x = Cadia, 2.x = Krieg (`CODENAME` i
 ## Body — sections in this order; leave out any that would be empty
 
 1. App line — this exact line in every release:
-   `MacDashboard is a native macOS app that checks your Mac: a full system report at launch, live metrics, a local history of past reports, and one-click maintenance, in English or Russian.`
+   `Moonport is a native macOS app that checks your Mac: a full system report at launch, live metrics, a local history of past reports, and one-click maintenance, in English or Russian.`
 2. One sentence: the main point of this version. Starts with `Version X.Y`.
 3. `### New`, `### Improved`, `### Fixed` — one bullet per item.
    - New: something the app did not do before.
@@ -28,14 +28,14 @@ after it. Codenames name a major version: 1.x = Cadia, 2.x = Krieg (`CODENAME` i
    - `macOS <N> (<name>) or later` — the minimum from `build_app.sh` `MIN_MACOS` / the asset's `LSMinimumSystemVersion`.
    - Chip: `Apple Silicon or Intel (universal build)` for v1.0–v2.1; `Apple Silicon only` from v2.2 on.
 6. `### Install` — this block, with the release's SHA-256 (from the workflow run summary, or
-   `shasum -a 256 MacDashboard.zip` on the uploaded asset):
+   `shasum -a 256 Moonport.zip` on the uploaded asset):
 
-       Download `MacDashboard.zip` below, unzip it, and move `MacDashboard.app` to Applications. The app is ad-hoc signed but not notarized (no Apple Developer certificate yet), so macOS blocks it on first launch. Allow it once, either way:
+       Download `Moonport.zip` below, unzip it, and move `Moonport.app` to Applications. The app is ad-hoc signed but not notarized (no Apple Developer certificate yet), so macOS blocks it on first launch. Allow it once, either way:
 
        - **System Settings → Privacy & Security → Open Anyway** (the old right-click → Open no longer works on macOS 15 and later).
-       - **Or in Terminal:** `xattr -dr com.apple.quarantine /Applications/MacDashboard.app`
+       - **Or in Terminal:** `xattr -dr com.apple.quarantine /Applications/Moonport.app`
 
-       SHA-256 of `MacDashboard.zip`: `<sha256>`
+       SHA-256 of `Moonport.zip`: `<sha256>`
 
        Step by step, and building from source: [README](https://github.com/rdskcm/MacDashboard#install).
 
@@ -53,7 +53,7 @@ after it. Codenames name a major version: 1.x = Cadia, 2.x = Krieg (`CODENAME` i
 
 ## What goes in the release body
 
-Only items that change something for a person who downloads `MacDashboard.zip`. Items for people who build
+Only items that change something for a person who downloads `Moonport.zip`. Items for people who build
 from source or contribute go in CHANGELOG.md only. Every body bullet must have a matching item in the same
 version's CHANGELOG entry, under the same heading.
 

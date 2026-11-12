@@ -1,9 +1,9 @@
 #!/bin/bash
 # tools/visual/snapshots.sh — offscreen snapshot suite (HARNESS-REDESIGN-RETARGET).
-# Renders every state of Tests/MacDashboardTests/ContentSnapshotTests.swift (dark + light) in the SwiftPM test process,
+# Renders every state of Tests/MoonportTests/ContentSnapshotTests.swift (dark + light) in the SwiftPM test process,
 # compares each PNG with Tests/Snapshots/<state>.png (`vbtool snap-compare`, built -O) and writes a run directory.
 #
-#   tools/visual/snapshots.sh [--out DIR] [--process-name MacDashboardTests.NAME]
+#   tools/visual/snapshots.sh [--out DIR] [--process-name MoonportTests.NAME]
 #   tools/visual/snapshots.sh --bless RUN_DIR [STATE ...] [--allow-dirty]
 #   tools/visual/snapshots.sh -h
 #
@@ -53,8 +53,8 @@ if [ "$ALLOW_DIRTY" = 1 ] && [ "$MODE" != bless ]; then
 fi
 if [ -n "$PROC_NAME" ]; then
   if [ "$MODE" != run ]; then echo "--process-name applies only to a run" >&2; usage >&2; exit 64; fi
-  if ! [[ "$PROC_NAME" =~ ^MacDashboardTests\.[A-Za-z0-9._-]+$ ]]; then
-    echo "--process-name must be MacDashboardTests.<letters, digits, . _ ->: $PROC_NAME" >&2; exit 64
+  if ! [[ "$PROC_NAME" =~ ^MoonportTests\.[A-Za-z0-9._-]+$ ]]; then
+    echo "--process-name must be MoonportTests.<letters, digits, . _ ->: $PROC_NAME" >&2; exit 64
   fi
 fi
 
@@ -160,7 +160,7 @@ PIN_ARGS=(
 # of the active toolchain with the test bundle (SwiftPM's current .build layout).
 SWIFT_BIN="$(xcrun --find swift 2>/dev/null || true)"
 HELPER="${SWIFT_BIN%/bin/swift}/libexec/swift/pm/swiftpm-testing-helper"
-BUNDLE="$ROOT/.build/out/Products/Debug/MacDashboardTests.xctest/Contents/MacOS/MacDashboardTests"
+BUNDLE="$ROOT/.build/out/Products/Debug/MoonportTests.xctest/Contents/MacOS/MoonportTests"
 PLAT="$(xcrun --show-sdk-platform-path 2>/dev/null || true)/Developer"
 DATEFMT_GLOBAL="$(defaults read -g AppleICUDateFormatStrings 2>/dev/null | tr -s ' \n' ' ' || true)"
 [ -n "$DATEFMT_GLOBAL" ] || DATEFMT_GLOBAL=unset

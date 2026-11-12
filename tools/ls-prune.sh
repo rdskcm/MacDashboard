@@ -1,13 +1,13 @@
 #!/bin/bash
-# tools/ls-prune.sh — keep the installed MacDashboard the only copy LaunchServices knows.
+# tools/ls-prune.sh — keep the installed Moonport the only copy LaunchServices knows.
 #
 # LaunchServices remembers every app bundle it has seen: a dist.noindex/ build, a test copy in a
 # scratchpad, a copy inside a backup snapshot or a mounted Time Machine backup, a bundle in the
 # Trash, and every bench copy tools/bench-app.sh made (running a bundle's binary registers it).
 # Opening the app by bundle ID can then launch any copy with that ID (APP-ID-DUPLICATES); opening
-# it by name matches the bundle FILE name and preferred a bench copy named MacDashboard.app over
+# it by name matches the bundle FILE name and preferred a bench copy named Moonport.app over
 # the installed one (LS-PRUNE-MISSES). This script unregisters every registration of
-# com.rdskcm.mac-dashboard and of the bench id com.rdskcm.mac-dashboard.bench except the install
+# app.moonport and of the bench id app.moonport.bench except the install
 # locations, and re-registers the installed copy as it is on disk.
 # It never touches a file — only LaunchServices records.
 #
@@ -27,10 +27,10 @@
 # Callers (build_app.sh, tools/visual/smoke.sh, tools/perf/gate.sh, backup_auto.sh) treat non-zero as a warning.
 set -uo pipefail
 
-BUNDLE_ID="com.rdskcm.mac-dashboard"
-BENCH_ID="com.rdskcm.mac-dashboard.bench"   # tools/bench-app.sh copies
+BUNDLE_ID="app.moonport"
+BENCH_ID="app.moonport.bench"   # tools/bench-app.sh copies
 # The install locations README.md names; build_app.sh --install uses the first.
-INSTALLED=("$HOME/Applications/MacDashboard.app" "/Applications/MacDashboard.app")
+INSTALLED=("$HOME/Applications/Moonport.app" "/Applications/Moonport.app")
 LSREG="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
 LSREG_TIMEOUT=60   # seconds allowed for each lsregister call; a hung lsregister must not block callers (backup_auto.sh)
 
@@ -94,14 +94,14 @@ registered() {
 }
 
 # Stub records: a registration of a bundle with no Info.plist (an empty or half-copied
-# MacDashboard.app or MacDashboardBench.app). It has no "identifier:" line, so registered() never
+# Moonport.app or MoonportBench.app). It has no "identifier:" line, so registered() never
 # sees it; its "bundle id:" is the directory name. Matched on all three: bundle id equal to the
 # directory name, no identifier, path ending in /<that name>. Never on the path alone.
 stubs() {
   lsreg -dump 2>/dev/null | awk '
     function val(s) { sub(/^[a-z ]+:[ \t]+/, "", s); sub(/ \(0x[0-9a-fA-F]+\)$/, "", s); return s }
     function flush() {
-      if (id == "" && ((bid == "MacDashboard.app" && path ~ /\/MacDashboard\.app$/) || (bid == "MacDashboardBench.app" && path ~ /\/MacDashboardBench\.app$/))) print path
+      if (id == "" && ((bid == "Moonport.app" && path ~ /\/Moonport\.app$/) || (bid == "MoonportBench.app" && path ~ /\/MoonportBench\.app$/))) print path
       path = ""; id = ""; bid = ""
     }
     /^----------/ { flush(); next }
@@ -118,14 +118,14 @@ is_installed() {
   return 1
 }
 
-# Bundle paths of every running MacDashboard process (a function, not an inline $(...):
+# Bundle paths of every running Moonport process (a function, not an inline $(...):
 # bash 3.2 misparses some constructs inside command substitution).
 running_bundles() {
   local pid comm
-  for pid in $(pgrep -x MacDashboard 2>/dev/null); do
+  for pid in $(pgrep -x Moonport 2>/dev/null); do
     comm="$(ps -o comm= -p "$pid" 2>/dev/null)" || continue
-    if [ "${comm%/Contents/MacOS/MacDashboard}" != "$comm" ]; then
-      printf '%s\n' "${comm%/Contents/MacOS/MacDashboard}"
+    if [ "${comm%/Contents/MacOS/Moonport}" != "$comm" ]; then
+      printf '%s\n' "${comm%/Contents/MacOS/Moonport}"
     fi
   done
   return 0

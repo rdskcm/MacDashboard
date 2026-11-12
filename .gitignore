@@ -12,6 +12,6 @@ dist.noindex/
 # macOS
 .DS_Store
 
-# Runtime data lives in ~/Library/Application Support/MacDashboard, never in repo
+# Runtime data lives in ~/Library/Application Support/Moonport, never in repo
 tools/visual/out/
 tools/perf/out/

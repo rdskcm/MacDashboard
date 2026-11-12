@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/visual/smoke.sh — capture the real-window smoke states (STATE_ORDER) of a bench copy of
-# MacDashboard, check them for alpha holes, and diff them against tools/visual/reference/.
+# Moonport, check them for alpha holes, and diff them against tools/visual/reference/.
 #
 # Usage:
 #   tools/visual/smoke.sh [--app PATH] [--out DIR] [--reference DIR] [--allow-old-sdk]
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-BENCH_ID="com.rdskcm.mac-dashboard.bench"
+BENCH_ID="app.moonport.bench"
 
 HELP="tools/visual/smoke.sh [--app PATH] [--out DIR] [--reference DIR] [--allow-old-sdk]
 tools/visual/smoke.sh --bless RUN_DIR [STATE ...]
@@ -51,7 +51,7 @@ threshold_for_state() {
 # Argument parsing
 # ---------------------------------------------------------------------------
 MODE="run"
-APP="$ROOT/dist.noindex/MacDashboard.app"
+APP="$ROOT/dist.noindex/Moonport.app"
 OUT=""
 REFERENCE="$ROOT/tools/visual/reference"
 ALLOW_OLD_SDK=0
@@ -113,7 +113,7 @@ if [ "$MODE" = "bless" ]; then
     exit 1
   fi
   if grep -q '^foreign_copies: TEST ONLY' "$RUN_DIR/build-info.txt"; then
-    echo "REFUSED: bless: this run ran beside foreign MacDashboard processes (foreign_copies: TEST ONLY)" >&2
+    echo "REFUSED: bless: this run ran beside foreign Moonport processes (foreign_copies: TEST ONLY)" >&2
     exit 1
   fi
 
@@ -199,7 +199,7 @@ fi
 if [ ! -d "$APP" ]; then
   usage_error "--app is not a directory: $APP"
 fi
-APP_BIN="$APP/Contents/MacOS/MacDashboard"
+APP_BIN="$APP/Contents/MacOS/Moonport"
 if [ ! -x "$APP_BIN" ]; then
   usage_error "--app binary is not executable: $APP_BIN"
 fi
@@ -215,7 +215,7 @@ if [[ "$IOREG_ROOT" =~ $LOCK_RE ]]; then
   precondition_refused "the screen is locked — unlock it and run again"
 fi
 
-# Precondition 3: no MacDashboard process this run did not start (tools/perf/foreign-copies.sh list, as gate.sh;
+# Precondition 3: no Moonport process this run did not start (tools/perf/foreign-copies.sh list, as gate.sh;
 # GATE-AX-MISS): a window behind the bench window changes the glass backdrop, and a leftover bench copy is what took
 # the 2026-10-30 night gate's presses. smoke never closes one (night.sh does). SMOKE_TEST_ALLOW_FOREIGN=1 runs beside
 # them instead — for the SMOKE-AX-PID verification only; --bless refuses such a run.
@@ -224,10 +224,10 @@ FOREIGN_NOTE="none"
 if [ -n "$FOREIGN" ]; then
   FOREIGN_ONE="$(paste -sd ';' - <<< "$FOREIGN" | sed 's/;/; /g')"
   if [ "${SMOKE_TEST_ALLOW_FOREIGN:-0}" = 1 ]; then
-    FOREIGN_NOTE="TEST ONLY (SMOKE_TEST_ALLOW_FOREIGN=1): running beside MacDashboard process(es) this run did not start (pid ppid started command): $FOREIGN_ONE"
+    FOREIGN_NOTE="TEST ONLY (SMOKE_TEST_ALLOW_FOREIGN=1): running beside Moonport process(es) this run did not start (pid ppid started command): $FOREIGN_ONE"
     echo "smoke: $FOREIGN_NOTE" >&2
   else
-    precondition_refused "MacDashboard process(es) this run did not start are running (pid ppid started command): $FOREIGN_ONE — quit them and run again (smoke never closes them)"
+    precondition_refused "Moonport process(es) this run did not start are running (pid ppid started command): $FOREIGN_ONE — quit them and run again (smoke never closes them)"
   fi
 fi
 
@@ -289,7 +289,7 @@ if [ "$SCREEN_SCALE" != "2.0" ] && [ "$SCREEN_SCALE" != "2" ]; then
 fi
 
 # Precondition 8: staleness warning (default dist app only)
-if [ "$APP" = "$ROOT/dist.noindex/MacDashboard.app" ]; then
+if [ "$APP" = "$ROOT/dist.noindex/Moonport.app" ]; then
   STALE="$(find "$ROOT/Sources" -newer "$APP_BIN" -print -quit 2>/dev/null || true)"
   if [ -n "$STALE" ]; then
     echo "WARNING: dist build is older than Sources/ — run ./build_app.sh"
@@ -403,7 +403,7 @@ defaults delete "$BENCH_ID" >/dev/null 2>&1 || true
 rm -rf "$BENCH_SAVED_STATE"
 defaults write "$BENCH_ID" visualAppearance -string dark
 # Overlay scrollers, language and no state restoration for this process only (argument domain, never persisted).
-CFFIXED_USER_HOME="$OUT/home" "$BENCH_APP/Contents/MacOS/MacDashboard" -appLanguage en -AppleLanguages "(en)" \
+CFFIXED_USER_HOME="$OUT/home" "$BENCH_APP/Contents/MacOS/Moonport" -appLanguage en -AppleLanguages "(en)" \
   -AppleShowScrollBars WhenScrolling -ApplePersistenceIgnoreState YES -visualFixture 1 > "$OUT/app.log" 2>&1 &
 PID=$!
 LAUNCHED_PID="$PID"
@@ -508,7 +508,7 @@ assert_key() {
       last_reason="no window bounds for wid=$wid"
     fi
     if [ "$printed" -eq 0 ]; then
-      echo "waiting for MacDashboard to become key (front app: $(focused_app)) — answer any system prompt"
+      echo "waiting for Moonport to become key (front app: $(focused_app)) — answer any system prompt"
       printed=1
     fi
     sleep 0.5
@@ -540,7 +540,7 @@ park_cursor() {
 # Drive the main window via an AX press on a button (VISUAL-COVERAGE, R4; Amendment 1; REDESIGN-HOME) — never a
 # coordinate click or keystroke. `AXIdentifier` (set via `.accessibilityIdentifier`) is the language-independent
 # handle. All AX goes through tools/perf/ax.swift addressed by $PID (SMOKE-AX-PID): a lookup by process (System
-# Events `first process whose unix id is`) returned another MacDashboard process's windows when two ran (GATE-AX-MISS).
+# Events `first process whose unix id is`) returned another Moonport process's windows when two ran (GATE-AX-MISS).
 # On a miss the tree of the pid's window 1 is written to $OUT/ax-dump-<id>.txt.
 press_main_tab() {
   local axid="$1" out
@@ -868,7 +868,7 @@ if [ -n "$REF_ENVS" ] && [ "$REF_ENVS" != "$(printf '%s\t%s' "$CAPTURE_DISPLAY" 
 fi
 
 {
-  echo "MacDashboard visual baseline report"
+  echo "Moonport visual baseline report"
   echo "run: $OUT"
   echo "capture: display $CAPTURE_DISPLAY, profile $CAPTURE_PROFILE"
   [ -z "$DISPLAY_WARN" ] || echo "$DISPLAY_WARN"

@@ -3,7 +3,7 @@ Report
 Refresh report
 This Mac
 Devices
-MacDashboard
+Moonport
 MacBook Air · Apple M3 · 16 GB · macOS 26.1 (25B78) · uptime 3 d 4 h
 Report
 Show in Finder
@@ -12,7 +12,7 @@ Done
 Mac status, 4 tasks, need attention, Critical, 0, Warnings, 4, checked at 10:30
 mac_report.txt · updated 10:30 AM
 Details — Battery
-MacDashboard report — MacBook Air (Apple M3) Generated Jan 15, 2026, 10:30 · macOS 26.1 (25B78) STATUS Needs attention · 4 tasks ! Battery 24% worn ! Firewall off ! Time Machine not set up ! caffeinate keeps the Mac awake CPU 25.7% · load 2.10 · 8 cores · SoC 48 °C MEMORY 9.5 of 16 GB · pressure low · swap 512 MB STORAGE 76.8 of 256 GB free · purgeable 3.1 GB BATTERY 82%, charging · health 76% · 312 cycles SECURITY FileVault · Gatekeeper · SIP · Firewall off BACKUPS Claude backup 2 h ago · 3 local snapshots UPTIME 3 d 4 h ===== SYSTEM ===== ProductName: macOS
+Moonport report — MacBook Air (Apple M3) Generated Jan 15, 2026, 10:30 · macOS 26.1 (25B78) STATUS Needs attention · 4 tasks ! Battery 24% worn ! Firewall off ! Time Machine not set up ! caffeinate keeps the Mac awake CPU 25.7% · load 2.10 · 8 cores · SoC 48 °C MEMORY 9.5 of 16 GB · pressure low · swap 512 MB STORAGE 76.8 of 256 GB free · purgeable 3.1 GB BATTERY 82%, charging · health 76% · 312 cycles SECURITY FileVault · Gatekeeper · SIP · Firewall off BACKUPS Claude backup 2 h ago · 3 local snapshots UPTIME 3 d 4 h ===== SYSTEM ===== ProductName: macOS
 Enable… — Firewall
 Set up… — Time Machine
 Show — caffeinate

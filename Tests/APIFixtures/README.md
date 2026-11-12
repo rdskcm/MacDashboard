@@ -1,6 +1,6 @@
 # Tests/APIFixtures
 
-Recorded answers of the HTTP APIs the app calls, used by `Tests/MacDashboardTests/IPSWTests.swift`
+Recorded answers of the HTTP APIs the app calls, used by `Tests/MoonportTests/IPSWTests.swift`
 through `apiFixturesRoot` (`TestSupport.swift`). They live outside `Tests/Fixtures/` because that tree
 admits only `ParsedCommand` directories of `.txt` captures (its README, enforced by
 `ParserFixtureTests`). Tests never use the network; `IPSWLiveCanaryTests` (opt-in, `MACDASH_LIVE=1`)

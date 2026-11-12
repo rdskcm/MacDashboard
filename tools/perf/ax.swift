@@ -4,7 +4,7 @@ import ApplicationServices
 import AppKit
 // tools/perf helper, compiled by gate.sh and tools/visual/smoke.sh into their $OUT/.bin/ax (never run from here). Native AX by pid
 // (AXUIElementCreateApplication) for every gate UI action. It replaces the old AppleScript helper, whose process lookup
-// `first process whose unix id is <pid>` returned another MacDashboard process's window contents when two ran
+// `first process whose unix id is <pid>` returned another Moonport process's window contents when two ran
 // (GATE-AX-MISS, 2026-10-30), so the gate pressed buttons in the wrong app.
 // usage: ax <pid> <kind> [value]          (trusted and focused ignore pid; pass 0)
 //   id <AXIdentifier>[|alt...]       press (AXPress) the first AXButton / AXRadioButton of window 1 whose AXIdentifier is a value

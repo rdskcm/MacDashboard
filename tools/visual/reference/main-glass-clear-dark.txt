@@ -3,7 +3,7 @@ Report
 Refresh report
 This Mac
 Devices
-MacDashboard
+Moonport
 MacBook Air · Apple M3 · 16 GB · macOS 26.1 (25B78) · uptime 3 d 4 h
 Mac status, 4 tasks, need attention, Critical, 0, Warnings, 4, checked at 10:30
 Details — Battery

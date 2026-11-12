@@ -35,8 +35,8 @@ with it, not with bare Command Line Tools).
 CI also fails on any build warning in the app or the tests. `tools/check-warnings.sh`
 runs the same check on your Mac: a clean debug build of both, with warnings as errors.
 
-Tests live in `Tests/MacDashboardTests/` and reach the app's code through
-`@testable import MacDashboard`, so anything `internal` is testable; `private` and
+Tests live in `Tests/MoonportTests/` and reach the app's code through
+`@testable import Moonport`, so anything `internal` is testable; `private` and
 `fileprivate` helpers are not, so put a helper you want covered in a non-private
 declaration. Tests that touch process-wide state (the UI language, `UserDefaults`,
 wall-clock timing) go inside the `.serialized` root suite `SerialTests`
@@ -62,7 +62,7 @@ Code, comments and commit messages: English only, regardless of UI language. A f
 ## Localization
 
 Every user-facing string is a key in one feature file under
-`Sources/MacDashboard/Engine/Strings/` (`Strings+<Feature>.swift`). Each file holds the
+`Sources/Moonport/Engine/Strings/` (`Strings+<Feature>.swift`). Each file holds the
 feature's protocol, the English table (`extension StringsEN`, the reference) and the
 Russian table (`extension StringsRU`, the translation); a new key goes into all three
 parts of the same file, and a key missing from either table does not compile. No
