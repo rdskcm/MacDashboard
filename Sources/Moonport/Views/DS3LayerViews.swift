@@ -49,6 +49,58 @@ enum RimBands {
             r(-1, yB, kx, h + 1), r(kx, yS, xR, h + 1), r(xR, yB, w + 1, h + 1),
         ]
     }
+
+    /// Added to the sprite's range R: the sprite bitmap is exactly zero at r >= R (`OrbBitmap.render`), bilinear
+    /// sampling spreads a texel by at most 1 pt, and the bitmap side is rounded to whole pixels (spec D13).
+    static let reachPad: CGFloat = 2
+
+    /// True when a light whose centre travels the segment `from`-`to` (card-local points) comes closer than `radius`
+    /// to a non-empty band, i.e. can put light on a ring pixel. Empty bands hold no ring pixel (RimBandsTests).
+    static func reaches(_ bands: [CGRect], from a: CGPoint, to b: CGPoint, radius: CGFloat) -> Bool {
+        bands.contains { !$0.isEmpty && distance($0, a, b) < radius }
+    }
+
+    /// Shortest distance between segment ab and rect r; 0 when they meet.
+    static func distance(_ r: CGRect, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x, dy = b.y - a.y
+        // Liang-Barsky: does the segment enter the rect?
+        var t0: CGFloat = 0, t1: CGFloat = 1, meets = true
+        for (p, q) in [(-dx, a.x - r.minX), (dx, r.maxX - a.x), (-dy, a.y - r.minY), (dy, r.maxY - a.y)] {
+            if p == 0 {
+                if q < 0 { meets = false; break }
+            } else {
+                let t = q / p
+                if p < 0 { t0 = max(t0, t) } else { t1 = min(t1, t) }
+                if t0 > t1 { meets = false; break }
+            }
+        }
+        if meets { return 0 }
+        func toRect(_ p: CGPoint) -> CGFloat {
+            hypot(max(r.minX - p.x, 0, p.x - r.maxX), max(r.minY - p.y, 0, p.y - r.maxY))
+        }
+        func toSegment(_ c: CGPoint) -> CGFloat {
+            let l2 = dx * dx + dy * dy
+            let t = l2 > 0 ? min(max(((c.x - a.x) * dx + (c.y - a.y) * dy) / l2, 0), 1) : 0
+            return hypot(a.x + t * dx - c.x, a.y + t * dy - c.y)
+        }
+        // Disjoint convex sets: the minimum is at an endpoint (to the rect) or at a rect corner (to the segment).
+        return min(toRect(a), toRect(b),
+                   toSegment(CGPoint(x: r.minX, y: r.minY)), toSegment(CGPoint(x: r.maxX, y: r.minY)),
+                   toSegment(CGPoint(x: r.minX, y: r.maxY)), toSegment(CGPoint(x: r.maxX, y: r.maxY)))
+    }
+}
+
+/// RIM-HOVER-COST: which layer set draws a card's pointer light (spec D20-D23). `ring`: the sprite inside the static
+/// card-sized ring group (main's structure). `bands`: the eight band sprites. `none`: the light cannot reach the ring.
+/// All nine sprites always hold the same values and animations, so switching carriers changes no pixel.
+enum RimLightCarrier: Equatable {
+    case none, ring, bands
+
+    static func pick(reaches: Bool, inMotion: Bool, leaving: Bool) -> RimLightCarrier {
+        guard reaches else { return .none }
+        if inMotion && !leaving { return .bands }
+        return .ring
+    }
 }
 
 struct DS3RimLayer: NSViewRepresentable {
@@ -60,6 +112,7 @@ struct DS3RimLayer: NSViewRepresentable {
         let v = DS3RimView(cornerRadius: cornerRadius)
         v.setStatic(isStatic)
         model.view = v
+        v.setLeaving(model.leaving)
         return v
     }
 
@@ -68,6 +121,7 @@ struct DS3RimLayer: NSViewRepresentable {
         nsView.setStatic(isStatic)
         nsView.configure(profileKey: RimSettingsObserver.shared.profileKey)
         model.view = nsView
+        nsView.setLeaving(model.leaving)
     }
 
     /// Takes whatever the parent offers (same as `BarFillLayer.sizeThatFits`).
@@ -80,7 +134,7 @@ struct DS3RimLayer: NSViewRepresentable {
     }
 }
 
-/// RIM-GLOW-OPTICS look, RIM-HOVER-COST structure: the 1.2 pt ring of a glass card as eight clipped bands (RimBands), each a full copy of the ring group (ring mask, static ambient layer, pointer-light sprite, all composited plusL as in spec §3.2, §3.3, D8), so a moving light repaints only the bands. Per pointer event: one presentation read, one position set and one fixed-key animation per band, in one transaction.
+/// RIM-GLOW-OPTICS look, RIM-HOVER-COST structure: the 1.2 pt ring of a glass card as main's card-sized ring group (ring mask, ambient light from above, pointer-light sprite, plusL) plus eight clipped bands (RimBands) that each hold a copy of the sprite (ring mask, plusL). The bands carry the light only while it moves on a card it can reach and that is not on a leaving Home; at rest the ring group carries it, so a resting or unreached card costs what main's ring costs (spec D10-D23). Per pointer event: one presentation read, one position set and one fixed-key animation per sprite, all in one transaction.
 final class DS3RimView: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -90,22 +144,46 @@ final class DS3RimView: NSView {
     }
     private(set) var isStatic = false
 
-    /// One clipped copy of the old card-sized ring group. `clip`: band rect, `masksToBounds`, ring mask, plusL.
-    /// `shift`: plain, card-sized, so `ambient` and `spot` keep card-local geometry in every band (spec D3).
+    /// One clipped copy of the sprite. `clip`: band rect, `masksToBounds`, ring mask, plusL. `shift`: plain, card-sized, so `spot` keeps card-local geometry in every band (spec D3).
     private struct Band {
         let clip = CALayer()
         let mask = CAShapeLayer()
         let shift = CALayer()
-        let ambient = CALayer()
         let spot = CALayer()
     }
-    /// Invariant: every sprite gets the same model values and the same animations in the same transaction, so
-    /// `bands[0].spot` stands for all of them when reading the presentation.
     private let bands: [Band] = (0..<8).map { _ in Band() }
+    /// Main's card-sized ring group: ring mask + ambient light from above + the sprite `ringSpot` (plusL), group
+    /// plusL. It carries the light at rest and on a leaving page; the bands carry it while it moves (spec D10, D20).
+    private let ring = CALayer()
+    private let ringMask = CAShapeLayer()
+    private let ambient = CALayer()
+    private let ringSpot = CALayer()
+    /// Every sprite: the ring's and the eight bands'. All get the same model values and animations in the same
+    /// transaction, so `ringSpot` stands for all of them when reading the presentation.
+    private lazy var spots: [CALayer] = [ringSpot] + bands.map(\.spot)
     private var shadeRing: CALayer?
     private var shadeMask: CAShapeLayer?
     private var h: Double
     private var spotVisible = false
+    /// The sprite is fading out after the pointer left the window (its 0.12 s fade has not completed).
+    private var fadingOut = false
+    /// Bumped by every fade and by `setStatic(true)`; a fade-out completion with an older token does nothing.
+    private var fadeToken = 0
+    /// Segment the sprite centre travels after the last committed aim (card-local): a superset of every position it
+    /// is drawn at from that commit on (spec D15).
+    private var lightPath = (from: CGPoint.zero, to: CGPoint.zero)
+    /// Band rectangles from the last `layout()`; empty before the first layout (= nothing reaches).
+    private var bandRects: [CGRect] = []
+    /// Which layer set draws the light now (model value of `ringSpot`/band `isHidden`).
+    private var carrier = RimLightCarrier.none
+    /// A follow animation is in flight: from a follow aim until that animation's completion (spec D21).
+    private var inMotion = false
+    /// Bumped by every follow, first aim and `setStatic(true)`; a follow completion with an older token does nothing.
+    private var motionToken = 0
+    /// This card belongs to Home while Home is fading out under an opened page (spec D22): never `bands`.
+    private var leaving = false
+    /// Light appearance with `RimLight.lightMode == .none`: ring group and bands hidden (dead path today, kept correct).
+    private var ringOff = false
     private var loggedRenderFailure = false
 
     private struct RenderKey: Equatable {
@@ -125,19 +203,32 @@ final class DS3RimView: NSView {
         let off = NSNull()
         let keys = ["bounds", "position", "frame", "transform", "path", "contents", "hidden",
                     "compositingFilter", "opacity", "backgroundColor"]
+        for l in [ring, ringMask, ambient, ringSpot] as [CALayer] {
+            l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
+        }
+        ringMask.fillColor = CGColor(gray: 0, alpha: 1)
+        ring.mask = ringMask
+        ambient.contentsGravity = .resize
+        ringSpot.contentsGravity = .resize
+        ringSpot.opacity = 0
+        ringSpot.isHidden = true
+        ringSpot.compositingFilter = "plusL"
+        ring.compositingFilter = "plusL"
+        ring.addSublayer(ambient)
+        ring.addSublayer(ringSpot)
+        layer?.addSublayer(ring)
         for b in bands {
-            for l in [b.clip, b.mask, b.shift, b.ambient, b.spot] as [CALayer] {
+            for l in [b.clip, b.mask, b.shift, b.spot] as [CALayer] {
                 l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) })
             }
             b.mask.fillColor = CGColor(gray: 0, alpha: 1)
             b.clip.mask = b.mask
             b.clip.masksToBounds = true
-            b.ambient.contentsGravity = .resize
+            b.clip.isHidden = true
             b.spot.contentsGravity = .resize
             b.spot.opacity = 0
             b.spot.compositingFilter = "plusL"
             b.clip.compositingFilter = "plusL"
-            b.shift.addSublayer(b.ambient)
             b.shift.addSublayer(b.spot)
             b.clip.addSublayer(b.shift)
             layer?.addSublayer(b.clip)
@@ -155,13 +246,18 @@ final class DS3RimView: NSView {
         let size = bounds.size
         let path = Self.ringPath(size, cornerRadius)
         let r = CGFloat(RimLight.range(h: h))
-        for (b, rect) in zip(bands, RimBands.rects(size: size, cornerRadius: cornerRadius)) {
+        ring.frame = bounds
+        ringMask.frame = ring.bounds
+        ringMask.path = path
+        ambient.frame = CGRect(x: 0, y: 0, width: size.width, height: cornerRadius)
+        ringSpot.bounds = CGRect(x: 0, y: 0, width: 2 * r, height: 2 * r)
+        let rects = RimBands.rects(size: size, cornerRadius: cornerRadius)
+        for (b, rect) in zip(bands, rects) {
             let card = CGRect(x: -rect.minX, y: -rect.minY, width: size.width, height: size.height)
             b.clip.frame = rect
             b.mask.frame = card
             b.mask.path = path
             b.shift.frame = card
-            b.ambient.frame = CGRect(x: 0, y: 0, width: size.width, height: cornerRadius)
             b.spot.bounds = CGRect(x: 0, y: 0, width: 2 * r, height: 2 * r)
         }
         if let shadeRing, let shadeMask {
@@ -169,6 +265,8 @@ final class DS3RimView: NSView {
             shadeMask.frame = shadeRing.bounds
             shadeMask.path = path
         }
+        bandRects = rects
+        syncCarrier()
         CATransaction.commit()
         renderIfNeeded()
     }
@@ -216,6 +314,8 @@ final class DS3RimView: NSView {
         if !isDark && RimLight.lightMode == .none {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
+            ringOff = true
+            ring.isHidden = true
             for b in bands { b.clip.isHidden = true }
             shadeRing?.isHidden = true
             CATransaction.commit()
@@ -240,7 +340,10 @@ final class DS3RimView: NSView {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for b in bands { b.clip.isHidden = false }
+        ringOff = false
+        ring.isHidden = false
+        ringSpot.isHidden = carrier != .ring
+        for b in bands { b.clip.isHidden = carrier != .bands }
         if shaded {
             if shadeRing == nil, let host = layer {
                 let sr = CALayer()
@@ -250,7 +353,7 @@ final class DS3RimView: NSView {
                 for l in [sr, sm] as [CALayer] { l.actions = Dictionary(uniqueKeysWithValues: keys.map { ($0, off) }) }
                 sm.fillColor = CGColor(gray: 0, alpha: 1)
                 sr.mask = sm
-                host.insertSublayer(sr, below: bands[0].clip)
+                host.insertSublayer(sr, below: ring)
                 shadeRing = sr
                 shadeMask = sm
                 needsLayout = true
@@ -260,12 +363,9 @@ final class DS3RimView: NSView {
         } else {
             shadeRing?.isHidden = true
         }
-        for b in bands {
-            if let sprite { b.spot.contents = sprite }
-            if let amb { b.ambient.contents = amb }
-            b.spot.contentsScale = scale
-            b.ambient.contentsScale = scale
-        }
+        for s in spots { if let sprite { s.contents = sprite }; s.contentsScale = scale }
+        if let amb { ambient.contents = amb }
+        ambient.contentsScale = scale
         CATransaction.commit()
     }
 
@@ -273,59 +373,126 @@ final class DS3RimView: NSView {
         guard s != isStatic else { return }
         isStatic = s
         if s {
-            for b in bands { b.spot.removeAllAnimations() }
-            spotVisible = false
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for b in bands { b.spot.opacity = 0 }
+            for s in spots {
+                s.removeAllAnimations()
+                s.opacity = 0
+            }
+            spotVisible = false
+            fadingOut = false
+            fadeToken &+= 1
+            inMotion = false
+            motionToken &+= 1
+            syncCarrier()
             CATransaction.commit()
         }
+    }
+
+    /// Home is fading out under an opened page (true) or shown again (false); from `DS3RimModel.setLeaving` (spec D22).
+    func setLeaving(_ l: Bool) {
+        guard l != leaving else { return }
+        leaving = l
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        syncCarrier()
+        CATransaction.commit()
     }
 
     /// Moves the light to the pointer's card-local point (nil = pointer outside the window: fade out).
     /// A fixed animation key replaces the previous one, so at most one live animation per card.
+    /// Position, animations, opacity and band visibility change in one transaction (spec D16).
     func aim(to local: CGPoint?) {
-        guard !isStatic else { return }
-        guard let local else {
-            if spotVisible { spotVisible = false; fade(to: 0) }
-            return
-        }
-        if !spotVisible {
-            spotVisible = true
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            for b in bands { b.spot.position = local }
-            CATransaction.commit()
-            for b in bands { b.spot.removeAnimation(forKey: "pos") }
-            fade(to: 1)
-            return
-        }
-        let lead = bands[0].spot
-        let from = lead.presentation()?.position ?? lead.position
+        guard !isStatic, local != nil || spotVisible else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for b in bands { b.spot.position = local }
+        if let local {
+            if !spotVisible {
+                // First aim: the sprite jumps to the pointer and rests there while it fades in.
+                spotVisible = true
+                fadingOut = false
+                fadeToken &+= 1
+                inMotion = false
+                motionToken &+= 1
+                for s in spots {
+                    s.position = local
+                    s.removeAnimation(forKey: "pos")
+                }
+                lightPath = (local, local)
+                fade(to: 1)
+            } else {
+                // Follow: in motion until this follow's animations complete (a newer aim replaces them first).
+                motionToken &+= 1
+                let mt = motionToken
+                CATransaction.setCompletionBlock { [weak self] in self?.motionEnded(mt) }
+                inMotion = true
+                let from = ringSpot.presentation()?.position ?? ringSpot.position
+                for s in spots { s.position = local }
+                let a = CABasicAnimation(keyPath: "position")
+                a.fromValue = NSValue(point: from)
+                a.toValue = NSValue(point: local)
+                a.duration = DS3Motion.rimFollow
+                a.timingFunction = CAMediaTimingFunction(name: .linear)
+                for s in spots { s.add(a, forKey: "pos") }
+                lightPath = (from, local)
+            }
+        } else {
+            // Pointer left the window: the sprite finishes its current follow (inside `lightPath`) while it fades.
+            spotVisible = false
+            fadingOut = true
+            fadeToken &+= 1
+            let token = fadeToken
+            CATransaction.setCompletionBlock { [weak self] in self?.fadeOutEnded(token) }
+            fade(to: 0)
+        }
+        syncCarrier()
         CATransaction.commit()
-        let a = CABasicAnimation(keyPath: "position")
-        a.fromValue = NSValue(point: from)
-        a.toValue = NSValue(point: local)
-        a.duration = DS3Motion.rimFollow
-        a.timingFunction = CAMediaTimingFunction(name: .linear)
-        for b in bands { b.spot.add(a, forKey: "pos") }
     }
 
+    /// Call inside an open transaction (aim). `add(_:forKey:)` copies, so one animation object serves all sprites.
     private func fade(to value: Float) {
-        let lead = bands[0].spot
-        let from = lead.presentation()?.opacity ?? lead.opacity
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        for b in bands { b.spot.opacity = value }
-        CATransaction.commit()
+        let from = ringSpot.presentation()?.opacity ?? ringSpot.opacity
+        for s in spots { s.opacity = value }
         let a = CABasicAnimation(keyPath: "opacity")
         a.fromValue = from
         a.toValue = value
         a.duration = DS3Motion.rimFade
-        for b in bands { b.spot.add(a, forKey: "fade") }
+        for s in spots { s.add(a, forKey: "fade") }
+    }
+
+    /// The pointer-left fade has completed or was replaced. Only the newest fade-out may end the light.
+    private func fadeOutEnded(_ token: Int) {
+        guard token == fadeToken, fadingOut else { return }
+        fadingOut = false
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        syncCarrier()
+        CATransaction.commit()
+    }
+
+    /// The newest follow has arrived (no aim since): the light rests, so the ring group carries it (spec D21).
+    private func motionEnded(_ token: Int) {
+        guard token == motionToken, inMotion else { return }
+        inMotion = false
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        syncCarrier()
+        CATransaction.commit()
+    }
+
+    /// Picks the carrier (`RimLightCarrier.pick`) and shows exactly that layer set, both toggles in the caller's
+    /// transaction. `reaches`: the sprite is visible or still fading out, and the segment it travels from this commit on
+    /// comes within R + pad of a band (spec D11-D14). Any switch changes no pixel: all nine sprites are identical (D20).
+    private func syncCarrier() {
+        let radius = CGFloat(RimLight.range(h: h)) + RimBands.reachPad
+        let reaches = (spotVisible || fadingOut)
+            && RimBands.reaches(bandRects, from: lightPath.from, to: lightPath.to, radius: radius)
+        let c = RimLightCarrier.pick(reaches: reaches, inMotion: inMotion, leaving: leaving)
+        guard c != carrier else { return }
+        carrier = c
+        guard !ringOff else { return }
+        ringSpot.isHidden = c != .ring
+        for b in bands { b.clip.isHidden = c != .bands }
     }
 }
 

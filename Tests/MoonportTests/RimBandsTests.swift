@@ -58,4 +58,73 @@ struct RimBandsTests {
             }
         }
     }
+
+    /// RIM-HOVER-COST fix: the reach threshold is exact at the band edge (just outside: not lit, just inside: lit).
+    @Test func reachThresholdAtTheBandEdge() {
+        let bands = RimBands.rects(size: CGSize(width: 412, height: 177), cornerRadius: 30)
+        let rho: CGFloat = 202                       // R 200 (h 40) + reachPad
+        let edge: CGFloat = 413                      // right bands end at w + 1
+        #expect(!RimBands.reaches(bands, from: CGPoint(x: edge + rho, y: 88), to: CGPoint(x: edge + rho, y: 88), radius: rho))
+        #expect(RimBands.reaches(bands, from: CGPoint(x: edge + rho - 0.5, y: 88), to: CGPoint(x: edge + rho - 0.5, y: 88), radius: rho))
+        #expect(!RimBands.reaches(bands, from: CGPoint(x: 88, y: -1 - rho), to: CGPoint(x: 88, y: -1 - rho), radius: rho))
+        #expect(RimBands.reaches(bands, from: CGPoint(x: 88, y: -1 - rho + 0.5), to: CGPoint(x: 88, y: -1 - rho + 0.5), radius: rho))
+    }
+
+    /// A light in the middle of a large card reaches no band when R is small, and does when R is large.
+    @Test func lightInsideALargeCard() {
+        let bands = RimBands.rects(size: CGSize(width: 942, height: 600), cornerRadius: 30)
+        let c = CGPoint(x: 471, y: 300)              // 297 pt from the top and bottom strips (y 3 and 597)
+        #expect(!RimBands.reaches(bands, from: c, to: c, radius: 202))
+        #expect(RimBands.reaches(bands, from: c, to: c, radius: 352))
+    }
+
+    /// A follow segment whose endpoints are both out of reach still lights the card when its middle passes close.
+    @Test func segmentSweepingPastACard() {
+        let bands = RimBands.rects(size: CGSize(width: 412, height: 177), cornerRadius: 30)
+        let a = CGPoint(x: -500, y: 88), b = CGPoint(x: 900, y: 88)   // straight through the card
+        #expect(!RimBands.reaches(bands, from: a, to: a, radius: 202))
+        #expect(!RimBands.reaches(bands, from: b, to: b, radius: 202))
+        #expect(RimBands.reaches(bands, from: a, to: b, radius: 202))
+        // Diagonal past the top-left corner: line x + y = -200 is 198 / sqrt(2) = 140 pt from the corner (-1, -1).
+        let c = CGPoint(x: -400, y: 200), d = CGPoint(x: 200, y: -400)
+        #expect(RimBands.reaches(bands, from: c, to: d, radius: 202))
+        #expect(!RimBands.reaches(bands, from: c, to: d, radius: 130))
+    }
+
+    @Test func distanceBasics() {
+        let r = CGRect(x: 0, y: 0, width: 10, height: 10)
+        #expect(RimBands.distance(r, CGPoint(x: 5, y: 5), CGPoint(x: 5, y: 5)) == 0)
+        #expect(RimBands.distance(r, CGPoint(x: 13, y: 14), CGPoint(x: 13, y: 14)) == 5)
+        #expect(RimBands.distance(r, CGPoint(x: -5, y: 20), CGPoint(x: 15, y: 20)) == 10)
+        #expect(RimBands.distance(r, CGPoint(x: -5, y: 5), CGPoint(x: 15, y: 5)) == 0)
+        #expect(!RimBands.reaches([CGRect(x: 0, y: 0, width: 0, height: 10)], from: .zero, to: .zero, radius: 5))
+    }
+
+    /// Bands only for a moving light on a page that is not leaving; a resting or leaving light uses the ring group.
+    @Test func carrierTable() {
+        #expect(RimLightCarrier.pick(reaches: false, inMotion: true, leaving: false) == .none)
+        #expect(RimLightCarrier.pick(reaches: false, inMotion: false, leaving: true) == .none)
+        #expect(RimLightCarrier.pick(reaches: true, inMotion: true, leaving: false) == .bands)
+        #expect(RimLightCarrier.pick(reaches: true, inMotion: false, leaving: false) == .ring)
+        #expect(RimLightCarrier.pick(reaches: true, inMotion: true, leaving: true) == .ring)
+        #expect(RimLightCarrier.pick(reaches: true, inMotion: false, leaving: true) == .ring)
+    }
+
+    /// Only Home's rims become leaving when Home stops being the destination, whatever the registration order.
+    @Test func homeRimsLeaveWhileHomeIsNotShown() {
+        let t = DS3PointerTracker()
+        let home = DS3RimModel(), page = DS3RimModel()
+        home.onHome = true
+        t.register(home)
+        t.register(page)
+        t.setHomeShown(false)
+        #expect(home.leaving)
+        #expect(!page.leaving)
+        let late = DS3RimModel()                     // a Home rim registering after the switch
+        late.onHome = true
+        t.register(late)
+        #expect(late.leaving)
+        t.setHomeShown(true)
+        #expect(!home.leaving && !late.leaving && !page.leaving)
+    }
 }

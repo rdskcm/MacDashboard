@@ -381,6 +381,7 @@ struct MacContentView: View {
     let tier: WidthTier
     let breakpoints: PageBreakpoints
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.ds3PointerTracker) private var tracker
     /// APPEAR-COST D3: Home's staggered entrance plays once per window. Flipped when Home is left (never while it is
     /// mounted: `homeEntrance` is a `@ViewBuilder` branch, and switching it would remount every card).
     @State private var homeEntrancePlayed = false
@@ -389,6 +390,7 @@ struct MacContentView: View {
         ZStack {
             if router.destination.page == .home {
                 HomeView(model: model, router: router, width: width, tier: tier, animatesEntrance: !homeEntrancePlayed)
+                    .environment(\.ds3RimOnHome, true)
                     .zIndex(0)   // default (opacity) transition: fades out under an opening page and in on Back
             }
             if router.destination.page == .cpu {
@@ -435,6 +437,10 @@ struct MacContentView: View {
         }
         .onChange(of: router.destination.page == .home) { _, isHome in
             if !isHome { homeEntrancePlayed = true }
+        }
+        // RIM-HOVER-COST D22: Home's rims never draw their light in bands while Home fades out under a page.
+        .onChange(of: router.destination.page == .home, initial: true) { _, isHome in
+            tracker?.setHomeShown(isHome)
         }
         // The transaction form this file used before; nil under Reduce Motion / frozen = instant swap.
         .animation((reduceMotion || DS3Motion.isFrozen) ? nil : .easeOut(duration: 0.25),

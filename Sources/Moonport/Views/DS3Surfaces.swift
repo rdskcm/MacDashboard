@@ -20,6 +20,7 @@ final class DS3PointerTracker {
     private var isScrolling = false
     private var scrollEnd: DispatchWorkItem?
     private var monitor: Any?
+    private var homeShown = true
 
     func start() {
         guard monitor == nil else { return }
@@ -37,9 +38,18 @@ final class DS3PointerTracker {
 
     func register(_ m: DS3RimModel) {
         rims[ObjectIdentifier(m)] = m
+        m.setLeaving(m.onHome && !homeShown)
         if !isScrolling { m.aim(at: location) }
     }
     func unregister(_ m: DS3RimModel) { rims[ObjectIdentifier(m)] = nil }
+
+    /// MacContentView reports whether Home is the destination. While it is not, Home's still-registered rims (Home
+    /// fading out under the opened page) never draw their light in bands (spec D22).
+    func setHomeShown(_ shown: Bool) {
+        guard shown != homeShown else { return }
+        homeShown = shown
+        for m in rims.values where m.onHome { m.setLeaving(!shown) }
+    }
     /// Rims currently registered (HiddenContentTests: only the shown page's rims may be here).
     var registeredCount: Int { rims.count }
 
@@ -75,6 +85,15 @@ final class DS3PointerTracker {
 final class DS3RimModel {
     var rect = CGRect.zero
     weak var view: DS3RimView?
+    /// Set from the environment when the rim appears: the rim is inside HomeView.
+    var onHome = false
+    private(set) var leaving = false
+
+    func setLeaving(_ l: Bool) {
+        guard l != leaving else { return }
+        leaving = l
+        view?.setLeaving(l)
+    }
 
     func aim(at p: CGPoint?) {
         guard let view else { return }
@@ -86,7 +105,15 @@ private struct DS3PointerTrackerKey: EnvironmentKey {
     static let defaultValue: DS3PointerTracker? = nil
 }
 
+private struct DS3RimOnHomeKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
+    var ds3RimOnHome: Bool {
+        get { self[DS3RimOnHomeKey.self] }
+        set { self[DS3RimOnHomeKey.self] = newValue }
+    }
     var ds3PointerTracker: DS3PointerTracker? {
         get { self[DS3PointerTrackerKey.self] }
         set { self[DS3PointerTrackerKey.self] = newValue }
@@ -312,7 +339,7 @@ struct DS3GlassBar: View {
 // MARK: - Rim
 
 /// Pointer light on the card edge (RIM-GLOW-OPTICS): a point light at height h over the glass. One pre-rendered
-/// sprite per card, drawn in eight thin edge bands (`DS3RimLayer`, RIM-HOVER-COST), is moved by the tracker imperatively,
+/// sprite per card, drawn in eight thin edge bands while it moves and inside the static ring group at rest (`DS3RimLayer`, RIM-HOVER-COST), is moved by the tracker imperatively,
 /// only when the pointer location changes (D7) and once after a scroll ends; a static sublayer holds the ambient light from above. No body here
 /// reads the pointer (D6). Without a tracker (offscreen harness renders) it is the static ambient stroke.
 @MainActor
@@ -320,6 +347,7 @@ struct DS3Rim: View {
     let cornerRadius: CGFloat
 
     @Environment(\.ds3PointerTracker) private var tracker
+    @Environment(\.ds3RimOnHome) private var onHome
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var model = DS3RimModel()
@@ -329,7 +357,7 @@ struct DS3Rim: View {
             if let tracker {
                 DS3RimLayer(cornerRadius: cornerRadius, model: model, isStatic: reduceMotion || DS3Motion.isFrozen)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(DS3.windowSpace)) }) { model.rect = $0 }
-                    .onAppear { tracker.register(model) }
+                    .onAppear { model.onHome = onHome; tracker.register(model) }
                     .onDisappear { tracker.unregister(model) }
             } else if colorScheme == .dark || RimLight.lightMode != .none {
                 DS3RimStroke(cornerRadius: cornerRadius)
