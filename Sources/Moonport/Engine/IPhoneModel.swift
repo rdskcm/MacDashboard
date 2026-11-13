@@ -550,6 +550,11 @@ final class IPhoneModel {
         }
     }
 
+    /// Tests: returns once every armed D15 stall check has finished or been cancelled.
+    func waitForWifiStallChecks() async {
+        for task in Array(wifiStallTasks.values) { await task.value }
+    }
+
     private func clearWifiStall(_ key: String) {
         wifiStallTasks.removeValue(forKey: key)?.cancel()
         wifiStalled.remove(key)

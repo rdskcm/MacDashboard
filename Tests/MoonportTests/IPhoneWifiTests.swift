@@ -293,14 +293,14 @@ import Testing
         m.apply(.success(snap), for: w, trigger: .user)
     }
 
-    @MainActor private func settle() async { try? await Task.sleep(for: .milliseconds(300)) }
+    @MainActor private func settle(_ m: IPhoneModel) async { await m.waitForWifiStallChecks() }
 
     @MainActor @Test func wifiDropShowsStallNote() async {
         let (m, dir) = makeModel()
         defer { try? FileManager.default.removeItem(at: dir) }
         connectWifiOnly(m)
         m.handle(.detached(w))
-        await settle()
+        await settle(m)
         #expect(m.wifiStalled.contains(k))
     }
 
@@ -310,7 +310,7 @@ import Testing
         let w2 = IPhoneHandle(raw: 14)
         connectWifiOnly(m)
         m.handle(.detached(w))
-        await settle()
+        await settle(m)
         #expect(m.wifiStalled.contains(k))
         m.handle(.attached(w2, .wifi))
         m.apply(.success(snap), for: w2, trigger: .attach)
@@ -325,7 +325,7 @@ import Testing
         m.handle(.detached(w))
         m.handle(.attached(w2, .wifi))
         m.apply(.success(snap), for: w2, trigger: .attach)
-        await settle()
+        await settle(m)
         #expect(!m.wifiStalled.contains(k))
     }
 
@@ -334,7 +334,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         connectWifiOnly(m)
         m.applyWifiSetting(false)
-        await settle()
+        await settle(m)
         #expect(m.wifiStalled.isEmpty)
     }
 
@@ -345,7 +345,7 @@ import Testing
         m.handle(.attached(u, .usb))
         m.apply(.success(snap), for: u, trigger: .user)
         m.handle(.detached(u))
-        await settle()
+        await settle(m)
         #expect(m.wifiStalled.isEmpty)
     }
 
@@ -355,7 +355,7 @@ import Testing
         m.wifiStallDelay = 0.05
         connectBoth(m, usbFirst: true)
         m.handle(.detached(u))
-        await settle()
+        await settle(m)
         #expect(m.connected[k] == w)
         #expect(m.wifiStalled.isEmpty)
     }
