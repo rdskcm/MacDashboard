@@ -2,6 +2,7 @@
 """mkfixture.py — synthetic bench home for the perf gate (R2). No byte of the user's real data is used.
 
 usage: python3 -I mkfixture.py <bench-home-dir>
+       python3 -I mkfixture.py --check-devices <bench-home-dir>
 
 Builds <home>/Library/Application Support/Moonport/ (mode 0700) with
   mac_check_state.json  500 daily rows ending today (port of the hunt's mkstate.sh)
@@ -10,6 +11,8 @@ Builds <home>/Library/Application Support/Moonport/ (mode 0700) with
 Safety: refuses (exit 2) when the target resolves to, or inside, the real ~/Library or contains the
 real home, and when <home> exists, is not empty and lacks the marker file this script writes. An
 existing marked <home> is deleted and rebuilt from scratch.
+
+--check-devices reads <home>/Library/Application Support/Moonport/iphones.json and prints "foreign <id, first 14 chars> <name>" per device whose id is not a fixture id. Exit 0 only fixture devices, 1 a foreign device, 2 file missing or unreadable.
 Exit: 0 ok, 2 refused or failed, 64 usage.
 """
 import json
@@ -19,6 +22,26 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 
 MARKER = ".gate-fixture-home"
+FIXTURE_DEVICES = (("A", 1026), ("B", 40), ("C", 40))   # letter, daily battery rows; device 0 is tile 0
+
+
+def device_id(k):
+    return "gate-device-%d" % k
+
+
+def check_devices(home):
+    path = os.path.join(home, "Library", "Application Support", "Moonport", "iphones.json")
+    try:
+        with open(path) as f:
+            ids = [(d["id"], d.get("name", "")) for d in json.load(f)["devices"]]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+        print("mkfixture: cannot read %s: %s" % (path, e), file=sys.stderr)
+        return 2
+    known = {device_id(k) for k in range(len(FIXTURE_DEVICES))}
+    foreign = [(i, n) for i, n in ids if i not in known]
+    for i, n in foreign:
+        print("foreign %s %s" % (str(i)[:14], n))
+    return 1 if foreign else 0
 
 
 def refuse(msg):
@@ -33,6 +56,8 @@ def inside(path, root):
 def main(argv):
     args = [a for a in argv if not a.startswith("--")]
     flags = [a for a in argv if a.startswith("--")]
+    if flags == ["--check-devices"] and len(args) == 1:
+        sys.exit(check_devices(os.path.realpath(args[0])))
     if len(args) != 1 or flags:
         print(__doc__, file=sys.stderr)
         sys.exit(64)
@@ -99,9 +124,9 @@ def main(argv):
         return pts
 
     devices = []
-    for k, (letter, rows_n) in enumerate((("A", 1026), ("B", 40), ("C", 40))):
+    for k, (letter, rows_n) in enumerate(FIXTURE_DEVICES):
         devices.append({
-            "id": "gate-device-%d" % k,
+            "id": device_id(k),
             "name": "Gate iPhone %s" % letter,
             "marketingName": "iPhone 14 Pro",
             "productType": "iPhone15,2",

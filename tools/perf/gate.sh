@@ -16,7 +16,7 @@
 #   --g1-max     absolute G1 (Home idle) app CPU limit in % (default: the home idle_app_pct budget in tools/perf/budgets.tsv)
 #   --g9-max     absolute G9 (CPU page idle) app CPU limit in % (default: the cpu idle_app_pct budget in tools/perf/budgets.tsv)
 #   -h, --help   this text
-# Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed) | 4 defaults domain changed
+# Exit: 0 pass (noisy rows do not fail) | 1 any FAIL | 3 INVALID run (power changed, or a non-fixture iPhone record in the bench home) | 4 defaults domain changed
 #       during the run | 5 ERROR: at least one scenario not measured (an AX element was still missing after one
 #       retry, or a trace or analysis step of one run failed, or a scroll window left its range; the other scenarios ran and are reported) | 64 usage |
 #       65 precondition refused | 70 runtime error (setup, app launch or window pin, fixture, final verdict) or a shell error (exit 1 before the verdict is reported as 70).
@@ -515,7 +515,19 @@ run_error() {   # item tag prefix reason diagnostics-path
   rm -f "$3-metrics.tmp"; cleanup_run "$3"
 }
 
-# attempt ITEM ARM RUN APP -> 0 valid (metrics appended to runs.tsv) | 1 invalid (power changed; nothing recorded) |
+# The bench home must hold only mkfixture's devices (GATE-TABLE-PROBE): a real phone there means the app measured
+# the wrong subject. Any other record or an unreadable iphones.json makes the attempt INVALID (line in invalid.log).
+fixture_devices_ok() {   # tag prefix -> 0 | 1 (run files cleaned)
+  local out rc
+  out="$(python3 -I "$PERF/mkfixture.py" --check-devices "$HOMEDIR" 2>&1)"; rc=$?
+  [ "$rc" = 0 ] && return 0
+  echo "$1: the bench home holds a non-fixture iPhone record or no readable iphones.json (check rc=$rc): $(tr '\n' ' ' <<< "$out")" >> "$OUT/invalid.log"
+  log "$1: INVALID (non-fixture iPhone in the bench home)"
+  rm -f "$2-metrics.tmp"; cleanup_run "$2"
+  return 1
+}
+
+# attempt ITEM ARM RUN APP -> 0 valid (metrics appended to runs.tsv) | 1 invalid (power changed, or a non-fixture iPhone in the bench home; nothing recorded) |
 #   2 ERROR (an AX element still missing after one retry, or a trace / analysis step failed; nothing recorded, line in errors.tsv)
 attempt() {
   local item=$1 arm=$2 run=$3 app=$4
@@ -534,11 +546,13 @@ attempt() {
   define_item "$item"
   if ! launch_app "$app" "$tag"; then   # GATE-AX-MISS: the pinned AX window is not the pid's on-screen window -> ERROR
     stop_app
+    fixture_devices_ok "$tag" "$prefix" || return 1
     local why; why="$(head -1 "$prefix-axdiag/miss.txt" 2>/dev/null)"
     run_error "$item" "$tag" "$prefix" "${why:-window pin check failed}" "$prefix-axdiag"; return 2
   fi
   if ! do_route || ! probe_scroll "$buf" "$tag" "$arm"; then   # S6: an AX element still missing after one retry -> this scenario is ERROR, the gate goes on
     stop_app
+    fixture_devices_ok "$tag" "$prefix" || return 1
     local why; why="$(head -1 "$prefix-axdiag/miss.txt" 2>/dev/null)"
     run_error "$item" "$tag" "$prefix" "${why:-route failed}" "$prefix-axdiag"; return 2
   fi
@@ -570,6 +584,7 @@ attempt() {
   pend="$(date +%s)"
   PID_LAST="$PID"
   stop_app
+  fixture_devices_ok "$tag" "$prefix" || return 1
 
   local valid=1
   "$PERF/power.sh" after "$OUT/power.log" "$tag after" || valid=0
