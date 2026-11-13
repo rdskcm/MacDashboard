@@ -310,6 +310,14 @@ final class IPhoneModel {
             raw: AppSettings.shared.iphoneArchiveFolder, defaultRoot: IPhoneStore.defaultArchiveRoot())
     }
 
+    /// GATE-TABLE-PROBE: only the installed app starts the live transport. A bench copy (tools/bench-app.sh,
+    /// app.moonport.bench), `swift run` or a test process never does: the transport reads the system-wide
+    /// usbmuxd/pairing state, which a synthetic CFFIXED_USER_HOME does not isolate, so a reachable real phone
+    /// would join the bench's device list.
+    nonisolated static func startsLiveTransport(bundleID: String? = Bundle.main.bundleIdentifier) -> Bool {
+        bundleID == AppInfo.bundleID
+    }
+
     func start() {
         guard !started else { return }
         started = true
@@ -325,6 +333,10 @@ final class IPhoneModel {
         migrateLegacyArchivesIfNeeded()
         transportAvailable = transport.isAvailable
         guard transportAvailable else { return }
+        guard Self.startsLiveTransport() else {
+            NSLog("[Moonport] iPhone transport not started: bundle id \(Bundle.main.bundleIdentifier ?? "nil") is not \(AppInfo.bundleID)")
+            return
+        }
         transport.start(networkEnabled: AppSettings.shared.iphoneWifi) { [weak self] event in self?.handle(event) }
     }
 
