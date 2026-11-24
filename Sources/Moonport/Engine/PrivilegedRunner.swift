@@ -11,7 +11,7 @@ enum PrivilegedRunner {
         case success
         case cancelled
         case failed(String)
-        /// The child was killed after `authTimeout`; the user never answered the prompt.
+        /// The child was killed by the `authTimeout` timer, or sudo refused after outliving it; the prompt was not completed in time.
         case timedOut
     }
 
@@ -29,6 +29,7 @@ enum PrivilegedRunner {
     }
 
     /// Exit code plus captured output of one `Invocation`; exit code -1 = launch failure or timeout.
+    /// `timedOut`: the timer fired before the child ended; exit code -1 only when the timer's kill ended it.
     struct ProcessResult: Equatable { let exitCode: Int32; let stderr: String; let stdout: String; var timedOut = false }
 
     /// Runs `command` as root. Tries plain `sudo` first (Touch ID via pam_tid),
@@ -46,8 +47,13 @@ enum PrivilegedRunner {
     static func run(_ command: String, executor: (Invocation) -> ProcessResult) -> Outcome {
         let sudoResult = executor(sudoInvocation(command))
         if sudoResult.exitCode == 0 { return .success }
-        // A timed-out Touch ID must not fall through to the password dialog.
-        if sudoResult.timedOut { return .timedOut }
+        // A timed-out Touch ID must not fall through to the password dialog. A sudo that outlived the timer and then ended
+        // on its own counts as timed out only when sudo itself refused; a command that ran reports its own failure
+        // (REVIEW-CODE-FIXES C).
+        if sudoResult.timedOut {
+            return sudoResult.exitCode == -1 || Self.isSudoOwnFailure(exitCode: sudoResult.exitCode, stderr: sudoResult.stderr)
+                ? .timedOut : Self.failure(from: sudoResult)
+        }
 
         // The privileged command RAN and failed (or sudo timed out / could not launch).
         // Re-running the same failing command as root behind a password dialog just fails
@@ -58,7 +64,8 @@ enum PrivilegedRunner {
 
         let osaResult = executor(osascriptInvocation(command))
         if osaResult.exitCode == 0 { return .success }
-        if osaResult.timedOut { return .timedOut }
+        // Killed by the timeout. An osascript that ended on its own after the timer fired is judged like any other ending.
+        if osaResult.timedOut && osaResult.exitCode == -1 { return .timedOut }
 
         if Self.isUserCancellation(exitCode: osaResult.exitCode, stderr: osaResult.stderr) {
             return .cancelled
@@ -208,12 +215,22 @@ enum PrivilegedRunner {
         timer.cancel()
         _ = drainGroup.wait(timeout: .now() + 3)
 
-        if killGate.winner == .timeout {
-            return ProcessResult(exitCode: -1, stderr: "timed out", stdout: "", timedOut: true)
-        }
         let stdoutText = String(data: stdoutBox.value, encoding: .utf8) ?? ""
         let stderrText = String(data: stderrBox.value, encoding: .utf8) ?? ""
-        return ProcessResult(exitCode: process.terminationStatus, stderr: stderrText, stdout: stdoutText)
+        return processResult(timeoutFired: killGate.winner == .timeout, reason: process.terminationReason,
+                             status: process.terminationStatus, stdout: stdoutText, stderr: stderrText)
+    }
+
+    /// REVIEW-CODE-FIXES C: how one child ended → its result. Timed out (exit -1, "timed out") only when the runner's own
+    /// timeout SIGKILL ended it. A child that ended on its own after the timer fired — it had already exited and was not
+    /// yet reaped, or it was a root `sudo` the user-level kill cannot signal (EPERM) — keeps its real status and output;
+    /// `timedOut` stays set for a non-zero ending so `run` keeps a refused prompt out of the password dialog.
+    static func processResult(timeoutFired: Bool, reason: Process.TerminationReason, status: Int32,
+                              stdout: String, stderr: String) -> ProcessResult {
+        if timeoutFired, reason == .uncaughtSignal, status == SIGKILL {
+            return ProcessResult(exitCode: -1, stderr: "timed out", stdout: "", timedOut: true)
+        }
+        return ProcessResult(exitCode: status, stderr: stderr, stdout: stdout, timedOut: timeoutFired && status != 0)
     }
 
     /// stderr is written on a background reader and read on the calling thread after a

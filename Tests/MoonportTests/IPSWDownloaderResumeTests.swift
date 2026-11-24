@@ -249,10 +249,11 @@ private struct Rig {
 
     var base: URL { downloads.deletingLastPathComponent() }
 
-    func downloader(checkpoint: Int64 = 256 << 10, capacity: @escaping @Sendable (URL) -> Int64? = { _ in 100 << 30 })
+    func downloader(checkpoint: Int64 = 256 << 10, capacity: @escaping @Sendable (URL) -> Int64? = { _ in 100 << 30 },
+                    syncFile: @escaping @Sendable (FileHandle) throws -> Void = { try $0.synchronize() })
         -> IPSWDownloader {
         IPSWDownloader(stagingRoot: root, protocolClasses: [RangeStubProtocol.self], checkpointBytes: checkpoint,
-                       capacity: capacity, tempDirectory: base.appendingPathComponent("tmp", isDirectory: true))
+                       capacity: capacity, tempDirectory: base.appendingPathComponent("tmp", isDirectory: true), syncFile: syncFile)
     }
 
     /// The HEAD never happens: ipsw.me gave the size.
@@ -542,6 +543,52 @@ struct IPSWDownloaderResumeTests {
         #expect(rec.checkpoint == partLength(rig.root) && rec.checkpoint >= 1 << 20)
         guard case .paused(_, _, let why)? = await phases.waitPaused() else { Issue.record("no pause"); return }
         #expect(why == .appQuit)
+    }
+
+    // REVIEW-CODE-FIXES D: a failed periodic flush ends the run like a failed write; nothing is delivered or kept.
+    @Test func aFailedPeriodicFlushFailsTheRunWithAFileSystemError() async throws {
+        let rig = try Rig.make(label: "syncfail")
+        defer { rig.cleanUp() }
+        let phases = Phases()
+        let d = rig.downloader(syncFile: { _ in throw POSIXError(.EIO) })   // 256 KiB interval: the first flush comes early
+        d.start(rig.build, downloadsDir: rig.downloads, sources: rig.sources, onPhase: phases.handler)
+        let end = await phases.waitFinished()
+        guard case .failed(.fileSystem)? = end else { Issue.record("not a file-system failure: \(String(describing: end))"); return }
+        #expect(diskRecord(rig.root) == nil, "no record survives the failed run")
+        #expect(names(rig.downloads).isEmpty, "nothing delivered")
+    }
+
+    // REVIEW-CODE-FIXES D: the quit hook and the park after it never name bytes whose flush failed.
+    @Test func suspendForQuitWithAFailedFlushKeepsTheLastGoodCheckpoint() async throws {
+        let rig = try Rig.make(label: "quitsyncfail")
+        defer { rig.cleanUp() }
+        RangeStubProtocol.state.holdAt = 1 << 20
+        let phases = Phases()
+        let d = rig.downloader(checkpoint: 64 << 20, syncFile: { _ in throw POSIXError(.EIO) })
+        d.start(rig.build, downloadsDir: rig.downloads, sources: rig.sources, onPhase: phases.handler)
+        #expect(await eventually { partLength(rig.root) >= 1 << 20 })
+        #expect(diskRecord(rig.root)?.checkpoint == 0)
+        d.suspendForQuit()
+        let rec = try #require(diskRecord(rig.root))
+        #expect(rec.stoppedAt != nil && rec.reason == .appQuit)
+        #expect(rec.checkpoint == 0 && partLength(rig.root) >= 1 << 20, "the record never names unflushed bytes")
+        guard case .paused(let w, _, let why)? = await phases.waitPaused() else { Issue.record("no pause"); return }
+        #expect(why == .appQuit && w == 0)
+        #expect(diskRecord(rig.root)?.checkpoint == 0, "the park after the cancelled task keeps it too")
+    }
+
+    // REVIEW-CODE-FIXES D: a complete transfer whose final flush failed is never verified or delivered.
+    @Test func aCompleteTransferWhoseFinalFlushFailsIsNeverVerified() async throws {
+        let rig = try Rig.make(label: "endsyncfail")
+        defer { rig.cleanUp() }
+        let phases = Phases()
+        // An interval larger than the 3 MiB body: the transfer-end flush is the only one.
+        let d = rig.downloader(checkpoint: 64 << 20, syncFile: { _ in throw POSIXError(.EIO) })
+        d.start(rig.build, downloadsDir: rig.downloads, sources: rig.sources, onPhase: phases.handler)
+        let end = await phases.waitFinished()
+        guard case .failed(.fileSystem)? = end else { Issue.record("not a file-system failure: \(String(describing: end))"); return }
+        #expect(!phases.all.contains { if case .verifying = $0 { return true }; return false })
+        #expect(names(rig.downloads).isEmpty)
     }
 
     @Test func stopWhileVerifyingKeepsTheCompletePartialAndResumeReverifiesWithoutARequest() async throws {
