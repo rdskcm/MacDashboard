@@ -5,7 +5,7 @@ Usage: python3 -I tools/perf/standing-diff.py NAME PREV_DIR|- CUR_DIR
 Output: one status line "<STATUS> <NAME>: <text>", then at most 15 detail lines starting with "- ".
 STATUS: SAME | CHANGED | FIRST (nothing earlier to compare) | NORULE (no rule for this output).
 The rule is chosen by the files in CUR_DIR: manifest.tsv with a cpu_ms column (MAIN-THREAD-AUDIT rig), summary.md with
-a "LEAKCHECK " line (MEMORY-LEAK-CHECK rig). A new standing job adds its rule here.
+a "LEAKCHECK " line (MEMORY-LEAK-CHECK rig), summary.md with a "DWAUDIT " line (DISK-WRITE-AUDIT rig). A new standing job adds its rule here.
 Exit: 0 | 64 usage.
 """
 import csv
@@ -20,6 +20,10 @@ ROWS_MIN = 1000     # ... and SwiftUI rows_total by at least 1000 rows
 MAX_LINES = 15
 LEAK_RE = re.compile(r"^LEAKCHECK (\S+): leaked bytes (\w+) .*?, leaks (\w+) .*?, footprint (\w+) .*?, "
                      r"(\d+) distinct leak stacks \((\d+) growing\)")
+DW_RE = re.compile(r"^DWAUDIT (\S+): idle visible (\S+) KB/h, idle hidden (\S+) KB/h, pages (\S+) KB/h "
+                   r"\(top \S+ \S+ KB/h\), hourly write (\S+) KB x(\d+), launch (\S+) KB, (\d+) cycles")
+DW_FLOOR_KB = 16           # DISK-WRITE-AUDIT: a write rate or the hourly write counts as changed only when it also moved by 16 KB(/h) ...
+DW_LAUNCH_FLOOR_KB = 256   # ... and the launch writes by 256 KB
 
 
 def done(status, name, text, details=()):
@@ -63,6 +67,17 @@ def leakline(d):
         with open(os.path.join(d, "summary.md"), encoding="utf-8", errors="replace") as f:
             for line in f:
                 if line.startswith("LEAKCHECK "):
+                    return line.strip()
+    except OSError:
+        pass
+    return None
+
+
+def dwline(d):
+    try:
+        with open(os.path.join(d, "summary.md"), encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith("DWAUDIT "):
                     return line.strip()
     except OSError:
         pass
@@ -123,6 +138,25 @@ def diff_leak(name, pline, cline):
     done("SAME", name, head + ", same trends and leak stack counts")
 
 
+def diff_dw(name, pline, cline):
+    if pline is None:
+        done("FIRST", name, "no earlier run with a DWAUDIT line to compare", [cline])
+    pm, cm = DW_RE.match(pline), DW_RE.match(cline)
+    if not pm or not cm:
+        done("NORULE", name, "DWAUDIT line not in the expected form", [pline, cline])
+    det = []
+    for label, g, floor in (("idle visible", 2, DW_FLOOR_KB), ("idle hidden", 3, DW_FLOOR_KB), ("pages", 4, DW_FLOOR_KB),
+                            ("hourly write", 5, DW_FLOOR_KB), ("launch", 7, DW_LAUNCH_FLOOR_KB)):
+        a, b = num(pm.group(g)), num(cm.group(g))
+        if (a is None) != (b is None) or moved(a, b, floor):
+            det.append("%s %s -> %s" % (label, pm.group(g), cm.group(g)))
+    head = "sha %s -> %s" % (pm.group(1), cm.group(1))
+    if det:
+        done("CHANGED", name, head + ", " + "; ".join(det), [pline, cline])
+    done("SAME", name, head + ", write rates within x%.2f (floors %d KB/h, launch %d KB)"
+         % (RATIO, DW_FLOOR_KB, DW_LAUNCH_FLOOR_KB))
+
+
 def main(argv):
     if len(argv) != 4:
         sys.stderr.write(__doc__)
@@ -139,6 +173,9 @@ def main(argv):
     cline = leakline(cur_dir)
     if cline is not None:
         diff_leak(name, leakline(prev_dir) if prev_dir else None, cline)
+    dline = dwline(cur_dir)
+    if dline is not None:
+        diff_dw(name, dwline(prev_dir) if prev_dir else None, dline)
     done("NORULE", name, "no diff rule for this output; compare the job lines above by eye")
 
 
