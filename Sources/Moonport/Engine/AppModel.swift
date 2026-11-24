@@ -237,6 +237,12 @@ final class AppModel {
     typealias PassCollect = @MainActor (_ hiddenCrashReports: Set<String>, _ cachedBrew: BrewSnapshot?,
                                         _ onSection: @escaping @MainActor (FullReport) -> Void) async -> FullReport
     private let passCollect: PassCollect
+    /// REVIEW-CODE-FIXES A: reads one Claude backup log (log, rotated). The app uses `BackupLog.readStatus`, which is
+    /// nonisolated, so the file read runs off the main actor; tests inject a reader they can hold.
+    typealias ClaudeStatusRead = @MainActor (_ log: URL, _ rotated: URL) async -> ClaudeBackupStatus?
+    private let readClaudeStatus: ClaudeStatusRead
+    /// Bumped by every `refreshClaudeBackup()` call; only the latest-started call may write its result.
+    @ObservationIgnored private var claudeRefreshGeneration = 0
     /// ARCH-MODEL-SPLIT: how controllers reach `report` / the pass / the assessment without a back-reference.
     private let link = CoordinatorLink()
     /// The one host every controller gets; tests drive it directly.
@@ -274,8 +280,9 @@ final class AppModel {
 
     /// `dataDirectory`: tests pass a temporary folder so the model never touches the real Application Support folder; the app passes nothing.
     /// `passCollect`: tests pass a fake pass; the app passes nothing.
+    /// `readClaudeStatus`: tests pass a fake Claude log reader; the app passes nothing.
     init(dataDirectory: URL? = nil, actions: AppActions = .none, settings: AppSettings? = nil, time: TimeSource = .live,
-         passCollect: PassCollect? = nil) {
+         passCollect: PassCollect? = nil, readClaudeStatus: ClaudeStatusRead? = nil) {
         let settings = settings ?? .shared
         self.settings = settings
         self.actions = actions
@@ -284,6 +291,7 @@ final class AppModel {
             await ReportCollector(hiddenCrashReports: hidden).collect(skipSlow: false, cachedBrew: cachedBrew, onSection: onSection)
         }
         self.passCollect = passCollect ?? livePassCollect
+        self.readClaudeStatus = readClaudeStatus ?? { log, rotated in await BackupLog.readStatus(logURL: log, rotatedURL: rotated) }
         cpuHistory = []
         report = FullReport()
         assessment = Assessment()
@@ -340,9 +348,14 @@ final class AppModel {
     }
 
     /// BACKUP-AGE: re-read the backup log off the main actor; guarded so an unchanged status notifies nobody.
+    /// REVIEW-CODE-FIXES A: the latest-started call wins. A call overtaken by a newer one (a log path change or any periodic
+    /// refresh) while its read was suspended writes nothing, so a slow stale read never overwrites a newer status.
     func refreshClaudeBackup() async {
+        claudeRefreshGeneration &+= 1
+        let generation = claudeRefreshGeneration
         let urls = BackupLog.resolvedURLs(custom: settings.claudeLogPath)
-        let s = await BackupLog.readStatus(logURL: urls.log, rotatedURL: urls.rotated)
+        let s = await readClaudeStatus(urls.log, urls.rotated)
+        guard generation == claudeRefreshGeneration else { return }
         if claudeBackup != s { claudeBackup = s }
         await claudeRun.refreshAttempt()
     }

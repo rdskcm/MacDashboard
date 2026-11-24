@@ -213,12 +213,33 @@ extension SerialTests {
             let timeoutFlows: [(String, [PR.ProcessResult], PR.Outcome, [PR.Invocation])] = [
                 ("P17 sudo timed out", [tmo], .timedOut, onlySudo),
                 ("P18 sudo-own, osascript timed out", [sudoOwn, tmo], .timedOut, both),
+                ("P19 sudo outlived the timer, command failed",
+                 [PR.ProcessResult(exitCode: 1, stderr: "rm: x: Operation not permitted\n", stdout: "", timedOut: true)],
+                 .failed("rm: x: Operation not permitted"), onlySudo),
+                ("P20 sudo outlived the timer, sudo refused",
+                 [PR.ProcessResult(exitCode: 1, stderr: "sudo: a password is required\n", stdout: "", timedOut: true)],
+                 .timedOut, onlySudo),
+                ("P21 sudo-own, osascript outlived the timer, user cancelled",
+                 [sudoOwn, PR.ProcessResult(exitCode: 1, stderr: "0:79: execution error: User canceled. (-128)\n", stdout: "", timedOut: true)],
+                 .cancelled, both),
             ]
             for (name, scripted, outcome, calls) in timeoutFlows {
                 let fake = PRFakeExecutor(scripted)
                 #expect(PR.run(cmd, executor: fake.execute) == outcome, "PrivilegedRunner: [flow] \(name) outcome")
                 #expect(fake.calls == calls, "PrivilegedRunner: [flow] \(name) calls")
             }
+            // REVIEW-CODE-FIXES C: the result follows how the child ended, not which side won the kill gate.
+            #expect(PR.processResult(timeoutFired: true, reason: .uncaughtSignal, status: SIGKILL, stdout: "o", stderr: "e") == tmo,
+                  "PrivilegedRunner: [processResult] C1 ended by our timeout kill")
+            #expect(PR.processResult(timeoutFired: true, reason: .exit, status: 0, stdout: "o", stderr: "e") == R(0, "e", "o"),
+                  "PrivilegedRunner: [processResult] C2 ran to success after the timer fired")
+            #expect(PR.processResult(timeoutFired: true, reason: .exit, status: 1, stdout: "", stderr: "boom")
+                    == PR.ProcessResult(exitCode: 1, stderr: "boom", stdout: "", timedOut: true),
+                  "PrivilegedRunner: [processResult] C3 failed on its own after the timer fired")
+            #expect(PR.processResult(timeoutFired: false, reason: .exit, status: 3, stdout: "o", stderr: "e") == R(3, "e", "o"),
+                  "PrivilegedRunner: [processResult] C4 ordinary exit")
+            #expect(PR.processResult(timeoutFired: false, reason: .uncaughtSignal, status: SIGKILL, stdout: "", stderr: "") == R(9, "", ""),
+                  "PrivilegedRunner: [processResult] C5 killed by someone else")
             #expect(PR.sudoInvocation("x").timeout == 30 && PR.osascriptInvocation("x").timeout == 30,
                   "PrivilegedRunner: [authTimeout] both invocations 30 s")
             for (name, scripted, outcome, calls) in flows {
@@ -257,6 +278,9 @@ extension SerialTests {
                 let e6 = PR.runProcess(.init(path: "/bin/sleep", args: ["5"], timeout: 0.3))
                 #expect(e6 == PR.ProcessResult(exitCode: -1, stderr: "timed out", stdout: "", timedOut: true), "PrivilegedRunner: [runProcess timeout] E6 result")
                 #expect(Date().timeIntervalSince(t0) < 3, "PrivilegedRunner: [runProcess timeout] E6 wall time")
+                let e7 = PR.runProcess(.init(path: "/bin/sh", args: ["-c", "kill -9 $$"], timeout: 10))
+                #expect(e7 == R(9, "", ""), "PrivilegedRunner: [runProcess signal death without our timer] E7")
+                print("LIVE runProcess: e6=\(e6) e7=\(e7)")
             }
             for (label, v) in prCorpus {
                 let r = PR.runProcess(.init(path: "/bin/sh", args: ["-c", "printf %s " + PR.shellQuoted(v)], timeout: 10))

@@ -99,7 +99,8 @@ extension SerialTests {
             #expect(c.state.mac_history.count == 1)
         }
 
-        @Test func passSaveFailureReportsTheErrorAndStillStamps() {
+        @Test func passSaveFailureReportsTheErrorAndDoesNotStamp() {
+            // REVIEW-CODE-FIXES B: a failed save is reported, not stamped, and retried by the next call.
             let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
             let blocker = dir.appendingPathComponent("blocker")
             write("x", blocker)
@@ -108,8 +109,42 @@ extension SerialTests {
             let c = make(url, host, clock, sched)
             c.passCommitted(FullReport(), live: LiveSnapshot())
             #expect(host.errors.count == 1)
-            #expect(sched.stamps.count == 1)
+            #expect(sched.stamps.isEmpty)
             #expect(c.state.mac_history.count == 1)
+        }
+
+        @Test func failedSaveIsRetriedOnTheNextCallAndThenStamps() throws {
+            let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+            let blocker = dir.appendingPathComponent("blocker")
+            write("x", blocker)
+            let url = blocker.appendingPathComponent(fileName)
+            let host = FakeHost(), clock = VirtualClock(), sched = FakeHistorySchedule()
+            let c = make(url, host, clock, sched)
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == false)
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == false)   // still due: retried, fails again
+            #expect(host.errors.count == 2 && sched.stamps.isEmpty && c.state.mac_history.count == 1)
+            try FileManager.default.removeItem(at: blocker)                          // the disk problem goes away
+            try FileManager.default.createDirectory(at: blocker, withIntermediateDirectories: true)
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == true)
+            #expect(sched.stamps == [clock.now] && host.errors.count == 2)
+            #expect(HistoryStore(url: url).load().mac_history.count == 1)
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == false)   // stamped: exclusive for the day
+        }
+
+        @Test func refreshAfterAFailedSaveIsRepairedByTheNextCall() throws {
+            let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+            let blocker = dir.appendingPathComponent("blocker")
+            write("x", blocker)
+            let url = blocker.appendingPathComponent(fileName)
+            let host = FakeHost(), clock = VirtualClock(), sched = FakeHistorySchedule()
+            let c = make(url, host, clock, sched)
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == false)
+            try FileManager.default.removeItem(at: blocker)
+            try FileManager.default.createDirectory(at: blocker, withIntermediateDirectories: true)
+            c.refreshNow()                                                           // reloads from disk: the unsaved point is gone
+            #expect(c.state.mac_history.isEmpty)
+            #expect(c.snapshotIfDue(FullReport(), live: LiveSnapshot()) == true)   // not stamped, so the next call restores it
+            #expect(c.state.mac_history.count == 1 && HistoryStore(url: url).load().mac_history.count == 1)
         }
 
         @Test func passRenamesAnUnreadableFileAsideAndClearsTheErrorState() {

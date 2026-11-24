@@ -93,13 +93,17 @@ final class IPSWDownloader: NSObject, URLSessionDataDelegate, IPSWDownloading, @
     private let capacity: @Sendable (URL) -> Int64?
     private let now: @Sendable () -> Date
     private let tempDirectory: URL
+    /// Flushes the partial to disk (`FileHandle.synchronize`, i.e. fsync). Tests inject a failing flush (REVIEW-CODE-FIXES D).
+    private let syncFile: @Sendable (FileHandle) throws -> Void
 
     init(stagingRoot: URL = IPSWPartialStore.defaultRoot(), protocolClasses: [AnyClass] = [],
          checkpointBytes: Int64 = IPSWPartialStore.checkpointBytes,
          capacity: @escaping @Sendable (URL) -> Int64? = IPSWDownloader.availableCapacity,
          now: @escaping @Sendable () -> Date = { Date() },
-         tempDirectory: URL = FileManager.default.temporaryDirectory) {
+         tempDirectory: URL = FileManager.default.temporaryDirectory,
+         syncFile: @escaping @Sendable (FileHandle) throws -> Void = { try $0.synchronize() }) {
         self.tempDirectory = tempDirectory
+        self.syncFile = syncFile
         self.stagingRoot = stagingRoot
         self.checkpointBytes = checkpointBytes
         self.capacity = capacity
@@ -271,9 +275,11 @@ final class IPSWDownloader: NSObject, URLSessionDataDelegate, IPSWDownloading, @
                     run?.cancelled = true
                 }
             } else if r.transferring, let task = r.task {
-                try? r.handle?.synchronize()
+                var flushed = true
+                if let h = r.handle { do { try syncFile(h) } catch { flushed = false } }
                 guard var record = locked({ run?.id == r.id ? run?.record : nil }) else { return }
-                record.checkpoint = locked { run?.written } ?? record.checkpoint
+                // REVIEW-CODE-FIXES D: a failed flush keeps the last good checkpoint (nothing can be shown at quit).
+                if flushed { record.checkpoint = locked { run?.written } ?? record.checkpoint }
                 record.stoppedAt = now()
                 record.reason = .appQuit
                 try? IPSWPartialStore.write(record, root: stagingRoot)
@@ -589,7 +595,14 @@ final class IPSWDownloader: NSObject, URLSessionDataDelegate, IPSWDownloading, @
 
         var checkpointed: IPSWPartialRecord?
         if written - record.checkpoint >= checkpointBytes {
-            try? handle.synchronize()
+            // REVIEW-CODE-FIXES D: the record names only flushed bytes. fsync reports deferred write errors, so a failed
+            // flush ends the run like a failed write (above) and the checkpoint never moves past it.
+            do {
+                try syncFile(handle)
+            } catch {
+                locked { if run?.id == r.id { run?.pendingError = Self.fileSystemError(error) } }
+                return dataTask.cancel()
+            }
             var updated = record
             updated.checkpoint = written
             try? IPSWPartialStore.write(updated, root: stagingRoot)
@@ -611,8 +624,10 @@ final class IPSWDownloader: NSObject, URLSessionDataDelegate, IPSWDownloading, @
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let r = current(task) else { return }
+        // REVIEW-CODE-FIXES D: a failed final flush keeps the last good checkpoint on a park and is never verified.
+        var syncError: Error?
         if let handle = r.handle {
-            try? handle.synchronize()
+            do { try syncFile(handle) } catch { syncError = error }
             try? handle.close()
         }
         locked { if run?.id == r.id { run?.handle = nil; run?.transferring = false } }
@@ -622,7 +637,7 @@ final class IPSWDownloader: NSObject, URLSessionDataDelegate, IPSWDownloading, @
             discardFiles(of: r)
             return finish(id, .failed(e))
         }
-        if r.pausing { return park(id, reason: nil) }
+        if r.pausing { return park(id, reason: nil, flushed: syncError == nil) }
         if let error {
             let mapped = IPSWSources.mapError(error)
             if r.written == 0 {
@@ -630,12 +645,16 @@ final class IPSWDownloader: NSObject, URLSessionDataDelegate, IPSWDownloading, @
                 return finish(id, .failed(mapped))
             }
             // A cancelled task nobody asked to stop is the quit hook (`suspendForQuit`).
-            if mapped == .cancelled { return park(id, reason: .appQuit) }
-            return park(id, reason: IPSWStopReason(mapped) ?? .transfer(error.localizedDescription))
+            if mapped == .cancelled { return park(id, reason: .appQuit, flushed: syncError == nil) }
+            return park(id, reason: IPSWStopReason(mapped) ?? .transfer(error.localizedDescription), flushed: syncError == nil)
         }
         guard r.written == r.size else {
             discardFiles(of: r)
             return finish(id, .failed(.sizeMismatch(expected: r.size, actual: r.written)))
+        }
+        if let syncError {
+            discardFiles(of: r)
+            return finish(id, .failed(Self.fileSystemError(syncError)))
         }
         beginVerify(id)
     }
@@ -686,11 +705,12 @@ final class IPSWDownloader: NSObject, URLSessionDataDelegate, IPSWDownloading, @
     }
 
     /// Keeps the partial: record `checkpoint`, `stoppedAt` and `reason` are saved, the run becomes the parked
-    /// download and `.paused` is delivered. Only for the run `id`.
-    private func park(_ id: UUID, reason: IPSWStopReason?) {
+    /// download and `.paused` is delivered. Only for the run `id`. `flushed` false: the final flush failed, so the record
+    /// keeps its last good checkpoint (REVIEW-CODE-FIXES D).
+    private func park(_ id: UUID, reason: IPSWStopReason?, flushed: Bool = true) {
         locked {
             guard let r = run, r.id == id, var record = r.record, let part = r.partURL else { return }
-            record.checkpoint = r.verifying ? record.size : r.written
+            record.checkpoint = r.verifying ? record.size : (flushed ? r.written : record.checkpoint)
             record.stoppedAt = now()
             record.reason = reason
             try? IPSWPartialStore.write(record, root: stagingRoot)

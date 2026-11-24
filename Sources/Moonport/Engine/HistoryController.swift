@@ -63,8 +63,8 @@ final class HistoryController {
     // MARK: - Report pass (coordinator → controller)
 
     /// A report pass committed `report`: writes today's snapshot when the daily schedule is due, then republishes the
-    /// store's state (a pass may also have renamed an unreadable file aside). A failed write is reported and the schedule
-    /// is stamped anyway (unchanged behaviour); the next successful save persists the in-memory entry.
+    /// store's state (a pass may also have renamed an unreadable file aside). A failed write is reported and not stamped, so
+    /// the schedule stays due and the next call retries (REVIEW-CODE-FIXES B).
     func passCommitted(_ report: FullReport, live: LiveSnapshot) {
         snapshotIfDue(report, live: live)
         state = store.state
@@ -73,19 +73,22 @@ final class HistoryController {
 
     /// SAMPLER-OCCLUSION-GATE D5: the one writer of the daily History point. The pass commit calls it with its final
     /// report; the coordinator's 60 s scheduler calls it with the committed report, so a Mac that runs for days gets its
-    /// point at the chosen time whether or not a pass ever runs again and whatever the window state. `lastSnapshotAt`
-    /// makes the two callers exclusive for the day. Republishes `state` only when it wrote (a tick that writes nothing
-    /// costs no observation mutation). Returns true when it wrote.
+    /// point at the chosen time whether or not a pass ever runs again and whatever the window state. `lastSnapshotAt`,
+    /// stamped only after a successful save, makes the two callers exclusive for the day. Republishes `state` only when it wrote (a tick that writes nothing
+    /// costs no observation mutation). Returns true when it wrote the file.
     @discardableResult
     func snapshotIfDue(_ report: FullReport, live: LiveSnapshot) -> Bool {
         let now = time.now()
         guard SnapshotSchedule.isDue(now: now, last: deps.lastSnapshotAt(), minutesAfterMidnight: deps.snapshotMinutes()) else { return false }
         store.upsertToday(from: report, live: live)
-        do { try store.save() } catch { host.reportError(L.errorHistorySaveFailed(error.localizedDescription)) }
-        deps.setLastSnapshotAt(now)
+        var saved = false
+        do { try store.save(); saved = true } catch { host.reportError(L.errorHistorySaveFailed(error.localizedDescription)) }
+        // REVIEW-CODE-FIXES B: stamped only after a successful save. A failed save stays due, so the next 60 s scheduler
+        // tick or pass commit re-upserts today's point and retries the save.
+        if saved { deps.setLastSnapshotAt(now) }
         state = store.state
         unreadable = store.fileUnreadable
-        return true
+        return saved
     }
 
     // MARK: - History page

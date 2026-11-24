@@ -24,9 +24,29 @@ import Testing
     }
 }
 
+/// REVIEW-CODE-FIXES A: a Claude log reader the test controls — the read of the file named `heldName` parks until `release()`.
+@MainActor final class HeldClaudeReader {
+    let heldName: String
+    let heldResult: ClaudeBackupStatus
+    let otherResult: ClaudeBackupStatus
+    private(set) var heldEntered = false
+    private var gate: CheckedContinuation<Void, Never>?
+    init(heldName: String, heldResult: ClaudeBackupStatus, otherResult: ClaudeBackupStatus) {
+        self.heldName = heldName; self.heldResult = heldResult; self.otherResult = otherResult
+    }
+    func release() { gate?.resume(); gate = nil }
+    var read: AppModel.ClaudeStatusRead {
+        { log, _ in
+            guard log.lastPathComponent == self.heldName else { return self.otherResult }
+            await withCheckedContinuation { self.gate = $0; self.heldEntered = true }
+            return self.heldResult
+        }
+    }
+}
+
 extension SerialTests {
     @MainActor struct ReportHostTests {
-        private func makeModel(pass: FakePass? = nil, configure: (AppSettings, URL) -> Void = { _, _ in }) -> (AppModel, AppSettings, VirtualClock, () -> Void) {
+        private func makeModel(pass: FakePass? = nil, configure: (AppSettings, URL) -> Void = { _, _ in }, readClaudeStatus: AppModel.ClaudeStatusRead? = nil) -> (AppModel, AppSettings, VirtualClock, () -> Void) {
             let (d, name) = makeIsolatedDefaults()
             let dir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("md-report-host-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)", isDirectory: true)
@@ -35,7 +55,7 @@ extension SerialTests {
             configure(s, dir)
             if pass != nil { s.notifyEnabled = [] }   // a committed pass must post no notification
             let clock = VirtualClock()
-            let m = AppModel(dataDirectory: dir, settings: s, time: clock.source, passCollect: pass?.collect)
+            let m = AppModel(dataDirectory: dir, settings: s, time: clock.source, passCollect: pass?.collect, readClaudeStatus: readClaudeStatus)
             return (m, s, clock, { removeIsolatedDefaults(d, name); try? FileManager.default.removeItem(at: dir) })
         }
         private let energy = EnergySettings(battery: [("displaysleep", "2")], ac: [("displaysleep", "10")])
@@ -192,6 +212,30 @@ extension SerialTests {
             try Data().write(to: log)                             // present, no successful run in it
             await m.reportHost.refreshClaudeBackup()
             #expect(m.claudeBackup == .noSuccessFound)
+        }
+
+        // REVIEW-CODE-FIXES A: a stale read of the previous log, landing after the new log's read, never overwrites it.
+        @Test func staleClaudeReadAfterALogPathChangeDoesNotOverwriteTheNewStatus() async {
+            let fresh = ClaudeBackupStatus.lastSuccess(Date(timeIntervalSince1970: 1_800_000_000))
+            let reader = HeldClaudeReader(heldName: "a.log", heldResult: .noSuccessFound, otherResult: fresh)
+            var dir: URL!
+            let (m, s, _, cleanup) = makeModel(configure: { settings, d in
+                dir = d
+                settings.claudeLogPath = d.appendingPathComponent("a.log").path
+            }, readClaudeStatus: reader.read)
+            defer { cleanup() }
+            let stale = Task { await m.refreshClaudeBackup() }
+            var spins = 0
+            while !reader.heldEntered && spins < 10_000 { await Task.yield(); spins += 1 }
+            #expect(reader.heldEntered, "the read of a.log is parked")
+            s.claudeLogPath = dir.appendingPathComponent("b.log").path      // the change hook starts its own refresh
+            await m.refreshClaudeBackup()
+            spins = 0
+            while m.claudeBackup != fresh && spins < 10_000 { await Task.yield(); spins += 1 }
+            #expect(m.claudeBackup == fresh)
+            reader.release()
+            await stale.value
+            #expect(m.claudeBackup == fresh, "the overtaken read of a.log wrote nothing")
         }
     }
 }
