@@ -81,3 +81,22 @@ jobs:
           n="$(grep -Eo 'Test run with [0-9]+ test' "$log" | grep -Eo '[0-9]+' | tail -1 || true)"
           echo "swift-testing tests run: ${n:-none}"
           [ "${n:-0}" -gt 0 ] || { echo "::error::swift test ran no swift-testing tests"; exit 1; }
+
+  agent-config:
+    # AGENT-CONFIG-SYNC: AGENTS.md is generated from CLAUDE.md by tools/agent-config/agent_config.py.
+    # Runs the generator's tests and its read-only drift check: exit 1 = AGENTS.md is stale (run
+    # the generator, commit the result), exit 2 = invalid source or a hand-written AGENTS.md.
+    # Ubuntu: needs only python3 and does not wait for a macOS runner. Skipped on release/*,
+    # whose branches are cut from tags older than the generator.
+    if: ${{ !startsWith(github.base_ref, 'release/') && !startsWith(github.ref, 'refs/heads/release/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generator tests
+        run: python3 -I -B -m unittest discover -s tools/agent-config -p 'test_*.py' -v
+
+      - name: AGENTS.md matches CLAUDE.md
+        run: python3 -I tools/agent-config/agent_config.py --check --root .
