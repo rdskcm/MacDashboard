@@ -11,7 +11,7 @@ import AppKit
 //   title <text>[|alt...]            press the first AXButton / AXRadioButton whose AXTitle or AXDescription is a value
 //                                    (pass both languages' titles, e.g. the Table segment)
 //   frame <AXIdentifier>[|alt...]    "x y w h" (integers, global top-left points) of the first element with that identifier
-//   exists <AXIdentifier>[|alt...]   "present" | "absent"
+//   exists <AXIdentifier>[|alt...]   "present" | "absent" | "no window" (the pid has no main window)
 //   enabled <AXIdentifier>[|alt...]  "enabled" | "disabled" for the first element with that identifier, else "absent"
 //   vscroll <x>,<y>                  first AXScrollArea of window 1 whose frame contains the global point: "bar" when it has
 //                                    a vertical AXScrollBar child (its content overflows), else "nobar"
@@ -32,10 +32,11 @@ import AppKit
 //                                    with a non-empty AXIdentifier
 //   text <x>,<y>,<w>,<h>             visible strings of the AXWindows element whose frame is within 2 pt of that frame (plus
 //                                    its sheets), one per line in reading order (SMOKE-TEXT-NOISE D4-D7) | "NO TEXT" | "no window"
+//                                    | "WALK-CAP 20000" (the element walk hit its cap; the text would be cut)
 //                                    An element only partly inside the clip contributes just its visible part of AXValue: AXStringForRange of
 //                                    AXVisibleCharacterRange, else the \n-lines whose AXBoundsForRange meets the clip, else the whole value
-//                                    plus "PARTIAL-CLIP <role>" on stderr (SMOKE-TEXT-NOISE R11); an AXValue equal to a descendant's is read
-//                                    from the deepest element only (Amendment 1a)
+//                                    plus "PARTIAL-CLIP <role>" on stderr (SMOKE-TEXT-NOISE R11); an AXValue equal to an emitted descendant's is
+//                                    read from the deepest emitted element only (Amendment 1a)
 // Window 1 = the app's main window (mainWindow()): the AXWindows element whose AXMain is true, else the first AXStandardWindow,
 // else the largest by AX frame area (tooltips and overlays are extra, small AXWindows entries). Elements are searched depth-first in AXChildren order (as
 // AppleScript's `entire contents`), at most 20000. "NOT FOUND" when nothing matches or the app has no window.
@@ -215,7 +216,8 @@ case "vscroll":
 case "frame", "exists", "enabled":
     guard !alts.isEmpty else { usage() }
     let miss = kind == "frame" ? "NOT FOUND" : "absent"
-    guard let w = mainWindow(), let e = find(w, hasID) else { out(miss) }
+    guard let w = mainWindow() else { out(kind == "exists" ? "no window" : miss) }
+    guard let e = find(w, hasID) else { out(miss) }
     if kind == "exists" { out("present") }
     if kind == "enabled" { out((attr(e, kAXEnabledAttribute) as? Bool) == true ? "enabled" : "disabled") }
     guard let f = frame(e) else { out("NOT FOUND") }
@@ -236,8 +238,8 @@ case "id", "title":
 case "text":
     // SMOKE-TEXT-NOISE: the visible text of the captured window for smoke's text check. Visible (D4): a frame with
     // positive area that intersects the window frame and every AXScrollArea ancestor's frame, no AXHidden on the path,
-    // and (outside a sheet) not lying entirely inside a sheet's frame. Strings (D5): distinct non-empty AXValue (String
-    // only), AXTitle, AXDescription, whitespace runs folded to one space. Order (D7): minY, minX, depth-first index.
+    // and (outside a sheet) not lying entirely inside a sheet's frame. Strings (D5): distinct non-empty AXValue (String, or a slider / stepper number
+    // see valueText), AXTitle, AXDescription, whitespace runs folded to one space. Order (D7): minY, minX, depth-first index.
     // R11: an element whose frame is not entirely inside the clip (one multi-line text box in a scroll view) gives only its
     // visible part of AXValue, see visibleValue.
     let target = rect(value)
@@ -251,20 +253,19 @@ case "text":
     let sheetFrames = sheets.compactMap { frame($0) }
     var items: [(y: Int, x: Int, i: Int, s: String)] = []
     var visited = 0
+    let walkCap = 20000
+    var capped = false
     func fold(_ s: String) -> String { s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ") }
-    // SwiftUI Text + .textSelection exposes two nested AXStaticText with one AXValue; only the deepest is read (R11 / Amendment 1a).
-    func descendantHasValue(_ e: AXUIElement, _ value: String) -> Bool {
-        var budget = 200
-        func scan(_ x: AXUIElement) -> Bool {
-            for c in children(x) {
-                guard budget > 0 else { return false }
-                budget -= 1
-                if (attr(c, "AXHidden") as? Bool) == true { continue }
-                if (attr(c, kAXValueAttribute) as? String) == value || scan(c) { return true }
-            }
-            return false
-        }
-        return scan(e)
+    /// AXValue as text (D5): a String, or the number of a slider / stepper (AXSlider, AXIncrementor). Other numeric
+    /// values (checkbox and radio states 0/1) are state, not text, and stay out.
+    func valueText(_ e: AXUIElement) -> String {
+        let raw = attr(e, kAXValueAttribute)
+        if let s = raw as? String { return s }
+        let role = str(e, kAXRoleAttribute)
+        guard role == "AXSlider" || role == "AXIncrementor", let num = raw as? NSNumber,
+              CFGetTypeID(num) != CFBooleanGetTypeID() else { return "" }
+        let d = num.doubleValue
+        return d == d.rounded() && abs(d) < 1e15 ? String(Int64(d)) : String(format: "%g", d)
     }
     func axRange(_ r: CFRange) -> AXValue? { var r = r; return AXValueCreate(.cfRange, &r) }
     func visibleValue(_ e: AXUIElement, _ full: String, clip: CGRect) -> String {
@@ -289,54 +290,69 @@ case "text":
         if paramNames.contains("AXBoundsForRange") {
             let ns = full as NSString
             var kept: [String] = []
+            var attempts = 0, failures = 0
             var start = 0
             for line in full.components(separatedBy: "\n") {
                 let len = (line as NSString).length
                 defer { start += len + 1 }
                 if fold(line).isEmpty { continue }
+                attempts += 1
                 guard let bv = param("AXBoundsForRange", CFRange(location: start, length: len)),
-                      CFGetTypeID(bv) == AXValueGetTypeID() else { continue }
+                      CFGetTypeID(bv) == AXValueGetTypeID() else { failures += 1; continue }
                 var b = CGRect.zero
-                if AXValueGetValue(bv as! AXValue, .cgRect, &b), b.width > 0, b.height > 0 {
+                guard AXValueGetValue(bv as! AXValue, .cgRect, &b) else { failures += 1; continue }
+                if b.width > 0, b.height > 0 {
                     let i = b.intersection(clip)
                     if !i.isNull && i.width > 0 && i.height > 0 { kept.append(ns.substring(with: NSRange(location: start, length: len))) }
                 }
             }
-            return kept.joined(separator: "\n")
+            // Every range call failed: no clip information, fall through to PARTIAL-CLIP below.
+            if !(attempts > 0 && failures == attempts) { return kept.joined(separator: "\n") }
         }
         FileHandle.standardError.write("PARTIAL-CLIP \(str(e, kAXRoleAttribute))\n".data(using: .utf8)!)
         return full
     }
-    func walk(_ e: AXUIElement, clip: CGRect, inSheet: Bool) {
-        guard visited < 20000 else { return }
+    var seq = 0
+    /// Walks `e` and returns the full AXValue strings emitted in its subtree (its own and its descendants').
+    @discardableResult
+    func walk(_ e: AXUIElement, clip: CGRect, inSheet: Bool) -> Set<String> {
+        guard visited < walkCap else { capped = true; return [] }
         visited += 1
-        if (attr(e, "AXHidden") as? Bool) == true { return }
-        if !inSheet && sheets.contains(where: { CFEqual($0, e) }) { return }   // walked as its own root below
+        if (attr(e, "AXHidden") as? Bool) == true { return [] }
+        if !inSheet && sheets.contains(where: { CFEqual($0, e) }) { return [] }   // walked as its own root below
         let f = frame(e)
-        if !inSheet, let f = f, sheetFrames.contains(where: { $0.contains(f) }) { return }   // covered by the sheet
+        if !inSheet, let f = f, sheetFrames.contains(where: { $0.contains(f) }) { return [] }   // covered by the sheet
         var inner = clip
         if str(e, kAXRoleAttribute) == "AXScrollArea", let f = f { inner = clip.intersection(f) }
+        // This element's own strings, computed before its children so its reading-order slot (seq) precedes theirs.
+        var mine: (y: Int, x: Int, i: Int, full: String, value: String, others: [String])? = nil
         if let f = f, f.width > 0, f.height > 0 {
             let v = f.intersection(clip)
             if !v.isNull && v.width > 0 && v.height > 0 {
-                var got: [String] = []
-                var value = (attr(e, kAXValueAttribute) as? String) ?? ""
-                if !value.isEmpty && descendantHasValue(e, value) { value = "" }   // the deepest element carrying the string wins
+                let full = valueText(e)
+                var value = full
                 if !value.isEmpty && v != f { value = visibleValue(e, value, clip: clip) }
-                for s in [value, str(e, kAXTitleAttribute), str(e, kAXDescriptionAttribute)] {
-                    let t = fold(s)
-                    if !t.isEmpty && !got.contains(t) { got.append(t) }
-                }
-                for t in got { items.append((y: n(f.minY), x: n(f.minX), i: items.count, s: t)) }
+                mine = (n(f.minY), n(f.minX), seq, full, fold(value), [fold(str(e, kAXTitleAttribute)), fold(str(e, kAXDescriptionAttribute))])
+                seq += 3   // value, title, description
             }
         }
-        for c in children(e) { walk(c, clip: inner, inSheet: inSheet) }
+        var below = Set<String>()
+        for c in children(e) { below.formUnion(walk(c, clip: inner, inSheet: inSheet)) }
+        guard let m = mine else { return below }
+        // SwiftUI Text + .textSelection exposes two nested AXStaticText with one AXValue: the deepest EMITTED one wins (Amendment 1a).
+        let ownValue = below.contains(m.full) ? "" : m.value
+        var got: [String] = []
+        for t in [ownValue] + m.others where !t.isEmpty && !got.contains(t) { got.append(t) }
+        for (k, t) in got.enumerated() { items.append((y: m.y, x: m.x, i: m.i + k, s: t)) }
+        if !ownValue.isEmpty { below.insert(m.full) }
+        return below
     }
     for c in children(root) { walk(c, clip: rootFrame, inSheet: false) }
     for s in sheets {
         guard let sf = frame(s) else { continue }
         for c in children(s) { walk(c, clip: sf.intersection(rootFrame), inSheet: true) }
     }
+    if capped { out("WALK-CAP \(walkCap)") }
     guard !items.isEmpty else { out("NO TEXT") }
     items.sort { ($0.y, $0.x, $0.i) < ($1.y, $1.x, $1.i) }
     out(items.map { $0.s }.joined(separator: "\n"))

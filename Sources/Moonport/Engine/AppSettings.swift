@@ -166,13 +166,13 @@ final class AppSettings {
                 else { defaults.removeObject(forKey: Self.claudeLogPathKey) }
             }
             if new.batteryShowsRawMac != oldValue.batteryShowsRawMac { defaults.set(new.batteryShowsRawMac, forKey: Self.batteryShowsRawMacKey) }
-            if let hook = onAssessmentSettingsChange { MainActor.assumeIsolated { hook(oldValue) } }
+            if let hook = onAssessmentSettingsChange { hook(oldValue) }
         }
     }
 
     /// Called synchronously, on the main actor, after any change of `assessmentSettings`, with the OLD value.
     /// One slot: `AppModel.init` installs it (the app has one model); a later model on the same instance
-    /// replaces it. Writing an assessment setting off the main thread while a hook is installed traps.
+    /// replaces it. `AppSettings` is `@MainActor`, so every write, and this call, runs on the main actor.
     @ObservationIgnored var onAssessmentSettingsChange: (@MainActor (AssessmentSettings) -> Void)?
 
     /// Wake holders the Sleep attention item no longer warns about (SLEEP-IGNORE-APP), in the order the user

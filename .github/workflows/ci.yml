@@ -12,10 +12,12 @@ on:
 permissions:
   contents: read
 
-# A new commit on a PR cancels that PR's run still in progress. Pushes are
-# grouped by commit SHA, so a push run on main or release/* is never cancelled.
+# A new commit on a PR cancels that PR's run still in progress. Push runs are grouped by
+# branch and commit SHA, so the same commit pushed to main and to a release/* branch runs
+# twice and neither run cancels the other (RELEASE-INTEGRITY: Release needs the release/*
+# push run).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.sha) }}
   cancel-in-progress: true
 
 jobs:

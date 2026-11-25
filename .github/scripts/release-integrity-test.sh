@@ -114,6 +114,10 @@ put line-no-branches "$REL" ""
 put line-no-branches "$(cmp_of "$M")" "ahead"
 gate_case line-no-branches 1 "is not on main" on-release-line "$S"
 
+put line-unknown-sha "$MAIN" "refs/heads/main $M"
+put line-unknown-sha "$REL" ""
+gate_case line-unknown-sha 1 "is not a commit of" on-release-line "$S"
+
 # --- no-release
 put rel-absent "$RELS" "$(printf 'v2.3.3\tfalse\thttps://example.com/r/1')"
 gate_case rel-absent 0 "OK — no release or draft exists" no-release v9.9.9

@@ -16,6 +16,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BENCH_ID="app.moonport.bench"
+# fixed bench home: the fixture's home-folder lines do not depend on --out (SMOKE-TEXT-NOISE)
+BENCH_HOME="/private/tmp/moonport-smoke-home"
 
 HELP="tools/visual/smoke.sh [--app PATH] [--out DIR] [--reference DIR] [--allow-old-sdk]
 tools/visual/smoke.sh --bless RUN_DIR [STATE ...]
@@ -24,9 +26,11 @@ tools/visual/smoke.sh -h | --help
 
 Exit codes: 0 all alpha ok, every diff <= threshold and no text change. 1 at
 least one alpha FAIL (wins over 2). 2 no alpha FAIL, but >=1 state is CHANGED,
-SIZE-CHANGED, TEXT-CHANGED, NO-REF or ORPHAN-REF, or its text column reads changed or no-ref (text = the window's visible Accessibility text vs reference/<state>.txt). 64
-usage error. 65 precondition refused. 70 runtime error (the bench copy
-was stopped and its state removed). --bless and --selftest exit 0 on success, 1 on refusal/failure."
+SIZE-CHANGED, TEXT-CHANGED, NO-REF or ORPHAN-REF, or its text column reads changed
+or no-ref (text = the window's visible Accessibility text vs reference/<state>.txt).
+64 usage error. 65 precondition refused. 70 runtime error (the bench copy was
+stopped and its state removed). --bless and --selftest exit 0 on success, 1 on
+refusal/failure."
 
 usage_error() { echo "usage error: $1" >&2; echo "$HELP" >&2; exit 64; }
 precondition_refused() { echo "REFUSED: $1" >&2; exit 65; }
@@ -155,10 +159,11 @@ if [ "$MODE" = "bless" ]; then
   REF_DIR="$ROOT/tools/visual/reference"
   mkdir -p "$REF_DIR"
   MANIFEST="$REF_DIR/manifest.txt"
+  MANIFEST_HDR="$(printf '# state\tblessed\tmacos\tsdk\tcommit\tdisplay\tprofile')"
   if [ ! -f "$MANIFEST" ]; then
-    printf '# state\tblessed\tmacos\tsdk\tcommit\tdisplay\tprofile\n' > "$MANIFEST"
+    printf '%s\n' "$MANIFEST_HDR" > "$MANIFEST"
   fi
-  if head -1 "$MANIFEST" | grep -q '^# state'; then TMPM="$(mktemp)"; { printf '# state\tblessed\tmacos\tsdk\tcommit\tdisplay\tprofile\n'; tail -n +2 "$MANIFEST"; } > "$TMPM"; mv "$TMPM" "$MANIFEST"; fi
+  if [ "$(head -1 "$MANIFEST")" != "$MANIFEST_HDR" ] && head -1 "$MANIFEST" | grep -q '^# state'; then TMPM="$(mktemp)"; { printf '%s\n' "$MANIFEST_HDR"; tail -n +2 "$MANIFEST"; } > "$TMPM"; mv "$TMPM" "$MANIFEST"; fi
 
   GIT_COMMIT="$(awk -F': ' '/^git_commit:/{print $2}' "$RUN_DIR/build-info.txt" | head -1)"
   MACOS_V="$(awk -F': ' '/^macos:/{print $2}' "$RUN_DIR/build-info.txt" | head -1)"
@@ -283,7 +288,11 @@ fi
 
 # Precondition 7b: the menu-bar display (where the bench window is placed; `vbtool screen`) is 2x. The references
 # are 2x captures normalised to points; a 1x capture is not resized and differs in antialiasing on every state.
-SCREEN_SCALE="$("$VBTOOL" screen | awk '{print $3}')"
+SCREEN_RC=0
+SCREEN_OUT="$("$VBTOOL" screen 2>"$TMPBIN/vbtool-screen.err")" || SCREEN_RC=$?
+[ "$SCREEN_RC" -eq 0 ] || precondition_refused "vbtool screen failed (exit $SCREEN_RC): $(cat "$TMPBIN/vbtool-screen.err")"
+SCREEN_SCALE="$(printf '%s\n' "$SCREEN_OUT" | awk '{print $3}')"
+[ -n "$SCREEN_SCALE" ] || precondition_refused "vbtool screen printed no scale (output: '$SCREEN_OUT')"
 if [ "$SCREEN_SCALE" != "2.0" ] && [ "$SCREEN_SCALE" != "2" ]; then
   precondition_refused "the menu-bar display is ${SCREEN_SCALE}x; references are 2x — make a Retina display the main display"
 fi
@@ -304,7 +313,9 @@ mv "$TMPBIN/vbtool" "$OUT/.bin/vbtool"
 VBTOOL="$OUT/.bin/vbtool"
 mv "$TMPBIN/ax" "$OUT/.bin/ax"
 AXHELPER="$OUT/.bin/ax"
-ax() { "$AXHELPER" "$PID" "$@" 2>&1; }   # native AX by pid (tools/perf/ax.swift), never a process lookup by name (GATE-AX-MISS)
+AX_STDERR="$OUT/ax-stderr.log"
+# native AX by pid (tools/perf/ax.swift), never a process lookup by name (GATE-AX-MISS)
+ax() { "$AXHELPER" "$PID" "$@" 2>>"$AX_STDERR"; }   # stdout = the answer; stderr to the run's log (SMOKE-TEXT-NOISE)
 is_frame() { [[ "$1" =~ ^-?[0-9]+\ -?[0-9]+\ [0-9]+\ [0-9]+$ ]]; }
 # "pid <n> (<executable>)" of the frontmost application, for diagnostics.
 focused_app() { local p; p="$("$AXHELPER" 0 focused 2>&1)"; echo "pid $p ($(ps -o comm= -p "$p" 2>/dev/null || echo "?"))"; }
@@ -351,7 +362,7 @@ THRESHOLDS_CONTENTS="$(cat "$ROOT/tools/visual/thresholds.txt")"
   echo "language: en (pinned via argument domain)"
   echo "scrollbars: WhenScrolling (pinned via argument domain; global=$SCROLLBARS_GLOBAL)"
   echo "fixture: visualFixture"
-  echo "bench: $BENCH_ID copy at $OUT/app, home $OUT/home"
+  echo "bench: $BENCH_ID copy at $OUT/app, home $BENCH_HOME"
   echo "foreign_copies: $FOREIGN_NOTE"
   echo "appearance: in-app (visualAppearance fixture key)"
   echo "alpha_params: corner_pt=32 edge_inset_px=0"
@@ -380,7 +391,7 @@ cleanup() {
     kill -0 "$LAUNCHED_PID" 2>/dev/null && kill -KILL "$LAUNCHED_PID" 2>/dev/null
   fi
   defaults delete "$BENCH_ID" >/dev/null 2>&1 || true
-  rm -rf "$BENCH_SAVED_STATE" "$OUT/app"
+  rm -rf "$BENCH_SAVED_STATE" "$OUT/app" "$BENCH_HOME"
   # Running the bench binary registered the copy with LaunchServices (LS-PRUNE-MISSES); drop the record of
   # the copy just deleted. A prune failure only warns: it never changes this script's exit code.
   if [ -n "$LAUNCHED_PID" ]; then
@@ -398,12 +409,12 @@ trap 'cleanup; exit 143' TERM
 # Launch
 # ---------------------------------------------------------------------------
 BENCH_APP="$("$ROOT/tools/bench-app.sh" "$APP" "$OUT/app")" || runtime_error "bench copy of $APP failed"
-mkdir -p "$OUT/home"
+rm -rf "$BENCH_HOME"; mkdir -p "$BENCH_HOME"
 defaults delete "$BENCH_ID" >/dev/null 2>&1 || true
 rm -rf "$BENCH_SAVED_STATE"
 defaults write "$BENCH_ID" visualAppearance -string dark
 # Overlay scrollers, language and no state restoration for this process only (argument domain, never persisted).
-CFFIXED_USER_HOME="$OUT/home" "$BENCH_APP/Contents/MacOS/Moonport" -appLanguage en -AppleLanguages "(en)" \
+CFFIXED_USER_HOME="$BENCH_HOME" "$BENCH_APP/Contents/MacOS/Moonport" -appLanguage en -AppleLanguages "(en)" \
   -AppleShowScrollBars WhenScrolling -ApplePersistenceIgnoreState YES -visualFixture 1 > "$OUT/app.log" 2>&1 &
 PID=$!
 LAUNCHED_PID="$PID"
@@ -423,7 +434,7 @@ COUNT="$(printf '%s\n' "$WINDOWS_OUT" | grep -c . || true)"
 if [ "$COUNT" -ne 1 ]; then runtime_error "expected exactly one window for pid $PID, got $COUNT"; fi
 MAIN_ID="$(printf '%s\n' "$WINDOWS_OUT" | awk '{print $1}')"
 
-SCREEN_NOW="$("$VBTOOL" screen)"
+SCREEN_NOW="$("$VBTOOL" screen)" || runtime_error "vbtool screen failed (exit $?) after launch"
 read -r SW SH SSCALE SVX SVY SVW SVH <<EOF_SCR
 $SCREEN_NOW
 EOF_SCR
@@ -491,7 +502,7 @@ assert_key() {
       if [ "$fp" != "$PID" ]; then
         last_reason="notfront (focused pid $fp)"
       else
-        out="$(ax main)"
+        out="$(ax main)" || runtime_error "assert_key: ax main exited $? (pid $PID); stderr: $AX_STDERR"
         if ! is_frame "$out"; then
           last_reason="$out"
         else
@@ -544,22 +555,25 @@ park_cursor() {
 # On a miss the tree of the pid's window 1 is written to $OUT/ax-dump-<id>.txt.
 press_main_tab() {
   local axid="$1" out
-  out="$(ax id "$axid")"
+  out="$(ax id "$axid")" || runtime_error "press_main_tab: ax id exited $? (pid $PID); stderr: $AX_STDERR"
   case "$out" in
     pressed) ;;
     "NOT FOUND")
-      ax dump > "$OUT/ax-dump-$axid.txt"
+      ax dump > "$OUT/ax-dump-$axid.txt" || true
       runtime_error "press_main_tab: AXIdentifier '$axid' not found in pid $PID; identifiers seen: $OUT/ax-dump-$axid.txt" ;;
     *) runtime_error "press_main_tab: ax id '$axid' answered: $out" ;;
   esac
 }
 
 # wait_ax_id present|absent AXIDENTIFIER SECONDS — polls window 1 of $PID every 0.5 s for an element of any role with
-# that AXIdentifier (ax exists); 0 when the wanted state is reached, 1 on timeout (D12).
+# that AXIdentifier (ax exists: present | absent | no window — no window, e.g. during a window transition, is
+# not-yet for both wanted states); 0 when the wanted state is reached, 1 on timeout (D12).
+WAIT_AX_LAST=""
 wait_ax_id() {
   local want="$1" axid="$2" secs="$3" n=0 state
   while :; do
-    state="$(ax exists "$axid")"
+    state="$(ax exists "$axid")" || runtime_error "wait_ax_id: ax exists exited $? (pid $PID); stderr: $AX_STDERR"
+    WAIT_AX_LAST="$state"
     [ "$state" = "$want" ] && return 0
     n=$((n + 1)); [ "$n" -ge $((secs * 2)) ] && return 1
     sleep 0.5
@@ -570,7 +584,7 @@ wait_ax_id() {
 # synthetic keystrokes proved intermittent, so no keystrokes at all). Never falls back to keystrokes.
 open_settings() {
   local out
-  out="$(ax appmenu Settings)"
+  out="$(ax appmenu Settings)" || runtime_error "open_settings: ax appmenu exited $? (pid $PID); stderr: $AX_STDERR"
   case "$out" in
     pressed) ;;
     "NOT FOUND"*) runtime_error "Settings menu item not found via AX; menu items seen: ${out#NOT FOUND: }" ;;
@@ -585,7 +599,7 @@ close_settings() {
   wb="$(window_bounds "$wid")"
   [ -n "$wb" ] || runtime_error "close_settings: no bounds for window $wid"
   read -r bx by bw bh <<< "$wb"
-  out="$(ax closewin "$bx,$by,$bw,$bh")"
+  out="$(ax closewin "$bx,$by,$bw,$bh")" || runtime_error "close_settings: ax closewin exited $? (pid $PID); stderr: $AX_STDERR"
   case "$out" in
     pressed) ;;
     "no window") runtime_error "close_settings: no AX window of pid $PID matching Settings bounds ($bx,$by,$bw,$bh)" ;;
@@ -602,14 +616,21 @@ STATE_BOUNDS=()
 # Visible Accessibility text of the captured window (SMOKE-TEXT-NOISE): read right after the capture, while the
 # state is still on screen, from the AX window at the captured window's CG bounds ($2 = "x y w h"; ax `text`).
 capture_ax_text() {
-  local name="$1" x y w h out
+  local name="$1" x y w h out rc=0 errf="$OUT/ax-stderr-text-$name.txt"
   read -r x y w h <<< "$2"
-  out="$(ax text "$x,$y,$w,$h")"
+  # Called directly, not through ax(): its stderr (PARTIAL-CLIP notes) goes to a per-state file, never into the text.
+  out="$("$AXHELPER" "$PID" text "$x,$y,$w,$h" 2>"$errf")" || rc=$?
+  [ "$rc" -eq 0 ] || runtime_error "capture_ax_text: ax text exited $rc for $name (pid $PID); stderr: $errf"
   case "$out" in
-    "no window"|"NO TEXT"|"")
-      ax dump > "$OUT/ax-dump-text-$name.txt"
+    "no window"|"NO TEXT"|""|"WALK-CAP "*)
+      ax dump > "$OUT/ax-dump-text-$name.txt" || true
       runtime_error "capture_ax_text: '$out' for $name at $x,$y,$w,$h (pid $PID); tree of window 1: $OUT/ax-dump-text-$name.txt" ;;
   esac
+  if [ -s "$errf" ]; then
+    echo "WARNING: ax text for $name wrote to stderr: $(head -1 "$errf") (all: $errf)" >&2
+  else
+    rm -f "$errf"
+  fi
   printf '%s\n' "$out" > "$OUT/axtext/$name.txt"
 }
 
@@ -684,7 +705,7 @@ for mode in dark light; do
   # for the pid; the capture is the main window's screen rect, which the sheet lies inside (R6). Never a second blind press.
   assert_key "$MAIN_ID" "main-report-$mode"
   press_main_tab main-report
-  wait_ax_id present report-sheet 5 || runtime_error "report sheet did not open within 5 s of pressing main-report ($mode)"
+  wait_ax_id present report-sheet 5 || runtime_error "report sheet did not open within 5 s of pressing main-report ($mode) (last ax answer: $WAIT_AX_LAST)"
   SHEET_COUNT="$("$VBTOOL" windows --pid "$PID" | grep -c . || true)"
   [ "$SHEET_COUNT" -eq 2 ] || runtime_error "expected the main window and the report sheet (2 windows), got $SHEET_COUNT ($mode)"
   park_cursor
@@ -692,7 +713,7 @@ for mode in dark light; do
   assert_key "$MAIN_ID" "main-report-$mode"
   capture_region_state "main-report-$mode" "$MAIN_ID"
   press_main_tab report-done
-  wait_ax_id absent report-sheet 5 || runtime_error "report sheet still open 5 s after pressing report-done ($mode); not pressing again"
+  wait_ax_id absent report-sheet 5 || runtime_error "report sheet still open 5 s after pressing report-done ($mode); not pressing again (last ax answer: $WAIT_AX_LAST)"
   sleep 1
 
   # Settings window: General (the pane it opens on).

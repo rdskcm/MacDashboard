@@ -68,10 +68,15 @@ enum CommandRunner {
     /// `args`, stdin /dev/null, the pinned `environment`, as leader of its own process group.
     /// `onLine` (optional) receives every stdout and stderr line, on a private serial queue,
     /// all of them before this function returns. Cancelling the awaiting Task kills the
-    /// group (or skips the spawn). Never blocks the caller or the Swift concurrency pool: each running child has one
-    /// dedicated waiter thread that blocks until it exits.
-    /// Output the child wrote before OUR kill is kept: after a timeout or cancellation, reading continues until EOF, at most `killDrainWindow` after the leader is reaped.
-    /// `interruptGrace` (opt-in): cancellation first sends SIGINT to the group so the child can clean up (what Ctrl-C does) and sends SIGKILL only if the leader is still unreaped `interruptGrace` seconds later. The outcome is then the child's own exit status unless the escalation fired or output was cut (→ `.cancelled`). Timeouts always SIGKILL.
+    /// group (or skips the spawn). Never blocks the caller or the Swift concurrency pool:
+    /// each running child has one dedicated waiter thread that blocks until it exits.
+    /// Output the child wrote before OUR kill is kept: after a timeout or cancellation,
+    /// reading continues until EOF, at most `killDrainWindow` after the leader is reaped.
+    /// `interruptGrace` (opt-in): cancellation first sends SIGINT to the group so the child
+    /// can clean up (what Ctrl-C does) and sends SIGKILL only if the leader is still
+    /// unreaped `interruptGrace` seconds later. The outcome is then the child's own exit
+    /// status unless the escalation fired or output was cut (→ `.cancelled`). Timeouts
+    /// always SIGKILL.
     static func run(_ path: String, _ args: [String], timeout: TimeInterval,
                     environment: [String: String] = defaultEnvironment,
                     interruptGrace: TimeInterval? = nil,
