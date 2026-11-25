@@ -4,7 +4,7 @@ Every Moonport release on GitHub follows this file. Release flow: the tag push r
 `.github/workflows/release.yml`, which creates the release with the standard title and a placeholder
 note and uploads `Moonport.zip`. Then write the body below into a file and apply it:
 
-    gh release edit vX.Y -R rdskcm/MacDashboard --title "vX.Y (Codename)" --notes-file <body file>
+    gh release edit vX.Y -R getmoonport/moonport --title "vX.Y (Codename)" --notes-file <body file>
 
 Edit title and body only. Never touch the tag or the asset.
 
@@ -37,7 +37,7 @@ after it. Codenames name a major version: 1.x = Cadia, 2.x = Krieg (`CODENAME` i
 
        SHA-256 of `Moonport.zip`: `<sha256>`
 
-       Step by step, and building from source: [README](https://github.com/rdskcm/MacDashboard#install).
+       Step by step, and building from source: [README](https://github.com/getmoonport/moonport#install).
 
 7. `### Privacy` — this exact paragraph:
 
@@ -45,7 +45,7 @@ after it. Codenames name a major version: 1.x = Cadia, 2.x = Krieg (`CODENAME` i
 
 8. Footer, no heading:
 
-       Full list and known limitations: [CHANGELOG.md](https://github.com/rdskcm/MacDashboard/blob/main/CHANGELOG.md). All code changes since vP: [vP...vX.Y](https://github.com/rdskcm/MacDashboard/compare/vP...vX.Y).
+       Full list and known limitations: [CHANGELOG.md](https://github.com/getmoonport/moonport/blob/main/CHANGELOG.md). All code changes since vP: [vP...vX.Y](https://github.com/getmoonport/moonport/compare/vP...vX.Y).
 
        Licensed under the MIT License.
 

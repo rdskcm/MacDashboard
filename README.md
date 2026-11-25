@@ -165,7 +165,7 @@ privacy notice before attaching anything.
 
 ## Requirements
 
-- An Apple Silicon Mac with macOS 26 (Tahoe) or newer for version 3.0 and later; version 2.3.x runs on macOS 14 (Sonoma) and newer. Intel Macs: use [v2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1), the last release built for them.
+- An Apple Silicon Mac with macOS 26 (Tahoe) or newer for version 3.0 and later; version 2.3.x runs on macOS 14 (Sonoma) and newer. Intel Macs: use [v2.1](https://github.com/getmoonport/moonport/releases/tag/v2.1), the last release built for them.
 - Nothing to install. Optionally: `smartmontools` (`brew install
   smartmontools`) to see SMART attributes for external NVMe drives — the app
   can also install it for you with one click.
@@ -176,7 +176,7 @@ Two ways — pick one.
 
 ### Download the ready-made app (easiest)
 
-> **Intel Mac?** Version 2.2 and later run on Apple Silicon only. On an Intel Mac, download `MacDashboard.zip` from the [v2.1 release](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1) instead — it is the last version built for Intel.
+> **Intel Mac?** Version 2.2 and later run on Apple Silicon only. On an Intel Mac, download `MacDashboard.zip` from the [v2.1 release](https://github.com/getmoonport/moonport/releases/tag/v2.1) instead — it is the last version built for Intel.
 
 1. Open the [Releases](../../releases) page and download `Moonport.zip` from the latest release.
 2. *Optional — verify the download.* Compare the hash against the **SHA-256** line in the release notes:
@@ -212,8 +212,8 @@ Xcode will fail to compile it. The app built from this source runs on macOS 26
 (Tahoe) and later.
 
 ```bash
-git clone https://github.com/rdskcm/MacDashboard.git
-cd MacDashboard
+git clone https://github.com/getmoonport/moonport.git
+cd moonport
 ./build_app.sh            # builds dist.noindex/Moonport.app
 ./build_app.sh --install  # ...and moves it into ~/Applications
 ```
@@ -278,7 +278,7 @@ quarantine flag along the way, clear it exactly as in the first-launch step abov
 ## Feedback
 
 Found a bug or have a feature idea? Open an
-[Issue](https://github.com/rdskcm/MacDashboard/issues) — the bug and feature
+[Issue](https://github.com/getmoonport/moonport/issues) — the bug and feature
 templates will guide you (the bug template also explains what's safe to
 attach and what isn't; see the Privacy section above before including a
 report file or screenshot). Found a security issue? See
