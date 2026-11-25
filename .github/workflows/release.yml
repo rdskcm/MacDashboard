@@ -1,17 +1,33 @@
 name: Release
 
-# Builds the Apple Silicon (arm64) Moonport.app, packages it with `ditto` (which
-# preserves the ad-hoc signature across the zip round-trip), and attaches the
-# .zip to a GitHub Release. The app is ad-hoc signed (not notarized), so on
-# first launch users must clear Gatekeeper — see the README install section.
+# Builds the Apple Silicon (arm64) Moonport.app from a release tag, packages it with
+# `ditto` (which preserves the ad-hoc signature across the zip round-trip), and creates
+# a DRAFT GitHub Release holding Moonport.zip and SHA256SUMS. This workflow never
+# publishes and never replaces an asset. Publishing is a separate manual step, done
+# after the draft's assets are downloaded and checked (release protocol). The app is
+# ad-hoc signed (not notarized), so on first launch users must clear Gatekeeper — see
+# the README install section.
 #
-#   - push a tag `vX.Y`   -> builds that tag, creates the release if missing,
-#                            uploads the asset
-#   - "Run workflow" button -> select the TAG in the ref dropdown and type the
-#                            same tag below. There is deliberately no default:
-#                            a pre-filled tag plus `--clobber` is one click away
-#                            from overwriting an older release's asset, and the
-#                            v1.0 asset is this project's rollback anchor.
+# RELEASE-INTEGRITY, in order:
+#   - job `gate` (read-only token): the typed tag names the ref being built, the tagged
+#     commit is on main or on a release/* branch, and a push-event CI run on that exact
+#     commit has a successful `build-and-check` job. The checks live in
+#     .github/scripts/release-gate.sh and run on a Mac with `gh` too. Nothing waits:
+#     CI that is missing, still running or failed fails this run.
+#   - job `release` (the only job with contents: write): no release or draft exists for
+#     the tag, the pinned Xcode (.github/actions/select-xcode) builds the gated commit,
+#     the bundle, binary and signature asserts pass, and one
+#     `gh release create --draft --verify-tag` uploads both assets.
+#
+#   - push a tag `vX.Y[.Z]` -> runs both jobs for that tag
+#   - "Run workflow" button -> select the TAG in the ref dropdown and type the same tag
+#                              below. There is deliberately no default, so one click
+#                              cannot aim a build at another release. Use it to retry
+#                              once CI on the commit has succeeded, or after a bad
+#                              draft was deleted by hand.
+# A release or draft that already exists for the tag fails the run. Delete a bad draft
+# by hand. A broken published build is fixed by the next patch number: v* tags are
+# immutable (ruleset protect-release-tags).
 on:
   push:
     tags:
@@ -19,53 +35,111 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to attach the build to (must equal the ref selected above)'
+        description: 'Release tag to build (must equal the tag selected above)'
         required: true
 
 permissions:
-  contents: write
+  contents: read
+
+# One run per tag at a time, never cancelled: a second run for the same tag waits, then
+# fails at the existing-release check instead of racing the first to create a draft.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    # The app's appearance follows the SDK recorded in its binary (LC_BUILD_VERSION
-    # `sdk`), not the OS it runs on. The floor is 26: the Tahoe (Liquid Glass)
-    # appearance is gated on the SDK major version. The shared select-xcode action
-    # (also used by ci.yml) picks the newest release Xcode >= 26 on whatever image
-    # macos-latest currently is (never assumed in advance), and the SDK check below
-    # fails the run unless the binary records exactly that Xcode's SDK. A newer
-    # major SDK is not required: builds with SDK 26.5 and SDK 27.0 showed no
-    # visible difference on macOS 27.0.1 (A/B, 2026-10-11).
-    runs-on: macos-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read  # list CI runs and their jobs
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Resolve release tag
         id: tag
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
           INPUT_TAG: ${{ github.event.inputs.release_tag }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "$EVENT_NAME" = "push" ]; then
             echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Manual run: the asset is uploaded with --clobber, so the tag must name
-          # the very ref being built. Uploading a build of one ref onto another
-          # ref's release silently replaces that release's asset.
-          if [ "${{ github.ref_type }}" != "tag" ]; then
-            echo "::error::run this workflow from a tag — the ref dropdown currently points at '${REF_NAME}' (a ${{ github.ref_type }})"
+          # Manual run: the draft is created for the typed tag, so the tag must name the
+          # very ref being built. Otherwise a build of one ref would become another tag's
+          # release.
+          if [ "$REF_TYPE" != "tag" ]; then
+            echo "::error::run this workflow from a tag — the ref dropdown currently points at '${REF_NAME}' (a ${REF_TYPE})"
             exit 1
           fi
           if [ "$INPUT_TAG" != "$REF_NAME" ]; then
-            echo "::error::release_tag '$INPUT_TAG' does not match the ref being built ('$REF_NAME') — refusing to attach this build to a different release"
+            echo "::error::release_tag '$INPUT_TAG' does not match the ref being built ('$REF_NAME') — refusing to build a release for a different tag"
             exit 1
           fi
           echo "tag=${REF_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Select the newest Xcode (>= 26)
+      - name: Resolve the tagged commit
+        id: sha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          sha="$(.github/scripts/release-gate.sh resolve "$REPO" "$TAG")"
+          echo "$TAG -> $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: The commit is on main or a release/* branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: .github/scripts/release-gate.sh on-release-line "$REPO" "$SHA"
+
+      - name: Push CI passed on the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: .github/scripts/release-gate.sh ci-passed "$REPO" "$SHA"
+
+  release:
+    needs: gate
+    # The app's appearance follows the SDK recorded in its binary (LC_BUILD_VERSION
+    # `sdk`), not the OS it runs on. The floor is 26: the Tahoe (Liquid Glass)
+    # appearance is gated on the SDK major version. The shared select-xcode action
+    # (also used by ci.yml) selects the one pinned Xcode and fails if the runner image
+    # lacks it, and the SDK check below fails the run unless the binary records exactly
+    # that Xcode's SDK. A newer major SDK is not required: builds with SDK 26.5 and
+    # SDK 27.0 showed no visible difference on macOS 27.0.1 (A/B, 2026-10-11).
+    runs-on: macos-latest
+    permissions:
+      contents: write  # the only job allowed to create the draft release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+
+      - name: Refuse if a release or draft already exists for the tag
+        # This job's token has push access, so drafts are listed too.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.gate.outputs.tag }}
+        run: .github/scripts/release-gate.sh no-release "$REPO" "$TAG"
+
+      - name: Select the pinned Xcode
         uses: ./.github/actions/select-xcode
 
       - name: Build .app
@@ -73,7 +147,7 @@ jobs:
 
       - name: Assert the bundle version matches the release tag
         env:
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.gate.outputs.tag }}
         run: |
           set -euo pipefail
           ver="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' dist.noindex/Moonport.app/Contents/Info.plist)"
@@ -170,22 +244,44 @@ jobs:
           fi
           echo "AppleEvents entitlement OK"
 
-      - name: Attach to release
+      - name: Create the draft release (never published or replaced here)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.gate.outputs.tag }}
+          SHA: ${{ needs.gate.outputs.sha }}
         run: |
           set -euo pipefail
-          TAG="${{ steps.tag.outputs.tag }}"
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            # Standard title "vX.Y (Codename)" (.github/RELEASE_NOTES_TEMPLATE.md), taken from the
-            # bundle's CFBundleShortVersionString ("2.2 (Krieg)"). build_app.sh builds that string from
-            # the same VERSION it writes to CFBundleVersion, and CFBundleVersion was checked against the
-            # tag above. The notes are a placeholder that the release flow replaces
-            # with `gh release edit --notes-file`.
-            short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist.noindex/Moonport.app/Contents/Info.plist)"
-            gh release create "$TAG" \
-              --title "v$short" \
-              --notes "Apple Silicon (arm64) build. Intel Macs: download v2.1 from https://github.com/getmoonport/moonport/releases/tag/v2.1. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
+          # Checked again right before creating: a release could have been made by hand
+          # while this run was building.
+          .github/scripts/release-gate.sh no-release "$REPO" "$TAG"
+          # --verify-tag only checks that the tag exists; make sure it still names the commit
+          # the gate passed and this job built (v* tags are immutable by ruleset, this is the
+          # check that does not rely on it).
+          now="$(.github/scripts/release-gate.sh resolve "$REPO" "$TAG")"
+          if [ "$now" != "$SHA" ]; then
+            echo "::error::$TAG now points to $now, not the gated and built commit $SHA"
+            exit 1
           fi
-          gh release upload "$TAG" Moonport.zip --clobber
-          sum="$(shasum -a 256 Moonport.zip | awk '{print $1}')"
+          # `shasum -a 256 -c SHA256SUMS` verifies the downloaded zip against this file.
+          shasum -a 256 Moonport.zip > SHA256SUMS
+          shasum -a 256 -c SHA256SUMS
+          # Standard title "vX.Y (Codename)" (.github/RELEASE_NOTES_TEMPLATE.md), taken from the
+          # bundle's CFBundleShortVersionString ("2.2 (Krieg)"). build_app.sh builds that string from
+          # the same VERSION it writes to CFBundleVersion, and CFBundleVersion was checked against the
+          # tag above. The notes are a placeholder: publishing replaces them with
+          # `gh release edit --draft=false --notes-file`.
+          short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist.noindex/Moonport.app/Contents/Info.plist)"
+          # --verify-tag: never let gh create a missing tag. Both assets go up in this one call.
+          gh release create "$TAG" Moonport.zip SHA256SUMS \
+            --draft \
+            --verify-tag \
+            --title "v$short" \
+            --notes "Apple Silicon (arm64) build. Intel Macs: download v2.1 from https://github.com/getmoonport/moonport/releases/tag/v2.1. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
+          sum="$(awk '{print $1}' SHA256SUMS)"
           echo "SHA-256: $sum"
-          echo "SHA-256 of \`Moonport.zip\`: \`$sum\`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Draft release created for \`$TAG\` (not published)."
+            echo "SHA-256 of \`Moonport.zip\`: \`$sum\`"
+          } >> "$GITHUB_STEP_SUMMARY"
