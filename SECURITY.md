@@ -10,7 +10,7 @@ If you're on an older build, please update before reporting.
 Please report security issues privately, not as a public GitHub issue: use
 GitHub's Private Vulnerability Reporting (Security tab → "Report a
 vulnerability"), or go directly to
-[https://github.com/rdskcm/MacDashboard/security/advisories/new](https://github.com/rdskcm/MacDashboard/security/advisories/new).
+[https://github.com/getmoonport/moonport/security/advisories/new](https://github.com/getmoonport/moonport/security/advisories/new).
 
 **Please don't include your own `mac_report.txt` or other diagnostic report
 files in the report.** That file is machine-identifying (folder names,

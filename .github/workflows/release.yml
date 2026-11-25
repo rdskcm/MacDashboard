@@ -183,7 +183,7 @@ jobs:
             short="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist.noindex/Moonport.app/Contents/Info.plist)"
             gh release create "$TAG" \
               --title "v$short" \
-              --notes "Apple Silicon (arm64) build. Intel Macs: download v2.1 from https://github.com/rdskcm/MacDashboard/releases/tag/v2.1. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
+              --notes "Apple Silicon (arm64) build. Intel Macs: download v2.1 from https://github.com/getmoonport/moonport/releases/tag/v2.1. Ad-hoc signed, not notarized — see the README for the one-time first-launch Gatekeeper step."
           fi
           gh release upload "$TAG" Moonport.zip --clobber
           sum="$(shasum -a 256 Moonport.zip | awk '{print $1}')"

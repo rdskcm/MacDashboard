@@ -171,7 +171,7 @@ Time Machine. Всё это остаётся локально — но если 
 
 ## Требования
 
-- Mac с Apple Silicon и macOS 26 (Tahoe) или новее — для версии 3.0 и новее; версия 2.3.x работает на macOS 14 (Sonoma) и новее. Для Mac с Intel — [версия 2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1), последняя, собранная для них.
+- Mac с Apple Silicon и macOS 26 (Tahoe) или новее — для версии 3.0 и новее; версия 2.3.x работает на macOS 14 (Sonoma) и новее. Для Mac с Intel — [версия 2.1](https://github.com/getmoonport/moonport/releases/tag/v2.1), последняя, собранная для них.
 - Ничего устанавливать не нужно. Опционально: `smartmontools` (`brew install
   smartmontools`) — тогда для внешних NVMe появятся атрибуты SMART; приложение
   умеет поставить его само в один клик.
@@ -182,7 +182,7 @@ Time Machine. Всё это остаётся локально — но если 
 
 ### Скачать готовое приложение (проще всего)
 
-> **Mac с Intel?** Версия 2.2 и новее работает только на Apple Silicon. На Mac с Intel скачайте `MacDashboard.zip` из [релиза v2.1](https://github.com/rdskcm/MacDashboard/releases/tag/v2.1) — это последняя версия, собранная для Intel.
+> **Mac с Intel?** Версия 2.2 и новее работает только на Apple Silicon. На Mac с Intel скачайте `MacDashboard.zip` из [релиза v2.1](https://github.com/getmoonport/moonport/releases/tag/v2.1) — это последняя версия, собранная для Intel.
 
 1. Откройте страницу [Releases](../../releases) и скачайте `Moonport.zip` из последнего релиза.
 2. *Необязательно — проверьте загрузку.* Сверьте хеш со строкой **SHA-256** в описании релиза:
@@ -218,8 +218,8 @@ Time Machine. Всё это остаётся локально — но если 
 работает на macOS 26 (Tahoe) и новее.
 
 ```bash
-git clone https://github.com/rdskcm/MacDashboard.git
-cd MacDashboard
+git clone https://github.com/getmoonport/moonport.git
+cd moonport
 ./build_app.sh            # соберёт dist.noindex/Moonport.app
 ./build_app.sh --install  # и переместит в ~/Applications
 ```
@@ -287,7 +287,7 @@ Finder через Automation, поэтому при первом использ�
 ## Обратная связь
 
 Нашли баг или есть идея фичи? Откройте
-[Issue](https://github.com/rdskcm/MacDashboard/issues) — шаблоны бага и
+[Issue](https://github.com/getmoonport/moonport/issues) — шаблоны бага и
 фичи подскажут, что заполнить (шаблон бага также объясняет, что можно
 прикладывать, а что нет — см. раздел «Приватность» выше, прежде чем
 прикладывать файл отчёта или скриншот). Нашли уязвимость? Смотрите
