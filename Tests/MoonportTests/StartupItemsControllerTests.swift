@@ -75,6 +75,7 @@ extension SerialTests {
             c.checkStaleNow()
             #expect(c.checking && c.checkTask != nil)
             await c.checkTask?.value
+            #expect(c.checkTask == nil)
             #expect(fake.collectCalls == 1 && host.afterPassCalls == 1 && host.updateCalls == 1)
             #expect(host.report.autostart == fake.info)
             #expect(c.checkedAt == clock.now && c.removedCount == 0 && !c.checking)
@@ -126,6 +127,25 @@ extension SerialTests {
             #expect(host.updateCalls == 0 && host.afterPassCalls == 0)
             #expect(c.checkedAt == nil && !c.checking)
             #expect(host.reassessCalls == 0)
+        }
+        @Test func staleCheckDoesNotResetANewerCheck() async {
+            let (c, host, fake, _) = make()
+            fake.holdCollect = true
+            c.checkStaleNow()
+            await settle { fake.collectParked }
+            let old = c.checkTask
+            c.stop()
+            #expect(!c.checking)
+            c.checkStaleNow()
+            let newer = c.checkTask
+            #expect(c.checking && newer != nil)
+            fake.releaseCollect()
+            await old?.value
+            #expect(c.checking && c.checkTask != nil, "the stale defer leaves the newer check alone")
+            await settle { fake.collectCalls == 2 }
+            fake.releaseCollect()
+            await newer?.value
+            #expect(!c.checking && c.checkTask == nil && host.report.autostart == fake.info)
         }
         // 5 (R2, R6, D9)
         @Test func userLevelDeleteTrashesAndDropsTheRowLocally() async {

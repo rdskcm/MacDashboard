@@ -7,7 +7,8 @@
 #                                                pending morning report; --dry-run prints the decisions and changes nothing; from 21:00 until tonight's run starts (03:00 at the latest) it keeps the display awake so the screen cannot lock, dimmed from 00:00 while the user is away
 #   tools/perf/night.sh --run [--now] [--keep-dark] [--scenarios LIST] [--runs N] [--stop HH:MM] [--no-gate] [--standing]
 #                                                the run (normally opened in Terminal by --check): gate, then jobs until
-#                                                09:00. --now skips the window and idle checks (hand run) and runs the gate
+#                                                09:00. --now skips the window and idle checks and, for its
+#                                                jobs, the Claude Code activity check (hand run) and runs the gate
 #                                                only, unless --stop HH:MM is given (then jobs run until that time);
 #                                                --no-gate (with --now --stop) skips the gate;
 #                                                --standing (with --now --stop) also runs the standing set after the queued jobs; --keep-dark leaves display and
@@ -268,8 +269,19 @@ tonight_stop() {   # night -> that night's one-night stop HH:MM; empty when none
   [ "${l%% *}" = "$1" ] && [[ "${l#* }" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] && echo "${l#* }"
   return 0
 }
-next_stop() {   # hour -> the job stop of the next automatic run as seen from that hour
-  local o; o="$(tonight_stop "$(stop_night "$1")")"; echo "${o:-$DEFAULT_STOP}"
+running_stop() {   # NIGHT-QUIET-CHECK: HH:MM job stop of the night run in progress (state/running-stop, written by a --run
+                   # that runs jobs, removed when it ends); exit 1 when none is alive or its stop has passed
+  local f="$NIGHT/state/running-stop" e hm
+  [ -f "$f" ] && busy || return 1
+  read -r e hm < "$f"
+  [[ "$e" =~ ^[0-9]+$ ]] && [[ "$hm" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] && [ "$(date +%s)" -lt "$e" ] || return 1
+  echo "$hm"
+}
+next_stop() {   # hour -> the job stop a job queued now gets: the running night's own stop while one runs, else the next
+                # automatic run's
+  local o
+  if o="$(running_stop)"; then echo "$o"; return 0; fi
+  o="$(tonight_stop "$(stop_night "$1")")"; echo "${o:-$DEFAULT_STOP}"
 }
 requeue_hint() {
   printf 'tools/perf/night.sh --queue-add --name %q --minutes %q --dir %q --cmd %q' \
@@ -286,6 +298,7 @@ queue_list() {
   done
   [ "$n" -gt 0 ] || echo "queue empty"
   [ ! -f "$NIGHT/state/last-measured-sha" ] || echo "gate: last full measurement $(cat "$NIGHT/state/last-measured-sha")"
+  if l="$(running_stop)"; then echo "job stop for the running night: $l (a job queued now can still start in it)"; fi
   l="$(tonight_stop "$(stop_night "$(date +%H)")")"
   [ -z "$l" ] || echo "job stop for night $(stop_night "$(date +%H)"): $l (one-night override, later nights $DEFAULT_STOP)"
 }
@@ -604,6 +617,7 @@ else o="$(tonight_stop "$DATE")"; [ -z "$o" ] || { STOP_HM="$o"; STOP_NOTE=" (on
 STOP_EPOCH="$(date -j -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 [ "$STOP_EPOCH" -gt "$START_EPOCH" ] || STOP_EPOCH="$(date -j -v+1d -f '%Y%m%d %H:%M:%S' "$(date +%Y%m%d) $STOP_HM:00" +%s)"
 SOFT_HM="$(date -r $((STOP_EPOCH - 900)) +%H:%M)"        # D7: STOP_AT for self-stopping jobs
+[ "$JOBS" = 1 ] && echo "$STOP_EPOCH $STOP_HM" > "$NIGHT/state/running-stop"   # NIGHT-QUIET-CHECK: the stop a job queued mid-run gets
 STANDING=0; { [ "$NOW" = 0 ] || [ "$STANDING_FLAG" = 1 ]; } && STANDING=1   # NIGHT-STANDING-JOBS: automatic runs always, hand runs with --standing
 
 # GATE-AX-MISS: every Moonport process is closed before the gate and before each job (tools/perf/foreign-copies.sh:
@@ -682,7 +696,7 @@ job_check() {   # file -> WHY = "" when the job may start now, else why not (D4-
   min="$(jf "$1" minutes)"; now="$(date +%s)"; WHY="$HALT"
   [ -z "$WHY" ] || return 0
   if [ $((now + min * 60)) -gt "$STOP_EPOCH" ]; then WHY="needs $min min, $(( (STOP_EPOCH - now) / 60 )) min left before $STOP_HM"
-  elif CC="$(claude_working)"; then HALT="$CC"; WHY="$HALT"
+  elif [ "$NOW" = 0 ] && CC="$(claude_working)"; then HALT="$CC"; WHY="$HALT"
   elif ! power_ok; then HALT="on battery or Low Power Mode on"; WHY="$HALT"
   elif ! unlocked; then HALT="screen locked"; WHY="$HALT"; fi
   return 0
@@ -877,6 +891,7 @@ budget_lines() {   # PAGE-BUDGETS: BUDGET_HEAD = "budgets: …" for line 1, BUDG
 finish() {
   local rc=$? first jobs standing hl
   [ "$FINISHED" = 0 ] || return; FINISHED=1
+  rm -f "$NIGHT/state/running-stop"
   if [ -n "$JPID" ]; then
     stop_job interrupted 30
     [ -n "$JSTOPPED" ] || { wait "$JPID" 2>/dev/null; JRC=$?; }
@@ -899,7 +914,7 @@ finish() {
   case "$NIGHT_VERDICT" in
     SKIPPED*) ;;   # a skipped night stays a short report
     *) REP+=("time: $START_HM - $(date +%H:%M), $(( ($(date +%s) - START_EPOCH) / 60 )) min; job stop $STOP_HM$STOP_NOTE (jobs get STOP_AT=$SOFT_HM)")
-       REP+=("idle at start: $IDLE0 s, threshold $THR s$([ "$NOW" = 1 ] && echo ' (--now: window and idle checks skipped)')")
+       REP+=("idle at start: $IDLE0 s, threshold $THR s$([ "$NOW" = 1 ] && echo ' (--now: window, idle and Claude Code activity checks skipped)')")
        REP+=("preconditions: AC power and Low Power Mode off, screen unlocked")
        REP+=("keep-awake: caffeinate pid ${CAF:-none}, assertion seen: $CAF_SEEN" "$DISP_LINE" "$KBD_LINE")
        hl="$(hold_line "${HOLD_NIGHT:-$DATE}")"; REP+=("evening hold: ${hl:-none}")

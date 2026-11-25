@@ -55,8 +55,9 @@ final class StartupItemsController {
     /// No view reads it today.
     private(set) var deleteRestore = PlistDeleteRestoreSignal()
 
-    /// The in-flight «Check for stale»; `stop()` cancels it. Tests await it.
+    /// The in-flight «Check for stale»; cleared when it ends or by `stop()`. Tests await it.
     @ObservationIgnored private(set) var checkTask: Task<Void, Never>?
+    @ObservationIgnored private var checkID = 0
     /// Every in-flight delete (single or bulk), keyed by start order. Each Task drops its own entry when it ends;
     /// `stop()` cancels them all. Tests snapshot and await them.
     @ObservationIgnored private(set) var deleteTasks: [Int: Task<Void, Never>] = [:]
@@ -76,9 +77,11 @@ final class StartupItemsController {
     func checkStaleNow() {
         guard !checking else { return }
         checking = true
+        checkID &+= 1
+        let id = checkID
         checkTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.checking = false }
+            defer { if self.checkID == id { self.checking = false; self.checkTask = nil } }
             let info = await self.deps.collect()
             guard !Task.isCancelled else { return }
             // A pass in flight would overwrite this section with its own (older) scan when it commits: land after it
@@ -307,6 +310,8 @@ final class StartupItemsController {
     func stop() {
         checkTask?.cancel()
         checkTask = nil
+        checkID &+= 1
+        checking = false
         for task in deleteTasks.values { task.cancel() }
         deleteTasks = [:]
     }

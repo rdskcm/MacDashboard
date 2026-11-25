@@ -257,7 +257,7 @@ final class StorageController {
     /// The app became active (the coordinator's `appDidBecomeActive()`): the Full Disk Access wait ends and the
     /// protected locations are re-probed.
     func appDidBecomeActive() {
-        fdaAwaitingReturn = false
+        if fdaAwaitingReturn { fdaAwaitingReturn = false }
         reprobeProtectedLocations()
     }
 

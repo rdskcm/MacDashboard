@@ -3,6 +3,8 @@
 // closures — no softwareupdate, no du, no probe, no disk, no coordinator (except test 17b, over a temp data folder).
 // Host and clock fakes: ControllerTestSupport.swift.
 import Foundation
+import Observation
+import Synchronization
 import Testing
 @testable import Moonport
 
@@ -296,6 +298,16 @@ extension SerialTests {
             #expect(c.fdaAwaitingReturn && fake.openedPanes == [AdvicePanes.fullDiskAccess])
             c.appDidBecomeActive()
             #expect(!c.fdaAwaitingReturn && fake.probeCalls == 1)
+        }
+
+        /// An activation with no Full Disk Access wait pending does not write the flag (no observation change).
+        @Test func activationWithoutFDAWaitDoesNotWriteTheFlag() {
+            let (c, _, _, _) = make()
+            #expect(!c.fdaAwaitingReturn)
+            let fired = Mutex(false)
+            withObservationTracking { _ = c.fdaAwaitingReturn } onChange: { fired.withLock { $0 = true } }
+            c.appDidBecomeActive()
+            #expect(!fired.withLock { $0 })
         }
 
         // 16 (R8)

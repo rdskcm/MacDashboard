@@ -28,8 +28,10 @@ usage() {
 
 # `gh api` GET with three attempts 5 s apart: the API has returned transient EOFs. stdin
 # is closed so gh never reads the caller's here-strings. Exits 2 when all attempts fail.
+# With --not-found-ok first, an HTTP 404 returns 4 at once (no retry, no message) for the caller to handle.
 api() {
-  local errf out attempt
+  local errf out attempt nf=0
+  if [ "${1:-}" = "--not-found-ok" ]; then nf=1; shift; fi
   errf="$(mktemp)"
   for attempt in 1 2 3; do
     if out="$(gh api "$@" </dev/null 2>"$errf")"; then
@@ -37,6 +39,7 @@ api() {
       if [ -n "$out" ]; then printf '%s\n' "$out"; fi
       return 0
     fi
+    if [ "$nf" = 1 ] && grep -q 'HTTP 404' "$errf"; then rm -f "$errf"; return 4; fi
     if [ "$attempt" -lt 3 ]; then sleep 5; fi
   done
   err "GitHub API call failed after 3 attempts: gh api $* -> $(tr '\n' ' ' <"$errf")"
@@ -55,13 +58,18 @@ cmd_resolve() {
 }
 
 cmd_on_release_line() {
-  local refs rel ref tip status
+  local refs rel ref tip status rc
   refs="$(api "repos/$repo/git/ref/heads/main" --jq '"\(.ref) \(.object.sha)"')"
   rel="$(api --paginate "repos/$repo/git/matching-refs/heads/release/" --jq '.[] | "\(.ref) \(.object.sha)"')"
   if [ -n "$rel" ]; then refs="$refs"$'\n'"$rel"; fi
   echo "is $arg on main or a release/* branch?"
   while read -r ref tip; do
-    status="$(api "repos/$repo/compare/$tip...$arg?per_page=1" --jq '.status')"
+    rc=0; status="$(api --not-found-ok "repos/$repo/compare/$tip...$arg?per_page=1" --jq '.status')" || rc=$?
+    if [ "$rc" = 4 ]; then
+      err "$arg is not a commit of $repo (GitHub answered 404 for the compare). A release is cut only from a commit on main or a release/* branch."
+      exit 1
+    fi
+    [ "$rc" = 0 ] || exit "$rc"
     echo "  ${ref#refs/heads/} at $tip: $status"
     case "$status" in
       identical|behind) echo "OK — $arg is on ${ref#refs/heads/}"; return 0 ;;

@@ -22,22 +22,53 @@ private func swiftFiles(_ subdir: String) throws -> [URL] {
 /// Engine sources: `Engine/` plus its `Strings/` subfolder (ARCH-STRINGS-SPLIT: the per-feature string tables).
 private func engineFiles() throws -> [URL] { try swiftFiles("Engine") + swiftFiles("Engine/Strings") }
 
-/// One source line with its `//` comment and the text of simple one-line string literals removed. Code inside a
-/// `\( … )` interpolation is kept (it is code); a `//` inside a string literal is not a comment.
-private func codeOnly(_ line: Substring) -> String {
-    let chars = Array(line)
-    var i = 0
-    return scanCode(chars, &i, interpolation: false)
+/// Per-line code of a file: `//` comments and string-literal text removed, code inside interpolations kept.
+/// Understands `"…"`, multi-line `"""…"""` (state carried across lines) and raw strings `#"…"#` / `#"""…"""#`
+/// with any number of `#` (`\#(…)` is their interpolation, a bare `\(` is literal text). A lone `"` with no closing
+/// quote on its line stays visible and the rest of the line is scanned as code. `/* */` comments are not handled.
+private func codeLines(_ lines: [Substring]) -> [String] {
+    var open: Int? = nil   // `#` count of the open multi-line literal; nil = in code
+    return lines.map { line in
+        let c = Array(line)
+        var i = 0
+        var out = ""
+        if let hashes = open {
+            let (code, closed) = scanString(c, &i, hashes: hashes, multiline: true)
+            out += code
+            guard closed else { return out }
+            open = nil
+        }
+        out += scanCode(c, &i, interpolation: false, open: &open)
+        return out
+    }
 }
 
+/// One line on its own (no literal open before it).
+private func codeOnly(_ line: Substring) -> String { codeLines([line])[0] }
+
 /// Code outside string literals; stops at a `//` comment, or (interpolation) at the `)` closing the `\(`.
-private func scanCode(_ c: [Character], _ i: inout Int, interpolation: Bool) -> String {
+/// A multi-line opener sets `open` and ends the line (its text starts on the next line).
+private func scanCode(_ c: [Character], _ i: inout Int, interpolation: Bool, open: inout Int?) -> String {
     var out = ""
     var depth = 0
     while i < c.count {
         let ch = c[i]
         if ch == "/", i + 1 < c.count, c[i + 1] == "/" { i = c.count; break }
-        if ch == "\"" { i += 1; out += scanString(c, &i); continue }
+        if ch == "\"" || ch == "#" {
+            var j = i
+            while j < c.count, c[j] == "#" { j += 1 }
+            let hashes = j - i
+            if j < c.count, c[j] == "\"" {
+                if j + 2 < c.count, c[j + 1] == "\"", c[j + 2] == "\"" { open = hashes; i = c.count; break }
+                let start = i
+                i = j + 1
+                let (code, closed) = scanString(c, &i, hashes: hashes, multiline: false)
+                if closed { out += code; continue }
+                out += String(c[start...j])   // lone quote: keep it, scan the rest of the line as code
+                i = j + 1
+                continue
+            }
+        }
         if interpolation {
             if ch == "(" { depth += 1 }
             else if ch == ")" {
@@ -51,24 +82,33 @@ private func scanCode(_ c: [Character], _ i: inout Int, interpolation: Bool) -> 
     return out
 }
 
-/// Consumes a string literal after its opening quote; returns only the code of its interpolations.
-private func scanString(_ c: [Character], _ i: inout Int) -> String {
+/// Consumes literal text after an opening delimiter with `hashes` `#`s; returns the code of its interpolations
+/// and whether the closing delimiter (`"` or `"""`, followed by `hashes` `#`s) was found on this line.
+private func scanString(_ c: [Character], _ i: inout Int, hashes: Int, multiline: Bool) -> (code: String, closed: Bool) {
+    let quotes = multiline ? 3 : 1
+    func matches(_ ch: Character, count: Int, at k: Int) -> Bool {
+        k + count <= c.count && c[k..<(k + count)].allSatisfy { $0 == ch }
+    }
     var out = ""
     while i < c.count {
-        let ch = c[i]
-        if ch == "\\" {
-            if i + 1 < c.count, c[i + 1] == "(" {
-                i += 2
-                out += " " + scanCode(c, &i, interpolation: true) + " "
+        if c[i] == "\\", matches("#", count: hashes, at: i + 1) {
+            let k = i + 1 + hashes
+            if k < c.count, c[k] == "(" {
+                i = k + 1
+                var nested: Int? = nil
+                out += " " + scanCode(c, &i, interpolation: true, open: &nested) + " "
             } else {
-                i += 2
+                i = k + 1   // an escape: skip the escaped character
             }
             continue
         }
+        if matches("\"", count: quotes, at: i), matches("#", count: hashes, at: i + quotes) {
+            i += quotes + hashes
+            return (out, true)
+        }
         i += 1
-        if ch == "\"" { return out }
     }
-    return out
+    return (out, false)
 }
 
 private func regex(_ pattern: String) -> NSRegularExpression { try! NSRegularExpression(pattern: pattern) }
@@ -120,8 +160,10 @@ struct EngineBoundaryTests {
         var viewsTypes = Set<String>()
         for file in try swiftFiles("Views") {
             var depth = 0
-            for line in try lines(of: file) {
-                let code = codeOnly(line)
+            let all = try lines(of: file)
+            let codes = codeLines(all)
+            for (n, line) in all.enumerated() {
+                let code = codes[n]
                 if depth == 0, let name = firstGroup(Self.topLevelType, in: String(line)) { viewsTypes.insert(name) }
                 depth += code.filter { $0 == "{" }.count - code.filter { $0 == "}" }.count
             }
@@ -131,8 +173,7 @@ struct EngineBoundaryTests {
         var offenders: [String] = []
         for file in try engineFiles() where Self.engineExceptions[file.lastPathComponent] == nil {
             var used = Set<String>()
-            for line in try lines(of: file) {
-                let code = codeOnly(line)
+            for code in codeLines(try lines(of: file)) {
                 for m in Self.identifier.matches(in: code, range: NSRange(code.startIndex..., in: code)) {
                     if let r = Range(m.range, in: code) { used.insert(String(code[r])) }
                 }
@@ -148,7 +189,9 @@ struct EngineBoundaryTests {
         var out: [String] = []
         for dir in subdirs {
             for file in try swiftFiles(dir) {
-                for (i, line) in try lines(of: file).enumerated() where (raw ? String(line) : codeOnly(line)).contains(needle) {
+                let all = try lines(of: file)
+                let code = codeLines(all)
+                for (i, line) in all.enumerated() where (raw ? String(line) : code[i]).contains(needle) {
                     out.append("\(file.lastPathComponent):\(i + 1)")
                 }
             }
@@ -175,8 +218,7 @@ struct EngineBoundaryTests {
         let hook = regex(#"\bfixtureNow\b|\bVisualFixture\."#)
         var offenders: [String] = []
         for file in try swiftFiles("Views") where Self.viewsFixtureExceptions[file.lastPathComponent] == nil {
-            for (i, line) in try lines(of: file).enumerated() {
-                let code = codeOnly(line)
+            for (i, code) in codeLines(try lines(of: file)).enumerated() {
                 if hook.firstMatch(in: code, range: NSRange(code.startIndex..., in: code)) != nil {
                     offenders.append("\(file.lastPathComponent):\(i + 1)")
                 }
@@ -197,10 +239,11 @@ struct EngineBoundaryTests {
         let file = sourcesRoot.appendingPathComponent("Engine/AppModel.swift")
         let all = try lines(of: file)
         let start = try #require(all.firstIndex { $0.contains("func assessed(_ r: FullReport)") }, "assessed(_:) not found in AppModel.swift")
+        let code0 = codeLines(all)
         var body: [String] = []
-        for line in all[(start + 1)...] {
-            if line == "    }" { break }
-            body.append(codeOnly(line))
+        for n in (start + 1)..<all.count {
+            if all[n] == "    }" { break }
+            body.append(code0[n])
         }
         let code = body.joined(separator: "\n")
         let marker = "settings.assessmentSettings"
@@ -225,7 +268,7 @@ struct EngineBoundaryTests {
         var matched: Set<String> = []
         for file in try swiftFiles("Engine") where Self.isModelFile(file.lastPathComponent) {
             matched.insert(file.lastPathComponent)
-            for (i, line) in try lines(of: file).enumerated() where codeOnly(line).contains("AppSettings.shared") {
+            for (i, line) in codeLines(try lines(of: file)).enumerated() where line.contains("AppSettings.shared") {
                 offenders.append("\(file.lastPathComponent):\(i + 1)")
             }
         }
@@ -237,7 +280,7 @@ struct EngineBoundaryTests {
     /// HistoryController (block 8) owns no Task and has no stop(), so it is not in the list.
     @Test func coordinatorStopFansOutToControllers() throws {
         let file = try swiftFiles("Engine").first { $0.lastPathComponent == "AppModel.swift" }
-        let all = try lines(of: try #require(file)).map(codeOnly)
+        let all = codeLines(try lines(of: try #require(file)))
         let start = try #require(all.firstIndex { $0.contains("func stop() {") })
         var body: [String] = []
         for line in all[(start + 1)...] {
@@ -252,7 +295,7 @@ struct EngineBoundaryTests {
     @Test func viewsReadSettingsThroughTheModel() throws {
         var users: Set<String> = []
         for file in try swiftFiles("Views") {
-            if try lines(of: file).contains(where: { codeOnly($0).contains("AppSettings.shared") }) { users.insert(file.lastPathComponent) }
+            if codeLines(try lines(of: file)).contains(where: { $0.contains("AppSettings.shared") }) { users.insert(file.lastPathComponent) }
         }
         let allowed = Set(Self.viewsSharedSettingsExceptions.keys)
         #expect(users.subtracting(allowed).isEmpty, "R6: views read settings through model.settings; AppSettings.shared found in \(users.subtracting(allowed).sorted())")
@@ -273,6 +316,34 @@ struct EngineBoundaryTests {
         #expect(!b.contains("L.gone") && !b.contains("http"), "comment and literal text removed: \(b)")
     }
 
+    /// A quote with no closing quote on its line does not hide the rest of the line.
+    @Test func codeOnlyKeepsCodeAfterALoneQuote() {
+        let s = codeOnly(#"let q = "unterminated; let v = L.foo"#)
+        #expect(s.contains("L.foo"), "code after a lone quote must stay visible: \(s)")
+    }
+
+    /// Raw strings: text and a bare `\(` are literal, `\#(` is interpolation, `"` inside does not close them.
+    @Test func codeOnlyUnderstandsRawStrings() {
+        let a = codeOnly(##"let r = #"a "quoted" \(L.notCode) b"#; let v = L.bar"##)
+        #expect(a.contains("L.bar"), "code after a raw string survives: \(a)")
+        #expect(!a.contains("L.notCode") && !a.contains("quoted"), "raw-string text removed, bare \\( is text: \(a)")
+        let b = codeOnly(##"let r = #"x \#(L.baz) y"#"##)
+        #expect(b.contains("L.baz") && !b.contains("x "), "\\#( is interpolation in a raw string: \(b)")
+        let c = codeOnly(###"let r = ##"a "# b \#(L.no) \##(L.yes)"##; let w = L.after"###)
+        #expect(c.contains("L.yes") && c.contains("L.after") && !c.contains("L.no"), "two-hash raw string: \(c)")
+    }
+
+    /// Multi-line literals: the text of the interior lines is removed, interpolations and code after `"""` are kept.
+    @Test func codeLinesCarryMultilineLiterals() {
+        let plain: [Substring] = [#"let s = """"#, #"  text "lone L.inText"#, #"  \(L.interp)"#, #"  """ + L.after"#]
+        let p = codeLines(plain)
+        #expect(p[0].contains("let s =") && !p[1].contains("L.inText") && p[2].contains("L.interp") && p[3].contains("L.after"),
+                "plain multi-line literal: \(p)")
+        let raw: [Substring] = [##"let s = #""""##, ##"  "# no \(L.no) \#(L.yes)"##, ##"  """# ; let z = L.end"##]
+        let r = codeLines(raw)
+        #expect(r[1].contains("L.yes") && !r[1].contains("L.no") && r[2].contains("L.end"), "raw multi-line literal: \(r)")
+    }
+
     /// R2: probes, parsers and the assessment take the language as a value; only the view edge reads `L`.
     /// `ReportWriter.swift` is checked above its staleness-caption marker (the helpers below it are card captions).
     @Test func engineProbesReadNoUILanguage() throws {
@@ -285,10 +356,12 @@ struct EngineBoundaryTests {
         for name in probeFiles {
             let file = try #require(try swiftFiles("Engine").first { $0.lastPathComponent == name }, "\(name) not found")
             var scanned = 0
-            for (i, line) in try lines(of: file).enumerated() {
+            let all = try lines(of: file)
+            let codes = codeLines(all)
+            for (i, line) in all.enumerated() {
                 if name == "ReportWriter.swift", line.contains(marker) { break }
                 scanned += 1
-                let code = codeOnly(line)
+                let code = codes[i]
                 let range = NSRange(code.startIndex..., in: code)
                 if globalL.firstMatch(in: code, range: range) != nil || store.firstMatch(in: code, range: range) != nil {
                     offenders.append("\(name):\(i + 1)")
