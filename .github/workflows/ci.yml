@@ -2,13 +2,18 @@ name: CI
 
 on:
   # CI-SPEED: one run per PR commit. Branch pushes are covered by the pull_request
-  # event (which tests the merge result); push runs only on main, after a merge.
+  # event (which tests the merge result); push runs only after a merge, on main and on
+  # the maintenance branches release/*. RELEASE-INTEGRITY: Release builds only a commit
+  # whose push run here succeeded, so a maintenance tag needs the release/* push run.
   push:
-    branches: [main]
+    branches: [main, 'release/*']
   pull_request:
 
-# A new commit on a PR cancels that PR's run still in progress. Pushes to main are
-# grouped by commit SHA, so a run on main is never cancelled.
+permissions:
+  contents: read
+
+# A new commit on a PR cancels that PR's run still in progress. Pushes are
+# grouped by commit SHA, so a push run on main or release/* is never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -20,10 +25,11 @@ jobs:
     if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Only backports of main commits and release prep
         run: >-
@@ -33,13 +39,15 @@ jobs:
           origin/main
 
   build-and-check:
-    # Same runner and Xcode rule as release.yml, via the shared select-xcode action:
-    # the newest release Xcode >= 26 on the current macos-latest image, so CI builds
-    # with the toolchain the release would use.
+    # Same runner and Xcode as release.yml, via the shared select-xcode action: the one
+    # pinned Xcode (the pin lives in the action), so CI builds with the toolchain the
+    # release uses.
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Assert the runner runs macOS >= 26
         # MIN-MACOS-26: the package's floor is macOS 26 and `swift test` runs the test
@@ -50,7 +58,7 @@ jobs:
           echo "runner macOS: $os"
           [ "${os%%.*}" -ge 26 ] || { echo "::error::runner runs macOS $os, below the package's macOS 26 floor; set runs-on to macos-26"; exit 1; }
 
-      - name: Select the newest Xcode (>= 26)
+      - name: Select the pinned Xcode
         uses: ./.github/actions/select-xcode
 
       - name: Build all targets, failing on any warning
