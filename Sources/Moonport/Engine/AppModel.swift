@@ -35,9 +35,9 @@ final class AppModel {
     /// IDLE-WORK-TRIM: when `disk` was last read (visible or hidden tick); the Storage disk card's caption. nil until the first read.
     var diskSampledAt: Date? = nil
     var battery: BatteryInfo? = nil   // Home battery tile / Now cell (falls back to report.battery)
-    /// Block N7: rounded SOC die temperature (°C), max over valid PMU tdie sensors,
-    /// sampled by the fast task via ThermalHIDReader (app-only private API). nil =
-    /// unavailable (Intel / API failure) — the CPU page shows «—» (honest-empty).
+    /// Chip temperature (°C, rounded), sampled by the fast task (TEMP-SENSORS-DETAIL R1): SMC `TCMz`, else `TCMb`,
+    /// else max over PMU tdie sensors from ThermalHIDReader; every source filtered to (10, 150] °C. nil = unavailable
+    /// (all three failed) — the SoC page shows «—» (honest-empty).
     /// Stored pre-rounded to Int so the equality guard suppresses sub-degree jitter.
     var socTempC: Int? = nil
     /// GPU-UTILIZATION: whole-machine GPU load %, `Device Utilization %` of the IOAccelerator entry (undocumented key),
@@ -544,9 +544,12 @@ final class AppModel {
                         let sp = PerfSignposts.begin(PerfSignposts.liveFastRead)
                         if reprime { fastBox.value.resetDeltaBaselines() }
                         let s = fastBox.value.collectFast(readsDisk: readsDisk)
-                        // Block N7: same background hop — one HID pass costs ~50 ms.
-                        let soc = ThermalSensors.socTemperature(
-                            from: ThermalHIDReader.readTemperatureSensors())
+                        // TEMP-SENSORS-DETAIL (R1, D4): TCMz, else TCMb from the SMC (two keys, well under 1 ms); the
+                        // ~50 ms HID pass (max PMU tdie) runs only when neither gives a valid value.
+                        let soc = TemperatureSensors.chipTemperature(
+                            SMCReader.readTemperatures(keys: TemperatureSensors.chipKeys) ?? [:]) {
+                            ThermalSensors.socTemperature(from: ThermalHIDReader.readTemperatureSensors())
+                        }
                         let gpu = GPUStats.readDeviceUtilization()
                         let pressure = LiveCollector.readMemoryPressure()
                         sp.end()

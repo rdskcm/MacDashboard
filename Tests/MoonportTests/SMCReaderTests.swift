@@ -11,6 +11,46 @@ private func leBytes(_ f: Float) -> [UInt8] {
 }
 
 struct SMCReaderTests {
+    // TEMP-SENSORS-DETAIL
+    @Test func decodeTemperatureFlt() {
+        #expect(SMCReader.decodeTemperature(bytes: leBytes(57.8125), type: "flt ") == 57.8125)
+        #expect(SMCReader.decodeTemperature(bytes: leBytes(57.8125), type: "flt") == 57.8125)
+    }
+
+    @Test func decodeTemperatureIoft() {
+        let raw: UInt64 = 2_514_944   // 38.375 x 65536
+        let bytes = (0..<8).map { UInt8(raw >> (8 * UInt64($0)) & 255) }
+        #expect(SMCReader.decodeTemperature(bytes: bytes, type: "ioft") == 38.375)
+        #expect(SMCReader.decodeTemperature(bytes: Array(bytes.prefix(7)), type: "ioft") == nil)
+        #expect(SMCReader.decodeTemperature(bytes: bytes, type: "sp78") == nil)
+        #expect(SMCReader.decodeTemperature(bytes: bytes, type: "si32") == nil)
+    }
+
+    @Test func decodeKeyCountRange() {
+        #expect(SMCReader.decodeKeyCount([0, 0, 7, 60]) == 1852)
+        #expect(SMCReader.decodeKeyCount([0, 0, 0, 0]) == nil)
+        #expect(SMCReader.decodeKeyCount([0, 0, 7]) == nil)
+        #expect(SMCReader.decodeKeyCount([0, 1, 0, 0]) == nil)
+    }
+
+    @Test func enumerationAcceptsOnlyKeptKeysAndRetriesWhenNothingRead() {
+        let keep: (String) -> Bool = { $0.hasPrefix("T") }
+        #expect(SMCReader.accepted(readKeys: ["Tp01", "FNum", "Te05"], count: 3, keep: keep) == ["Tp01", "Te05"])
+        #expect(SMCReader.accepted(readKeys: ["FNum"], count: 1, keep: keep) == [])     // no sensor keys: a real answer
+        #expect(SMCReader.accepted(readKeys: [], count: 1852, keep: keep) == nil)       // every index failed: retry
+        #expect(SMCReader.accepted(readKeys: [], count: 0, keep: keep) == [])
+    }
+
+    @Test func stringFromFourCCInvertsFourCC() {
+        #expect(SMCReader.string(fromFourCC: SMCReader.fourCC("TH0x")) == "TH0x")
+        #expect(SMCReader.string(fromFourCC: SMCReader.fourCC("flt ")) == "flt ")
+    }
+
+    @Test func missingKeyKeepsTheConnection() {
+        let outcome = SMCReader.powerOutcome(.missing)
+        #expect(outcome.watts == nil && outcome.dropConnection == false)
+    }
+
     @Test func fltDecodesLittleEndian() {
         #expect(SMCReader.decodeFloat(bytes: leBytes(6.8), type: "flt ") == Double(Float(6.8)))
         #expect(SMCReader.decodeFloat(bytes: leBytes(12.3), type: "flt") == Double(Float(12.3)))   // blank-less spelling

@@ -3,6 +3,7 @@
 // The actual private-IOKit read lives in Engine/ThermalHIDReader.swift (app-only,
 // not covered by Tests/MoonportTests); this file is covered by them and
 // must stay Foundation-only.
+// TEMP-SENSORS-DETAIL: now only the fallback of the chip temperature (after SMC TCMz and TCMb, see TemperatureSensors.swift).
 //
 // Hardware ground truth (spike, base M3 MacBook Air): no per-core CPU sensors
 // exist on this chip class — only generic "PMU tdie1-8"/"PMU2 tdie1-8" die-

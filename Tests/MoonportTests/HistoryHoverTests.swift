@@ -29,4 +29,15 @@ struct HistoryHoverTests {
         #expect(abs(s.y - -10) < 1e-9)
         #expect(HistoryHoverMath.popInStart(centre: CGPoint(x: 84, y: 31), anchor: CGPoint(x: 84, y: 31)) == .zero)
     }
+
+    // CHART-HOVER-STICKY: visibleRect can be larger than bounds (scroll viewport); only the view's own part counts.
+    @Test func isOverChartUsesBoundsAndVisibleRect() {
+        let bounds = CGRect(x: 0, y: 0, width: 300, height: 150)
+        let wide = CGRect(x: 0, y: -32, width: 600, height: 432)
+        #expect(!HistoryHoverMath.isOverChart(CGPoint(x: 100, y: 239), bounds: bounds, visibleRect: wide))
+        #expect(HistoryHoverMath.isOverChart(CGPoint(x: 100, y: 75), bounds: bounds, visibleRect: wide))
+        let scrolled = CGRect(x: 0, y: 100, width: 300, height: 50)
+        #expect(!HistoryHoverMath.isOverChart(CGPoint(x: 100, y: 20), bounds: bounds, visibleRect: scrolled))
+        #expect(HistoryHoverMath.isOverChart(CGPoint(x: 100, y: 120), bounds: bounds, visibleRect: scrolled))
+    }
 }
