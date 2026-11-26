@@ -1345,6 +1345,7 @@ extension SerialTests {
                     let estimateRec: IPhoneDeviceRecord? = rec.map {
                         var r = $0
                         r.battery = r.battery.map { var p = $0; p.source = "live"; return p }
+                        r.batteryManufacture = nil   // "nothing imported": no manufacture date (IPHONE-MANUFACTURE-DATE hidden state)
                         return r
                     }
                     VStack(alignment: .leading, spacing: 24) {
