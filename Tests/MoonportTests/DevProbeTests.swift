@@ -29,14 +29,32 @@ private func sysdiagnoseProbe(_ archivePath: String) async -> Int32 {
             return n.hasPrefix("BDC_Once_") && n.hasSuffix(".csv")
         }
         var design = Set<Int>()
+        var texts: [String] = []
         for rel in onceRel {
             if let t = try? String(contentsOf: x.appendingPathComponent(rel), encoding: .utf8) {
                 design.formUnion(IPhoneData.parseBDCOnceDesignCapacities(t))
+                texts.append(t)
             }
         }
+        // IPHONE-MANUFACTURE-DATE (R11): the decoded week and the calendar month of its ISO Monday.
+        let mfg = IPhoneData.batteryManufacture(fromBDCOnce: texts)
+        var mfgText = "mfg=none"
+        var mfgMonth = "none"
+        if let m = mfg {
+            var c = DateComponents()
+            c.weekOfYear = m.week
+            c.yearForWeekOfYear = m.year
+            c.weekday = 2
+            let cal = Calendar(identifier: .iso8601)
+            if let d = cal.date(from: c) {
+                mfgMonth = String(format: "%04d-%02d", cal.component(.year, from: d), cal.component(.month, from: d))
+            }
+            mfgText = String(format: "mfg=%04d-W%02d", m.year, m.week)
+        }
         let designText = design.isEmpty ? "none" : design.sorted().map(String.init).joined(separator: ",")
-        print("sysdiag probe: result=success selected=\(n) csv=\(csv) once=\(onceRel.count) designMAh=\(designText) ips=\(ips) seconds=\(String(format: "%.1f", secs)) tmp=\(dir.path)")
+        print("sysdiag probe: result=success selected=\(n) csv=\(csv) once=\(onceRel.count) designMAh=\(designText) ips=\(ips) \(mfgText) mfgMonth=\(mfgMonth) seconds=\(String(format: "%.1f", secs)) tmp=\(dir.path)")
         code = 0
+        if let want = ProcessInfo.processInfo.environment["MACDASH_SYSDIAGNOSE_MFG_MONTH"], want != mfgMonth { code = 3 }
     case .failure(let e):
         print("sysdiag probe: result=failure error=\(String(describing: e)) tmp=\(dir.path)")
     }
@@ -51,7 +69,7 @@ extension SerialTests {
         func sysdiagnoseProbe() async {
             let path = ProcessInfo.processInfo.environment["MACDASH_SYSDIAGNOSE_ARCHIVE"] ?? ""
             let code = await MoonportTests.sysdiagnoseProbe(path)
-            #expect(code == 0, "sysdiagnose probe exit code \(code) (2 = temp dir, 1 = extraction failed)")
+            #expect(code == 0, "sysdiagnose probe exit code \(code) (3 = manufacture month differs from MACDASH_SYSDIAGNOSE_MFG_MONTH, 2 = temp dir, 1 = extraction failed)")
         }
 
         /// Opt-in: MACDASH_LIVE=1 swift test --filter liveVolumeUsage

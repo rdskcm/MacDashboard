@@ -699,6 +699,7 @@ final class IPhoneModel {
             if let i = devices.firstIndex(where: { $0.id == deviceKey }) {
                 devices[i].battery = IPhoneData.mergeImported(devices[i].battery, out.points)
                 if let kept = out.summary.keptPath { devices[i].keptArchives.append(kept.lastPathComponent) }
+                devices[i].batteryManufacture = IPhoneData.mergedManufacture(stored: devices[i].batteryManufacture, imported: out.batteryManufacture)   // IPHONE-MANUFACTURE-DATE D7: newest reading wins
                 try? store.save(devices)
             }
             archiveLogs[deviceKey] = out.logs

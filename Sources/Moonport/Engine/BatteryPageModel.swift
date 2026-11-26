@@ -308,8 +308,8 @@ struct BatteryPageModel: Equatable {
         return out
     }
 
-    /// ISO-8601 week → Monday → "Mar 2024" (or the Russian equivalent); nil when the date cannot be built.
-    @MainActor static func mfgMonth(year: Int, week: Int) -> String? {
+    /// ISO-8601 week → Monday → "Mar 2024" (or the Russian equivalent); `fullMonth` gives "March 2024" (the Russian equivalent, standalone month name). nil when the date cannot be built.
+    @MainActor static func mfgMonth(year: Int, week: Int, fullMonth: Bool = false) -> String? {
         var comps = DateComponents()
         comps.weekOfYear = week
         comps.yearForWeekOfYear = year
@@ -318,7 +318,7 @@ struct BatteryPageModel: Equatable {
         guard let date = cal.date(from: comps) else { return nil }
         let df = DateFormatter()
         df.locale = Locale(identifier: L10nStore.shared.language.localeIdentifier)
-        df.dateFormat = "LLL yyyy"
+        df.dateFormat = fullMonth ? "LLLL yyyy" : "LLL yyyy"
         return df.string(from: date)
     }
 

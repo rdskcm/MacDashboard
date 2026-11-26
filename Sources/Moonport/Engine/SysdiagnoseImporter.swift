@@ -15,6 +15,7 @@ struct ImportOutput {
     var summary: ImportSummary
     var points: [BatteryPoint]
     var logs: [IPhoneLogEntry]
+    var batteryManufacture: IPhoneBatteryManufacture? = nil
 }
 
 struct SysdiagnoseImporter {
@@ -117,10 +118,13 @@ struct SysdiagnoseImporter {
 
         // 4b. Identity (IPHONE-HISTORY-MIXUP): asked before anything is kept or merged.
         var designMAh = Set<Int>()
-        for u in found.once {
+        var onceTexts: [String] = []
+        for u in found.once.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             guard let text = try? String(contentsOf: u, encoding: .utf8) else { continue }
             designMAh.formUnion(IPhoneData.parseBDCOnceDesignCapacities(text))
+            onceTexts.append(text)
         }
+        let manufacture = IPhoneData.batteryManufacture(fromBDCOnce: onceTexts)
         guard await confirm(archiveName, designMAh) else { return .failure(.cancelled) }
 
         // 5. Keep.
@@ -148,7 +152,7 @@ struct SysdiagnoseImporter {
         return .success(ImportOutput(archiveName: archiveName,
                                      summary: ImportSummary(batteryPoints: points.count, skippedRows: skipped,
                                                             logFiles: logs.count, keptPath: keptURL),
-                                     points: points, logs: logs))
+                                     points: points, logs: logs, batteryManufacture: manufacture))
     }
 
     /// BDC_Daily CSVs, BDC_Once CSVs and `.ips` files under `dir`. Synchronous: FileManager.enumerator

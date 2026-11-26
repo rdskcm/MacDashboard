@@ -93,6 +93,14 @@ struct BatteryPoint: Codable, Equatable {
     var source: String              // "live" | "import"
 }
 
+/// IPHONE-MANUFACTURE-DATE: the battery's manufacture week, decoded from `BDC_Once` `YWW` at import (ISO-8601 year + week),
+/// and the `TimeStamp` of the row it came from (newest reading wins, within an archive and across imports).
+struct IPhoneBatteryManufacture: Codable, Equatable {
+    var year: Int    // ISO-8601 yearForWeekOfYear, e.g. 2025
+    var week: Int    // ISO-8601 week, 1...53
+    var stamp: Date  // the winning BDC_Once row's TimeStamp; non-optional: the type is new in this block (D1)
+}
+
 /// IPHONE-HISTORY-RANGE: the battery-history range switch (mockup section 3.8). Case order IS the segment order.
 /// Not `HistoryRange`: the iPhone mockup has a 6M segment and a 91-day 3M (`rangeHist`).
 enum IPhoneHistoryRange: DayWindowRange {
@@ -109,7 +117,7 @@ enum IPhoneHistoryRange: DayWindowRange {
     }
 }
 
-/// The only persisted device record (R13; `ownArchives` since DEVICE-ARCHIVE-CLEANUP); the crash-log type cache is a separate rebuildable file.
+/// The only persisted device record (R13; `ownArchives` since DEVICE-ARCHIVE-CLEANUP, `batteryManufacture` since IPHONE-MANUFACTURE-DATE); the crash-log type cache is a separate rebuildable file.
 struct IPhoneDeviceRecord: Codable, Equatable, Identifiable {
     var id: String                  // deviceKey
     var name: String
@@ -123,6 +131,8 @@ struct IPhoneDeviceRecord: Codable, Equatable, Identifiable {
     /// DEVICE-ARCHIVE-CLEANUP: archives the app requested and saw finish on this phone (newest last, at most
     /// `SysdiagnoseDir.maxOwnRecords`). nil in stores written before the block; only these may be deleted on the phone.
     var ownArchives: [OwnSysdiagnose]? = nil
+    /// IPHONE-MANUFACTURE-DATE: from the newest `BDC_Once` row seen across all imports (`IPhoneData.mergedManufacture`). nil in stores written before the block.
+    var batteryManufacture: IPhoneBatteryManufacture? = nil
 }
 
 // Sysdiagnose import types (pure; L10n formats them, so Checks need them too).
@@ -625,6 +635,60 @@ enum IPhoneData {
             out.insert(v)
         }
         return out
+    }
+
+    /// IPHONE-MANUFACTURE-DATE: `YWW` = last digit of the year + ISO-8601 week (findings C2). The decade is the latest
+    /// year ending in that digit that is not after `stampYear`. nil unless exactly three ASCII digits, week 1...53,
+    /// and the week exists in that ISO year.
+    static func decodeYWW(_ raw: String, stampYear: Int) -> (year: Int, week: Int)? {
+        guard raw.count == 3, raw.allSatisfy({ $0.isASCII && $0.isNumber }),
+              let digit = Int(raw.prefix(1)), let week = Int(raw.suffix(2)), (1...53).contains(week) else { return nil }
+        let year = stampYear - ((stampYear % 10 - digit + 10) % 10)
+        var comps = DateComponents()
+        comps.weekOfYear = week
+        comps.yearForWeekOfYear = year
+        comps.weekday = 2 // Monday
+        let cal = Calendar(identifier: .iso8601)
+        guard let monday = cal.date(from: comps),
+              cal.component(.yearForWeekOfYear, from: monday) == year,
+              cal.component(.weekOfYear, from: monday) == week else { return nil }
+        return (year, week)
+    }
+
+    /// IPHONE-MANUFACTURE-DATE: the battery manufacture week across all `BDC_Once_*.csv` texts of one archive.
+    /// Columns by name (`TimeStamp`, `YWW`); same row guard as `parseBDCOnceDesignCapacities`. A row whose stamp is
+    /// not `yyyy-MM-dd HH:mm:ss` or whose `YWW` does not decode is skipped. The row with the newest stamp wins
+    /// (a replaced battery); on an equal stamp the later text wins. The result carries that row's stamp. nil when no row qualifies.
+    static func batteryManufacture(fromBDCOnce texts: [String]) -> IPhoneBatteryManufacture? {
+        let fmt = bdcTimestampFormatter()
+        var best: IPhoneBatteryManufacture?
+        for csv in texts {
+            let lines = csv.split(whereSeparator: { $0 == "\n" || $0 == "\r\n" || $0 == "\r" })
+                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            guard let headerLine = lines.first else { continue }
+            let header = headerLine.split(separator: ",", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard let iTime = header.firstIndex(of: "TimeStamp"), let iYWW = header.firstIndex(of: "YWW") else { continue }
+            for line in lines.dropFirst() {
+                let cols = line.split(separator: ",", omittingEmptySubsequences: false)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                guard cols.count == header.count, cols[iTime].count == 19,
+                      let when = fmt.date(from: cols[iTime]), let stampYear = Int(cols[iTime].prefix(4)),
+                      let yw = decodeYWW(cols[iYWW], stampYear: stampYear) else { continue }
+                if let b = best, b.stamp > when { continue }
+                best = IPhoneBatteryManufacture(year: yw.year, week: yw.week, stamp: when)
+            }
+        }
+        return best
+    }
+
+    /// IPHONE-MANUFACTURE-DATE D7: newest reading wins across imports. The import replaces the stored value when
+    /// nothing is stored or its stamp is newer or equal; a nil import keeps the stored value.
+    static func mergedManufacture(stored: IPhoneBatteryManufacture?,
+                                  imported: IPhoneBatteryManufacture?) -> IPhoneBatteryManufacture? {
+        guard let imported else { return stored }
+        guard let stored else { return imported }
+        return imported.stamp >= stored.stamp ? imported : stored
     }
 
     /// The phone's own battery design capacity: the latest point (by day) that carries a

@@ -38,7 +38,8 @@ extension IPhoneModel {
                 productType: "iPhone18,2", enclosureColor: "2", osVersion: "26.4.1", lastSeen: now,
                 battery: history(n: 180, endBack: 0, steps: [(0.5, 101), (0.627, 100), (0.874, 99)], last: 98,
                                  c0: 70, c1: 269, design: 5030, live: alexLive),
-                keptArchives: [Self.fixtureAlexKeptArchive]
+                keptArchives: [Self.fixtureAlexKeptArchive],
+                batteryManufacture: IPhoneBatteryManufacture(year: 2025, week: 28, stamp: now)
             ),
             IPhoneDeviceRecord(
                 id: Self.fixtureSamKey, name: "Sam’s iPhone", marketingName: "iPhone 15 Pro Max",

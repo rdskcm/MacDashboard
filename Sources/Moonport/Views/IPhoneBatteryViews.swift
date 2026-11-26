@@ -18,7 +18,7 @@ struct IPhoneBatteryCard: View {
         }
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private var branchContent: some View {
         if let b = snapshot?.battery {
             let h = liveHero(b)
             IPhoneRatioRow(spacing: 12) {
@@ -36,6 +36,19 @@ struct IPhoneBatteryCard: View {
         } else {
             IPhoneMessagePanel(text: L.iphoneBatteryConnectToRead)
         }
+    }
+
+    /// IPHONE-MANUFACTURE-DATE D10/D11: the imported manufacture month sits below every branch; absent when unknown.
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            branchContent
+            if let text = manufactureText { manufactureBox(text) }
+        }
+    }
+
+    private var manufactureText: String? {
+        guard let m = record?.batteryManufacture else { return nil }
+        return BatteryPageModel.mfgMonth(year: m.year, week: m.week, fullMonth: true)
     }
 
     private var lastPoint: BatteryPoint? {
@@ -191,6 +204,28 @@ struct IPhoneBatteryCard: View {
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .ds3RowPanel(cornerRadius: 20)
+    }
+
+    /// IPHONE-MANUFACTURE-DATE: full-width row in the `liveReadingsBox` panel style; static (no-unseen-work).
+    private func manufactureBox(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L.batteryDetailMfgDate)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(DS3.inkSoft)
+                .lineLimit(1)
+            Text(text)
+                .font(.system(size: 17, weight: .bold))
+                .tracking(-0.17)
+                .monospacedDigit()
+                .foregroundStyle(DS3.ink)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .ds3RowPanel(cornerRadius: 20)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L.batteryDetailMfgDate + ", " + text)
     }
 }
 
