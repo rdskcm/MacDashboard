@@ -121,6 +121,8 @@ struct SocReaders: Sendable {
     var power: @Sendable () -> Double?
     /// Full executable name for a pid (D12); nil → the 16-character name as read.
     var processName: @Sendable (Int32) -> String?
+    /// Sensor rows (TEMP-SENSORS-DETAIL R8); [] when the SMC is unavailable or no row has a valid value.
+    var sensors: @Sendable () -> [SensorReading] = { [] }
 
     static var live: SocReaders {
         SocReaders(
@@ -133,7 +135,8 @@ struct SocReaders: Sendable {
             gpuClients: { GPUStats.readClients() },
             gpuCoreCount: { GPUStats.cachedCoreCount },
             power: { SMCReader.readSystemPowerW() },
-            processName: { GPUClientRanking.executableName(pid: $0) })
+            processName: { GPUClientRanking.executableName(pid: $0) },
+            sensors: { SMCReader.readSensorTemperatures().map(TemperatureSensors.readings(from:)) ?? [] })
     }
 }
 
@@ -146,6 +149,7 @@ struct SocLiveFixture {
     var gpuRows: GPURowsState = .notYet
     var powerW: Double?
     var gpuCoreCount: Int?
+    var sensors: SensorsState = .notYet
 }
 
 @MainActor
@@ -170,6 +174,8 @@ final class SocLiveSampler {
     /// nil = unavailable or not yet.
     private(set) var powerW: Double? = nil
     private(set) var gpuCoreCount: Int? = nil
+    /// TEMP-SENSORS-DETAIL: the Sensors card's rows. Published from the baseline pass on (no second sample needed).
+    private(set) var sensors: SensorsState = .notYet
     /// Number of published readings (a baseline pass does not count). The no-unseen-work test reads it.
     @ObservationIgnored private(set) var readCount = 0
     @ObservationIgnored private(set) var isRunning = false
@@ -187,9 +193,12 @@ final class SocLiveSampler {
         var power: Double?
         /// Full executable names of the GPU clients' pids, resolved off the main actor (D12).
         var names: [Int32: String] = [:]
+        var sensors: [SensorReading] = []
     }
 
     @ObservationIgnored private var baseline: (pass: Pass, at: Date)? = nil
+    /// The last valid value per sensor row and when it was read (A1: an idle GPU holds its value for 30 s).
+    @ObservationIgnored private(set) var lastSensorValues: [SensorKind: (celsius: Int, at: Date)] = [:]
     @ObservationIgnored private var groups: [CoreGroup]? = nil
 
     init(interval: @escaping @MainActor () -> Int, isPaused: @escaping @MainActor () -> Bool,
@@ -274,7 +283,7 @@ final class SocLiveSampler {
             var names: [Int32: String] = [:]
             for pid in Set((clients ?? []).map(\.pid)) { if let n = readers.processName(pid) { names[pid] = n } }
             return Pass(ticks: readers.ticks(), frequency: readers.frequency(), clients: clients, power: readers.power(),
-                        names: names)
+                        names: names, sensors: readers.sensors())
         }
     }
 
@@ -286,6 +295,8 @@ final class SocLiveSampler {
 
     /// A reopened page starts from the not-yet state, never from numbers of an earlier visit (D1).
     private func resetToNotYet() {
+        lastSensorValues = [:]
+        if sensors != .notYet { sensors = .notYet }
         guard let groups else { return }
         let initial = Self.notYetGroups(groups)
         if !SocDisplay.sameOnScreen(cores, initial) { setCores(initial) }
@@ -340,6 +351,7 @@ final class SocLiveSampler {
     /// Power needs no second sample: it shows as soon as the baseline pass has read it (logic 3.6).
     private func publishBaseline(_ pass: Pass) {
         if !SocDisplay.sameOnScreen(powerW, pass.power, decimals: SocDisplay.powerDecimals) { powerW = pass.power }
+        publishSensors(pass)
     }
 
     private func publish(_ pass: Pass, since base: Pass, dt: Double) {
@@ -381,6 +393,15 @@ final class SocLiveSampler {
 
         // Power: a failed read is "—" on this update, not the last value (D16).
         if !SocDisplay.sameOnScreen(powerW, pass.power, decimals: SocDisplay.powerDecimals) { powerW = pass.power }
+        publishSensors(pass)
+    }
+
+    /// Sensor rows need no second sample. An unchanged set of whole degrees writes nothing (no re-render).
+    private func publishSensors(_ pass: Pass) {
+        let held = TemperatureSensors.holding(pass.sensors, last: lastSensorValues, now: time.now())
+        lastSensorValues = held.last
+        let next = SensorsState.from(held.readings)
+        if sensors != next { sensors = next }
     }
 
     /// `.unavailable` for a group with no channel (a third core type, type unknown), a failed reading or a failed setup.
@@ -401,5 +422,6 @@ final class SocLiveSampler {
         setGPURows(f.gpuRows)
         powerW = f.powerW
         gpuCoreCount = f.gpuCoreCount
+        sensors = f.sensors
     }
 }

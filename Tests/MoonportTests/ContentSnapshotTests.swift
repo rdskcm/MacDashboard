@@ -10,7 +10,7 @@ import Testing
 
 
 /// SOC-DETAILS Stage 2: the SoC page body as `CPUPage` stacks it, without the scroll view and the bar: the
-/// read-failure note (only when failed), the CPU / GPU pair, the cores card and the 2-minute chart card.
+/// read-failure note (only when failed), the CPU / GPU pair, the cores card, the Sensors card and the 2-minute chart card.
 @MainActor
 private struct SocPageBodyFixture: View {
     let model: AppModel
@@ -20,6 +20,7 @@ private struct SocPageBodyFixture: View {
             SocFailureNote(model: model)
             SoCCards(model: model)
             SocCoresCard(model: model)
+            SocSensorsCard(model: model)
             SocChartCard(model: model)
         }
     }
@@ -178,7 +179,7 @@ extension SerialTests {
             let socChartUnavailable = socModel(SocOptions(chart: .unavailable))
             let socChartSamples = m.socChartSeries.hoverSamples
             let socChartTopIndex = SocChartModel.topCPUIndex(socChartSamples) ?? 0
-            let socNotYet = socModel(SocOptions(cores: .notYet, freq: .notYet, gpuList: .notYet))
+            let socNotYet = socModel(SocOptions(cores: .notYet, freq: .notYet, gpuList: .notYet, sensors: .notYet))
             let socCores16 = socModel(SocOptions(cores: .p16e4))
             let socCores3 = socModel(SocOptions(cores: .threeTypes))
             let socCoresUnknown = socModel(SocOptions(cores: .unknown))
@@ -192,6 +193,10 @@ extension SerialTests {
             let socPrivateUnavailable = socModel(SocOptions(freq: .unavailable, gpuList: .unavailable, chart: .gpuMissing,
                                                             powerUnavailable: true)) { $0.gpuUtil = nil }
             let socWide = socModel(SocOptions(wide: true))
+            let socSensorsPartial = socModel(SocOptions(sensors: .partial))
+            let socSensorsGpuIdle = socModel(SocOptions(sensors: .gpuIdle))
+            let socSensorsChipOnly = socModel(SocOptions(sensors: .chipOnly))
+            let socSensorsUnavailable = socModel(SocOptions(sensors: .unavailable))
             let socRuCritical = socModel(SocOptions(temp: .hot, thermal: .critical))
             let socWarmHigh = socModel(SocOptions(temp: .warm, thermal: .high))
             let socHotCritical = socModel(SocOptions(temp: .hot, thermal: .critical))
@@ -608,6 +613,14 @@ extension SerialTests {
                 run.snap("content-soc-gpu-list-unavailable", mode, width: 1094) { SoCCards(model: socListUnavailable) }
                 run.snap("content-soc-all-private-unavailable", mode, width: 1094) { SocPageBodyFixture(model: socPrivateUnavailable) }
                 run.snap("content-soc-wide-values", mode, width: 844) { SocPageBodyFixture(model: socWide) }
+                // TEMP-SENSORS-DETAIL: the Sensors card (all rows, 844 wide, a Mac without Battery and Charger,
+                // chip parts only = one full-width list, no sensors).
+                run.snap("content-soc-sensors", mode, width: 1094) { SocSensorsCard(model: m) }
+                run.snap("content-soc-sensors-narrow", mode, width: 844) { SocSensorsCard(model: m) }
+                run.snap("content-soc-sensors-partial", mode, width: 1094) { SocSensorsCard(model: socSensorsPartial) }
+                run.snap("content-soc-sensors-gpu-idle", mode, width: 1094) { SocSensorsCard(model: socSensorsGpuIdle) }
+                run.snap("content-soc-sensors-chip-only", mode, width: 1094) { SocSensorsCard(model: socSensorsChipOnly) }
+                run.snap("content-soc-sensors-unavailable", mode, width: 1094) { SocSensorsCard(model: socSensorsUnavailable) }
                 // Russian at the minimum window: the page bar (900 wide, the body padded by 28 on each side).
                 L10nStore.shared.language = .ru
                 run.snap("content-soc-ru-narrow", mode, width: 900) {

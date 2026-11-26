@@ -1,5 +1,5 @@
 // Tests/MoonportTests/SocReadersLiveCanaryTests.swift
-// SOC-DETAILS 1.7: opt-in live canaries for the six SoC readers, each checked against an independent source.
+// SOC-DETAILS 1.7 and TEMP-SENSORS-DETAIL: opt-in live canaries for the six SoC readers, each checked against an independent source.
 // Run: MACDASH_LIVE=1 swift test --filter liveCanary. Reads only; the frequency canary spins two threads for 2 s.
 // Every line printed here starts with `liveCanary`.
 import Foundation
@@ -179,6 +179,48 @@ extension SerialTests {
                 #expect(abs(w - discharge) <= 1.5)
             } else {
                 print("liveCanary power AC: no battery comparison")
+            }
+        }
+
+        // MARK: temperatures (TEMP-SENSORS-DETAIL R14)
+
+        @Test(.enabled(if: liveEnabled))
+        func liveCanaryTemperatures() throws {
+            let t0 = Date()
+            let raw = try #require(SMCReader.readSensorTemperatures(), "SMC could not be opened")
+            let first = Date().timeIntervalSince(t0)
+            let t1 = Date()
+            _ = SMCReader.readSensorTemperatures()
+            let second = Date().timeIntervalSince(t1)
+            print(String(format: "liveCanary temps first call (with enumeration) %.1f ms, second call %.1f ms, %d keys",
+                         first * 1000, second * 1000, raw.count))
+            for key in raw.keys.sorted() { print(String(format: "liveCanary temps smc %@ %.3f", key, raw[key] ?? .nan)) }
+            let rows = TemperatureSensors.readings(from: raw)
+            for r in rows { print("liveCanary temps row \(r.kind) \(r.celsius.map(String.init) ?? "nil") °C") }
+            let chipRaw = try #require(SMCReader.readTemperatures(keys: TemperatureSensors.chipKeys))
+            let hid = ThermalHIDReader.readTemperatureSensors()
+            let tdieMax = ThermalSensors.socTemperature(from: hid)
+            let chip = TemperatureSensors.chipTemperature(chipRaw) { tdieMax }
+            func f(_ v: Double?) -> String { v.map { String(format: "%.2f", $0) } ?? "nil" }
+            print("liveCanary temps TCMz=\(f(chipRaw["TCMz"])) TCMb=\(f(chipRaw["TCMb"])) tdieMax=\(f(tdieMax)) chip=\(f(chip))")
+            #expect(!rows.isEmpty)
+            #expect(rows.allSatisfy { $0.celsius.map { $0 > 10 && $0 <= 150 } ?? true })
+            #expect(!raw.keys.contains { $0.hasPrefix("TG") }, "battery gas-gauge keys are never rows")
+            let chipValue = try #require(chip)
+            #expect(TemperatureSensors.isValid(chipValue))
+            if let z = chipRaw["TCMz"], TemperatureSensors.isValid(z) {
+                #expect(chipValue == z, "TCMz is first in the source order")
+                // Reference Mac: TCMz idles about 9 °C above max(PMU tdie) and rises more under load (findings rows 18, 20).
+                if let t = tdieMax { #expect(z >= t - 1) }
+            }
+            // Independent readings of the same parts (findings row 20): TB0T equals a HID "gas gauge battery" value,
+            // TH0x is about "NAND CH0 temp". The HID NAND value is whole degrees (38.00, 39.00 seen), so up to 1 °C of
+            // quantisation plus sampling drift separates the two: tolerance 2.0.
+            let gas = hid.filter { $0.name == "gas gauge battery" && ThermalSensors.isValidReading($0.value) }.map(\.value)
+            print("liveCanary temps HID gas gauge \(gas.map { f($0) }) NAND \(f(hid.first { $0.name == "NAND CH0 temp" }?.value))")
+            if let b = raw["TB0T"], !gas.isEmpty { #expect(gas.contains { abs($0 - b) <= 1.0 }) }
+            if let s = raw["TH0x"], let nand = hid.first(where: { $0.name == "NAND CH0 temp" })?.value {
+                #expect(abs(s - nand) <= 2.0)
             }
         }
     }

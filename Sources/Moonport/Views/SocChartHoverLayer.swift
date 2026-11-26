@@ -420,7 +420,7 @@ final class SocChartHoverView: NSView {
     private func pointerLocation() -> CGPoint? {
         guard let w = window, NSApp.isActive else { return nil }
         let p = convert(w.mouseLocationOutsideOfEventStream, from: nil)
-        return visibleRect.contains(p) ? p : nil
+        return HistoryHoverMath.isOverChart(p, bounds: bounds, visibleRect: visibleRect) ? p : nil
     }
 
     /// The sample nearest to the pointer. The pointer x is clamped to the plot, so the hover stays over the margins

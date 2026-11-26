@@ -15,6 +15,12 @@ struct HistoryHoverFrame: Equatable {
 
 /// Pure helpers (unit-tested in `HistoryHoverTests`).
 enum HistoryHoverMath {
+    /// True when `p` is over the view's own visible part. `NSView.visibleRect` is not limited to `bounds` (it can span the
+    /// whole scroll viewport), so the point must lie in both. Shared by the History and SoC hover views.
+    static func isOverChart(_ p: CGPoint, bounds: CGRect, visibleRect: CGRect) -> Bool {
+        bounds.intersection(visibleRect).contains(p)
+    }
+
     /// Index of the `xs` entry nearest to `x`; ties go to the lower index. `xs` must be ascending.
     static func nearestIndex(xs: [CGFloat], x: CGFloat) -> Int? {
         guard !xs.isEmpty else { return nil }
@@ -410,7 +416,7 @@ final class HistoryHoverView: NSView {
     private func pointerLocation() -> CGPoint? {
         guard let w = window, NSApp.isActive else { return nil }
         let p = convert(w.mouseLocationOutsideOfEventStream, from: nil)
-        return visibleRect.contains(p) ? p : nil
+        return HistoryHoverMath.isOverChart(p, bounds: bounds, visibleRect: visibleRect) ? p : nil
     }
 
     private func hover(at p: CGPoint, animated: Bool) {

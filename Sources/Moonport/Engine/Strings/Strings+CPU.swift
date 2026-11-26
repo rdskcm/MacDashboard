@@ -88,6 +88,19 @@ protocol CPUStrings {
     var socTemperatureHelp: String { get }
     var socTemperatureUnavailable: String { get }
     var socChartTitle: String { get }
+
+    // MARK: Sensors card (TEMP-SENSORS-DETAIL)
+    var socSensorsTitle: String { get }
+    var socSensorsCaption: String { get }
+    var socSensorsUnavailable: String { get }
+    var socSensorECores: String { get }
+    var socSensorPCores: String { get }
+    var socSensorWireless: String { get }
+    var socSensorSSD: String { get }
+    var socSensorCharger: String { get }
+    var socSensorIdle: String { get }
+    var socSensorIdleHelp: String { get }
+    var socSensorNoReading: String { get }
 }
 
 extension StringsEN: CPUStrings {
@@ -175,6 +188,19 @@ extension StringsEN: CPUStrings {
     var socTemperatureHelp: String { "Chip temperature. Warm from 85 °C, hot from 95 °C." }
     var socTemperatureUnavailable: String { "Chip temperature: Not available on this Mac" }
     var socChartTitle: String { "CPU and GPU, last 2 minutes" }
+
+    // MARK: Sensors card (TEMP-SENSORS-DETAIL)
+    var socSensorsTitle: String { "Sensors" }
+    var socSensorsCaption: String { "Current temperatures. Core and GPU rows show the hottest sensor." }
+    var socSensorsUnavailable: String { "Temperature sensors are not available on this Mac." }
+    var socSensorECores: String { "Efficiency cores" }
+    var socSensorPCores: String { "Performance cores" }
+    var socSensorWireless: String { "Wi-Fi and Bluetooth" }
+    var socSensorSSD: String { "SSD" }
+    var socSensorCharger: String { "Charger" }
+    var socSensorIdle: String { "Idle" }
+    var socSensorIdleHelp: String { "The GPU is not working right now. Its temperature appears when it wakes up." }
+    var socSensorNoReading: String { "The sensor gave no valid reading. The value returns with the next valid one." }
 }
 
 extension StringsRU: CPUStrings {
@@ -262,4 +288,17 @@ extension StringsRU: CPUStrings {
     var socTemperatureHelp: String { "Температура чипа. Тепло от 85 °C, горячо от 95 °C." }
     var socTemperatureUnavailable: String { "Температура чипа: Недоступно на этом Mac" }
     var socChartTitle: String { "CPU и GPU за последние 2 минуты" }
+
+    // MARK: Sensors card (TEMP-SENSORS-DETAIL)
+    var socSensorsTitle: String { "Датчики" }
+    var socSensorsCaption: String { "Текущие температуры. Для ядер и графики показан самый горячий датчик." }
+    var socSensorsUnavailable: String { "Датчики температуры недоступны на этом Mac." }
+    var socSensorECores: String { "Энергоэффективные ядра" }
+    var socSensorPCores: String { "Производительные ядра" }
+    var socSensorWireless: String { "Wi-Fi и Bluetooth" }
+    var socSensorSSD: String { "SSD" }
+    var socSensorCharger: String { "Контроллер зарядки" }
+    var socSensorIdle: String { "В покое" }
+    var socSensorIdleHelp: String { "GPU сейчас не работает. Температура появится, когда он проснётся." }
+    var socSensorNoReading: String { "Датчик не дал верного значения. Число вернётся со следующим верным." }
 }

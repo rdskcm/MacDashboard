@@ -3,8 +3,8 @@
 // page bar (Back, icon, title, sub line, state tag) and the restyled Processes card. GPU-UTILIZATION: it is
 // now the SoC page. SOC-DETAILS Stage 2 (mockups/SoC.dc.html): the page bar carries the readout chip (chip
 // temperature, thermal state, whole-Mac power); the page is CPU / GPU pair (SoCCards), CPU cores card
-// (SocCoresCard), the 2-minute chart card (SocChartCard) and the Processes card, with the CPU read-failure
-// note above the pair only in that state.
+// (SocCoresCard), the Sensors card (SocSensorsCard, TEMP-SENSORS-DETAIL), the 2-minute chart card
+// (SocChartCard) and the Processes card, with the CPU read-failure note above the pair only in that state.
 // All texts and states come from the pure `CPUPageModel` / `SocPageModel`; this file only draws them.
 
 import SwiftUI
@@ -31,6 +31,8 @@ struct CPUPage: View {
                         .sectionFocusPulse(pulse == .cpu)
                     SocCoresCard(model: model)
                         .ds3Appear(delay: 0.24)
+                    SocSensorsCard(model: model)
+                        .ds3Appear(delay: 0.27)
                     SocChartCard(model: model)
                         .ds3Appear(delay: 0.30)
                     ProcessListCard(model: model, initialMetric: .cpu, onConfirmShown: { router.isInlineConfirmOpen = $0 })

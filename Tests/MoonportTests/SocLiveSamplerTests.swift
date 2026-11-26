@@ -16,6 +16,7 @@ private final class FakeSocReaders: @unchecked Sendable {
     var ticksResult = true
     var clients: [GPUClientSample]? = []
     var power: Double? = 6.8
+    var sensors: [SensorReading] = [SensorReading(kind: .pCores, celsius: 58)]
     var frequency: [CoreGroupKey: FrequencyReading?]? = [.performance: FrequencyReading(mhz: 3950, activeShare: 0.99),
                                                          .efficiency: FrequencyReading(mhz: 1270, activeShare: 0.03)]
     var groups = [CoreGroup(name: "Performance", count: 2, coreIndices: [2, 3]),
@@ -45,7 +46,8 @@ private final class FakeSocReaders: @unchecked Sendable {
             },
             gpuCoreCount: { self.hit("gpuCoreCount"); return 8 },
             power: { self.hit("power"); return self.power },
-            processName: { _ in nil })
+            processName: { _ in nil },
+            sensors: { self.hit("sensors"); return self.sensors })
     }
 }
 
@@ -112,7 +114,8 @@ extension SerialTests {
             #expect(!s.isRunning)
             // One setup, one baseline pass and three readings of every per-pass reader.
             #expect(fake.count("topology") == 1 && fake.count("gpuCoreCount") == 1)
-            #expect(fake.count("ticks") == 4 && fake.count("frequency") == 4 && fake.count("gpuClients") == 4 && fake.count("power") == 4)
+            #expect(fake.count("ticks") == 4 && fake.count("frequency") == 4 && fake.count("gpuClients") == 4 && fake.count("power") == 4
+                    && fake.count("sensors") == 4)
         }
 
         @Test func intervalSettingIsReadEveryTime() async {
@@ -167,7 +170,48 @@ extension SerialTests {
             runner.task = Task { await s.run() }
             await runner.task?.value
             #expect(s.readCount == 0)
-            #expect(fake.count("ticks") == 0 && fake.count("frequency") == 0 && fake.count("gpuClients") == 0 && fake.count("power") == 0)
+            #expect(fake.count("ticks") == 0 && fake.count("frequency") == 0 && fake.count("gpuClients") == 0 && fake.count("power") == 0
+                    && fake.count("sensors") == 0)
+        }
+
+        @Test func sensorsShowFromTheBaselineAndResetOnExit() async {
+            let clock = VirtualClock(), fake = FakeSocReaders()
+            let s = make(fake, clock: clock)
+            let runner = Runner()
+            var atBaseline: SensorsState?
+            var atThird: SensorsState?
+            clock.onSleep = { n in
+                if n == 1 { atBaseline = s.sensors }
+                if n == 2 { fake.sensors = [] }
+                if n == 3 { atThird = s.sensors; runner.task?.cancel() }
+            }
+            runner.task = Task { await s.run() }
+            await runner.task?.value
+            #expect(atBaseline == .rows([SensorReading(kind: .pCores, celsius: 58)]))
+            #expect(atThird == .unavailable)
+            #expect(s.sensors == .notYet)
+        }
+
+        /// A1: an idle sensor (nil value) keeps the last valid value for 30 s, then shows nil; exit empties the map.
+        @Test func idleSensorHoldsTheLastValueThenExpires() async {
+            let clock = VirtualClock(), fake = FakeSocReaders()
+            let s = make(fake, clock: clock, interval: 31)
+            let runner = Runner()
+            var atSecondPass: SensorsState?
+            var atThirdPass: SensorsState?
+            var mapAtThird = 0
+            clock.onSleep = { n in
+                if n == 1 { fake.sensors = [SensorReading(kind: .pCores, celsius: nil)] }
+                if n == 2 { atSecondPass = s.sensors }                     // t = 1 s: held
+                if n == 3 { atThirdPass = s.sensors; mapAtThird = s.lastSensorValues.count; runner.task?.cancel() }   // t = 32 s
+            }
+            runner.task = Task { await s.run() }
+            await runner.task?.value
+            #expect(atSecondPass == .rows([SensorReading(kind: .pCores, celsius: 58)]))
+            #expect(atThirdPass == .rows([SensorReading(kind: .pCores, celsius: nil)]))
+            #expect(mapAtThird == 1)
+            #expect(s.sensors == .notYet)
+            #expect(s.lastSensorValues.isEmpty)
         }
 
         // MARK: (3) cancellation

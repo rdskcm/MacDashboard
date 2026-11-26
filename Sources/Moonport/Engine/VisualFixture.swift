@@ -477,6 +477,9 @@ extension VisualFixture {
         /// `-fixtureChart partial | gap | gpumissing | collecting | unavailable`
         enum Chart: String { case reference, partial, gap, gpuMissing = "gpumissing", collecting, unavailable }
 
+        /// `-fixtureSensors gpuIdle | partial | chiponly | unavailable | notyet` (partial = a Mac without Battery and Charger)
+        enum Sensors: String { case reference, gpuIdle, partial, chipOnly = "chiponly", unavailable, notYet = "notyet" }
+
         var cores: Cores = .reference
         var freq: Freq = .reference
         var gpuList: GPUList = .reference
@@ -488,6 +491,7 @@ extension VisualFixture {
         var powerUnavailable = false
         /// `-fixtureWide 1`: 3-digit values (128.00 load, 128 GPU cores, 128.4 W).
         var wide = false
+        var sensors: Sensors = .reference
 
         /// Unknown or missing values keep the reference state.
         static func fromLaunchArguments(_ args: [String] = ProcessInfo.processInfo.arguments) -> SocFixtureOptions {
@@ -503,6 +507,7 @@ extension VisualFixture {
             if let v = value("-fixtureThermal").flatMap(Thermal.init(rawValue:)) { o.thermal = v }
             if let v = value("-fixtureCPU").flatMap(CPU.init(rawValue:)) { o.cpu = v }
             if let v = value("-fixtureChart").flatMap(Chart.init(rawValue:)) { o.chart = v }
+            if let v = value("-fixtureSensors").flatMap(Sensors.init(rawValue:)) { o.sensors = v }
             o.powerUnavailable = value("-fixturePower") == "unavailable"
             o.wide = args.contains("-fixtureWide")
             return o
@@ -581,6 +586,19 @@ extension VisualFixture {
         }
         f.powerW = o.powerUnavailable ? nil : (o.wide ? 128.4 : (high ? 14.1 : 6.8))
         f.gpuCoreCount = o.wide ? 128 : 8
+        // TEMP-SENSORS-DETAIL: synthetic placeholder temperatures (not measured values).
+        let sensors = [SensorReading(kind: .eCores, celsius: 47), SensorReading(kind: .pCores, celsius: 58),
+                       SensorReading(kind: .gpu, celsius: 46), SensorReading(kind: .battery, celsius: 31),
+                       SensorReading(kind: .wireless, celsius: 39), SensorReading(kind: .ssd, celsius: 37),
+                       SensorReading(kind: .charger, celsius: 39)]
+        switch o.sensors {
+        case .reference: f.sensors = .rows(sensors)
+        case .gpuIdle: f.sensors = .rows(sensors.map { $0.kind == .gpu ? SensorReading(kind: .gpu, celsius: nil) : $0 })
+        case .partial: f.sensors = .rows(sensors.filter { $0.kind != .battery && $0.kind != .charger })
+        case .chipOnly: f.sensors = .rows(sensors.filter { SocSensorsModel.chipKinds.contains($0.kind) })
+        case .unavailable: f.sensors = .unavailable
+        case .notYet: f.sensors = .notYet
+        }
         return f
     }
 
