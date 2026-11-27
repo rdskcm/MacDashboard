@@ -89,7 +89,7 @@ enum FolderSizesCacheStore {
 
 enum ReportSection: String, CaseIterable {
     case system, snapshots, homeDirs, serviceDirs, security, tmDest, spotlight
-    case crashes, brew, updates, autostart, smart, energy, battery
+    case crashes, brew, updates, autostart, smart, energy, battery, readerStatus
 }
 
 final class ReportCollector: Sendable {
@@ -362,6 +362,7 @@ final class ReportCollector: Sendable {
             { await self.collectSmart() },
             { await self.collectEnergy() },
             { await self.collectBattery() },
+            { await self.collectReaderStatus() },
         ]
         if !skipSlow {
             jobs += [
@@ -388,19 +389,32 @@ final class ReportCollector: Sendable {
         return report
     }
 
+    // MARK: - reader status (READER-STATUS)
+
+    private func collectReaderStatus() async -> Outcome {
+        let lines = await ReaderProbe.collect()
+        return Outcome(section: .readerStatus) { $0.readerStatus += lines }
+    }
+
     // MARK: - system
 
     private func collectSystem() async -> Outcome {
         var info = SystemInfo()
         var failures: [ParseFailure] = []
-        if let data = FileManager.default.contents(atPath: "/System/Library/CoreServices/SystemVersion.plist"),
-           let parsed = Parsers.systemVersion(plist: data) {
+        // READER-STATUS S4: keep the file read and the command outcome so the two identity rows can be reported.
+        let versionData = FileManager.default.contents(atPath: "/System/Library/CoreServices/SystemVersion.plist")
+        var versionParsed = false
+        if let data = versionData, let parsed = Parsers.systemVersion(plist: data) {
             info.osName = parsed.osName; info.osVersion = parsed.osVersion; info.osBuild = parsed.osBuild
+            versionParsed = true
         }
-        if let hw = await ParsedCommand.spHardware.run().text {
+        let hwOut = await ParsedCommand.spHardware.run()
+        var hwParsed = false
+        if let hw = hwOut.text {
             if let h = Parsers.hardwareProfile(json: Data(hw.utf8), perfLevels: Self.perfLevels()) {
                 info.modelName = h.modelName; info.modelId = h.modelId; info.chip = h.chip
                 info.cores = h.cores; info.memBytes = h.memBytes
+                hwParsed = true
             } else if let f = ParseFailure(.spHardware, stdout: hw) {
                 failures.append(f)
             }
@@ -415,7 +429,14 @@ final class ReportCollector: Sendable {
         }
         let has = info.osName != nil || info.modelName != nil || info.chip != nil
         let finalInfo = info, finalFailures = failures   // immutable copies: the @Sendable mutate closure cannot capture the vars
-        return Outcome(section: .system) { $0.system = has ? finalInfo : nil; $0.parseFailures += finalFailures }
+        let finalLines = [
+            ReaderStatusMac.systemVersionLine(dataRead: versionData != nil, parsed: versionParsed),
+            ReaderStatusMac.commandLine(.systemHardwareProfile, tool: "system_profiler -json SPHardwareDataType",
+                                        termination: hwOut.termination, stdout: hwOut.stdout, parsed: hwParsed),
+        ]
+        return Outcome(section: .system) {
+            $0.system = has ? finalInfo : nil; $0.parseFailures += finalFailures; $0.readerStatus += finalLines
+        }
     }
 
     private static func sysctlString(_ name: String) -> String? {
@@ -737,9 +758,11 @@ final class ReportCollector: Sendable {
     // MARK: - SMART / disks (generic — no hardcoded model names)
 
     private func collectSmart() async -> Outcome {
-        let (disks, failures) = await smartDisksReporting()
+        let (disks, failures, lines) = await smartDisksReporting()
         let smartctlPresent = Self.findSmartctl() != nil
-        return Outcome(section: .smart) { $0.smart = disks; $0.smartctlPresent = smartctlPresent; $0.parseFailures += failures }
+        return Outcome(section: .smart) {
+            $0.smart = disks; $0.smartctlPresent = smartctlPresent; $0.parseFailures += failures; $0.readerStatus += lines
+        }
     }
 
     /// The actual SMART/disks collection logic, factored out of `collectSmart()` so the
@@ -749,14 +772,21 @@ final class ReportCollector: Sendable {
         await smartDisksReporting().disks
     }
 
-    private func smartDisksReporting() async -> (disks: [SmartDisk], failures: [ParseFailure]) {
+    private func smartDisksReporting() async -> (disks: [SmartDisk], failures: [ParseFailure], lines: [ReaderStatusLine]) {
         var disks: [SmartDisk] = []
         var failures: [ParseFailure] = []
+        var lines: [ReaderStatusLine] = []   // READER-STATUS S4: disk.internalInfo, disk.internalSmart, disk.externalList
         let smartctl = Self.findSmartctl()
 
         // Internal boot disk.
-        if let info = await ParsedCommand.diskutilInfo.run(device: "disk0").nonEmptyText {
+        let infoOut = await ParsedCommand.diskutilInfo.run(device: "disk0")
+        var infoParsed = false
+        var smartTool = "smartctl -A -j disk0"
+        var smartOut: CommandOutcome?
+        var attrCount = 0
+        if let info = infoOut.nonEmptyText {
             let (status, media) = Parsers.diskutilSmart(plist: Data(info.utf8))
+            infoParsed = status != nil || media != nil
             if status == nil && media == nil, let f = ParseFailure(.diskutilInfo, device: "disk0", stdout: info) {
                 failures.append(f)
             }
@@ -775,11 +805,19 @@ final class ReportCollector: Sendable {
             if let sc = smartctl {
                 var raw: String? = nil
                 if Self.isSafeToRunViaSudo(sc) {
-                    raw = await CommandRunner.run("/usr/bin/sudo", ["-n", sc] + ParsedCommand.smartctl.arguments(device: "disk0"), timeout: ParsedCommand.smartctl.timeout).nonEmptyText
+                    let sudoOut = await CommandRunner.run("/usr/bin/sudo", ["-n", sc] + ParsedCommand.smartctl.arguments(device: "disk0"), timeout: ParsedCommand.smartctl.timeout)
+                    raw = sudoOut.nonEmptyText
+                    if raw != nil { smartOut = sudoOut; smartTool = "sudo -n smartctl -A -j disk0" }
                 }
-                if raw == nil { raw = await ParsedCommand.smartctl.run(device: "disk0", executable: sc).nonEmptyText }
+                if raw == nil {
+                    let plainOut = await ParsedCommand.smartctl.run(device: "disk0", executable: sc)
+                    raw = plainOut.nonEmptyText
+                    smartOut = plainOut
+                    smartTool = "smartctl -A -j disk0"
+                }
                 if let raw {
                     let attrs = Parsers.smartctlAttrs(json: Data(raw.utf8))
+                    attrCount = attrs.count
                     if attrs.isEmpty {
                         if let f = ParseFailure(.smartctl, device: "disk0", executable: sc, stdout: raw) { failures.append(f) }
                     } else {
@@ -802,10 +840,19 @@ final class ReportCollector: Sendable {
             }
             disks.append(disk)
         }
+        lines.append(ReaderStatusMac.commandLine(.diskInternalInfo, tool: "diskutil info -plist disk0",
+                                                 termination: infoOut.termination, stdout: infoOut.stdout, parsed: infoParsed))
+        lines.append(ReaderStatusMac.internalSmartLine(smartctl: smartctl, diskutilOK: infoOut.nonEmptyText != nil,
+                                                       tool: smartTool, termination: smartOut?.termination,
+                                                       stdout: smartOut?.stdout ?? "", attrCount: attrCount))
 
         // External physical disks.
-        if let list = await CommandRunner.run("/usr/sbin/diskutil", ["list", "-plist", "external", "physical"], timeout: 15).text {
-            for dev in Parsers.externalPhysicalDisks(plist: Data(list.utf8)) {
+        let listOut = await CommandRunner.run("/usr/sbin/diskutil", ["list", "-plist", "external", "physical"], timeout: 15)
+        var externalCount = 0
+        if let list = listOut.text {
+            let devices = Parsers.externalPhysicalDisks(plist: Data(list.utf8))
+            externalCount = devices.count
+            for dev in devices {
                 var title = dev
                 var duStatus: String?
                 if let info = await ParsedCommand.diskutilInfo.run(device: dev).text {
@@ -839,7 +886,10 @@ final class ReportCollector: Sendable {
                                               attrs: attrs, health: health, smartctlPresent: smartctl != nil))
             }
         }
-        return (disks, failures)
+        lines.append(ReaderStatusMac.commandLine(.diskExternalList, tool: "diskutil list -plist external physical",
+                                                 termination: listOut.termination, stdout: listOut.stdout, parsed: true,
+                                                 reading: "\(externalCount) external disks"))
+        return (disks, failures, lines)
     }
 
     private func makeDiskutilDisk(device: String,
@@ -893,9 +943,12 @@ final class ReportCollector: Sendable {
     }
 
     static func findSmartctl() -> String? {
-        firstTool(primary: ["/opt/homebrew/sbin/smartctl", "/opt/homebrew/bin/smartctl"],
-                  fallback: ["/usr/local/sbin/smartctl", "/usr/local/bin/smartctl"])
+        firstTool(primary: Array(smartctlPaths[0...1]), fallback: Array(smartctlPaths[2...3]))
     }
+
+    /// The four places `findSmartctl` looks, in lookup order (READER-STATUS S4 prints them when none exists).
+    static let smartctlPaths = ["/opt/homebrew/sbin/smartctl", "/opt/homebrew/bin/smartctl",
+                                "/usr/local/sbin/smartctl", "/usr/local/bin/smartctl"]
 
     /// Pure (unit-tested). N3: may a tool found at a /usr/local FALLBACK location be run
     /// (unprivileged)? Regular file, owned by root or by the user running the app, no group/
@@ -1078,13 +1131,20 @@ final class ReportCollector: Sendable {
     private func collectBattery() async -> Outcome {
         var b: BatteryInfo?
         var failures: [ParseFailure] = []
-        if let pm = await ParsedCommand.pmsetBatt.run().nonEmptyText {
+        let pmOut = await ParsedCommand.pmsetBatt.run()
+        if let pm = pmOut.nonEmptyText {
             b = Parsers.batteryPmset(pm)
             if b == nil, let f = ParseFailure(.pmsetBatt, stdout: pm) { failures.append(f) }
         }
-        if let sp = await ParsedCommand.spPower.run().text {
+        let pmInfo = b   // READER-STATUS S4: before the power profile and the desktop strip
+        let spOut = await ParsedCommand.spPower.run()
+        var profCycles: Int?
+        var profileHasBattery = false
+        if let sp = spOut.text {
             let prof = Parsers.batteryPowerProfile(sp)
+            profCycles = prof.cycles
             if prof.cycles != nil || prof.condition != nil || prof.maxCapacity != nil {
+                profileHasBattery = true
                 if b == nil { b = BatteryInfo() }
                 b?.cycles = prof.cycles
                 b?.condition = prof.condition
@@ -1108,7 +1168,14 @@ final class ReportCollector: Sendable {
         }
         let value = b
         let finalFailures = failures   // immutable copy: the @Sendable mutate closure cannot capture the var
-        return Outcome(section: .battery) { $0.battery = value; $0.parseFailures += finalFailures }
+        let finalLines = [
+            ReaderStatusMac.pmsetLine(termination: pmOut.termination, stdout: pmOut.stdout, info: pmInfo),
+            ReaderStatusMac.spPowerLine(termination: spOut.termination, stdout: spOut.stdout, cycles: profCycles,
+                                        profileHasBattery: profileHasBattery, pmsetCharge: pmInfo?.charge),
+        ]
+        return Outcome(section: .battery) {
+            $0.battery = value; $0.parseFailures += finalFailures; $0.readerStatus += finalLines
+        }
     }
 
     // MARK: - folder sizes (background job, SIZES-BACKGROUND)

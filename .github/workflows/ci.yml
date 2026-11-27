@@ -84,6 +84,22 @@ jobs:
           echo "swift-testing tests run: ${n:-none}"
           [ "${n:-0}" -gt 0 ] || { echo "::error::swift test ran no swift-testing tests"; exit 1; }
 
+      - name: Run swift-testing suite in release (MoonportTests)
+        # READER-STATUS: a Swift optimizer defect miscompiled the statically initialised global
+        # SMCReader.connection. The installed (release) app crashed while the debug suite above
+        # passed, because debug builds do not run that optimization. The regression test
+        # sharedConnectionStartsWithoutAForeignFailure only guards it in a release build, and
+        # -enable-testing keeps `@testable import Moonport` working there.
+        # This step builds on its own in a separate scratch path: the debug build above cannot
+        # be reused. The count guard is the same as in the debug step.
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/swift-test-release.log"
+          swift test -c release -Xswiftc -enable-testing --scratch-path "$RUNNER_TEMP/build-release" 2>&1 | tee "$log"
+          n="$(grep -Eo 'Test run with [0-9]+ test' "$log" | grep -Eo '[0-9]+' | tail -1 || true)"
+          echo "swift-testing tests run (release): ${n:-none}"
+          [ "${n:-0}" -gt 0 ] || { echo "::error::release swift test ran no swift-testing tests"; exit 1; }
+
   agent-config:
     # AGENT-CONFIG-SYNC: AGENTS.md is generated from CLAUDE.md by tools/agent-config/agent_config.py.
     # Runs the generator's tests and its read-only drift check: exit 1 = AGENTS.md is stale (run

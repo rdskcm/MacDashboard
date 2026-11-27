@@ -20,21 +20,46 @@ enum GPUStats {
 
     /// IOKit. Max `Device Utilization %` over every IOAccelerator entry; nil when none has it. Never throws.
     static func readDeviceUtilization() -> Int? {
+        try? readDeviceUtilizationResult().get()
+    }
+
+    /// The IOAccelerator service iterator, or why there is none (READER-STATUS T1 rows 12-14).
+    private static func acceleratorIterator() -> Result<io_iterator_t, ReaderReason> {
         var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator) == KERN_SUCCESS,
-              iterator != 0 else { return nil }
+        let kr = IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator)
+        guard kr == KERN_SUCCESS else {
+            return .failure(.kernReturn(call: "IOServiceGetMatchingServices(IOAccelerator)", code: kr))
+        }
+        guard iterator != 0 else { return .failure(.serviceAbsent(className: "IOAccelerator")) }
+        return .success(iterator)
+    }
+
+    /// `readDeviceUtilization` with the failure reason (READER-STATUS T1 row 12).
+    static func readDeviceUtilizationResult() -> Result<Int, ReaderReason> {
+        let iterator: io_iterator_t
+        switch acceleratorIterator() {
+        case .success(let it): iterator = it
+        case .failure(let r): return .failure(r)
+        }
         defer { IOObjectRelease(iterator) }
         var best: Int? = nil
+        var sawEntry = false
+        var sawStats = false
         while true {
             let entry = IOIteratorNext(iterator)
             if entry == 0 { break }
             defer { IOObjectRelease(entry) }
+            sawEntry = true
             guard let cf = IORegistryEntryCreateCFProperty(entry, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0),
-                  let dict = cf.takeRetainedValue() as? [String: Any],
-                  let v = deviceUtilization(performanceStatistics: dict) else { continue }
+                  let dict = cf.takeRetainedValue() as? [String: Any] else { continue }
+            sawStats = true
+            guard let v = deviceUtilization(performanceStatistics: dict) else { continue }
             best = max(best ?? v, v)
         }
-        return best
+        if let best { return .success(best) }
+        if !sawEntry { return .failure(.serviceAbsent(className: "IOAccelerator")) }
+        if !sawStats { return .failure(.registryPropertyAbsent(entry: "IOAccelerator", property: "PerformanceStatistics")) }
+        return .failure(.registryPropertyAbsent(entry: "IOAccelerator PerformanceStatistics", property: deviceUtilizationKey))
     }
 
     // MARK: - SOC-DETAILS: core count and client list
@@ -44,18 +69,33 @@ enum GPUStats {
 
     /// IOKit. `gpu-core-count` of the first IOAccelerator entry that has a positive one; nil when none does.
     static func readCoreCount() -> Int? {
-        var iterator: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator) == KERN_SUCCESS,
-              iterator != 0 else { return nil }
+        try? readCoreCountResult().get()
+    }
+
+    /// `readCoreCount` with the failure reason (READER-STATUS T1 row 13).
+    static func readCoreCountResult() -> Result<Int, ReaderReason> {
+        let iterator: io_iterator_t
+        switch acceleratorIterator() {
+        case .success(let it): iterator = it
+        case .failure(let r): return .failure(r)
+        }
         defer { IOObjectRelease(iterator) }
+        var sawEntry = false
+        var firstNonPositive: Int? = nil
         while true {
             let entry = IOIteratorNext(iterator)
             if entry == 0 { break }
             defer { IOObjectRelease(entry) }
+            sawEntry = true
             if let cf = IORegistryEntryCreateCFProperty(entry, "gpu-core-count" as CFString, kCFAllocatorDefault, 0),
-               let n = cf.takeRetainedValue() as? NSNumber, n.intValue > 0 { return n.intValue }
+               let n = cf.takeRetainedValue() as? NSNumber {
+                if n.intValue > 0 { return .success(n.intValue) }
+                if firstNonPositive == nil { firstNonPositive = n.intValue }
+            }
         }
-        return nil
+        if !sawEntry { return .failure(.serviceAbsent(className: "IOAccelerator")) }
+        if let bad = firstNonPositive { return .failure(.implausible(what: "gpu-core-count", value: "\(bad)", accepted: "> 0")) }
+        return .failure(.registryPropertyAbsent(entry: "IOAccelerator", property: "gpu-core-count"))
     }
 
     /// Pure. "pid 123, Name" → (123, "Name"). nil when the prefix, the pid or the comma is missing. The name is the
@@ -76,20 +116,29 @@ enum GPUStats {
     /// IOKit. One sample per IOAccelerator child that is a client with `AppUsage`. nil when no IOAccelerator entry
     /// exists or an iterator cannot be created; `[]` when the source works and no child has `AppUsage`.
     static func readClients() -> [GPUClientSample]? {
-        var accelerators: io_iterator_t = 0
-        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &accelerators) == KERN_SUCCESS,
-              accelerators != 0 else { return nil }
+        try? readClientsResult().get()
+    }
+
+    /// `readClients` with the failure reason (READER-STATUS T1 row 14).
+    static func readClientsResult() -> Result<[GPUClientSample], ReaderReason> {
+        let accelerators: io_iterator_t
+        switch acceleratorIterator() {
+        case .success(let it): accelerators = it
+        case .failure(let r): return .failure(r)
+        }
         defer { IOObjectRelease(accelerators) }
         var out: [GPUClientSample] = []
         var sawAccelerator = false
+        let childCall = "IORegistryEntryGetChildIterator(IOAccelerator)"
         while true {
             let entry = IOIteratorNext(accelerators)
             if entry == 0 { break }
             defer { IOObjectRelease(entry) }
             sawAccelerator = true
             var children: io_iterator_t = 0
-            guard IORegistryEntryGetChildIterator(entry, kIOServicePlane, &children) == KERN_SUCCESS,
-                  children != 0 else { return nil }
+            let kr = IORegistryEntryGetChildIterator(entry, kIOServicePlane, &children)
+            guard kr == KERN_SUCCESS else { return .failure(.kernReturn(call: childCall, code: kr)) }
+            guard children != 0 else { return .failure(.nullResult(call: childCall)) }
             defer { IOObjectRelease(children) }
             while true {
                 let child = IOIteratorNext(children)
@@ -104,7 +153,7 @@ enum GPUStats {
                 out.append(GPUClientSample(pid: who.pid, name16: who.name16, gpuTimeNs: ns))
             }
         }
-        return sawAccelerator ? out : nil
+        return sawAccelerator ? .success(out) : .failure(.serviceAbsent(className: "IOAccelerator"))
     }
 }
 

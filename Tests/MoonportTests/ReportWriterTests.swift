@@ -46,7 +46,7 @@ private func rwVM(_ label: String, _ pages: Int64) -> String {
      L.reportSectionServiceDirs, L.reportSectionMemory, L.reportSectionTopMem, L.reportSectionTopCPU,
      L.reportSectionLoginItems, L.reportSectionAgents, L.reportSectionBackground, L.reportSectionBattery,
      L.reportSectionEnergy, L.reportSectionSecurity, L.reportSectionTMDest, "SPOTLIGHT",
-     L.reportSectionCrashes, "HOMEBREW", L.reportSectionUpdates, L.reportSectionSmart,
+     L.reportSectionCrashes, "HOMEBREW", L.reportSectionUpdates, L.reportSectionSmart, L.reportSectionReaderStatus,
      L.reportSectionTimings, L.reportSectionUnparsed]
 }
 
@@ -122,6 +122,42 @@ private func emptyInput() -> ReportSummaryInput {
 
 extension SerialTests {
     @MainActor struct ReportWriterTests {
+        /// READER-STATUS S1: the section renders in EN and RU, lines in macOrder, reasons identical in both languages.
+        @Test func renderReaderStatus() {
+            let originalLang = L10nStore.shared.language
+            defer { L10nStore.shared.language = originalLang }
+            var r = FullReport()
+            r.system = SystemInfo(osName: "macOS", osVersion: "26.1", osBuild: "25B78", modelName: "MacBook Air",
+                                  modelId: "Mac15,12", chip: "Apple M3", cores: nil, memBytes: nil, uptimeSeconds: nil)
+            r.readerStatus = [
+                ReaderStatusLine(reader: .smcPower, status: .ok, reading: "PSTR 6.42 W"),
+                ReaderStatusLine(reader: .systemVersion, status: .ok),
+                ReaderStatusLine(reader: .batteryPowerSources, status: .notApplicable(.empty(what: "IOPS source of type InternalBattery"))),
+                ReaderStatusLine(reader: .hidTemperature, status: .failed(.symbolMissing(library: "/L", symbol: "S"))),
+            ]
+            func body(_ chip: String, _ model: String, _ ok: String, _ failed: String, _ na: String) -> [String] {
+                [chip + "Apple M3", model + "Mac15,12", "macOS: 26.1 (25B78)",
+                 pad("system.version", 24) + ok, pad("smc.power", 24) + ok + " (PSTR 6.42 W)",
+                 pad("hid.temperature", 24) + failed + ": dlsym S not found in /L",
+                 pad("battery.powerSources", 24) + na + ": IOPS source of type InternalBattery: none found"]
+            }
+            L10nStore.shared.language = .en
+            #expect(rwSection(renderDetails(r, LiveSnapshot()), L.reportSectionReaderStatus)
+                    == body("Chip: ", "Model Identifier: ", "ok", "failed", "not applicable"))
+            L10nStore.shared.language = .ru
+            let ru = ReportWriter.render({
+                var i = emptyInput()
+                i.details = ReportDetails(report: r, live: LiveSnapshot())
+                return i
+            }(), language: .ru)
+            #expect(rwSection(ru, L.reportSectionReaderStatus)
+                    == body("Чип: ", "Идентификатор модели: ", "работает", "сбой", "не применимо"))
+            L10nStore.shared.language = .en
+            let na = L.sharedUnavailable
+            #expect(rwSection(renderDetails(FullReport(), LiveSnapshot()), L.reportSectionReaderStatus)
+                    == [L.reportReaderChip(na), L.reportReaderModelId(na), L.reportReaderMacOS(na), na])
+        }
+
         @Test func renderEN() {
             let originalLang = L10nStore.shared.language
             defer { L10nStore.shared.language = originalLang }

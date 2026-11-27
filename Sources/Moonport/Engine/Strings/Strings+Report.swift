@@ -54,6 +54,13 @@ protocol ReportStrings {
     var reportSectionCrashes: String { get }
     var reportSectionUpdates: String { get }
     var reportSectionSmart: String { get }
+    var reportSectionReaderStatus: String { get }
+    func reportReaderChip(_ v: String) -> String
+    func reportReaderModelId(_ v: String) -> String
+    func reportReaderMacOS(_ v: String) -> String
+    var reportReaderOK: String { get }
+    var reportReaderNotApplicable: String { get }
+    var reportReaderFailed: String { get }
     var reportSectionUnparsed: String { get }
     var reportUnparsedHint: String { get }
     func reportUnparsedMoreLines(_ n: Int) -> String
@@ -159,6 +166,13 @@ extension StringsEN: ReportStrings {
     var reportSectionCrashes: String { "RECENT APP CRASHES" }
     var reportSectionUpdates: String { "macOS UPDATES" }
     var reportSectionSmart: String { "EXTERNAL AND INTERNAL DISKS: SMART" }
+    var reportSectionReaderStatus: String { "READER STATUS" }
+    func reportReaderChip(_ v: String) -> String { "Chip: \(v)" }
+    func reportReaderModelId(_ v: String) -> String { "Model Identifier: \(v)" }
+    func reportReaderMacOS(_ v: String) -> String { "macOS: \(v)" }
+    var reportReaderOK: String { "ok" }
+    var reportReaderNotApplicable: String { "not applicable" }
+    var reportReaderFailed: String { "failed" }
     var reportSectionUnparsed: String { "UNRECOGNISED COMMAND OUTPUT (first lines)" }
     var reportUnparsedHint: String { "Moonport could not read the output of these commands. Serial numbers and UUIDs are masked. Attach this block to a bug report." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(+\(n) more lines not shown)" }
@@ -199,6 +213,7 @@ extension StringsEN: ReportStrings {
         case .smart: return "SMART"
         case .energy: return "Energy settings"
         case .battery: return "Battery"
+        case .readerStatus: return "Reader status"
         }
     }
     func reportFoldersCountedAt(_ at: String) -> String { "(counted \(at))" }
@@ -282,6 +297,13 @@ extension StringsRU: ReportStrings {
     var reportSectionCrashes: String { "НЕДАВНИЕ КРАШИ ПРОГРАММ" }
     var reportSectionUpdates: String { "ОБНОВЛЕНИЯ macOS" }
     var reportSectionSmart: String { "ВНЕШНИЕ И ВСТРОЕННЫЕ ДИСКИ: SMART" }
+    var reportSectionReaderStatus: String { "СОСТОЯНИЕ ИСТОЧНИКОВ ДАННЫХ" }
+    func reportReaderChip(_ v: String) -> String { "Чип: \(v)" }
+    func reportReaderModelId(_ v: String) -> String { "Идентификатор модели: \(v)" }
+    func reportReaderMacOS(_ v: String) -> String { "macOS: \(v)" }
+    var reportReaderOK: String { "работает" }
+    var reportReaderNotApplicable: String { "не применимо" }
+    var reportReaderFailed: String { "сбой" }
     var reportSectionUnparsed: String { "НЕРАСПОЗНАННЫЙ ВЫВОД КОМАНД (первые строки)" }
     var reportUnparsedHint: String { "Moonport не смог разобрать вывод этих команд. Серийные номера и UUID скрыты. Приложите этот блок к сообщению об ошибке." }
     func reportUnparsedMoreLines(_ n: Int) -> String { "(ещё не показано строк: \(n))" }
@@ -322,6 +344,7 @@ extension StringsRU: ReportStrings {
         case .smart: return "SMART"
         case .energy: return "Настройки энергии"
         case .battery: return "Батарея"
+        case .readerStatus: return "Источники данных"
         }
     }
     func reportFoldersCountedAt(_ at: String) -> String { "(подсчитано \(at))" }

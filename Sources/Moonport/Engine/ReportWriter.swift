@@ -190,6 +190,7 @@ private struct ReportRenderer {
         addSection(&out, "HOMEBREW", renderBrew(report.brewStatus, report.brewOutdated))
         addSection(&out, S.reportSectionUpdates, renderUpdates(report.updates, checkedAt: report.updatesCheckedAt))
         addSection(&out, S.reportSectionSmart, renderSmart(report.smart))
+        addSection(&out, S.reportSectionReaderStatus, renderReaderStatus(report.readerStatus, system: report.system))
         addSection(&out, S.reportSectionTimings, renderTimings(report))
     }
 
@@ -617,6 +618,27 @@ private struct ReportRenderer {
             }
         }
         return lines
+    }
+
+    // MARK: - READER STATUS (READER-STATUS)
+
+    private func renderReaderStatus(_ lines: [ReaderStatusLine], system: SystemInfo?) -> [String] {
+        let na = S.sharedUnavailable
+        let os = system?.osVersion.map { v in v + (system?.osBuild.map { " (\($0))" } ?? "") }
+        var out = [S.reportReaderChip(system?.chip ?? na), S.reportReaderModelId(system?.modelId ?? na), S.reportReaderMacOS(os ?? na)]
+        let ordered = ReaderStatusLine.ordered(lines, by: ReaderID.macOrder)
+        if ordered.isEmpty { return out + [na] }
+        for line in ordered { out.append(ReportWriter.padRight(line.reader.rawValue, 24) + readerStatusText(line)) }
+        return out
+    }
+
+    private func readerStatusText(_ line: ReaderStatusLine) -> String {
+        let suffix = line.reading.map { " (\($0))" } ?? ""
+        switch line.status {
+        case .ok: return S.reportReaderOK + suffix
+        case .notApplicable(let r): return S.reportReaderNotApplicable + ": " + r.text + suffix
+        case .failed(let r): return S.reportReaderFailed + ": " + r.text + suffix
+        }
     }
 
     private func renderParseFailures(_ failures: [ParseFailure]) -> [String] {
