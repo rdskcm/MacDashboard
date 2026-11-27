@@ -103,11 +103,85 @@ struct CoreLoadReaderTests {
         #expect(CoreTopology.resolve(levels: same, clusterLetters: eeeePPPP, ncpu: 8) == unknown(8))
     }
 
+    @Test func resolutionNamesTheFailedCheck() {
+        func fail(_ check: String) -> Result<[CoreGroup], ReaderReason> {
+            .failure(.validationFailed(what: "core topology", check: check))
+        }
+        func run(_ levels: [PerfLevel], _ letters: [Character], _ ncpu: Int) -> Result<[CoreGroup], ReaderReason> {
+            CoreTopology.resolution(levels: .success(levels), clusterLetters: .success(letters), ncpu: ncpu)
+        }
+        #expect(run(two, eeeePPPP, 0) == fail("activeProcessorCount 0 > 0"))
+        #expect(run([], eeeePPPP, 8) == fail("hw.perflevel0 present"))
+        #expect(run(two, Array(eeeePPPP.dropLast()), 8) == fail("cluster-type count 7 == activeProcessorCount 8"))
+        #expect(run(two, eeeePPPP, 10) == fail("cluster-type count 8 == activeProcessorCount 10"))
+        let tenLetters = Array(eeeePPPP) + ["E", "E"]
+        #expect(run(two, tenLetters, 10) == fail("perflevel core sum 8 == activeProcessorCount 10"))
+        #expect(run([PerfLevel(name: nil, count: 4), PerfLevel(name: "Efficiency", count: 4)], eeeePPPP, 8)
+                == fail("hw.perflevel0.name present"))
+        let same = [PerfLevel(name: "Performance", count: 4), PerfLevel(name: "Plus", count: 4)]
+        #expect(run(same, eeeePPPP, 8) == fail("perflevel name initials unique"))
+        let skewed: [Character] = ["E", "E", "E", "P", "P", "P", "P", "P"]
+        #expect(run(two, skewed, 8) == fail("Performance cores 5 == hw.perflevel0.physicalcpu 4"))
+        let odd: [Character] = ["E", "E", "E", "E", "P", "P", "P", "X"]
+        #expect(run(two, odd, 8) == fail("Performance cores 3 == hw.perflevel0.physicalcpu 4"))
+        // The level counts sum to ncpu, but the registry letters do not match the second level.
+        let zero = [PerfLevel(name: "Performance", count: 0), PerfLevel(name: "Efficiency", count: 8)]
+        #expect(run(zero, eeeePPPP, 8) == fail("Efficiency cores 4 == hw.perflevel1.physicalcpu 8"))
+        // A failed input returns its own reason, levels before letters.
+        let levelsReason = ReaderReason.errno(call: "sysctlbyname(hw.perflevel0.physicalcpu)", code: 2)
+        let lettersReason = ReaderReason.registryEntryAbsent(path: "IODeviceTree:/cpus")
+        #expect(CoreTopology.resolution(levels: .failure(levelsReason), clusterLetters: .failure(lettersReason), ncpu: 8)
+                == .failure(levelsReason))
+        #expect(CoreTopology.resolution(levels: .success(two), clusterLetters: .failure(lettersReason), ncpu: 8)
+                == .failure(lettersReason))
+        // A matching input succeeds with the groups `resolve` returns.
+        #expect(run(two, eeeePPPP, 8) == .success(CoreTopology.resolve(levels: two, clusterLetters: eeeePPPP, ncpu: 8)))
+    }
+
     @Test func nodeNamesParse() {
         #expect(CoreTopology.coreIndex(fromNodeName: "cpu0") == 0)
         #expect(CoreTopology.coreIndex(fromNodeName: "cpu12") == 12)
         #expect(CoreTopology.coreIndex(fromNodeName: "cpus") == nil)
         #expect(CoreTopology.coreIndex(fromNodeName: "cpu") == nil)
         #expect(CoreTopology.coreIndex(fromNodeName: "arm-io") == nil)
+    }
+
+    // MARK: cluster letters (READER-STATUS T5)
+
+    private func entry(_ i: Int, _ c: Character?) -> CoreTopology.ClusterTypeEntry {
+        .init(index: i, clusterType: c.map { UInt8(ascii: $0.unicodeScalars.first!) })
+    }
+
+    @Test func clusterLettersSucceedInIndexOrder() throws {
+        let raw: Result<[CoreTopology.ClusterTypeEntry]?, ReaderReason> =
+            .success([entry(1, "P"), entry(0, "E"), entry(2, "P")])
+        #expect(try CoreTopology.clusterLetters(from: raw).get() == ["E", "P", "P"])
+    }
+
+    @Test func clusterLettersEntryAbsent() {
+        let r = CoreTopology.clusterLetters(from: .success(nil))
+        guard case .failure(let reason) = r else { Issue.record("expected failure"); return }
+        #expect(reason == .registryEntryAbsent(path: "IODeviceTree:/cpus"))
+    }
+
+    @Test func clusterLettersPropertyAbsentNamesTheChild() {
+        let raw: Result<[CoreTopology.ClusterTypeEntry]?, ReaderReason> = .success([entry(0, "E"), entry(1, nil)])
+        guard case .failure(let reason) = CoreTopology.clusterLetters(from: raw) else { Issue.record("expected failure"); return }
+        #expect(reason == .registryPropertyAbsent(entry: "IODeviceTree:/cpus/cpu1", property: "cluster-type"))
+    }
+
+    @Test func clusterLettersIndexGapNamesTheIndices() {
+        let raw: Result<[CoreTopology.ClusterTypeEntry]?, ReaderReason> = .success([entry(2, "P"), entry(0, "E")])
+        guard case .failure(let reason) = CoreTopology.clusterLetters(from: raw) else { Issue.record("expected failure"); return }
+        #expect(reason == .validationFailed(what: "IODeviceTree:/cpus children", check: "indices 0..<2, got [0, 2]"))
+        let empty = CoreTopology.clusterLetters(from: .success([]))
+        guard case .failure(let r2) = empty else { Issue.record("expected failure"); return }
+        #expect(r2 == .validationFailed(what: "IODeviceTree:/cpus children", check: "indices 0..<0, got []"))
+    }
+
+    @Test func clusterLettersPassesIOKitFailureThrough() {
+        let reason = ReaderReason.nullResult(call: "x")
+        guard case .failure(let r) = CoreTopology.clusterLetters(from: .failure(reason)) else { Issue.record("expected failure"); return }
+        #expect(r == reason)
     }
 }

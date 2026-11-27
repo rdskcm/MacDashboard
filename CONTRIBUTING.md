@@ -32,6 +32,8 @@ swift test
 This must stay green before you open a PR. It needs Xcode (the `Testing` module ships
 with it, not with bare Command Line Tools).
 
+The gate also runs `swift test -c release -Xswiftc -enable-testing`, because a Swift optimizer defect once miscompiled a statically initialised global (`SMCReader.connection`) in the release app while the debug suite passed. Run it locally before you hand a build over when CI has no runner.
+
 CI also fails on any build warning in the app or the tests. `tools/check-warnings.sh`
 runs the same check on your Mac: a clean debug build of both, with warnings as errors.
 

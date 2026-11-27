@@ -52,8 +52,8 @@ enum ThermalHIDReader {
     private typealias ServiceCopyEventFn     = @convention(c) (CFTypeRef?, Int64, Int32, Int64) -> Unmanaged<CFTypeRef>?
     private typealias EventGetFloatValueFn   = @convention(c) (CFTypeRef?, Int32) -> Double
 
-    /// All six resolved function pointers. Constructed all-or-nothing: `loadSymbols()`
-    /// returns a value only when dlopen AND all six dlsym lookups succeeded, so no
+    /// All six resolved function pointers. Constructed all-or-nothing: `symbolLoad`
+    /// succeeds only when dlopen AND all six dlsym lookups succeeded, so no
     /// caller can ever observe a partially-resolved set.
     private struct HIDSymbols {
         let clientCreate: ClientCreateFn
@@ -64,53 +64,54 @@ enum ThermalHIDReader {
         let eventGetFloatValue: EventGetFloatValueFn
     }
 
+    static let libraryPath = "/System/Library/Frameworks/IOKit.framework/IOKit"
+    // NOTE: dlsym takes the UNMANGLED name — no leading underscore. `nm` prints
+    // `_IOHIDEventSystemClientCreate`; that underscore is Mach-O mangling.
+    static let symbolNames = ["IOHIDEventSystemClientCreate", "IOHIDEventSystemClientSetMatching",
+                              "IOHIDEventSystemClientCopyServices", "IOHIDServiceClientCopyProperty",
+                              "IOHIDServiceClientCopyEvent", "IOHIDEventGetFloatValue"]
+
     /// Resolved exactly once, on first access, by Swift's lazy static initialization
     /// (swift_once) — that is already thread-safe, so no lock/dispatch_once is needed
-    /// even though readTemperatureSensors() is called from a background queue. A nil
-    /// result is cached like any other value: dlopen/dlsym are NEVER retried.
-    private static let symbols: HIDSymbols? = loadSymbols()
-
-    private static func loadSymbols() -> HIDSymbols? {
-        // RTLD_LAZY: IOKit is already loaded in-process, so this is a refcount bump.
-        // The handle is intentionally NEVER dlclose()d — the resolved pointers must
-        // stay valid for the whole process lifetime.
-        guard let handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit",
-                                  RTLD_LAZY) else { return nil }
-
-        // NOTE: dlsym takes the UNMANGLED name — no leading underscore. `nm` prints
-        // `_IOHIDEventSystemClientCreate`; that underscore is Mach-O mangling.
-        guard let create       = dlsym(handle, "IOHIDEventSystemClientCreate"),
-              let setMatching  = dlsym(handle, "IOHIDEventSystemClientSetMatching"),
-              let copyServices = dlsym(handle, "IOHIDEventSystemClientCopyServices"),
-              let copyProperty = dlsym(handle, "IOHIDServiceClientCopyProperty"),
-              let copyEvent    = dlsym(handle, "IOHIDServiceClientCopyEvent"),
-              let getFloat     = dlsym(handle, "IOHIDEventGetFloatValue")
-        else { return nil }   // partial resolution => whole set fails closed
-
-        return HIDSymbols(
-            clientCreate:        unsafeBitCast(create,       to: ClientCreateFn.self),
-            clientSetMatching:   unsafeBitCast(setMatching,  to: ClientSetMatchingFn.self),
-            clientCopyServices:  unsafeBitCast(copyServices, to: ClientCopyServicesFn.self),
-            serviceCopyProperty: unsafeBitCast(copyProperty, to: ServiceCopyPropertyFn.self),
-            serviceCopyEvent:    unsafeBitCast(copyEvent,    to: ServiceCopyEventFn.self),
-            eventGetFloatValue:  unsafeBitCast(getFloat,     to: EventGetFloatValueFn.self))
-    }
+    /// even though readTemperatureSensors() is called from a background queue. A failure
+    /// is cached like any other value: dlopen/dlsym are NEVER retried. READER-STATUS D10/D11: the failure keeps
+    /// the first missing symbol or the dlerror text (`SymbolLoader`). RTLD_LAZY: IOKit is already loaded in-process,
+    /// so this is a refcount bump. The handle is intentionally NEVER dlclose()d — the resolved pointers must stay
+    /// valid for the whole process lifetime. Partial resolution => the whole set fails closed.
+    private static let symbolLoad: Result<HIDSymbols, ReaderReason> =
+        SymbolLoader.load(path: libraryPath, mode: RTLD_LAZY, symbols: symbolNames).map { p in
+            HIDSymbols(
+                clientCreate:        unsafeBitCast(p[0], to: ClientCreateFn.self),
+                clientSetMatching:   unsafeBitCast(p[1], to: ClientSetMatchingFn.self),
+                clientCopyServices:  unsafeBitCast(p[2], to: ClientCopyServicesFn.self),
+                serviceCopyProperty: unsafeBitCast(p[3], to: ServiceCopyPropertyFn.self),
+                serviceCopyEvent:    unsafeBitCast(p[4], to: ServiceCopyEventFn.self),
+                eventGetFloatValue:  unsafeBitCast(p[5], to: EventGetFloatValueFn.self))
+        }
 
     /// One full enumeration+read pass. Unnamed services (no "Product" property —
     /// these read NaN anyway) are skipped; value filtering/classification is the
-    /// caller's job (ThermalSensors).
+    /// caller's job (ThermalSensors). Private API unavailable on this OS (dlopen failed, or one of the six symbols
+    /// is gone) — honest-empty, same as "no sensors found".
     static func readTemperatureSensors() -> [ThermalSensors.Reading] {
-        // Private API unavailable on this OS (dlopen failed, or one of the six symbols
-        // is gone) — honest-empty, same as "no sensors found".
-        guard let hid = symbols else { return [] }
+        (try? readTemperatureSensorsResult().get()) ?? []
+    }
+
+    /// READER-STATUS: the same pass, with the reason when it could not run (missing symbol, no client, no service list).
+    static func readTemperatureSensorsResult() -> Result<[ThermalSensors.Reading], ReaderReason> {
+        let hid: HIDSymbols
+        switch symbolLoad {
+        case .failure(let r): return .failure(r)
+        case .success(let h): hid = h
+        }
 
         guard let client = hid.clientCreate(kCFAllocatorDefault)?.takeRetainedValue()
-        else { return [] }
+        else { return .failure(.nullResult(call: "IOHIDEventSystemClientCreate")) }
         let match: [String: Int] = ["PrimaryUsagePage": appleVendorPage,
                                     "PrimaryUsage": temperatureUsage]
         _ = hid.clientSetMatching(client, match as CFDictionary)
         guard let services = hid.clientCopyServices(client)?
-            .takeRetainedValue() as? [CFTypeRef] else { return [] }
+            .takeRetainedValue() as? [CFTypeRef] else { return .failure(.nullResult(call: "IOHIDEventSystemClientCopyServices")) }
 
         var out: [ThermalSensors.Reading] = []
         out.reserveCapacity(services.count)
@@ -123,6 +124,6 @@ enum ThermalHIDReader {
                 name: name,
                 value: hid.eventGetFloatValue(event, temperatureEventField)))
         }
-        return out
+        return .success(out)
     }
 }

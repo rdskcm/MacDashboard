@@ -75,27 +75,17 @@ final class LiveCollector {
     // MARK: - load average
 
     private func readLoad() -> [Double]? {
-        var loads = [Double](repeating: 0, count: 3)
-        return getloadavg(&loads, 3) == 3 ? loads : nil
+        try? Self.readLoadResult().get()
     }
 
     // MARK: - CPU (host_statistics HOST_CPU_LOAD_INFO, tick delta between samples)
 
     private func readCPU() -> CPUUsage? {
-        var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride
-                                           / MemoryLayout<integer_t>.stride)
-        var info = host_cpu_load_info_data_t()
-        let kr = withUnsafeMutablePointer(to: &info) { ptr in
-            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
-                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, intPtr, &count)
-            }
-        }
-        guard kr == KERN_SUCCESS else { return nil }
-        // cpu_ticks is a 4-tuple indexed by CPU_STATE_{USER,SYSTEM,IDLE,NICE} = 0,1,2,3.
-        let user = UInt64(info.cpu_ticks.0)
-        let sys = UInt64(info.cpu_ticks.1)
-        let idle = UInt64(info.cpu_ticks.2)
-        let nice = UInt64(info.cpu_ticks.3)
+        guard case .success(let ticks) = Self.readCPUTicksResult() else { return nil }
+        let user = ticks.user
+        let sys = ticks.sys
+        let idle = ticks.idle
+        let nice = ticks.nice
         defer { prevTicks = (user, sys, idle, nice) }
         guard let prev = prevTicks else { return nil }  // first call only primes the baseline
 
@@ -115,58 +105,19 @@ final class LiveCollector {
     // MARK: - memory (host_statistics64 HOST_VM_INFO64 + sysctl hw.memsize)
 
     private func readMemory() -> MemSnapshot? {
-        var total: UInt64 = 0
-        var tsize = MemoryLayout<UInt64>.stride
-        guard sysctlbyname("hw.memsize", &total, &tsize, nil, 0) == 0, total > 0 else { return nil }
-
-        var pageSize: vm_size_t = 0
-        if host_page_size(mach_host_self(), &pageSize) != KERN_SUCCESS || pageSize == 0 {
-            pageSize = 4096
-        }
-        let ps = Int64(pageSize)
-
-        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride
-                                           / MemoryLayout<integer_t>.stride)
-        var vm = vm_statistics64_data_t()
-        let kr = withUnsafeMutablePointer(to: &vm) { ptr in
-            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, intPtr, &count)
-            }
-        }
-        guard kr == KERN_SUCCESS else { return nil }
-        func bytes(_ pages: natural_t) -> Int64 { Int64(pages) * ps }
-        return MemSnapshot(
-            total: Int64(total),
-            pageSize: ps,
-            free: bytes(vm.free_count),
-            active: bytes(vm.active_count),
-            inactive: bytes(vm.inactive_count),
-            speculative: bytes(vm.speculative_count),
-            wired: bytes(vm.wire_count),
-            compressor: bytes(vm.compressor_page_count),
-            purgeable: bytes(vm.purgeable_count),
-            fileBacked: bytes(vm.external_page_count)
-        )
+        try? Self.readMemoryResult().get()
     }
 
     // MARK: - swap (sysctl vm.swapusage → xsw_usage)
 
     private func readSwap() -> SwapInfo? {
-        var xsw = xsw_usage()
-        var size = MemoryLayout<xsw_usage>.stride
-        guard sysctlbyname("vm.swapusage", &xsw, &size, nil, 0) == 0 else { return nil }
-        return SwapInfo(total: Int64(xsw.xsu_total),
-                        used: Int64(xsw.xsu_used),
-                        free: Int64(xsw.xsu_avail))
+        try? Self.readSwapResult().get()
     }
 
     // MARK: - memory pressure (sysctl kern.memorystatus_vm_pressure_level)
 
     static func readMemoryPressure() -> MemoryPressureLevel? {
-        var level: Int32 = 0
-        var size = MemoryLayout<Int32>.size
-        guard sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &size, nil, 0) == 0 else { return nil }
-        return MemoryPressureLevel(sysctlValue: level)
+        try? readMemoryPressureResult().get()
     }
 
     // MARK: - disk (volume resource values; Data volume, fall back to root)
@@ -182,19 +133,7 @@ final class LiveCollector {
     }
 
     private func readDisk() -> DiskInfo? {
-        for path in ["/System/Volumes/Data", "/"] {
-            let url = URL(fileURLWithPath: path)
-            guard let vals = try? url.resourceValues(forKeys: [
-                .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey
-            ]), let total = vals.volumeTotalCapacity, total > 0 else { continue }
-            let avail = vals.volumeAvailableCapacityForImportantUsage ?? 0
-            let purgeable = Self.purgeableBytes(importantAvailable: vals.volumeAvailableCapacityForImportantUsage,
-                                                 available: vals.volumeAvailableCapacity.map(Int64.init))
-            let (rawDataUsed, sysUsed) = Self.volumeUsage()
-            let dataUsed = Self.dataUsedExcludingPurgeable(raw: rawDataUsed, purgeable: purgeable)
-            return DiskInfo(size: Int64(total), avail: Int64(avail), dataUsed: dataUsed, sysUsed: sysUsed, purgeable: purgeable)
-        }
-        return nil
+        try? Self.readDiskResult().get()
     }
 
     /// Data-volume used bytes without purgeable space. `getattrlist(ATTR_VOL_SPACEUSED)` counts purgeable as used while `avail`
@@ -245,9 +184,138 @@ final class LiveCollector {
     // MARK: - battery (IOKit power sources; nil on desktops)
 
     private func readBattery() -> BatteryInfo? {
-        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
-              let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]
-        else { return nil }
+        (try? Self.readBatteryResult().get()) ?? nil
+    }
+}
+
+// MARK: - READER-STATUS: Result entry points (the failure detail the readers above used to drop)
+
+extension LiveCollector {
+    /// T1 row 16.
+    static func readLoadResult() -> Result<[Double], ReaderReason> {
+        var loads = [Double](repeating: 0, count: 3)
+        let rc = getloadavg(&loads, 3)
+        return rc == 3 ? .success(loads) : .failure(.callFailed(call: "getloadavg", code: rc))
+    }
+
+    /// T1 row 15: one `host_statistics(HOST_CPU_LOAD_INFO)` call, the cumulative ticks.
+    static func readCPUTicksResult() -> Result<(user: UInt64, sys: UInt64, idle: UInt64, nice: UInt64), ReaderReason> {
+        var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride
+                                           / MemoryLayout<integer_t>.stride)
+        var info = host_cpu_load_info_data_t()
+        let kr = withUnsafeMutablePointer(to: &info) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
+                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, intPtr, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return .failure(.kernReturn(call: "host_statistics(HOST_CPU_LOAD_INFO)", code: kr)) }
+        // cpu_ticks is a 4-tuple indexed by CPU_STATE_{USER,SYSTEM,IDLE,NICE} = 0,1,2,3.
+        return .success((user: UInt64(info.cpu_ticks.0), sys: UInt64(info.cpu_ticks.1),
+                         idle: UInt64(info.cpu_ticks.2), nice: UInt64(info.cpu_ticks.3)))
+    }
+
+    /// T1 row 17. The silent 4096 page-size fallback stays silent.
+    static func readMemoryResult() -> Result<MemSnapshot, ReaderReason> {
+        var total: UInt64 = 0
+        var tsize = MemoryLayout<UInt64>.stride
+        guard sysctlbyname("hw.memsize", &total, &tsize, nil, 0) == 0 else {
+            return .failure(.errno(call: "sysctlbyname(hw.memsize)", code: errno))
+        }
+        guard total > 0 else { return .failure(.implausible(what: "hw.memsize", value: "0", accepted: "> 0")) }
+
+        var pageSize: vm_size_t = 0
+        if host_page_size(mach_host_self(), &pageSize) != KERN_SUCCESS || pageSize == 0 {
+            pageSize = 4096
+        }
+        let ps = Int64(pageSize)
+
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride
+                                           / MemoryLayout<integer_t>.stride)
+        var vm = vm_statistics64_data_t()
+        let kr = withUnsafeMutablePointer(to: &vm) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, intPtr, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return .failure(.kernReturn(call: "host_statistics64(HOST_VM_INFO64)", code: kr)) }
+        func bytes(_ pages: natural_t) -> Int64 { Int64(pages) * ps }
+        return .success(MemSnapshot(
+            total: Int64(total),
+            pageSize: ps,
+            free: bytes(vm.free_count),
+            active: bytes(vm.active_count),
+            inactive: bytes(vm.inactive_count),
+            speculative: bytes(vm.speculative_count),
+            wired: bytes(vm.wire_count),
+            compressor: bytes(vm.compressor_page_count),
+            purgeable: bytes(vm.purgeable_count),
+            fileBacked: bytes(vm.external_page_count)
+        ))
+    }
+
+    /// T1 row 18.
+    static func readSwapResult() -> Result<SwapInfo, ReaderReason> {
+        var xsw = xsw_usage()
+        var size = MemoryLayout<xsw_usage>.stride
+        guard sysctlbyname("vm.swapusage", &xsw, &size, nil, 0) == 0 else {
+            return .failure(.errno(call: "sysctlbyname(vm.swapusage)", code: errno))
+        }
+        return .success(SwapInfo(total: Int64(xsw.xsu_total),
+                                 used: Int64(xsw.xsu_used),
+                                 free: Int64(xsw.xsu_avail)))
+    }
+
+    /// T1 row 19.
+    static func readMemoryPressureResult() -> Result<MemoryPressureLevel, ReaderReason> {
+        let name = "kern.memorystatus_vm_pressure_level"
+        var level: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname(name, &level, &size, nil, 0) == 0 else {
+            return .failure(.errno(call: "sysctlbyname(\(name))", code: errno))
+        }
+        guard let parsed = MemoryPressureLevel(sysctlValue: level) else {
+            return .failure(.implausible(what: name, value: "\(level)", accepted: "1, 2 or 4"))
+        }
+        return .success(parsed)
+    }
+
+    /// T1 row 20: Data volume, then root.
+    static func readDiskResult() -> Result<DiskInfo, ReaderReason> {
+        var reasons: [ReaderReason] = []
+        for path in ["/System/Volumes/Data", "/"] {
+            let url = URL(fileURLWithPath: path)
+            let vals: URLResourceValues
+            do {
+                vals = try url.resourceValues(forKeys: [
+                    .volumeTotalCapacityKey, .volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey
+                ])
+            } catch {
+                let ns = error as NSError
+                reasons.append(.nsError(call: "URL.resourceValues(\(path))", domain: ns.domain, code: ns.code))
+                continue
+            }
+            guard let total = vals.volumeTotalCapacity, total > 0 else {
+                reasons.append(.validationFailed(what: "volumeTotalCapacity of \(path)", check: "> 0"))
+                continue
+            }
+            let avail = vals.volumeAvailableCapacityForImportantUsage ?? 0
+            let purgeable = purgeableBytes(importantAvailable: vals.volumeAvailableCapacityForImportantUsage,
+                                           available: vals.volumeAvailableCapacity.map(Int64.init))
+            let (rawDataUsed, sysUsed) = volumeUsage()
+            let dataUsed = dataUsedExcludingPurgeable(raw: rawDataUsed, purgeable: purgeable)
+            return .success(DiskInfo(size: Int64(total), avail: Int64(avail), dataUsed: dataUsed, sysUsed: sysUsed, purgeable: purgeable))
+        }
+        return .failure(.joined(reasons))
+    }
+
+    /// T1 row 21: `success(nil)` = no InternalBattery power source (a desktop).
+    static func readBatteryResult() -> Result<BatteryInfo?, ReaderReason> {
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
+            return .failure(.nullResult(call: "IOPSCopyPowerSourcesInfo"))
+        }
+        guard let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] else {
+            return .failure(.nullResult(call: "IOPSCopyPowerSourcesList"))
+        }
 
         for source in list {
             guard let desc = IOPSGetPowerSourceDescription(blob, source)?
@@ -278,12 +346,11 @@ final class LiveCollector {
             else if onAC { state = .notCharging }
             else { state = .discharging }
 
-            return BatteryInfo(source: sourceLabel, charge: charge, state: state,
-                               cycles: nil, condition: nil, maxCapacity: nil)
+            return .success(BatteryInfo(source: sourceLabel, charge: charge, state: state,
+                                        cycles: nil, condition: nil, maxCapacity: nil))
         }
-        return nil
+        return .success(nil)
     }
-
 }
 
 private extension Array where Element == ProcEntry {

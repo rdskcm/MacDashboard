@@ -45,6 +45,60 @@ private func ioregBattery() async -> [String: String] {
     return out
 }
 
+/// Battery discharge power (V x |A|, watts) from one `ioreg` read; nil unless the Mac is on battery with both values.
+private func batteryDischargeW(_ batt: [String: String]) -> Double? {
+    guard batt["ExternalConnected"] == "No", let volts = Double(batt["Voltage"] ?? ""),
+          let amps = batt["InstantAmperage"].flatMap({ UInt64($0) }).map({ Double(Int64(bitPattern: $0)) }) else { return nil }
+    return volts * abs(amps) / 1e6
+}
+
+/// The battery gauge publishes a new Voltage/InstantAmperage only every 30-60 s (measured), and between publications
+/// it keeps showing the load of the last one, so a PSTR comparison against a stale gauge can agree or disagree by
+/// accident (a run after the spin canary read PSTR 7.0 W against a stale 13.2 W). The comparison is therefore made only
+/// at the instant the gauge publishes a fresh sample: record the gauge's Voltage and InstantAmperage, poll once per
+/// second until either changes, require PSTR within `agreement` W of V x |A| right then, and do it for two
+/// consecutive refreshes. Both must agree. The total cap is `cap` s (two refreshes take up to about 120 s).
+/// `failure` is nil on a pass (and on AC or without a battery reading, where there is nothing to compare);
+/// otherwise it names the reason. `checks` lists each refresh's readings.
+private func gaugeRefreshPower(agreement: Double = 1.5, cap: Int = 150)
+    async -> (pstr: Double?, discharge: Double?, batt: [String: String], failure: String?, checks: [String]) {
+    func gauge(_ b: [String: String]) -> String { "\(b["Voltage"] ?? "nil")/\(b["InstantAmperage"] ?? "nil")" }
+    var batt = await ioregBattery()
+    var pstr = SMCReader.readSystemPowerW()
+    var discharge = batteryDischargeW(batt)
+    // On AC (or without a battery reading) there is nothing to compare, so nothing to wait for.
+    guard discharge != nil else { return (pstr, nil, batt, nil, []) }
+    var baseline = gauge(batt)
+    var checks: [String] = []
+    var elapsed = 0
+    while checks.count < 2 {
+        var refreshed = false
+        while elapsed < cap {
+            try? await Task.sleep(for: .seconds(1))
+            elapsed += 1
+            let b = await ioregBattery()
+            pstr = SMCReader.readSystemPowerW()
+            discharge = batteryDischargeW(b)
+            batt = b
+            if gauge(b) != baseline { refreshed = true; break }
+        }
+        let n = checks.count + 1
+        let fmt: (Double?) -> String = { $0.map { String(format: "%.2f", $0) } ?? "nil" }
+        guard refreshed else {
+            return (pstr, discharge, batt, "gauge never refreshed (refresh \(n) of 2 not seen within \(cap) s; Voltage/InstantAmperage stayed \(baseline)). Last readings: PSTR \(fmt(pstr)) W, V x |A| \(fmt(discharge)) W. Earlier checks: \(checks)", checks)
+        }
+        guard let w = pstr, let d = discharge else {
+            return (pstr, discharge, batt, "reading missing at gauge refresh \(n) of 2: PSTR \(fmt(pstr)) W, V x |A| \(fmt(discharge)) W (battery \(gauge(batt)))", checks)
+        }
+        checks.append(String(format: "refresh %d at %d s: PSTR %.2f W, V x |A| %.2f W, difference %.2f W", n, elapsed, w, d, abs(w - d)))
+        if abs(w - d) > agreement {
+            return (pstr, discharge, batt, "mismatch at gauge refresh \(n) of 2: PSTR \(fmt(w)) W vs V x |A| \(fmt(d)) W, difference \(String(format: "%.2f", abs(w - d))) W exceeds \(agreement) W. Checks: \(checks)", checks)
+        }
+        baseline = gauge(batt)
+    }
+    return (pstr, discharge, batt, nil, checks)
+}
+
 extension SerialTests {
     @MainActor struct SocReadersLiveCanaryTests {
         // MARK: core load and topology
@@ -165,18 +219,20 @@ extension SerialTests {
 
         @Test(.enabled(if: liveEnabled))
         func liveCanaryPower() async throws {
-            let w = try #require(SMCReader.readSystemPowerW(), "PSTR returned nil")
-            let batt = await ioregBattery()
+            // Independent of test order: after the CPU spin canary the battery gauge is stale for 30-60 s (6-9 W
+            // apart seen), so compare only at two fresh gauge samples.
+            let r = await gaugeRefreshPower()
+            let w = try #require(r.pstr, "PSTR returned nil")
+            let batt = r.batt
             let external = batt["ExternalConnected"] ?? "?", charging = batt["IsCharging"] ?? "?"
-            let volts = Double(batt["Voltage"] ?? "")
             let amps = batt["InstantAmperage"].flatMap { UInt64($0) }.map { Double(Int64(bitPattern: $0)) }
             print(String(format: "liveCanary power PSTR %.2f W", w))
             print("liveCanary power battery ExternalConnected=\(external) IsCharging=\(charging) Voltage=\(batt["Voltage"] ?? "nil") mV InstantAmperage=\(amps.map { String(format: "%.0f", $0) } ?? "nil") mA")
             #expect(w > 0 && w <= 1000)
-            if external == "No", let volts, let amps {
-                let discharge = volts * abs(amps) / 1e6
+            if let discharge = r.discharge {
                 print(String(format: "liveCanary power battery V x |A| = %.2f W, difference %.2f W", discharge, abs(w - discharge)))
-                #expect(abs(w - discharge) <= 1.5)
+                for c in r.checks { print("liveCanary power \(c)") }
+                if let failure = r.failure { Issue.record("PSTR vs battery V x |A|: \(failure)") }
             } else {
                 print("liveCanary power AC: no battery comparison")
             }
@@ -187,7 +243,7 @@ extension SerialTests {
         @Test(.enabled(if: liveEnabled))
         func liveCanaryTemperatures() throws {
             let t0 = Date()
-            let raw = try #require(SMCReader.readSensorTemperatures(), "SMC could not be opened")
+            let raw = try #require(SMCReader.readSensorTemperatures(), "SMC could not be opened or its key list could not be read")
             let first = Date().timeIntervalSince(t0)
             let t1 = Date()
             _ = SMCReader.readSensorTemperatures()

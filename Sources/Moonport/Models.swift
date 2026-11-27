@@ -344,6 +344,7 @@ struct FullReport {
     var progress: [String: Bool] = [:]  // sectionKey -> done (for UI spinners)
     var smartctlPresent: Bool = true    // whether smartctl was found on last collectSmartDisks() run (Block N8)
     var parseFailures: [ParseFailure] = []   // report-time command output the parser rejected (R3-FIXTURES)
+    var readerStatus: [ReaderStatusLine] = []   // READER-STATUS: one line per reader, appended by the report jobs (order: ReaderID.macOrder at render time)
 }
 
 struct Assessment: Equatable {

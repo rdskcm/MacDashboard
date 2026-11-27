@@ -132,4 +132,13 @@ struct CPUFrequencyReaderTests {
         #expect(CoreGroupKey(groupName: "Super") == nil)
         #expect(CoreGroupKey(groupName: nil) == nil)
     }
+
+    // READER-STATUS
+    @Test func tableCheckFailureNamesTheCheck() {
+        #expect(CPUFrequencyReader.tableCheckFailure(table: [1000], stateCount: 2) == "(a) at least 2 entries, got 1")
+        #expect(CPUFrequencyReader.tableCheckFailure(table: [1000, 1000, 2000], stateCount: 4) == "(b) strictly ascending")
+        #expect(CPUFrequencyReader.tableCheckFailure(table: [99.4, 2000], stateCount: 3) == "(c) 100...10000 MHz, got 99...2000")
+        #expect(CPUFrequencyReader.tableCheckFailure(table: [1000, 2000], stateCount: 5) == "(d) state count 5 == entries 2 + 1")
+        #expect(CPUFrequencyReader.tableCheckFailure(table: eTable, stateCount: 8) == nil)
+    }
 }

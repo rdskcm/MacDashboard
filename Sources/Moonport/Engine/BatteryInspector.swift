@@ -193,12 +193,17 @@ enum BatteryInspector {
     }
 
     /// App path: runs ioreg (5 s deadline) and parses. `AppModel.readBatteryNow` consumes this.
-    static func read() async -> BatteryReadResult {
+    static func read() async -> BatteryReadResult { await readWithStatus().result }
+
+    /// `read()` plus the `battery.ioreg` reader status (READER-STATUS), from the same run.
+    static func readWithStatus() async -> (result: BatteryReadResult, status: ReaderStatusLine) {
         let out = await CommandRunner.run("/usr/sbin/ioreg", ["-r", "-c", "AppleSmartBattery", "-a", "-l"], timeout: 5)
-        if out.termination == .timedOut { return .timedOut }
-        guard let text = out.text, var detail = parse(Data(text.utf8)) else { return .unavailable }
+        let parsed = out.text.flatMap { parse(Data($0.utf8)) }
+        let status = ReaderStatusMac.ioregBatteryLine(termination: out.termination, stdout: out.stdout, parsed: parsed != nil)
+        if out.termination == .timedOut { return (.timedOut, status) }
+        guard var detail = parsed else { return (.unavailable, status) }
         detail.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
-        return .detail(detail)
+        return (.detail(detail), status)
     }
 
     /// Decodes the length-prefixed ASCII segments of the 32-byte ManufacturerData blob
