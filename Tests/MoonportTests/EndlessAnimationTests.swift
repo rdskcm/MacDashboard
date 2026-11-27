@@ -32,7 +32,11 @@ private final class Host {
         func walk(_ l: CALayer) {
             guard seen.insert(ObjectIdentifier(l)).inserted else { return }
             for k in l.animationKeys() ?? [] {
-                if let a = l.animation(forKey: k), a.repeatCount >= 1e6 || a.repeatDuration >= 1e6 { n += 1 }
+                // Copy the two values out first: capturing the non-Sendable `a` in the `||` autoclosure is a
+                // data-race error under the pinned Xcode 26.6 in a release test build (READER-STATUS CI).
+                guard let a = l.animation(forKey: k) else { continue }
+                let count = a.repeatCount, duration = a.repeatDuration
+                if count >= 1e6 || duration >= 1e6 { n += 1 }
             }
             for s in l.sublayers ?? [] { walk(s) }
         }
